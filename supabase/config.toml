@@ -1,0 +1,5 @@
+# Supabase project config (local dev). Fill project_id after `supabase init`.
+project_id = "kala"
+
+[functions.aws-proxy]
+verify_jwt = false   # invoked by a DB webhook / trusted caller, not an end user

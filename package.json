@@ -1,0 +1,16 @@
+{
+  "name": "kala",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm --filter web typecheck",
+    "setup": "pnpm install && pnpm setup:api && pnpm setup:worker",
+    "setup:api": "cd services/api && uv sync",
+    "setup:worker": "cd services/worker && uv sync",
+    "api:dev": "cd services/api && uv run uvicorn app.main:app --reload --port 8000",
+    "worker:run": "cd services/worker && uv run python -c \"from app.handler import handler; handler({}, None)\""
+  }
+}

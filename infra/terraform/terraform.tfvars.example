@@ -1,0 +1,8 @@
+region           = "ap-southeast-1"
+env              = "pilot"
+assume_role_arn  = ""   # set to the school's Org cross-account role, or leave empty
+api_image_uri    = "<account>.dkr.ecr.ap-southeast-1.amazonaws.com/kala-api:latest"
+worker_image_uri = "<account>.dkr.ecr.ap-southeast-1.amazonaws.com/kala-worker:latest"
+frontend_url     = "https://kala.example.edu"
+worker_schedule  = "rate(15 minutes)"
+budget_alert_email = ""
