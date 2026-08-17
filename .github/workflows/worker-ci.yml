@@ -1,0 +1,35 @@
+name: worker-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/worker/**"
+      - "packages/**"
+      - ".github/workflows/worker-ci.yml"
+  pull_request:
+    paths:
+      - "services/worker/**"
+      - "packages/**"
+      - ".github/workflows/worker-ci.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.x"
+
+      - run: uv sync --locked
+
+      - run: uv run ruff check .
+        continue-on-error: true # tighten to blocking once the codebase is ruff-clean
+
+      - name: Import check
+        run: uv run python -c "from app.handler import handler"

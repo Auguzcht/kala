@@ -46,7 +46,7 @@ External researchers use a separate portal with their own authentication, not an
 
 ## Setup steps
 
-1. Create the Supabase project (choose the region closest to the pilot, matching your AWS region where practical).
+1. Create the Supabase project (choose the region closest to the pilot, matching your AWS region where practical). Run `pnpm setup` or `pnpm install` first in this repo; the root workspace already pulls in the Supabase CLI, so the local binary is available without a separate global install.
 2. In the SQL editor or CLI, ensure `pgcrypto` and `vector` are enabled (migration `0001` does this).
 3. Set the JWT secret so the backend can mint Supabase-compatible tokens: use the project JWT secret for HS256, or configure third-party (asymmetric) auth if you prefer. The backend must include `sub`, `institution_id`, `app_role`, and `role: authenticated` in every minted token.
 4. Confirm the `authenticated` role has usage on the `auth` schema and execute on `auth.uid()` and `auth.jwt()` (Supabase sets this up by default).

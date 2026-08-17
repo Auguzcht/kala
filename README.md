@@ -2,30 +2,34 @@
 
 AI learning companion and digital learning twin, delivered as an intelligence layer on top of the LMS (Blackboard, Canvas).
 
-Start here: read `CLAUDE.md` at the repo root. It routes you to `docs/masterplan.md`, `docs/stack.md`, and the per-folder guides.
+For project context and implementation details, see `docs/masterplan.md`, `docs/stack.md`, and the module-specific READMEs.
 
 ## Quick start
 
-Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). The root workspace also installs the Supabase CLI locally through `pnpm install`, so no separate global `supabase` install is needed.
 
-```
+```bash
 pnpm setup        # installs apps/web (pnpm) + services/api and services/worker (uv)
 pnpm dev          # web app on :5173
 pnpm api:dev      # backend on :8000
 ```
 
-Each module is also installable on its own, see the README in `apps/web`, `services/api`, and `services/worker`.
+Each module can also be installed independently. See the README in `apps/web`, `services/api`, and `services/worker`.
 
 ## Layout
 
-- `apps/web` — React + Vite SPA (the product UI)
-- `services/api` — FastAPI backend (LTI, connectors, AI, twin)
-- `services/worker` — async twin recompute
-- `packages/db` — SQL migrations and RLS (tenancy)
-- `packages/schema` — shared contracts
-- `infra` — AWS IaC
-- `docs` — masterplan, stack, architecture
+* `apps/web` — React + Vite SPA (product UI)
+* `services/api` — FastAPI backend (LTI, connectors, AI, twin)
+* `services/worker` — asynchronous twin recompute
+* `packages/db` — SQL migrations and RLS (tenancy)
+* `packages/schema` — shared contracts
+* `infra` — AWS infrastructure as code
+* `docs` — masterplan, stack, and architecture documentation
 
 ## CI
 
-Three path-scoped GitHub Actions workflows in `.github/workflows`, one per installable module (`web-ci.yml`, `api-ci.yml`, `worker-ci.yml`). Each only runs when its own module (or `packages/`) changes, installs with the module's real package manager (pnpm or uv) against the committed lockfile, then lints, typechecks/imports, and builds. No Docker in CI, that stays a deploy-time concern (see `services/api/Dockerfile`, `services/worker/Dockerfile`, and `infra/terraform`).
+Three path-scoped GitHub Actions workflows live in `.github/workflows`, one per installable module: `web-ci.yml`, `api-ci.yml`, and `worker-ci.yml`.
+
+Each workflow runs only when its corresponding module or shared `packages/` code changes. It installs dependencies using the module's actual package manager, pnpm or uv, against the committed lockfile, then runs the relevant linting, type checking or import validation, and build steps.
+
+Docker is intentionally excluded from CI and remains a deploy-time concern. See `services/api/Dockerfile`, `services/worker/Dockerfile`, and `infra/terraform`.

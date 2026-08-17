@@ -11,3 +11,55 @@ export const sessionSchema = z.object({
 });
 
 export type Session = z.infer<typeof sessionSchema>;
+
+const STORAGE_KEY = "kala.session_token";
+
+/** Decode the session JWT's claims without verifying the signature. The
+ * backend already verified the LTI launch before minting this token, the
+ * frontend just needs to read it, never trust a token it didn't get
+ * straight from the backend's own /launch redirect. */
+function decodeClaims(token: string): Session | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return sessionSchema.parse({
+      userId: payload.sub,
+      institutionId: payload.institution_id,
+      role: payload.app_role,
+      courseId: payload.course_id ?? undefined,
+      displayName: payload.display_name ?? undefined,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** BACKEND.md step 5: the backend redirects to /launch#token=...&course=....
+ * Read it once, store it, then scrub the fragment so it doesn't linger in
+ * browser history. */
+export function captureLaunchToken(): Session | null {
+  const hash = window.location.hash;
+  const match = hash.match(/token=([^&]+)/);
+  if (!match) return null;
+
+  const token = decodeURIComponent(match[1]);
+  const session = decodeClaims(token);
+  if (!session) return null;
+
+  sessionStorage.setItem(STORAGE_KEY, token);
+  window.history.replaceState(null, "", window.location.pathname);
+  return session;
+}
+
+export function loadStoredSession(): Session | null {
+  const token = sessionStorage.getItem(STORAGE_KEY);
+  return token ? decodeClaims(token) : null;
+}
+
+export function getSessionToken(): string | null {
+  return sessionStorage.getItem(STORAGE_KEY);
+}
+
+export function clearSession(): void {
+  sessionStorage.removeItem(STORAGE_KEY);
+}
+

@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "routes:generate": "tsr generate",
+    "build": "pnpm routes:generate && tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm routes:generate && tsc --noEmit",
     "gen:api": "openapi-typescript ../../services/api/openapi.json -o src/lib/api/types.gen.ts"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@tanstack/router-cli": "^1.87.0",
     "@tanstack/router-plugin": "^1.87.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
