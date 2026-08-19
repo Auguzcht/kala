@@ -7,9 +7,12 @@
     "build": "pnpm --filter web build",
     "lint": "pnpm --filter web lint",
     "typecheck": "pnpm --filter web typecheck",
-    "setup": "pnpm install && pnpm setup:api && pnpm setup:worker",
+    "setup": "pnpm install && pnpm setup:aws && pnpm setup:aws:path && pnpm setup:api && pnpm setup:worker",
+    "setup:aws": "[ -x .tools/aws-cli/bin/python ] || uv venv .tools/aws-cli && uv pip install --python .tools/aws-cli/bin/python --upgrade awscli",
+    "setup:aws:path": "sh ./scripts/setup-aws-path.sh",
     "setup:api": "cd services/api && uv sync",
     "setup:worker": "cd services/worker && uv sync",
+    "aws": "sh ./scripts/aws-cli.sh",
     "api:dev": "cd services/api && uv run uvicorn app.main:app --reload --port 8000",
     "worker:run": "cd services/worker && uv run python -c \"from app.handler import handler; handler({}, None)\""
   },

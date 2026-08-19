@@ -35,6 +35,7 @@ supabase/.env.*
 .venv/
 venv/
 ENV/
+.tools/
 
 __pycache__/
 *.py[cod]
@@ -82,3 +83,9 @@ tmp/
 
 *.tsbuildinfo
 .eslintcache
+
+# Local AWS/Blackboard AMI artifacts
+containers.json
+kala-blackboard-dev.pem
+role-policy.json
+trust-policy.json

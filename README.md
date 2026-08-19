@@ -6,13 +6,17 @@ For project context and implementation details, see `docs/masterplan.md`, `docs/
 
 ## Quick start
 
-Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). The root workspace also installs the Supabase CLI locally through `pnpm install`, so no separate global `supabase` install is needed.
+Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). The root workspace installs both Supabase CLI and AWS CLI locally through setup, so no separate global `supabase` or `aws` install is needed.
 
 ```bash
 pnpm setup        # installs apps/web (pnpm) + services/api and services/worker (uv)
 pnpm dev          # web app on :5173
 pnpm api:dev      # backend on :8000
+pnpm exec supabase --help
+pnpm aws --version
 ```
+
+`pnpm setup` also appends a small, idempotent PATH block to your shell rc file (`~/.zshrc` on macOS zsh, `~/.bashrc` on bash) so you can run `aws ...` directly after reloading your shell (`source ~/.zshrc`) or opening a new terminal.
 
 Each module can also be installed independently. See the README in `apps/web`, `services/api`, and `services/worker`.
 
