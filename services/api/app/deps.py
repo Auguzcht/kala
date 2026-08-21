@@ -3,9 +3,11 @@ token and guard endpoints by role."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 from fastapi import Depends, Header, HTTPException, status
 
+from app.lms.blackboard import BlackboardConnector
 from app.security.jwt import verify_session_token
 
 
@@ -40,3 +42,8 @@ def require_role(*roles: str):
         return user
 
     return _guard
+
+
+@lru_cache
+def get_lms_connector() -> BlackboardConnector:
+    return BlackboardConnector()

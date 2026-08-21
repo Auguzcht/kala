@@ -25,10 +25,11 @@ def converse(*, model_id: str, system: str, messages: list[dict], max_tokens: in
     return "".join(p.get("text", "") for p in parts)
 
 
-def embed(text: str) -> list[float]:
+def embed(text: str, *, input_type: str = "search_document") -> list[float]:
     s = get_settings()
     resp = _runtime().invoke_model(
         modelId=s.bedrock_embed_model,
-        body=json.dumps({"inputText": text}),
+        body=json.dumps({"texts": [text], "input_type": input_type}),
     )
-    return json.loads(resp["body"].read())["embedding"]
+    body = json.loads(resp["body"].read())
+    return body["embeddings"][0]

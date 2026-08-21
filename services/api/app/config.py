@@ -42,18 +42,26 @@ class Settings(BaseSettings):
 
     # AWS / Bedrock
     aws_region: str = Field(default="ap-southeast-1", alias="AWS_REGION")
-    bedrock_model_tier1: str = Field(default="", alias="BEDROCK_MODEL_TIER1")
-    bedrock_model_tier2: str = Field(default="", alias="BEDROCK_MODEL_TIER2")
+    bedrock_model_fast: str = Field(default="", alias="BEDROCK_MODEL_FAST")
+    bedrock_model_default: str = Field(default="", alias="BEDROCK_MODEL_DEFAULT")
+    bedrock_model_reasoning: str = Field(default="", alias="BEDROCK_MODEL_REASONING")
+    bedrock_model_premium: str = Field(default="", alias="BEDROCK_MODEL_PREMIUM")
     bedrock_embed_model: str = Field(default="", alias="BEDROCK_EMBED_MODEL")
 
     # LTI 1.3
     lti_issuer: str = Field(default="https://blackboard.com", alias="LTI_ISSUER")
     lti_client_id: str = Field(default="", alias="LTI_CLIENT_ID")
+    lms_verify_tls: bool = Field(default=True, alias="LMS_VERIFY_TLS")
     lti_auth_login_url: str = Field(default="", alias="LTI_AUTH_LOGIN_URL")
     lti_auth_token_url: str = Field(default="", alias="LTI_AUTH_TOKEN_URL")
     lti_keyset_url: str = Field(default="", alias="LTI_KEYSET_URL")
     lti_deployment_ids: str = Field(default="", alias="LTI_DEPLOYMENT_IDS")
     lti_tool_private_key_pem: str = Field(default="", alias="LTI_TOOL_PRIVATE_KEY_PEM")
+
+    # Blackboard Learn REST API
+    lms_rest_base_url: str = Field(default="", alias="LMS_REST_BASE_URL")
+    lms_rest_client_id: str = Field(default="", alias="LMS_REST_CLIENT_ID")
+    lms_rest_client_secret: str = Field(default="", alias="LMS_REST_CLIENT_SECRET")
 
     @property
     def deployment_id_list(self) -> list[str]:

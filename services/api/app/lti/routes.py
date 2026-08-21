@@ -15,13 +15,15 @@ from __future__ import annotations
 import secrets
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.config import get_settings
 from app.db import supabase as db
+from app.deps import get_lms_connector
 from app.lti import claims as C
 from app.lti.security import build_tool_jwks, sign_state, verify_id_token, verify_state
+from app.lms.blackboard import BlackboardConnector
 from app.security.jwt import mint_session_token
 
 router = APIRouter(prefix="/lti", tags=["lti"])
@@ -74,7 +76,8 @@ async def login_post(request: Request):
 
 
 @router.post("/launch")
-async def launch(request: Request, id_token: str = Form(...), state: str = Form(...)):
+async def launch(request: Request, id_token: str = Form(...), state: str = Form(...),
+                 connector: BlackboardConnector = Depends(get_lms_connector)):
     s = get_settings()
 
     # 1. verify state (CSRF) against the signed cookie, then the id_token itself
@@ -116,10 +119,17 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
     )
     ctx = C.extract_context(payload)
     course = None
-    if ctx["lms_course_id"]:
+    if ctx["lms_course_external_id"]:
+        try:
+            lms_course_id = connector.resolve_course_ref(ctx["lms_course_external_id"])
+        except Exception as exc:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                f"could not resolve Blackboard course: {exc}",
+            ) from exc
         course = db.get_or_create_course(
             institution_id=institution["id"],
-            lms_course_id=ctx["lms_course_id"],
+            lms_course_id=lms_course_id,
             title=ctx["title"],
         )
         db.upsert_enrollment(

@@ -50,6 +50,14 @@ def upsert(table: str, rows: list[dict], *, on_conflict: str) -> list[dict]:
         return r.json() if r.content else []
 
 
+def update(table: str, filters: dict[str, str], values: dict[str, Any]) -> list[dict]:
+    with _client() as c:
+        r = c.patch(f"/{table}", params=filters, json=values,
+                    headers={"Prefer": "return=representation"})
+        r.raise_for_status()
+        return r.json() if r.content else []
+
+
 def rpc(fn: str, args: dict[str, Any]) -> Any:
     with _client() as c:
         r = c.post(f"/rpc/{fn}", json=args)

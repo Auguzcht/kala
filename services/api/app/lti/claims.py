@@ -37,6 +37,7 @@ def map_role(role_uris: list[str]) -> str:
 def extract_context(claims: dict) -> dict:
     ctx = claims.get(CONTEXT) or {}
     return {
-        "lms_course_id": ctx.get("id"),
+        "lti_context_id": ctx.get("id"),
+        "lms_course_external_id": ctx.get("label"),
         "title": ctx.get("title") or ctx.get("label") or "Course",
     }

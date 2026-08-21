@@ -89,3 +89,4 @@ containers.json
 kala-blackboard-dev.pem
 role-policy.json
 trust-policy.json
+kala_lti_private.pem

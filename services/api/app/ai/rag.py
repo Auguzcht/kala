@@ -8,7 +8,7 @@ from app.db import supabase as db
 
 
 def retrieve(*, institution_id: str, course_id: str, query: str, k: int = 5) -> list[dict]:
-    query_embedding = bedrock.embed(query)
+    query_embedding = bedrock.embed(query, input_type="search_query")
     return db.rpc("match_content_items", {
         "p_institution_id": institution_id,
         "p_course_id": course_id,

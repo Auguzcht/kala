@@ -75,6 +75,13 @@ def mint_mock_session_token() -> str:
 
     from fastapi.testclient import TestClient
     from app.main import app
+    from app.deps import get_lms_connector
+
+    class MockConnector:
+        def resolve_course_ref(self, external_id: str) -> str:
+            return external_id
+
+    app.dependency_overrides[get_lms_connector] = MockConnector
 
     client = TestClient(app)
 
@@ -114,6 +121,7 @@ def mint_mock_session_token() -> str:
         ],
         "https://purl.imsglobal.org/spec/lti/claim/context": {
             "id": "mock-course-1",
+            "label": "mock-course-1",
             "title": "Mock Course",
         },
     }
