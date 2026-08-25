@@ -1,13 +1,14 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-// Cards use the xl radius (Cintana surfaces are generously rounded).
+// Kala cards are instrument PANELS: hairline slate border, low radius,
+// header strip, no heavy shadow. Structure defines, shadows do not.
 export function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
       className={cn(
-        "rounded-xl border bg-card text-card-foreground shadow-sm",
+        "rounded-lg border bg-card text-card-foreground",
         className
       )}
       {...props}
@@ -16,12 +17,20 @@ export function Card({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 export function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col gap-1 p-6", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-1 border-b p-5",
+        className
+      )}
+      {...props}
+    />
+  );
 }
 
 export function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("text-lg font-semibold tracking-tight", className)} {...props} />
+    <div className={cn("font-display text-lg font-semibold tracking-tight", className)} {...props} />
   );
 }
 
@@ -30,9 +39,9 @@ export function CardDescription({ className, ...props }: React.ComponentProps<"d
 }
 
 export function CardContent({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("p-6 pt-0", className)} {...props} />;
+  return <div className={cn("p-5", className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex items-center p-6 pt-0", className)} {...props} />;
+  return <div className={cn("flex items-center border-t p-5", className)} {...props} />;
 }

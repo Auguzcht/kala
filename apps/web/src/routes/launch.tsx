@@ -16,9 +16,9 @@ function LaunchLanding() {
       setError(true);
       return;
     }
-    // TODO: once features/instructor and features/twin exist, route by role
-    // instead of always going home.
-    navigate({ to: "/" });
+    // TODO: once features/instructor and features/twin exist, route
+    // instructor/admin to their own dashboard instead of the student loop.
+    navigate({ to: session.role === "student" ? "/course" : "/" });
   }, [navigate]);
 
   if (error) {

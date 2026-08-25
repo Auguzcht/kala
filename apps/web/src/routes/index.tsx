@@ -7,7 +7,7 @@ export const Route = createFileRoute("/")({
 function Index() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-16">
-      <p className="text-sm font-medium tracking-wide text-brand-teal">Kala</p>
+      <p className="text-sm font-medium tracking-wide text-brand-slate">Kala</p>
       <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
         Scaffold ready
       </h1>

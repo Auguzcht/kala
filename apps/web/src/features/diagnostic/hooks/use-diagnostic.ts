@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchDiagnostic,
   submitDiagnostic,
@@ -14,7 +14,12 @@ export function useDiagnostic(courseId: string) {
 }
 
 export function useSubmitDiagnostic(courseId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (answers: Answer[]) => submitDiagnostic(courseId, answers),
+    onSuccess: () => {
+      // Mastery moved: invalidate anything reading it (dashboard, twin).
+      queryClient.invalidateQueries({ queryKey: ["mastery", courseId] });
+    },
   });
 }

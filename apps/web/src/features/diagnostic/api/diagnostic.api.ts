@@ -20,7 +20,13 @@ export async function submitDiagnostic(
 ): Promise<DiagnosticResult> {
   const data = await api<unknown>(`/courses/${courseId}/diagnostic/submit`, {
     method: "POST",
-    body: JSON.stringify({ answers }),
+    body: JSON.stringify({
+      answers: answers.map((a) => ({
+        item_id: a.itemId,
+        choice_id: a.choiceId,
+        latency_ms: a.latencyMs,
+      })),
+    }),
   });
   return diagnosticResultSchema.parse(data);
 }

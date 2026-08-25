@@ -1,6 +1,7 @@
-"""Diagnostic endpoints. Worked example of the full path: read course skills,
-serve questions, accept answers, write evidence (service role), update the twin.
-Question generation from LMS content via RAG is the next step (marked TODO)."""
+"""Diagnostic endpoints. Full path: ingest, read course skills, generate
+RAG-grounded questions, accept answers, grade server-side, write evidence
+(service role), update the twin.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +12,7 @@ from app.ai.chunking import chunk_text
 from app.ai.deidentify import strip_pii
 from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user, get_lms_connector
+from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
 from app.twin import tracer
 
@@ -102,15 +104,14 @@ def ingest_course(course_id: str,
     return {"stored": stored, "tagged": tagged, "embedded": embedded}
 
 
-class Answer(BaseModel):
-    question_id: str
-    skill_id: str
-    correct: bool
+class SubmitAnswer(BaseModel):
+    item_id: str
+    choice_id: str
     latency_ms: int = 0
 
 
 class SubmitBody(BaseModel):
-    answers: list[Answer]
+    answers: list[SubmitAnswer]
 
 
 class GradeBody(BaseModel):
@@ -134,33 +135,47 @@ def post_grade(course_id: str, column_id: str, body: GradeBody,
 @router.get("/{course_id}/diagnostic")
 def get_diagnostic(course_id: str, user: CurrentUser = Depends(get_current_user)):
     skills = db.select("skills", {
-        "course_id": f"eq.{course_id}", "select": "id,name,bloom_level", "limit": "10",
+        "course_id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
+        "select": "id,name,bloom_level", "limit": "10",
     })
-    # TODO: generate real, course-grounded questions via app.ai.rag + router.
-    questions = [{
-        "id": f"q-{s['id']}",
-        "skillId": s["id"],
-        "bloomLevel": s["bloom_level"],
-        "prompt": f"Placeholder question for {s['name']}",
-        "choices": [{"id": "a", "label": "Option A"}, {"id": "b", "label": "Option B"}],
-    } for s in skills]
+    questions = [
+        item_gen.generate_question(
+            institution_id=user.institution_id, course_id=course_id,
+            skill=s, kind="diagnostic",
+        )
+        for s in skills
+    ]
     return {"courseId": course_id, "questions": questions}
 
 
 @router.post("/{course_id}/diagnostic/submit")
 def submit_diagnostic(course_id: str, body: SubmitBody,
                       user: CurrentUser = Depends(get_current_user)):
-    rows = [{
-        "institution_id": user.institution_id, "user_id": user.user_id,
-        "course_id": course_id, "skill_id": a.skill_id, "type": "diagnostic",
-        "correct": a.correct, "latency_ms": a.latency_ms,
-    } for a in body.answers]
+    results = []
+    rows = []
+    for a in body.answers:
+        try:
+            graded = item_gen.grade(
+                institution_id=user.institution_id, item_id=a.item_id, choice_id=a.choice_id,
+            )
+        except ValueError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"item {a.item_id} not found")
+        results.append({**graded, "itemId": a.item_id})
+        rows.append({
+            "institution_id": user.institution_id, "user_id": user.user_id,
+            "course_id": course_id, "skill_id": graded["skillId"], "type": "diagnostic",
+            "correct": graded["correct"], "latency_ms": a.latency_ms,
+        })
     if rows:
         db.insert_evidence(rows)
-    for a in body.answers:
+    for r in results:
         tracer.apply_evidence(
             institution_id=user.institution_id, user_id=user.user_id,
-            course_id=course_id, skill_id=a.skill_id, correct=a.correct,
+            course_id=course_id, skill_id=r["skillId"], correct=r["correct"],
         )
-    correct = sum(1 for a in body.answers if a.correct)
-    return {"correctCount": correct, "total": len(body.answers)}
+    correct = sum(1 for r in results if r["correct"])
+    return {
+        "correctCount": correct,
+        "total": len(results),
+        "results": [{"itemId": r["itemId"], "correct": r["correct"], "explanation": r["explanation"]} for r in results],
+    }

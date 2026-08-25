@@ -12,6 +12,7 @@
     "setup:aws:path": "sh ./scripts/setup-aws-path.sh",
     "setup:api": "cd services/api && uv sync",
     "setup:worker": "cd services/worker && uv sync",
+    "check:stack": "bash ./check_stack.sh",
     "schema:types": "pnpm supabase gen types typescript --project-id \"${SUPABASE_PROJECT_ID:-jcufmpxjlgdfzefvulvz}\" --schema public > packages/schema/supabase.ts",
     "aws": "sh ./scripts/aws-cli.sh",
     "api:dev": "cd services/api && uv run uvicorn app.main:app --reload --port 8000",

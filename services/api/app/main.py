@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.lti.routes import router as lti_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.diagnostic import router as diagnostic_router
+from app.routers.flashcards import router as flashcards_router
 from app.routers.health import router as health_router
 from app.routers.practice import router as practice_router
 from app.routers.tutor import router as tutor_router
@@ -29,6 +30,7 @@ app.include_router(health_router)
 app.include_router(lti_router)
 app.include_router(diagnostic_router)
 app.include_router(practice_router)
+app.include_router(flashcards_router)
 app.include_router(tutor_router)
 app.include_router(dashboard_router)
 

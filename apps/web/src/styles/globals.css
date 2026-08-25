@@ -3,119 +3,146 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Kala tokens, derived from the Cintana palette (navy, gold, teal).
-   Semantic tokens follow shadcn new-york. Brand tokens are additive.
-   Never hardcode hex in components. See DESIGN.md. */
+/* Kala tokens — instrument-panel system.
+   Locked from the Kala brand board + design brief (mockups use these exact
+   values): ink / slate / orange / gold / red / green, hairline slate borders,
+   low radius (2-4px interactive, 0 on data surfaces). Semantic tokens follow
+   shadcn new-york; brand tokens are additive. See DESIGN.md and the design
+   brief in "Kala Frontend Mockup/assets/Kala_Design_Brief.md".
+   Never hardcode hex in components. */
 
 :root {
-  --radius: 0.75rem;
+  --radius: 0.25rem; /* 4px base: 2-4px interactive, 0 on data surfaces */
 
-  --background: oklch(0.985 0.002 247);
-  --foreground: oklch(0.29 0.045 262);
+  /* fonts (loaded in index.html) */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.29 0.045 262);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.29 0.045 262);
+  --background: #f7f8fb;             /* app canvas, cool near-white */
+  --foreground: #0e1b33;             /* ink */
 
-  --primary: oklch(0.29 0.07 262);            /* Cintana navy */
-  --primary-foreground: oklch(0.985 0.002 247);
+  --card: #ffffff;
+  --card-foreground: #0e1b33;
+  --popover: #ffffff;
+  --popover-foreground: #0e1b33;
 
-  --secondary: oklch(0.962 0.004 247);
-  --secondary-foreground: oklch(0.29 0.05 262);
+  --primary: #0e1b33;                /* ink: structural base, primary buttons */
+  --primary-foreground: #f7f8fb;
 
-  --muted: oklch(0.965 0.004 247);
-  --muted-foreground: oklch(0.52 0.02 255);
+  --secondary: #1f2f4d;              /* slate: chrome, panel headers */
+  --secondary-foreground: #f7f8fb;
 
-  --accent: oklch(0.95 0.012 232);            /* faint teal-tinted hover */
-  --accent-foreground: oklch(0.29 0.05 262);
+  --muted: #edf0f5;
+  --muted-foreground: #5a6577;
 
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.985 0 0);
+  --accent: #edf0f5;
+  --accent-foreground: #0e1b33;
 
-  --border: oklch(0.92 0.004 247);
-  --input: oklch(0.92 0.004 247);
-  --ring: oklch(0.62 0.10 232);               /* teal focus ring */
+  --destructive: #d62828;            /* red: at-risk / alert */
+  --destructive-foreground: #ffffff;
 
-  /* brand tokens (additive) */
-  --brand-navy: oklch(0.29 0.07 262);
-  --brand-navy-foreground: oklch(0.985 0.002 247);
-  --brand-gold: oklch(0.77 0.13 76);
-  --brand-gold-foreground: oklch(0.29 0.07 262);   /* dark text for AA; flip to white to match Cintana exactly */
-  --brand-teal: oklch(0.62 0.10 232);
-  --brand-teal-foreground: oklch(0.985 0 0);
-  --brand-coral: oklch(0.68 0.17 44);
-  --brand-coral-foreground: oklch(0.985 0 0);
+  --border: rgba(31, 47, 77, 0.14);  /* hairline slate at low opacity */
+  --input: rgba(31, 47, 77, 0.18);
+  --ring: #ff8a00;                   /* orange focus ring */
 
-  /* charts, on-brand ramp */
-  --chart-1: oklch(0.29 0.07 262);
-  --chart-2: oklch(0.62 0.10 232);
-  --chart-3: oklch(0.77 0.13 76);
-  --chart-4: oklch(0.68 0.17 44);
-  --chart-5: oklch(0.52 0.02 255);
+  /* brand tokens (additive, semantic: a color means one thing) */
+  --brand-ink: #0e1b33;
+  --brand-ink-foreground: #f7f8fb;
+  --brand-slate: #1f2f4d;
+  --brand-slate-foreground: #f7f8fb;
+  --brand-orange: #ff8a00;           /* action, intervene, primary CTA */
+  --brand-orange-foreground: #0e1b33; /* dark text for AA; orange is a fill, text stays ink/slate */
+  --brand-gold: #ffc63d;             /* mastery, achievement, badges */
+  --brand-gold-foreground: #0e1b33;
+  --brand-red: #d62828;              /* at-risk, alert */
+  --brand-red-foreground: #ffffff;
+  --brand-green: #2e9e6b;            /* on-track, positive delta */
+  --brand-green-foreground: #ffffff;
+  --brand-maroon: #8c1d40;           /* ASU accent: researcher/export surfaces only */
+  --brand-maroon-foreground: #f7f8fb;
+  --brand-paper: #f7f5ef;            /* marketing + conference canvas */
+  --brand-canvas: #f7f8fb;
+
+  /* charts, on-brand ramp (red reserved for the at-risk axis) */
+  --chart-1: #0e1b33;
+  --chart-2: #1f2f4d;
+  --chart-3: #ff8a00;
+  --chart-4: #ffc63d;
+  --chart-5: #2e9e6b;
+  --chart-6: #d62828;
 
   /* sidebar */
-  --sidebar: oklch(0.985 0.002 247);
-  --sidebar-foreground: oklch(0.29 0.045 262);
-  --sidebar-primary: oklch(0.29 0.07 262);
-  --sidebar-primary-foreground: oklch(0.985 0.002 247);
-  --sidebar-accent: oklch(0.95 0.012 232);
-  --sidebar-accent-foreground: oklch(0.29 0.05 262);
-  --sidebar-border: oklch(0.92 0.004 247);
-  --sidebar-ring: oklch(0.62 0.10 232);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0e1b33;
+  --sidebar-primary: #0e1b33;
+  --sidebar-primary-foreground: #f7f8fb;
+  --sidebar-accent: #edf0f5;
+  --sidebar-accent-foreground: #0e1b33;
+  --sidebar-border: rgba(31, 47, 77, 0.14);
+  --sidebar-ring: #ff8a00;
 }
 
 .dark {
-  --background: oklch(0.20 0.03 262);
-  --foreground: oklch(0.96 0.005 247);
+  --background: #0e1b33;
+  --foreground: #f7f8fb;
 
-  --card: oklch(0.24 0.03 262);
-  --card-foreground: oklch(0.96 0.005 247);
-  --popover: oklch(0.24 0.03 262);
-  --popover-foreground: oklch(0.96 0.005 247);
+  --card: #16223c;
+  --card-foreground: #f7f8fb;
+  --popover: #16223c;
+  --popover-foreground: #f7f8fb;
 
-  --primary: oklch(0.72 0.10 250);
-  --primary-foreground: oklch(0.20 0.03 262);
+  --primary: #f7f8fb;
+  --primary-foreground: #0e1b33;
 
-  --secondary: oklch(0.28 0.03 262);
-  --secondary-foreground: oklch(0.96 0.005 247);
+  --secondary: #1f2f4d;
+  --secondary-foreground: #f7f8fb;
 
-  --muted: oklch(0.28 0.03 262);
-  --muted-foreground: oklch(0.70 0.02 255);
+  --muted: #1f2f4d;
+  --muted-foreground: #9aa3b2;
 
-  --accent: oklch(0.30 0.04 240);
-  --accent-foreground: oklch(0.96 0.005 247);
+  --accent: #24355a;
+  --accent-foreground: #f7f8fb;
 
-  --destructive: oklch(0.62 0.20 25);
-  --destructive-foreground: oklch(0.96 0.005 247);
+  --destructive: #d62828;
+  --destructive-foreground: #ffffff;
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.62 0.10 232);
+  --border: rgba(247, 248, 251, 0.14);
+  --input: rgba(247, 248, 251, 0.18);
+  --ring: #ff8a00;
 
-  --brand-navy: oklch(0.72 0.10 250);
-  --brand-navy-foreground: oklch(0.20 0.03 262);
-  --brand-gold: oklch(0.80 0.13 78);
-  --brand-gold-foreground: oklch(0.20 0.03 262);
-  --brand-teal: oklch(0.66 0.10 232);
-  --brand-teal-foreground: oklch(0.20 0.03 262);
-  --brand-coral: oklch(0.70 0.17 44);
-  --brand-coral-foreground: oklch(0.20 0.03 262);
+  --brand-ink: #f7f8fb;
+  --brand-ink-foreground: #0e1b33;
+  --brand-slate: #9aa3b2;
+  --brand-slate-foreground: #0e1b33;
+  --brand-orange: #ff8a00;
+  --brand-orange-foreground: #0e1b33;
+  --brand-gold: #ffc63d;
+  --brand-gold-foreground: #0e1b33;
+  --brand-red: #e34b4b;
+  --brand-red-foreground: #ffffff;
+  --brand-green: #2e9e6b;
+  --brand-green-foreground: #ffffff;
+  --brand-maroon: #8c1d40;
+  --brand-maroon-foreground: #f7f8fb;
+  --brand-paper: #f7f5ef;
+  --brand-canvas: #0e1b33;
 
-  --chart-1: oklch(0.72 0.10 250);
-  --chart-2: oklch(0.66 0.10 232);
-  --chart-3: oklch(0.80 0.13 78);
-  --chart-4: oklch(0.70 0.17 44);
-  --chart-5: oklch(0.70 0.02 255);
+  --chart-1: #f7f8fb;
+  --chart-2: #9aa3b2;
+  --chart-3: #ff8a00;
+  --chart-4: #ffc63d;
+  --chart-5: #2e9e6b;
+  --chart-6: #d62828;
 
-  --sidebar: oklch(0.24 0.03 262);
-  --sidebar-foreground: oklch(0.96 0.005 247);
-  --sidebar-primary: oklch(0.72 0.10 250);
-  --sidebar-primary-foreground: oklch(0.20 0.03 262);
-  --sidebar-accent: oklch(0.30 0.04 240);
-  --sidebar-accent-foreground: oklch(0.96 0.005 247);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.62 0.10 232);
+  --sidebar: #16223c;
+  --sidebar-foreground: #f7f8fb;
+  --sidebar-primary: #f7f8fb;
+  --sidebar-primary-foreground: #0e1b33;
+  --sidebar-accent: #24355a;
+  --sidebar-accent-foreground: #f7f8fb;
+  --sidebar-border: rgba(247, 248, 251, 0.14);
+  --sidebar-ring: #ff8a00;
 }
 
 @theme inline {
@@ -139,20 +166,29 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-brand-navy: var(--brand-navy);
-  --color-brand-navy-foreground: var(--brand-navy-foreground);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ink-foreground: var(--brand-ink-foreground);
+  --color-brand-slate: var(--brand-slate);
+  --color-brand-slate-foreground: var(--brand-slate-foreground);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-orange-foreground: var(--brand-orange-foreground);
   --color-brand-gold: var(--brand-gold);
   --color-brand-gold-foreground: var(--brand-gold-foreground);
-  --color-brand-teal: var(--brand-teal);
-  --color-brand-teal-foreground: var(--brand-teal-foreground);
-  --color-brand-coral: var(--brand-coral);
-  --color-brand-coral-foreground: var(--brand-coral-foreground);
+  --color-brand-red: var(--brand-red);
+  --color-brand-red-foreground: var(--brand-red-foreground);
+  --color-brand-green: var(--brand-green);
+  --color-brand-green-foreground: var(--brand-green-foreground);
+  --color-brand-maroon: var(--brand-maroon);
+  --color-brand-maroon-foreground: var(--brand-maroon-foreground);
+  --color-brand-paper: var(--brand-paper);
+  --color-brand-canvas: var(--brand-canvas);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -163,10 +199,14 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: calc(var(--radius) - 2px); /* 2px */
+  --radius-md: var(--radius);             /* 4px */
+  --radius-lg: calc(var(--radius) + 4px); /* 8px */
+  --radius-xl: calc(var(--radius) + 8px); /* 12px */
 }
 
 @layer base {
@@ -177,6 +217,15 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
+    font-family: var(--font-sans);
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  /* display face for headings + hero numbers (Space Grotesk) */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+  /* metrics, mastery estimates, ledger (JetBrains Mono) */
+  code, kbd, samp, pre, [data-metric] {
+    font-family: var(--font-mono);
   }
 }
