@@ -263,3 +263,41 @@ def test_seed_creates_novel_proposal_when_no_match(monkeypatch):
     assert result["proposed"] == 1
     assert result["flagged_possible_duplicate"] == 0
     assert inserted[0]["status"] == "proposed"
+
+
+def test_seed_continues_past_a_failed_insert(monkeypatch):
+    """A single failed skill insert (e.g. a timeout on a heavy vector write)
+    must not abort the run and discard already-processed modules. Found
+    live: one 500 in the middle of the module loop lost every module that
+    had already succeeded. The run now logs, counts insertFailed, and
+    continues, so a refresh only ever re-does the failed skill, not the
+    whole course."""
+    items = [
+        {"lms_content_id": "mod-1", "title": "Module 1", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l1", "title": "L1", "parent_id": "mod-1", "body_or_description": "sensors"},
+        {"lms_content_id": "mod-2", "title": "Module 2", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l2", "title": "L2", "parent_id": "mod-2", "body_or_description": "actuators"},
+    ]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [])
+    monkeypatch.setattr(
+        skill_proposer, "propose_skills_from_text",
+        lambda **k: [{"name": "Skill X", "bloom_level": "apply", "weight": 1.0}],
+    )
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [0.0] * 1024)
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [])  # no match at all
+
+    calls = {"n": 0, "failed_once": False}
+
+    def flaky_insert(table, rows):
+        if not calls["failed_once"]:  # first write fails, the rest land
+            calls["failed_once"] = True
+            raise TimeoutError("vector insert timed out")
+        calls["n"] += 1
+        return rows
+
+    monkeypatch.setattr(skill_proposer.db, "insert", flaky_insert)
+
+    result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=items)
+    assert result["modulesProcessed"] == 2  # both modules were processed
+    assert result["insertFailed"] == 1     # the one failed write is counted, not fatal
+    assert result["proposed"] == 1         # the second skill landed

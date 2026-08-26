@@ -202,7 +202,7 @@ def seed_course_skills(
             "modulesSkipped": len(by_module),
         }
 
-    proposed = auto_approved = flagged = 0
+    proposed = auto_approved = flagged = insert_failed = 0
 
     for mod_ref, joined_text in pending.items():
         proposals = propose_skills_from_text(course_content=joined_text)
@@ -212,36 +212,46 @@ def seed_course_skills(
             sim = float(match["similarity"]) if match else 0.0
             emb = bedrock.embed(p["name"], input_type="search_document")
 
-            if match and sim >= AUTO_MATCH:
-                # Same skill, already vetted elsewhere. Reuse it verbatim and
-                # go straight to approved, pointing at the canonical origin.
-                db.insert("skills", [{
-                    "institution_id": institution_id, "course_id": course_id,
-                    "name": match["name"], "bloom_level": match["bloom_level"],
-                    "blueprint_weight": match["blueprint_weight"],
-                    "status": "approved",
-                    "canonical_skill_id": match["id"],
-                    "embedding": emb,
-                    "module_ref": mod_ref,
-                    "proposed_source": mod_ref,
-                }])
-                auto_approved += 1
-            else:
-                # Novel, or only a possible duplicate: stage for human review.
-                note = None
-                if match and sim >= REVIEW_HINT:
-                    note = f"possible duplicate of '{match['name']}' (sim {sim:.2f})"
-                    flagged += 1
-                db.insert("skills", [{
-                    "institution_id": institution_id, "course_id": course_id,
-                    "name": p["name"], "bloom_level": p["bloom_level"],
-                    "blueprint_weight": p["weight"],
-                    "status": "proposed",
-                    "embedding": emb,
-                    "module_ref": mod_ref,
-                    "proposed_source": note or mod_ref,
-                }])
-                proposed += 1
+            try:
+                if match and sim >= AUTO_MATCH:
+                    # Same skill, already vetted elsewhere. Reuse it verbatim and
+                    # go straight to approved, pointing at the canonical origin.
+                    db.insert("skills", [{
+                        "institution_id": institution_id, "course_id": course_id,
+                        "name": match["name"], "bloom_level": match["bloom_level"],
+                        "blueprint_weight": match["blueprint_weight"],
+                        "status": "approved",
+                        "canonical_skill_id": match["id"],
+                        "embedding": emb,
+                        "module_ref": mod_ref,
+                        "proposed_source": mod_ref,
+                    }])
+                    auto_approved += 1
+                else:
+                    # Novel, or only a possible duplicate: stage for human review.
+                    note = None
+                    if match and sim >= REVIEW_HINT:
+                        note = f"possible duplicate of '{match['name']}' (sim {sim:.2f})"
+                        flagged += 1
+                    db.insert("skills", [{
+                        "institution_id": institution_id, "course_id": course_id,
+                        "name": p["name"], "bloom_level": p["bloom_level"],
+                        "blueprint_weight": p["weight"],
+                        "status": "proposed",
+                        "embedding": emb,
+                        "module_ref": mod_ref,
+                        "proposed_source": note or mod_ref,
+                    }])
+                    proposed += 1
+            except Exception as exc:
+                # A single bad write (timeout on a heavy vector insert, etc.)
+                # must not abort the run and discard modules already
+                # processed — log it, count it, and keep going. The proposal
+                # work (model + embed) already succeeded and is cheap to
+                # re-attempt on the next refresh, but completed modules are
+                # not.
+                print(f"skill insert failed for '{p['name']}': {exc}")
+                insert_failed += 1
 
     return {
         "skipped": False,
@@ -250,4 +260,5 @@ def seed_course_skills(
         "proposed": proposed,
         "auto_approved": auto_approved,
         "flagged_possible_duplicate": flagged,
+        "insertFailed": insert_failed,
     }

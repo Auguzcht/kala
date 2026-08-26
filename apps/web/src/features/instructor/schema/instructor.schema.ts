@@ -75,9 +75,11 @@ export const proposeSkillsResultSchema = z.object({
   skipped: z.boolean(),
   reason: z.string().optional(),
   modulesProcessed: z.number().optional(),
+  modulesSkipped: z.number().optional(),
   proposed: z.number().optional(),
   auto_approved: z.number().optional(),
   flagged_possible_duplicate: z.number().optional(),
+  insertFailed: z.number().optional(),
 });
 
 export type HeatmapSkill = z.infer<typeof heatmapSkillSchema>;

@@ -50,7 +50,8 @@ function RefreshStatus({
       <p className="mt-3 text-xs text-muted-foreground">
         Processed {processed} new module{processed === 1 ? "" : "s"}, {data.proposed ?? 0} skill
         {(data.proposed ?? 0) === 1 ? "" : "s"} ready for review
-        {data.auto_approved ? `, ${data.auto_approved} auto-matched from another course` : ""}.
+        {data.auto_approved ? `, ${data.auto_approved} auto-matched from another course` : ""}
+        {data.insertFailed ? `, ${data.insertFailed} failed to save — press Refresh to retry` : ""}.
       </p>
     );
   }

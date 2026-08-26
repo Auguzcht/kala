@@ -20,7 +20,7 @@ def _client() -> httpx.Client:
             "Authorization": f"Bearer {s.supabase_service_key}",
             "Content-Type": "application/json",
         },
-        timeout=15.0,
+        timeout=60.0,  # vector rows (1024-dim embeddings) need headroom on slow/cold writes; 15s was pre-vector
     )
 
 
