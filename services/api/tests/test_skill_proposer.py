@@ -53,17 +53,82 @@ def test_group_content_by_module_skips_empty_bodies():
     assert skill_proposer._group_content_by_module(items) == {}
 
 
-def test_seed_skips_when_course_already_has_skills(monkeypatch):
-    """Idempotency: a re-launch of a course that already has skills does not
-    re-propose (no duplicate work, no LLM calls)."""
-    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [{"id": "existing"}])
+def test_seed_skips_only_modules_that_already_have_skills(monkeypatch):
+    """Incremental: a module that already has skills is skipped; a module
+    that doesn't is processed. This is the core of the refresh-button
+    behavior, safe to re-run, only does new work."""
+    items = [
+        {"lms_content_id": "mod-1", "title": "Module 1", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l1", "title": "L1", "parent_id": "mod-1", "body_or_description": "module one text"},
+        {"lms_content_id": "mod-2", "title": "Module 2", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l2", "title": "L2", "parent_id": "mod-2", "body_or_description": "module two text"},
+        {"lms_content_id": "mod-3", "title": "Module 3", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l3", "title": "L3", "parent_id": "mod-3", "body_or_description": "module three text"},
+    ]
+    # Module 1 already has skills (e.g. from a first partial run); Modules 2/3 don't.
+    monkeypatch.setattr(
+        skill_proposer.db, "select",
+        lambda t, p: [{"module_ref": "Module 1"}],
+    )
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [])
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: rows)
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [0.0] * 1024)
+
+    seen = []
+
+    def fake_propose(*, course_content):
+        seen.append(course_content)
+        return [{"name": f"Skill from {course_content}", "bloom_level": "apply", "weight": 1.0}]
+
+    monkeypatch.setattr(skill_proposer, "propose_skills_from_text", fake_propose)
+
+    result = skill_proposer.seed_course_skills(
+        institution_id="i", course_id="c", content_items=items,
+    )
+    assert result["modulesProcessed"] == 2
+    assert result["modulesSkipped"] == 1
+    # Module 1 was never sent to the model; Modules 2 and 3 were.
+    assert sorted(seen) == ["module three text", "module two text"]
+
+
+def test_seed_is_a_noop_when_all_modules_already_done(monkeypatch):
+    """Re-running once every module is covered does nothing, and reports it
+    cleanly rather than erroring. This is the 'instructor hits refresh again,
+    nothing new' case."""
+    items = [
+        {"lms_content_id": "mod-1", "title": "Module 1", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l1", "title": "L1", "parent_id": "mod-1", "body_or_description": "module one text"},
+    ]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [{"module_ref": "Module 1"}])
     called = {"proposed": False}
     monkeypatch.setattr(
         skill_proposer, "propose_skills_from_text",
         lambda **k: called.__setitem__("proposed", True) or [],
     )
     result = skill_proposer.seed_course_skills(
-        institution_id="i", course_id="c", content_items=[],
+        institution_id="i", course_id="c", content_items=items,
+    )
+    assert result["skipped"] is True
+    assert result["modulesProcessed"] == 0
+    assert result["modulesSkipped"] == 1
+    assert called["proposed"] is False  # no model call at all
+
+
+def test_seed_treats_root_content_as_its_own_trackable_module(monkeypatch):
+    """Course-root content (module_ref None) is proposed once then skipped,
+    not re-run on every refresh."""
+    items = [
+        {"lms_content_id": "syllabus", "title": "Syllabus", "parent_id": None, "body_or_description": "syllabus text"},
+    ]
+    # None already recorded as done.
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [{"module_ref": None}])
+    called = {"proposed": False}
+    monkeypatch.setattr(
+        skill_proposer, "propose_skills_from_text",
+        lambda **k: called.__setitem__("proposed", True) or [],
+    )
+    result = skill_proposer.seed_course_skills(
+        institution_id="i", course_id="c", content_items=items,
     )
     assert result["skipped"] is True
     assert called["proposed"] is False

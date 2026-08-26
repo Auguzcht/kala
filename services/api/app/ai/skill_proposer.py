@@ -148,35 +148,63 @@ def _find_approved_match(*, institution_id: str, name: str) -> dict | None:
     return matches[0] if matches else None
 
 
+def _already_proposed_modules(*, institution_id: str, course_id: str) -> set[str | None]:
+    """Which module_refs already have at least one skill row for this course,
+    i.e. which modules have already been through proposal. This is the
+    completion record for incremental re-runs, derived from data already
+    written (every proposed/approved skill carries its module_ref), so there's
+    no separate tracking table to keep in sync. None is a real member here:
+    course-root content with no enclosing folder is tracked like any module,
+    so it's proposed once and then skipped, not re-run every time."""
+    rows = db.select("skills", {
+        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "select": "module_ref",
+    })
+    return {r["module_ref"] for r in rows}
+
+
 def seed_course_skills(
     *, institution_id: str, course_id: str, content_items: list[dict],
 ) -> dict:
-    """Propose skills for a course, one model call per detected module (not
-    one call for the whole course, see module docstring), and reconcile each
-    proposal against the institution's approved catalog. Idempotent-ish:
-    skips proposing entirely if the course already has any skills (approved
-    or proposed), so a re-launch doesn't duplicate work.
+    """Propose skills for a course, one model call per detected module, and
+    reconcile each proposal against the institution's approved catalog.
+
+    INCREMENTAL by module: only processes modules that don't already have
+    skills for this course. Safe to call repeatedly, a re-run picks up any
+    module that wasn't covered before (a module added mid-term, or one that
+    produced nothing on a flaky first run) and skips everything already done.
+    This is what lets an instructor press a "refresh skills" button as many
+    times as they like: it only ever does the work that's actually new.
+
+    Completion is tracked per module via _already_proposed_modules (derived
+    from the module_ref already stored on every skill row, no separate
+    tracking table).
 
     content_items is the raw list from LMSConnector.get_content(), the same
     shape ingest_course() already consumes.
 
-    Returns counts for logging: proposed, auto_approved (matched), flagged,
-    plus modulesProcessed so a demo-day sanity check can confirm every
-    module was actually seen, not just the first one.
-    Best-effort by contract: the caller (launch handler) must treat a raised
-    exception as non-fatal, this must never block a launch.
+    Returns counts for logging, including modulesProcessed (how many modules
+    were newly processed this run) and modulesSkipped (already done). A run
+    where everything's already covered returns modulesProcessed=0, which is
+    the correct, non-erroring "nothing new to do" outcome.
+    Best-effort by contract: the caller must treat a raised exception as
+    non-fatal, this must never block a launch.
     """
-    existing = db.select("skills", {
-        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-        "select": "id", "limit": "1",
-    })
-    if existing:
-        return {"skipped": True, "reason": "course already has skills"}
-
     by_module = _group_content_by_module(content_items)
+    done = _already_proposed_modules(institution_id=institution_id, course_id=course_id)
+
+    pending = {ref: text for ref, text in by_module.items() if ref not in done}
+    if not pending:
+        return {
+            "skipped": True,
+            "reason": "all modules already have skills",
+            "modulesProcessed": 0,
+            "modulesSkipped": len(by_module),
+        }
+
     proposed = auto_approved = flagged = 0
 
-    for mod_ref, joined_text in by_module.items():
+    for mod_ref, joined_text in pending.items():
         proposals = propose_skills_from_text(course_content=joined_text)
 
         for p in proposals:
@@ -217,7 +245,8 @@ def seed_course_skills(
 
     return {
         "skipped": False,
-        "modulesProcessed": len(by_module),
+        "modulesProcessed": len(pending),
+        "modulesSkipped": len(by_module) - len(pending),
         "proposed": proposed,
         "auto_approved": auto_approved,
         "flagged_possible_duplicate": flagged,

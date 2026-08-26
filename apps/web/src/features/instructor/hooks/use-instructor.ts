@@ -56,6 +56,8 @@ export function useProposeSkills(courseId: string) {
     mutationFn: () => proposeSkills(courseId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
+      // Auto-approved matches may have added live skills to the cohort.
+      queryClient.invalidateQueries({ queryKey: ["heatmap", courseId] });
     },
   });
 }

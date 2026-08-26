@@ -45,18 +45,14 @@ def _roster_role(course_role: str | None) -> str:
 
 def _seed_course_skills(*, institution_id: str, course_id: str, course_ref: str,
                         connector: BlackboardConnector) -> dict:
-    """Seed the skill graph from AI proposals on first launch (see
-    docs/SKILL_PIPELINE.md). Same non-blocking contract as roster sync: any
-    failure logs and is skipped, never blocks the 302. Guarded so we only
-    propose when the course has no skills yet (avoids a pointless content
-    fetch on every instructor launch)."""
+    """Seed the skill graph from AI proposals (docs/SKILL_PIPELINE.md). Same
+    non-blocking contract as roster sync: any failure logs and is skipped,
+    never blocks the 302. Incremental by module (see ai/skill_proposer.py):
+    the proposer itself tracks which modules already have skills and only
+    processes new ones, so this is safe on every instructor launch — the
+    all-or-nothing "course already has skills" pre-check is deliberately
+    gone, it would have blocked a partial result from ever being topped up."""
     try:
-        existing = db.select("skills", {
-            "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-            "select": "id", "limit": "1",
-        })
-        if existing:
-            return {"skipped": True, "reason": "course already has skills"}
         items = connector.get_content(course_ref)
         if not items:
             return {"skipped": True, "reason": "course has no content"}
