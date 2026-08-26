@@ -3,11 +3,13 @@ import {
   atRiskSchema,
   heatmapSchema,
   proposedSkillsSchema,
+  proposeSkillsResultSchema,
   reviewResponseSchema,
   studentTwinSchema,
   type AtRisk,
   type HeatmapData,
   type ProposedSkills,
+  type ProposeSkillsResult,
   type ReviewResponse,
   type StudentTwin,
 } from "@/features/instructor/schema/instructor.schema";
@@ -42,4 +44,9 @@ export async function reviewProposedSkill(
     body: JSON.stringify(decision),
   });
   return reviewResponseSchema.parse(data);
+}
+
+export async function proposeSkills(courseId: string): Promise<ProposeSkillsResult> {
+  const data = await api<unknown>(`/courses/${courseId}/skills/propose`, { method: "POST" });
+  return proposeSkillsResultSchema.parse(data);
 }

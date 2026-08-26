@@ -8,6 +8,7 @@ export {
   useStudentTwin,
   useProposedSkills,
   useReviewProposedSkill,
+  useProposeSkills,
 } from "@/features/instructor/hooks/use-instructor";
 export type {
   HeatmapData,
@@ -20,4 +21,5 @@ export type {
   ProposedSkill,
   ProposedSkills,
   ReviewResponse,
+  ProposeSkillsResult,
 } from "@/features/instructor/schema/instructor.schema";

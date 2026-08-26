@@ -122,3 +122,55 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
     assert inserted[0]["lms_ref"] == "lesson-1"
     assert {"skill_id": "skill-1"} in updates
     assert not any("embedding" in u for u in updates)
+
+
+def test_propose_skills_endpoint_requires_instructor_or_admin(monkeypatch) -> None:
+    """No relaunch needed to trigger skill proposal, but it's still
+    instructor/admin only, same as everything else in this pipeline."""
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="student-1", institution_id="institution-1", app_role="student"
+    )
+    app.dependency_overrides[get_lms_connector] = IngestConnector
+    try:
+        with TestClient(app) as client:
+            response = client.post("/courses/course-1/skills/propose")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
+def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypatch) -> None:
+    """The standalone endpoint fetches content fresh from the connector and
+    hands it straight to seed_course_skills, same pipeline the launch
+    handler uses, just callable on demand instead of only on a fresh
+    Blackboard launch."""
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="user-1", institution_id="institution-1", app_role="instructor"
+    )
+    app.dependency_overrides[get_lms_connector] = IngestConnector
+    monkeypatch.setattr(
+        diagnostic.db, "select",
+        lambda table, params: [{"lms_course_id": "_4_1"}] if table == "courses" else [],
+    )
+    captured = {}
+
+    def fake_seed(*, institution_id, course_id, content_items):
+        captured["institution_id"] = institution_id
+        captured["course_id"] = course_id
+        captured["content_items"] = content_items
+        return {"skipped": False, "modulesProcessed": 1, "proposed": 2,
+                "auto_approved": 0, "flagged_possible_duplicate": 0}
+
+    monkeypatch.setattr(diagnostic, "seed_course_skills", fake_seed)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/courses/course-1/skills/propose")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["proposed"] == 2
+    assert captured["institution_id"] == "institution-1"
+    assert captured["course_id"] == "course-1"
+    assert captured["content_items"][1]["lms_content_id"] == "lesson-1"

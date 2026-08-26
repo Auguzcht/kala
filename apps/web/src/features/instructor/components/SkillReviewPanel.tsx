@@ -1,4 +1,4 @@
-import { useProposedSkills, useReviewProposedSkill } from "@/features/instructor";
+import { useProposeSkills, useProposedSkills, useReviewProposedSkill } from "@/features/instructor";
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function SkillReviewPanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError, refetch } = useProposedSkills(courseId);
   const review = useReviewProposedSkill(courseId);
+  const propose = useProposeSkills(courseId);
 
   if (isLoading) {
     return (
@@ -23,23 +24,63 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
     );
   }
 
+  if (isError && !data) {
+    return (
+      <div className="border bg-card p-5">
+        <p className="text-sm font-semibold text-foreground">Skill proposals</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          We could not load pending proposals.
+        </p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   const proposed = data?.proposed ?? [];
-  if (isError || (data && proposed.length === 0)) {
-    // Quiet: no proposals is the normal steady state, not an error surface.
-    if (isError && !data) {
-      return (
-        <div className="border bg-card p-5">
-          <p className="text-sm font-semibold text-foreground">Skill proposals</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            We could not load pending proposals.
-          </p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
-            Retry
-          </Button>
+
+  // Empty steady state: the trigger for the FIRST proposal run, on demand,
+  // no relaunch needed (docs/DEEPSEEK_ONDEMAND_PROPOSAL.md). modulesProcessed
+  // is the demo-day sanity check that every module was actually seen.
+  if (proposed.length === 0) {
+    return (
+      <div className="relative border bg-card">
+        <CornerBrackets />
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div>
+            <h2 className="font-display text-[16px] font-semibold text-foreground">
+              Skill proposals
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              AI-draft this course's skills from its content, one module at a time.
+            </p>
+          </div>
         </div>
-      );
-    }
-    return null;
+        <div className="px-5 py-6">
+          <Button
+            variant="default"
+            size="sm"
+            disabled={propose.isPending}
+            onClick={() => propose.mutate()}
+          >
+            {propose.isPending ? "Proposing…" : "Run skill proposal"}
+          </Button>
+          {propose.isError ? (
+            <p className="mt-3 text-xs text-destructive">
+              Proposal failed. Check the API log and try again.
+            </p>
+          ) : null}
+          {propose.isSuccess ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {propose.data.skipped
+                ? "This course already has skills — nothing to propose. Delete existing rows to re-run from scratch."
+                : `Processed ${propose.data.modulesProcessed ?? 0} modules, ${propose.data.proposed ?? 0} proposals ready for review`}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
   }
 
   return (

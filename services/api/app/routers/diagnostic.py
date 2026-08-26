@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from app.ai import bedrock, router as model_router
 from app.ai.chunking import chunk_text
 from app.ai.deidentify import strip_pii
+from app.ai.skill_proposer import seed_course_skills
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user, get_lms_connector
+from app.deps import CurrentUser, get_current_user, get_lms_connector, require_role
 from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
 from app.lms.hierarchy import build_folder_paths, module_ref_for
@@ -51,6 +52,31 @@ def get_assessments(course_id: str,
                     user: CurrentUser = Depends(get_current_user),
                     connector: BlackboardConnector = Depends(get_lms_connector)):
     return connector.get_assessments(_course_ref(course_id, user.institution_id))
+
+
+@router.post("/{course_id}/skills/propose")
+def propose_course_skills(
+    course_id: str,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    connector: BlackboardConnector = Depends(get_lms_connector),
+):
+    """On-demand trigger for AI skill proposal, standalone, no relaunch
+    needed. This was previously only ever fired as a side effect buried
+    inside the LTI launch handler, meaning re-testing or re-running it
+    required faking a fresh Blackboard launch each time. Same underlying
+    pipeline (ai/skill_proposer.seed_course_skills), same idempotency
+    behavior: if this course already has any skill rows, approved or
+    proposed, this is a no-op, delete them first (in Supabase) if you
+    genuinely want a from-scratch re-proposal, e.g. after fixing a bug in
+    the proposal logic itself, or want to re-run against changed course
+    content.
+    """
+    course_ref = _course_ref(course_id, user.institution_id)
+    content_items = connector.get_content(course_ref)
+    return seed_course_skills(
+        institution_id=user.institution_id, course_id=course_id,
+        content_items=content_items,
+    )
 
 
 @router.post("/{course_id}/ingest")

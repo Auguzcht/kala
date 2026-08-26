@@ -4,6 +4,7 @@ import {
   fetchHeatmap,
   fetchProposedSkills,
   fetchStudentTwin,
+  proposeSkills,
   reviewProposedSkill,
 } from "@/features/instructor/api/instructor.api";
 
@@ -45,6 +46,16 @@ export function useReviewProposedSkill(courseId: string) {
       // Approving a skill changes what the cohort/heatmap can show.
       queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
       queryClient.invalidateQueries({ queryKey: ["heatmap", courseId] });
+    },
+  });
+}
+
+export function useProposeSkills(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => proposeSkills(courseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
     },
   });
 }

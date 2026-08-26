@@ -69,6 +69,17 @@ export const reviewResponseSchema = z.object({
   status: z.enum(["approved", "rejected"]),
 });
 
+// On-demand proposal trigger (POST /courses/{id}/skills/propose). Skipped
+// shape when the course already has skills; full shape when it ran.
+export const proposeSkillsResultSchema = z.object({
+  skipped: z.boolean(),
+  reason: z.string().optional(),
+  modulesProcessed: z.number().optional(),
+  proposed: z.number().optional(),
+  auto_approved: z.number().optional(),
+  flagged_possible_duplicate: z.number().optional(),
+});
+
 export type HeatmapSkill = z.infer<typeof heatmapSkillSchema>;
 export type HeatmapStudent = z.infer<typeof heatmapStudentSchema>;
 export type HeatmapCell = z.infer<typeof heatmapCellSchema>;
@@ -79,3 +90,4 @@ export type StudentTwin = z.infer<typeof studentTwinSchema>;
 export type ProposedSkill = z.infer<typeof proposedSkillSchema>;
 export type ProposedSkills = z.infer<typeof proposedSkillsSchema>;
 export type ReviewResponse = z.infer<typeof reviewResponseSchema>;
+export type ProposeSkillsResult = z.infer<typeof proposeSkillsResultSchema>;
