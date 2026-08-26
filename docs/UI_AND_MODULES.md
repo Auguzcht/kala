@@ -105,3 +105,22 @@ Sept 1 unless it turns out to be needed for the demo itself.
 See the small edits called out separately in `masterplan.md` sections 3.1,
 5.3, 8, and 18, Canvas status and the module-scoping open decision, these
 are still pending, they weren't part of the code change.
+
+## 4. Model provider: interim OpenRouter path (added later)
+
+Real AWS Bedrock model access is scoped for once this runs under the
+school's own AWS org account. Until then, `AI_PROVIDER=openrouter` in
+`.env` swaps every model call (chat completion + embeddings) to OpenRouter's
+free-tier models, with zero changes to any caller. See `.env` config in
+`config.py` for the exact model IDs and `ai/bedrock.py`'s module docstring
+for why the file kept its name despite no longer being Bedrock-only.
+
+One real caveat worth tracking: OpenRouter's free models had ~85-90%
+availability over recent days per their own status page at the time this was
+wired in. That's not production-grade reliability. Every current caller
+already degrades gracefully on a model failure (skill proposal is
+best-effort at the launch handler, `learn/items.py` falls back to a
+deterministic item on generation failure), so an OpenRouter outage shows up
+as those existing fallbacks firing, not a crash, but it's worth a live
+rehearsal specifically to see what a flaky free model looks like on stage
+before demo day, not assuming it away.

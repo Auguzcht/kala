@@ -48,6 +48,42 @@ class Settings(BaseSettings):
     bedrock_model_premium: str = Field(default="", alias="BEDROCK_MODEL_PREMIUM")
     bedrock_embed_model: str = Field(default="", alias="BEDROCK_EMBED_MODEL")
 
+    # Model provider switch. "bedrock" (default, for when this runs under the
+    # school's AWS org account with real model access) or "openrouter" (the
+    # interim path while Bedrock model access isn't provisioned yet, using
+    # OpenRouter's free-tier models). ai/bedrock.py dispatches on this; every
+    # caller (ai/router.py, ai/rag.py, ai/skill_proposer.py, learn/items.py,
+    # routers/diagnostic.py) is unchanged either way, same converse()/embed()
+    # signatures regardless of which provider is actually behind them.
+    ai_provider: str = Field(default="bedrock", alias="AI_PROVIDER")
+
+    # OpenRouter (interim provider). Free-tier chat models rotate over time,
+    # see https://openrouter.ai/collections/free-models, current defaults
+    # below were verified working as of this integration.
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL",
+    )
+    openrouter_model_fast: str = Field(
+        default="nvidia/nemotron-3.5-lightning:free", alias="OPENROUTER_MODEL_FAST",
+    )
+    openrouter_model_default: str = Field(
+        default="z-ai/glm-5.2:free", alias="OPENROUTER_MODEL_DEFAULT",
+    )
+    openrouter_model_reasoning: str = Field(
+        default="z-ai/glm-5.2:free", alias="OPENROUTER_MODEL_REASONING",
+    )
+    openrouter_model_premium: str = Field(
+        default="nvidia/nemotron-3-super-120b-a12b:free", alias="OPENROUTER_MODEL_PREMIUM",
+    )
+    # Nemotron 3 Embed 1B natively outputs 2048 dims; ai/bedrock.py slices to
+    # the first 1024 and re-normalizes (NVIDIA's own documented technique for
+    # this model family) so it matches the existing vector(1024) schema with
+    # no migration change.
+    openrouter_embed_model: str = Field(
+        default="nvidia/nemotron-3-embed-1b:free", alias="OPENROUTER_EMBED_MODEL",
+    )
+
     # LTI 1.3
     lti_issuer: str = Field(default="https://blackboard.com", alias="LTI_ISSUER")
     lti_client_id: str = Field(default="", alias="LTI_CLIENT_ID")
