@@ -1,73 +1,38 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, Navigate, Outlet } from "@tanstack/react-router";
 import { useSession } from "@/lib/auth/AuthProvider";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { DiagnosticPanel } from "@/features/diagnostic";
-import { PracticePanel } from "@/features/practice";
-import { TutorChat } from "@/features/tutor";
-import { FlashcardDeck } from "@/features/flashcards";
+import { CourseShell } from "@/components/shell/CourseShell";
 
+// /course is a layout: the app shell (side rail + top bar) wraps every
+// learn-loop page. Guards session + course scope before rendering.
 export const Route = createFileRoute("/course")({
-  component: CourseHome,
+  component: CourseLayout,
 });
 
-const TABS = [
-  { id: "diagnostic", label: "Diagnostic" },
-  { id: "practice", label: "Practice" },
-  { id: "tutor", label: "Ask Kala" },
-  { id: "flashcards", label: "Flashcards" },
-] as const;
-
-type TabId = (typeof TABS)[number]["id"];
-
-function CourseHome() {
+function CourseLayout() {
   const session = useSession();
-  const [tab, setTab] = useState<TabId>("diagnostic");
 
-  if (!session?.courseId) {
+  if (!session) {
+    // No minted session: back to the launch flow, which explains the
+    // "open Kala from inside your course" state.
+    return <Navigate to="/launch" />;
+  }
+  if (!session.courseId) {
+    // Authenticated but not course-scoped (e.g. a standalone admin visiting
+    // a course URL). Their surface lives elsewhere (Phase 4+).
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <EmptyState
           title="No course in this session"
-          description="Open Kala from inside a course in your LMS to start the diagnostic, practice, and tutor."
+          description="Open Kala from inside a course in your LMS to use the learn loop."
         />
       </div>
     );
   }
 
-  const courseId = session.courseId;
-
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-6 py-10">
-      <div>
-        <p className="text-sm font-medium tracking-wide text-brand-slate">Your course</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-          The learn loop
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Diagnose your baseline, practice your weakest skills, ask questions, and review with
-          flashcards.
-        </p>
-      </div>
-
-      <nav className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <Button
-            key={t.id}
-            variant={tab === t.id ? "orange" : "outline"}
-            size="sm"
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </Button>
-        ))}
-      </nav>
-
-      {tab === "diagnostic" ? <DiagnosticPanel courseId={courseId} /> : null}
-      {tab === "practice" ? <PracticePanel courseId={courseId} /> : null}
-      {tab === "tutor" ? <TutorChat courseId={courseId} /> : null}
-      {tab === "flashcards" ? <FlashcardDeck courseId={courseId} /> : null}
-    </div>
+    <CourseShell courseId={session.courseId} displayName={session.displayName}>
+      <Outlet />
+    </CourseShell>
   );
 }

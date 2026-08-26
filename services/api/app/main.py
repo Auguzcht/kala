@@ -8,12 +8,14 @@ from mangum import Mangum
 
 from app.config import get_settings
 from app.lti.routes import router as lti_router
+from app.routers.courses import router as courses_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.diagnostic import router as diagnostic_router
 from app.routers.flashcards import router as flashcards_router
 from app.routers.health import router as health_router
 from app.routers.practice import router as practice_router
 from app.routers.tutor import router as tutor_router
+from app.routers.twin import router as twin_router
 
 app = FastAPI(title="Kala API", version="0.1.0")
 
@@ -28,10 +30,12 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(lti_router)
+app.include_router(courses_router)
 app.include_router(diagnostic_router)
 app.include_router(practice_router)
 app.include_router(flashcards_router)
 app.include_router(tutor_router)
+app.include_router(twin_router)
 app.include_router(dashboard_router)
 
 # Lambda entrypoint (referenced by the Dockerfile CMD: app.main.handler)
