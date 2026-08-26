@@ -12,6 +12,7 @@ token carries sub, institution_id, and app_role, which the database RLS reads.
 """
 from __future__ import annotations
 
+import logging
 import secrets
 from urllib.parse import urlencode
 
@@ -28,7 +29,54 @@ from app.security.jwt import mint_session_token
 
 router = APIRouter(prefix="/lti", tags=["lti"])
 
+logger = logging.getLogger(__name__)
+
 _STATE_COOKIE = "kala_lti_state"
+
+
+def _roster_role(course_role: str | None) -> str:
+    """Blackboard courseRoleId -> Kala app_role. Only an explicit Student
+    membership is a student; everything else (Instructor, Teaching
+    Assistant, Grader, ...) is enrolled as instructor (upsert_enrollment
+    coerces admin/instructor the same way)."""
+    return "student" if (course_role or "").strip().lower() == "student" else "instructor"
+
+
+def _sync_roster(*, institution_id: str, course_id: str, course_ref: str,
+                 connector: BlackboardConnector) -> int:
+    """NRPS-style roster pull (masterplan 3.1). Enrolls every member the LMS
+    returns, so the cohort exists before each student has individually
+    launched Kala once. Best-effort by design: a roster failure (LMS hiccup,
+    one malformed member) must never break the launching instructor's own
+    session — members are upserted one at a time and failures are logged and
+    skipped."""
+    try:
+        members = connector.get_roster(course_ref)
+    except Exception:
+        logger.exception("roster pull failed for %s; skipping roster sync", course_ref)
+        return 0
+
+    enrolled = 0
+    for member in members:
+        lms_user_id = member.get("lms_user_id")
+        if not lms_user_id:
+            continue
+        try:
+            user = db.upsert_user(
+                institution_id=institution_id,
+                lms_user_id=lms_user_id,
+                role=_roster_role(member.get("role")),
+                display_name=member.get("name"),
+                email=member.get("email"),
+            )
+            db.upsert_enrollment(
+                institution_id=institution_id, user_id=user["id"],
+                course_id=course_id, role=_roster_role(member.get("role")),
+            )
+            enrolled += 1
+        except Exception:
+            logger.exception("roster member %s skipped", lms_user_id)
+    return enrolled
 
 
 async def _login(request: Request) -> RedirectResponse:
@@ -136,6 +184,17 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
             institution_id=institution["id"], user_id=user["id"],
             course_id=course["id"], role=app_role,
         )
+
+        # NRPS roster pull (masterplan 3.1): the full class list already
+        # exists in Blackboard — enroll every member, not just this launcher,
+        # so an instructor sees their cohort before any student has opened
+        # Kala. Students launching do not trigger this (avoid hammering the
+        # LMS on every student launch); best-effort, never blocks the launch.
+        if app_role in ("instructor", "admin"):
+            _sync_roster(
+                institution_id=institution["id"], course_id=course["id"],
+                course_ref=lms_course_id, connector=connector,
+            )
 
     # 4. mint the session token and hand off to the SPA (fragment is not logged)
     token = mint_session_token(
