@@ -26,7 +26,13 @@ def converse(*, model_id: str, system: str, messages: list[dict], max_tokens: in
 
 def embed(text: str, *, input_type: str = "search_document") -> list[float]:
     s = get_settings()
-    if s.ai_provider == "openrouter":
+    # Embedding provider is independent of chat provider on purpose (see
+    # config.py EMBED_PROVIDER docstring) -- chat and embedding reliability
+    # turned out to be two separate problems in practice, not one.
+    provider = s.embed_provider or s.ai_provider
+    if provider == "openai":
+        return _openai_embed(text, input_type=input_type)
+    if provider == "openrouter":
         return _openrouter_embed(text, input_type=input_type)
     return _bedrock_embed(text, input_type=input_type)
 
@@ -111,7 +117,7 @@ def _openrouter_embed(text: str, *, input_type: str) -> list[float]:
         r = c.post("/embeddings", json={
             "model": s.openrouter_embed_model,
             "input": text,
-            "input_type": input_type,  # harmless if the provider ignores it
+            "input_type": _to_openrouter_input_type(input_type),
         })
         r.raise_for_status()
         data = r.json()
@@ -136,3 +142,62 @@ def _truncate_and_renormalize(vec: list[float], *, dims: int) -> list[float]:
     if norm == 0:
         return sliced  # degenerate all-zero vector; avoid dividing by zero
     return [x / norm for x in sliced]
+
+
+# Every caller in this codebase uses Bedrock/Cohere-style input_type values
+# ("search_document" for content being indexed, "search_query" for a query
+# doing the searching). OpenRouter's NVIDIA embedding endpoint uses different
+# vocabulary for the same two concepts ("passage" / "query") and, found via
+# live testing, is NOT permissive about it: an unrecognized value 400s, and
+# omitting the field entirely 500s. So this must always be mapped, never
+# passed through and never omitted, for this specific provider.
+_OPENROUTER_INPUT_TYPE = {
+    "search_document": "passage",
+    "search_query": "query",
+}
+
+
+def _to_openrouter_input_type(input_type: str) -> str:
+    try:
+        return _OPENROUTER_INPUT_TYPE[input_type]
+    except KeyError:
+        # Any value outside the two this codebase actually sends is almost
+        # certainly a new call site introduced without updating this map.
+        # Default to "passage" (content-being-indexed is the more common
+        # case) rather than forwarding an unrecognized value that we already
+        # know this provider rejects outright.
+        return "passage"
+
+
+# ---- OpenAI (embeddings only, interim path) --------------------------------
+# Added after live testing found OpenRouter's free NVIDIA embedding endpoint
+# consistently returning 500s (a provider-side outage, not a bug in this
+# code, the input_type mapping above is correct and was verified against the
+# same endpoint). OpenAI's embeddings API has no query/passage distinction
+# (input_type is accepted here only for interface parity with the other two
+# providers; it's a no-op), and officially supports requesting a smaller
+# output via "dimensions" rather than needing manual truncation.
+
+def _openai_client() -> httpx.Client:
+    s = get_settings()
+    return httpx.Client(
+        base_url=s.openai_base_url,
+        headers={
+            "Authorization": f"Bearer {s.openai_api_key}",
+            "Content-Type": "application/json",
+        },
+        timeout=30.0,
+    )
+
+
+def _openai_embed(text: str, *, input_type: str) -> list[float]:
+    s = get_settings()
+    with _openai_client() as c:
+        r = c.post("/embeddings", json={
+            "model": s.openai_embed_model,
+            "input": text,
+            "dimensions": 1024,  # matches vector(1024); OpenAI truncates+renormalizes server-side
+        })
+        r.raise_for_status()
+        data = r.json()
+    return data["data"][0]["embedding"]

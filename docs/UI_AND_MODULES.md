@@ -124,3 +124,38 @@ deterministic item on generation failure), so an OpenRouter outage shows up
 as those existing fallbacks firing, not a crash, but it's worth a live
 rehearsal specifically to see what a flaky free model looks like on stage
 before demo day, not assuming it away.
+
+**Live-testing update:** two real bugs were caught by actually calling the
+API rather than trusting the shape on paper. (1) OpenRouter's NVIDIA
+embedding endpoint uses `passage`/`query` for what Bedrock calls
+`search_document`/`search_query`, an unmapped value 400s, and omitting the
+field entirely 500s, so `_to_openrouter_input_type()` now maps this
+explicitly rather than passing the Bedrock-style value through (the earlier
+"harmless if the provider ignores it" comment was wrong and has been
+removed). (2) `OPENROUTER_MODEL_DEFAULT`/`REASONING` switched from
+`z-ai/glm-5.2:free` to `minimax/minimax-m3:free` after live comparison,
+sharper instruction-following for the structured JSON extraction that both
+`skill_proposer.py` and `learn/items.py` actually depend on.
+
+**Update: OpenRouter's free embedding endpoint itself is unhealthy, not just
+mismatched.** After fixing the input_type mapping, live testing found the
+NVIDIA embedding endpoint consistently returning `500 Internal Server Error`
+regardless of input_type, and its catalog wasn't even listing an embedding
+model via `/models`. This is a provider-side outage, not a bug in this code.
+Since chat and embeddings are separate concerns, and OpenRouter's free chat
+models work fine, `EMBED_PROVIDER` is now a setting independent of
+`AI_PROVIDER`: set it to `openai` to embed via OpenAI's
+`text-embedding-3-small` (officially supports a `dimensions` parameter,
+requested at 1024 directly, no manual truncation needed, unlike the NVIDIA
+path) while chat stays on OpenRouter. Cost is negligible, `$0.02` per 1M
+tokens, embedding an entire course's content costs cents.
+
+**Also fixed while investigating:** `ingest_course()`'s embed call had no
+error handling at all, a single failed chunk (the exact timeout hit during
+this investigation) would 502 the *entire* ingest request, unlike the
+skill-proposal path, which was already best-effort. It's now wrapped
+per-chunk: a failure is logged and that chunk simply has no embedding
+(degrading RAG retrieval for that one chunk, since `match_content_items`
+filters on `embedding is not null`), rather than failing the whole course's
+ingest. New `embedFailed` count in the response makes this visible instead
+of silent.

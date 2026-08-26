@@ -67,11 +67,17 @@ class Settings(BaseSettings):
     openrouter_model_fast: str = Field(
         default="nvidia/nemotron-3.5-lightning:free", alias="OPENROUTER_MODEL_FAST",
     )
+    # minimax/minimax-m3:free chosen over z-ai/glm-5.2:free after live testing:
+    # cleaner instruction-following for structured JSON extraction, which is
+    # what both skill_proposer.py and learn/items.py actually need (they
+    # parse strict JSON out of the response; a model that "rambles" around
+    # the JSON, like nemotron-3-super below, still works since it's parsed,
+    # but is a less reliable target for max_tokens-constrained calls).
     openrouter_model_default: str = Field(
-        default="z-ai/glm-5.2:free", alias="OPENROUTER_MODEL_DEFAULT",
+        default="minimax/minimax-m3:free", alias="OPENROUTER_MODEL_DEFAULT",
     )
     openrouter_model_reasoning: str = Field(
-        default="z-ai/glm-5.2:free", alias="OPENROUTER_MODEL_REASONING",
+        default="minimax/minimax-m3:free", alias="OPENROUTER_MODEL_REASONING",
     )
     openrouter_model_premium: str = Field(
         default="nvidia/nemotron-3-super-120b-a12b:free", alias="OPENROUTER_MODEL_PREMIUM",
@@ -83,6 +89,25 @@ class Settings(BaseSettings):
     openrouter_embed_model: str = Field(
         default="nvidia/nemotron-3-embed-1b:free", alias="OPENROUTER_EMBED_MODEL",
     )
+
+    # Embeddings can use a different provider than chat completions. Live
+    # testing found OpenRouter's free NVIDIA embedding endpoint consistently
+    # 500ing (unrelated to the input_type bug already fixed, the endpoint
+    # itself is unhealthy), while its free chat models work fine. Empty
+    # string (default) means "use AI_PROVIDER for embeddings too", set
+    # explicitly to "openai" to embed via OpenAI instead while chat stays on
+    # OpenRouter. Independent of AI_PROVIDER on purpose, chat and embedding
+    # reliability are two separate problems.
+    embed_provider: str = Field(default="", alias="EMBED_PROVIDER")
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
+    # text-embedding-3-small officially supports a "dimensions" request
+    # parameter (OpenAI truncates + renormalizes server-side, the same
+    # Matryoshka technique used manually for the NVIDIA path, but here it's
+    # a first-class supported feature) -- so this matches vector(1024) with
+    # no manual slicing needed. $0.02 / 1M tokens: embedding an entire
+    # course's content costs cents, not dollars.
+    openai_embed_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBED_MODEL")
 
     # LTI 1.3
     lti_issuer: str = Field(default="https://blackboard.com", alias="LTI_ISSUER")

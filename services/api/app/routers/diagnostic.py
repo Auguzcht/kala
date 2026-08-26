@@ -74,6 +74,7 @@ def ingest_course(course_id: str,
     stored = 0
     tagged = 0
     embedded = 0
+    embed_failed = 0
 
     for item in content_items:
         body = item.get("body_or_description", "")
@@ -111,12 +112,22 @@ def ingest_course(course_id: str,
             if values:
                 db.update("content_items", {"id": f"eq.{row_id}"}, values)
 
-            embedding = bedrock.embed(clean_chunk)
-            if len(embedding) != 1024:
-                raise HTTPException(
-                    status.HTTP_502_BAD_GATEWAY,
-                    f"embedding dimension was {len(embedding)}, expected 1024",
-                )
+            # Best-effort: an embedding provider outage or a single flaky
+            # chunk must not fail the whole ingest run (found necessary
+            # live: a broken free embedding endpoint was previously enough
+            # to 502 the entire request after the very first chunk). The
+            # content row and its skill tag are already stored either way;
+            # a chunk with no embedding just won't surface in RAG retrieval
+            # (match_content_items filters on embedding is not null), which
+            # degrades gracefully rather than failing outright.
+            try:
+                embedding = bedrock.embed(clean_chunk)
+                if len(embedding) != 1024:
+                    raise ValueError(f"embedding dimension was {len(embedding)}, expected 1024")
+            except Exception as exc:
+                print(f"embedding failed for a chunk of {item.get('lms_content_id')}: {exc}")
+                embed_failed += 1
+                continue
             db.update("content_items", {"id": f"eq.{row_id}"}, {"embedding": embedding})
             embedded += 1
 
@@ -129,7 +140,7 @@ def ingest_course(course_id: str,
             {"module_ref": module_ref},
         )
 
-    return {"stored": stored, "tagged": tagged, "embedded": embedded}
+    return {"stored": stored, "tagged": tagged, "embedded": embedded, "embedFailed": embed_failed}
 
 
 @router.get("/{course_id}/modules")
