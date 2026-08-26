@@ -17,10 +17,13 @@ const STORAGE_KEY = "kala.session_token";
 /** Decode the session JWT's claims without verifying the signature. The
  * backend already verified the LTI launch before minting this token, the
  * frontend just needs to read it, never trust a token it didn't get
- * straight from the backend's own /launch redirect. */
+ * straight from the backend's own /launch redirect. The payload is
+ * base64url (JWT standard, `-`/`_`), which atob() cannot decode —
+ * normalize it to standard base64 first (PyJWT emits base64url). */
 function decodeClaims(token: string): Session | null {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(segment));
     return sessionSchema.parse({
       userId: payload.sub,
       institutionId: payload.institution_id,

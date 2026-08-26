@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { captureLaunchToken } from "@/lib/auth/session";
+import { useSetSession } from "@/lib/auth/AuthProvider";
+import { captureLaunchToken, loadStoredSession } from "@/lib/auth/session";
 import { SystemState } from "@/components/shared/SystemState";
 import { Button } from "@/components/ui/button";
 
@@ -14,16 +15,30 @@ export const Route = createFileRoute("/launch")({
 
 function LaunchLanding() {
   const navigate = useNavigate();
+  const setSession = useSetSession();
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const session = captureLaunchToken();
+    // Idempotent against StrictMode's dev double-invoke: the first run
+    // captures the hash token and strips it from the URL; the second run
+    // finds no hash, so it falls back to the session the first run just
+    // stored. Without the fallback, a successful launch lands on the
+    // "open Kala from inside your course" error in dev.
+    const session = captureLaunchToken() ?? loadStoredSession();
     if (!session) {
       setError(true);
       return;
     }
+    // Push the resolved session into AuthProvider BEFORE navigating: it
+    // booted before the token existed (null), and the layouts read it —
+    // otherwise /class sees stale null and bounces back here (spinner
+    // ping-pong).
+    setSession(session);
     // Brief branded pause so the "validating your launch" state is legible
-    // (it doubles as the conference demo's opening beat).
+    // (it doubles as the conference demo's opening beat). No ref guard:
+    // StrictMode runs effect → cleanup → effect, and the cleanup clears
+    // the timeout, so a "run once" guard would suppress navigation. Both
+    // runs take the same path; only the second timeout fires.
     const t = setTimeout(() => {
       // Role routing: students to the learn loop, instructors/admins to the
       // class dashboard (Phase 4). Standalone admin/researcher doors come
@@ -31,7 +46,7 @@ function LaunchLanding() {
       navigate({ to: session.role === "student" ? "/course" : "/class" });
     }, 700);
     return () => clearTimeout(t);
-  }, [navigate]);
+  }, [navigate, setSession]);
 
   if (error) {
     return (

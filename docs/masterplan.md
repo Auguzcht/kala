@@ -47,7 +47,7 @@ Keep responsible-AI framing visible: student learning data is sensitive, we de-i
 4. Diagnostic, quick practice, and AI tutor running on that real course content (RAG-grounded).
 5. A live-updating student digital twin (mastery per skill, evidence log).
 6. An instructor dashboard: skills-by-Bloom's heatmap plus an at-risk list.
-7. LMS-agnostic connector interface with a working Blackboard implementation and a Canvas stub.
+7. LMS-agnostic connector interface with a working Blackboard implementation. (Canvas access was removed at the vendor level — the interface stays LMS-agnostic, and a Canvas connector is future work.)
 
 ### 3.2 Strong nice-to-have (include if time allows)
 - Grade or completion passback to the LMS gradebook via LTI Assignment and Grade Services (AGS).
@@ -122,7 +122,7 @@ class LMSConnector(Protocol):
 ```
 
 - `BlackboardConnector`: implement fully for September.
-- `CanvasConnector`: stub the same methods, wire enough for a credibility demo if time permits. The stub existing is what makes "works across every Cintana institution" believable in the room.
+- `CanvasConnector`: kept as a stub to prove the interface is LMS-agnostic. Canvas access was removed at the vendor level; full implementation is future work if a Canvas tenant onboards.
 
 ### 5.4 Registration and tokens (build notes)
 - Register a REST application and an LTI 1.3 tool in the Anthology Developer Portal. Registration yields a client id, and the platform validates our messages against our public key published at a **JWKS URL** (we generate our own key pair; RS256).
@@ -185,8 +185,9 @@ Core tables (illustrative):
 institutions        (id, name, lms_type, region)
 courses             (id, institution_id, lms_course_id, title)
 users               (id, institution_id, lms_user_id, role, pseudonym)
-skills              (id, course_id, name, bloom_level, blueprint_weight)
-content_items       (id, course_id, lms_ref, skill_id, embedding vector)
+skills              (id, course_id, name, bloom_level, blueprint_weight, module_ref)
+content_items       (id, course_id, lms_ref, skill_id, embedding vector,
+                     parent_lms_ref, folder_path jsonb, module_ref)
 assessments         (id, course_id, lms_ref, skill_id)
 evidence_events     (id, user_id, course_id, skill_id, type, correct,
                      latency_ms, hints_used, created_at)          -- append-only
@@ -198,6 +199,11 @@ recommendations     (id, user_id, skill_id, action, rationale, created_at)
 - `evidence_events` is append-only. Never update or delete a row; it is the research dataset and the audit trail.
 - `mastery_state` is derived from `evidence_events` by the tracer; it can be recomputed from scratch.
 - `content_items.embedding` powers RAG retrieval.
+- `folder_path` (ancestor chain, root → parent) and `module_ref` (top-level
+  ancestor) scope content and skills to a course's own folder/module
+  structure, derived generically from the LMS content tree (`lms/hierarchy.py`)
+  — MMCM's `Module N` convention and any other Cintana school's deeper
+  nesting both fall out of the same parent_id walk, no naming assumed.
 
 ---
 
@@ -360,6 +366,16 @@ Reuse the existing CRISP-DM framing.
 ## 18. Open decisions
 
 Track these as they get resolved:
+- [x] Module scoping: **resolved** — derived from each course's own top-level
+  content folders (generic over depth/naming), stored as
+  `folder_path`/`module_ref` (migration 0006, `app/lms/hierarchy.py`),
+  with optional `module_ref` filters on heatmap and diagnostic plus a
+  `GET /courses/{id}/modules` endpoint for admin sanity checks. An
+  in-app skill/module curation screen (the metadata-driven exception) is
+  deferred past September 1.
+- [x] Canvas connector: **resolved** — access removed at the vendor level;
+  stub retained to prove interface agnosticism, full implementation future
+  work.
 - [ ] Blackboard sandbox vs own AMI as the primary demo target.
 - [ ] Tier 1 model: Bedrock-only vs external provider for cost.
 - [ ] BKT vs Elo for the September tracer.

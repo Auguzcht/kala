@@ -14,6 +14,7 @@ from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user, get_lms_connector
 from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
+from app.lms.hierarchy import build_folder_paths, module_ref_for
 from app.twin import tracer
 
 router = APIRouter(prefix="/courses", tags=["diagnostic"])
@@ -63,6 +64,12 @@ def ingest_course(course_id: str,
         "select": "id,name",
     })
     content_items = connector.get_content(course_ref)
+    # Folder/module scoping is resolved once, generically, over whatever tree
+    # shape this institution's course actually has (see lms/hierarchy.py).
+    # No assumption here about depth or naming, "Module N" vs a school that
+    # organizes some other way both fall out of the same parent_id walk.
+    folder_paths = build_folder_paths(content_items)
+    skill_module_ref: dict[str, str] = {}  # first-tagged-item wins per skill
     stored = 0
     tagged = 0
     embedded = 0
@@ -71,12 +78,17 @@ def ingest_course(course_id: str,
         body = item.get("body_or_description", "")
         if not body:
             continue
+        item_folder_path = folder_paths.get(item.get("lms_content_id"), [])
+        item_module_ref = module_ref_for(item_folder_path)
         for chunk in chunk_text(body):
             clean_chunk = strip_pii(chunk)
             rows = db.insert("content_items", [{
                 "institution_id": user.institution_id,
                 "course_id": course_id,
                 "lms_ref": item.get("lms_content_id"),
+                "parent_lms_ref": item.get("parent_id"),
+                "folder_path": item_folder_path,
+                "module_ref": item_module_ref,
                 "chunk_text": clean_chunk,
             }])
             if not rows:
@@ -89,6 +101,12 @@ def ingest_course(course_id: str,
             if tag["skill_id"]:
                 values["skill_id"] = tag["skill_id"]
                 tagged += 1
+                # Best-effort skill -> module inference: the first content
+                # item tagged to a skill decides that skill's module_ref.
+                # A manual override (e.g. from the CEA spreadsheet) always
+                # wins over this and is never touched here (only fills gaps).
+                if item_module_ref and tag["skill_id"] not in skill_module_ref:
+                    skill_module_ref[tag["skill_id"]] = item_module_ref
             if values:
                 db.update("content_items", {"id": f"eq.{row_id}"}, values)
 
@@ -101,7 +119,53 @@ def ingest_course(course_id: str,
             db.update("content_items", {"id": f"eq.{row_id}"}, {"embedding": embedding})
             embedded += 1
 
+    for skill_id, module_ref in skill_module_ref.items():
+        # Only fill skills that don't already have a module_ref (a prior
+        # manual override, or a prior ingest run, is never overwritten).
+        db.update(
+            "skills",
+            {"id": f"eq.{skill_id}", "module_ref": "is.null"},
+            {"module_ref": module_ref},
+        )
+
     return {"stored": stored, "tagged": tagged, "embedded": embedded}
+
+
+@router.get("/{course_id}/modules")
+def list_modules(course_id: str, user: CurrentUser = Depends(get_current_user)):
+    """Distinct modules detected for this course from the last ingest run,
+    with content and skill counts. Generic over however this institution's
+    Blackboard course is actually organized, no naming assumed. Useful for
+    an admin screen to sanity-check ingest, and as the source of options for
+    any future module-scoped filtering in the UI."""
+    content_rows = db.select("content_items", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "select": "module_ref",
+    })
+    skill_rows = db.select("skills", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "select": "module_ref",
+    })
+    content_counts: dict[str | None, int] = {}
+    for r in content_rows:
+        content_counts[r["module_ref"]] = content_counts.get(r["module_ref"], 0) + 1
+    skill_counts: dict[str | None, int] = {}
+    for r in skill_rows:
+        skill_counts[r["module_ref"]] = skill_counts.get(r["module_ref"], 0) + 1
+
+    modules = sorted(
+        {ref for ref in content_counts if ref} | {ref for ref in skill_counts if ref}
+    )
+    return {
+        "courseId": course_id,
+        "modules": [{
+            "moduleRef": m,
+            "contentItemCount": content_counts.get(m, 0),
+            "skillCount": skill_counts.get(m, 0),
+        } for m in modules],
+        "unscopedContentItemCount": content_counts.get(None, 0),
+        "unscopedSkillCount": skill_counts.get(None, 0),
+    }
 
 
 class SubmitAnswer(BaseModel):
@@ -133,11 +197,21 @@ def post_grade(course_id: str, column_id: str, body: GradeBody,
 
 
 @router.get("/{course_id}/diagnostic")
-def get_diagnostic(course_id: str, user: CurrentUser = Depends(get_current_user)):
-    skills = db.select("skills", {
+def get_diagnostic(
+    course_id: str,
+    module_ref: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
+):
+    # module_ref lets a future UI scope the diagnostic to one module (e.g.
+    # "just Module 2") once skills.module_ref is populated by ingest.
+    # Omitted, this is unchanged: the whole course's skills, as before.
+    skill_filters = {
         "course_id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
         "select": "id,name,bloom_level", "limit": "10",
-    })
+    }
+    if module_ref is not None:
+        skill_filters["module_ref"] = f"eq.{module_ref}"
+    skills = db.select("skills", skill_filters)
     questions = [
         item_gen.generate_question(
             institution_id=user.institution_id, course_id=course_id,

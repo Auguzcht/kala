@@ -107,7 +107,7 @@ export function InstructorShell({
         </div>
       ) : null}
 
-      <main className="mx-auto max-w-7xl px-6 py-7">{children}</main>
+      <main className="w-full px-6 py-7">{children}</main>
     </div>
   );
 }

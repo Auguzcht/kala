@@ -22,13 +22,23 @@ LOW_SUCCESS_ATTEMPTS = 5
 LOW_SUCCESS_RATE = 0.4
 
 
-def _cohort(*, institution_id: str, course_id: str) -> tuple[list[dict], list[dict], dict]:
+def _cohort(
+    *, institution_id: str, course_id: str, module_ref: str | None = None,
+) -> tuple[list[dict], list[dict], dict]:
     """skills, students (pseudonym + initials), and the per-user/per-skill
-    mastery map. Two selects: enrollments→users, mastery_state."""
-    skills = db.select("skills", {
+    mastery map. Two selects: enrollments→users, mastery_state.
+
+    module_ref is optional and generic: any institution whose ingest has
+    populated skills.module_ref (see lms/hierarchy.py) can filter by it,
+    nothing here assumes what a "module" means for a given school. Omitted,
+    behavior is unchanged, the whole course's skills are returned."""
+    skill_filters = {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
         "select": "id,name,bloom_level", "order": "name.asc",
-    })
+    }
+    if module_ref is not None:
+        skill_filters["module_ref"] = f"eq.{module_ref}"
+    skills = db.select("skills", skill_filters)
     enrollments = db.select("enrollments", {
         "course_id": f"eq.{course_id}", "role": "eq.student",
         "select": "user_id", "order": "user_id.asc",
@@ -71,9 +81,13 @@ def _band_cell(m: dict | None) -> dict:
 
 
 @router.get("/{course_id}/heatmap")
-def heatmap(course_id: str, user: CurrentUser = Depends(require_role("instructor", "admin"))):
+def heatmap(
+    course_id: str,
+    module_ref: str | None = None,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
     skills, students, cells = _cohort(
-        institution_id=user.institution_id, course_id=course_id,
+        institution_id=user.institution_id, course_id=course_id, module_ref=module_ref,
     )
 
     # Per-skill cohort band + per-student rollup (readiness proxy) from the

@@ -8,8 +8,16 @@ from app.routers import diagnostic
 class IngestConnector:
     def get_content(self, course_ref: str) -> list[dict]:
         return [
-            {"lms_content_id": "folder-1", "body_or_description": "", "content_type": "resource/x-bb-folder"},
-            {"lms_content_id": "lesson-1", "body_or_description": "name: Jane\nActual lesson content."},
+            {
+                "lms_content_id": "folder-1", "title": "Module 1",
+                "body_or_description": "", "content_type": "resource/x-bb-folder",
+                "parent_id": None,
+            },
+            {
+                "lms_content_id": "lesson-1", "title": "Lesson 1",
+                "body_or_description": "name: Jane\nActual lesson content.",
+                "parent_id": "folder-1",
+            },
         ]
 
 
@@ -55,7 +63,13 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
         "institution_id": "institution-1",
         "course_id": "course-1",
         "lms_ref": "lesson-1",
+        "parent_lms_ref": "folder-1",
+        "folder_path": [{"lmsRef": "folder-1", "title": "Module 1"}],
+        "module_ref": "Module 1",
         "chunk_text": "[name]\nActual lesson content.",
     }]
     assert {"skill_id": "skill-1"} in updates
     assert {"embedding": [0.0] * 1024} in updates
+    # The tagged skill's module is backfilled from the content item it was
+    # tagged from (skill-1 has no prior module_ref, so this fills the gap).
+    assert {"module_ref": "Module 1"} in updates
