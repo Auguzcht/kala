@@ -9,6 +9,8 @@ is explicit (the UI shows the "de-identified" chip, not a backend footnote).
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -150,7 +152,6 @@ def _days_since(iso: str | None) -> int | None:
     if not iso:
         return None
     try:
-        from datetime import datetime, timezone
         then = datetime.fromisoformat(iso.replace("Z", "+00:00"))
         if then.tzinfo is None:
             then = then.replace(tzinfo=timezone.utc)
@@ -272,7 +273,11 @@ def review_proposed_skill(
     if body.status not in ("approved", "rejected"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "status must be approved or rejected")
 
-    values: dict = {"status": body.status, "reviewed_by": user.user_id}
+    values: dict = {
+        "status": body.status,
+        "reviewed_by": user.user_id,
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }
     if body.status == "approved":
         if body.name is not None:
             values["name"] = body.name.strip()
