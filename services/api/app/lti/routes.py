@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from app.config import get_settings
 from app.db import supabase as db
 from app.deps import get_lms_connector
+from app.ai.skill_proposer import seed_course_skills
 from app.lti import claims as C
 from app.lti.security import build_tool_jwks, sign_state, verify_id_token, verify_state
 from app.lms.blackboard import BlackboardConnector
@@ -40,6 +41,32 @@ def _roster_role(course_role: str | None) -> str:
     Assistant, Grader, ...) is enrolled as instructor (upsert_enrollment
     coerces admin/instructor the same way)."""
     return "student" if (course_role or "").strip().lower() == "student" else "instructor"
+
+
+def _seed_course_skills(*, institution_id: str, course_id: str, course_ref: str,
+                        connector: BlackboardConnector) -> dict:
+    """Seed the skill graph from AI proposals on first launch (see
+    docs/SKILL_PIPELINE.md). Same non-blocking contract as roster sync: any
+    failure logs and is skipped, never blocks the 302. Guarded so we only
+    propose when the course has no skills yet (avoids a pointless content
+    fetch on every instructor launch)."""
+    try:
+        existing = db.select("skills", {
+            "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+            "select": "id", "limit": "1",
+        })
+        if existing:
+            return {"skipped": True, "reason": "course already has skills"}
+        items = connector.get_content(course_ref)
+        content = "\n".join(i.get("body_or_description") or "" for i in items).strip()
+        if not content:
+            return {"skipped": True, "reason": "course has no content"}
+        return seed_course_skills(
+            institution_id=institution_id, course_id=course_id, course_content=content,
+        )
+    except Exception:
+        logger.exception("skill proposal failed for %s; skipping", course_ref)
+        return {"skipped": True, "reason": "error"}
 
 
 def _sync_roster(*, institution_id: str, course_id: str, course_ref: str,
@@ -192,6 +219,14 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
         # LMS on every student launch); best-effort, never blocks the launch.
         if app_role in ("instructor", "admin"):
             _sync_roster(
+                institution_id=institution["id"], course_id=course["id"],
+                course_ref=lms_course_id, connector=connector,
+            )
+            # AI skill proposal (docs/SKILL_PIPELINE.md): seed the skill
+            # graph from the course's own content on first launch. Same
+            # best-effort contract — a proposal failure never blocks the
+            # 302. By the time students launch, proposals/matches are staged.
+            _seed_course_skills(
                 institution_id=institution["id"], course_id=course["id"],
                 course_ref=lms_course_id, connector=connector,
             )

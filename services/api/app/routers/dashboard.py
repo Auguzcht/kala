@@ -10,6 +10,7 @@ is explicit (the UI shows the "de-identified" chip, not a backend footnote).
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.db import supabase as db
 from app.deps import CurrentUser, require_role
@@ -34,6 +35,7 @@ def _cohort(
     behavior is unchanged, the whole course's skills are returned."""
     skill_filters = {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.approved",  # heatmap shows reviewed skills only
         "select": "id,name,bloom_level", "order": "name.asc",
     }
     if module_ref is not None:
@@ -230,3 +232,61 @@ def student_twin(course_id: str, user_id: str,
     )
     twin["pseudonym"] = rows[0]["pseudonym"]
     return twin
+
+
+# ---- Skill proposal review (human-in-the-loop gate) -----------------------
+# AI proposes skills on course launch (see ai/skill_proposer.py); nothing
+# proposed reaches the twin/heatmap/diagnostic until a human approves it here.
+
+class ReviewDecision(BaseModel):
+    status: str  # "approved" or "rejected"
+    name: str | None = None          # optional edit before approving
+    bloom_level: str | None = None   # optional edit before approving
+    blueprint_weight: float | None = None
+
+
+@router.get("/{course_id}/skills/proposed")
+def list_proposed_skills(
+    course_id: str,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """Skills awaiting review for this course, with any 'possible duplicate'
+    hint the proposer attached. Feeds the review UI (or read straight in
+    Supabase for the demo)."""
+    rows = db.select("skills", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.proposed",
+        "select": "id,name,bloom_level,blueprint_weight,proposed_source",
+        "order": "name.asc",
+    })
+    return {"courseId": course_id, "proposed": rows}
+
+
+@router.patch("/{course_id}/skills/{skill_id}/review")
+def review_proposed_skill(
+    course_id: str, skill_id: str, body: ReviewDecision,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """Approve or reject a proposed skill, with optional inline edits. Only
+    after approval does the skill feed the learner/instructor surfaces."""
+    if body.status not in ("approved", "rejected"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "status must be approved or rejected")
+
+    values: dict = {"status": body.status, "reviewed_by": user.user_id}
+    if body.status == "approved":
+        if body.name is not None:
+            values["name"] = body.name.strip()
+        if body.bloom_level is not None:
+            values["bloom_level"] = body.bloom_level
+        if body.blueprint_weight is not None:
+            values["blueprint_weight"] = max(0.5, min(2.0, float(body.blueprint_weight)))
+
+    updated = db.update(
+        "skills",
+        {"id": f"eq.{skill_id}", "institution_id": f"eq.{user.institution_id}",
+         "course_id": f"eq.{course_id}", "status": "eq.proposed"},
+        values,
+    )
+    if not updated:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "proposed skill not found")
+    return {"skillId": skill_id, "status": body.status}

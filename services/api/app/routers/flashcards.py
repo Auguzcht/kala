@@ -19,6 +19,7 @@ router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 def deck(course_id: str, limit: int = 5, user: CurrentUser = Depends(get_current_user)):
     skills = db.select("skills", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.approved",
         "select": "id,name,bloom_level", "limit": str(limit),
     })
     cards = [

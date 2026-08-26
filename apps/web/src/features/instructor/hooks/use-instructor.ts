@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAtRisk,
   fetchHeatmap,
+  fetchProposedSkills,
   fetchStudentTwin,
+  reviewProposedSkill,
 } from "@/features/instructor/api/instructor.api";
 
 export function useHeatmap(courseId: string) {
@@ -24,5 +26,25 @@ export function useStudentTwin(courseId: string, userId: string) {
     queryKey: ["student-twin", courseId, userId],
     queryFn: () => fetchStudentTwin(courseId, userId),
     enabled: !!userId,
+  });
+}
+
+export function useProposedSkills(courseId: string) {
+  return useQuery({
+    queryKey: ["proposed-skills", courseId],
+    queryFn: () => fetchProposedSkills(courseId),
+  });
+}
+
+export function useReviewProposedSkill(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { skillId: string; status: "approved" | "rejected" }) =>
+      reviewProposedSkill(courseId, args.skillId, { status: args.status }),
+    onSuccess: () => {
+      // Approving a skill changes what the cohort/heatmap can show.
+      queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["heatmap", courseId] });
+    },
   });
 }

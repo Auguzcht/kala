@@ -49,6 +49,26 @@ export const atRiskSchema = z.object({
 // Instructor's read of one student's twin: the twin shape + pseudonym.
 export const studentTwinSchema = twinSchema.extend({ pseudonym: z.string() });
 
+// HITL skill proposals awaiting review (docs/SKILL_PIPELINE.md). Rows come
+// back snake_case from the review endpoint (DB-shaped, not generated types).
+export const proposedSkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  bloom_level: z.string(),
+  blueprint_weight: z.number(),
+  proposed_source: z.string().nullable(),
+});
+
+export const proposedSkillsSchema = z.object({
+  courseId: z.string(),
+  proposed: z.array(proposedSkillSchema),
+});
+
+export const reviewResponseSchema = z.object({
+  skillId: z.string(),
+  status: z.enum(["approved", "rejected"]),
+});
+
 export type HeatmapSkill = z.infer<typeof heatmapSkillSchema>;
 export type HeatmapStudent = z.infer<typeof heatmapStudentSchema>;
 export type HeatmapCell = z.infer<typeof heatmapCellSchema>;
@@ -56,3 +76,6 @@ export type HeatmapData = z.infer<typeof heatmapSchema>;
 export type AtRiskFlag = z.infer<typeof atRiskFlagSchema>;
 export type AtRisk = z.infer<typeof atRiskSchema>;
 export type StudentTwin = z.infer<typeof studentTwinSchema>;
+export type ProposedSkill = z.infer<typeof proposedSkillSchema>;
+export type ProposedSkills = z.infer<typeof proposedSkillsSchema>;
+export type ReviewResponse = z.infer<typeof reviewResponseSchema>;

@@ -61,6 +61,7 @@ def ingest_course(course_id: str,
     skills = db.select("skills", {
         "course_id": f"eq.{course_id}",
         "institution_id": f"eq.{user.institution_id}",
+        "status": "eq.approved",  # tag content only against reviewed skills
         "select": "id,name",
     })
     content_items = connector.get_content(course_ref)
@@ -207,6 +208,7 @@ def get_diagnostic(
     # Omitted, this is unchanged: the whole course's skills, as before.
     skill_filters = {
         "course_id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
+        "status": "eq.approved",
         "select": "id,name,bloom_level", "limit": "10",
     }
     if module_ref is not None:

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Heatmap, AtRiskList, useHeatmap } from "@/features/instructor";
+import { Heatmap, AtRiskList, SkillReviewPanel, useHeatmap } from "@/features/instructor";
 import { MasteryRing } from "@/components/kala";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,6 +54,12 @@ function ClassDashboard() {
         <div id="at-risk-list" className="w-full max-w-sm shrink-0">
           <AtRiskList courseId={courseId} />
         </div>
+      </div>
+
+      {/* HITL skill proposals: nothing proposed reaches learners until a
+          human approves here (docs/SKILL_PIPELINE.md). */}
+      <div className="mt-6">
+        <SkillReviewPanel courseId={courseId} />
       </div>
     </>
   );

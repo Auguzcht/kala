@@ -26,10 +26,14 @@ def _launch_payload(role_uris: list[str], *, sub: str = "lms-teacher-1") -> dict
     }
 
 
-def _fake_connector(roster: list[dict]):
+def _fake_connector(roster: list[dict], content: list[dict] | None = None):
     class FakeConnector:
         def __init__(self) -> None:
             self.roster_calls = 0
+            self.content_calls = 0
+            self.content = content or [
+                {"lms_content_id": "lesson-1", "body_or_description": "Module 1 content here."},
+            ]
 
         def resolve_course_ref(self, external_id: str) -> str:
             return f"ref-{external_id}"
@@ -37,6 +41,10 @@ def _fake_connector(roster: list[dict]):
         def get_roster(self, course_ref: str) -> list[dict]:
             self.roster_calls += 1
             return roster
+
+        def get_content(self, course_ref: str) -> list[dict]:
+            self.content_calls += 1
+            return self.content
 
     return FakeConnector()
 
@@ -142,4 +150,71 @@ def test_roster_failure_does_not_block_the_instructor_launch(monkeypatch) -> Non
 
     assert response.status_code == 302
     # The instructor still lands; only the roster sync was skipped.
+    assert {"user_id": "user-lms-teacher-1", "role": "instructor"} in recorded["enrollments"]
+
+
+def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> None:
+    """BE-1 (skill pipeline): an instructor launch on a course with no skills
+    pulls the course content and calls the proposer."""
+    connector = _fake_connector([])
+    payload = _launch_payload([C._ROLE_INSTRUCTOR])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+    seed_calls: list[dict] = []
+    monkeypatch.setattr(lti_routes.db, "select", lambda t, p: [])  # no skills yet
+    monkeypatch.setattr(
+        lti_routes, "seed_course_skills",
+        lambda **kw: seed_calls.append(kw) or {"skipped": False, "proposed": 1},
+    )
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    assert connector.content_calls == 1
+    assert len(seed_calls) == 1
+    assert seed_calls[0]["institution_id"] == "inst-1"
+    assert seed_calls[0]["course_id"] == "course-1"
+    assert "Module 1 content here." in seed_calls[0]["course_content"]
+
+
+def test_student_launch_does_not_seed_skills(monkeypatch) -> None:
+    """Students launching never trigger skill proposals (or a content fetch)."""
+    connector = _fake_connector([])
+    payload = _launch_payload([C._ROLE_LEARNER], sub="lms-stu-1")
+    recorded = _patch_launch(monkeypatch, payload, connector)
+    seed_calls: list[dict] = []
+    monkeypatch.setattr(
+        lti_routes, "seed_course_skills",
+        lambda **kw: seed_calls.append(kw) or {"skipped": True},
+    )
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    assert connector.content_calls == 0
+    assert seed_calls == []
+    assert {"user_id": "user-lms-stu-1", "role": "student"} in recorded["enrollments"]
+
+
+def test_skill_seed_failure_does_not_block_the_launch(monkeypatch) -> None:
+    """A proposer exception degrades to a normal launch (same contract as
+    roster sync): the instructor still lands, the 302 is never delayed or
+    replaced by an error."""
+    connector = _fake_connector([])
+    payload = _launch_payload([C._ROLE_INSTRUCTOR])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+    monkeypatch.setattr(lti_routes.db, "select", lambda t, p: [])
+    monkeypatch.setattr(lti_routes, "seed_course_skills", lambda **kw: (_ for _ in ()).throw(RuntimeError("model unreachable")))
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
     assert {"user_id": "user-lms-teacher-1", "role": "instructor"} in recorded["enrollments"]

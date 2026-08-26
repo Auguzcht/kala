@@ -155,6 +155,7 @@ def weakest_skill(*, institution_id: str, user_id: str, course_id: str) -> dict 
     mastery estimate, with never-attempted skills ranked weakest of all."""
     skills = db.select("skills", {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.approved",
         "select": "id,name,bloom_level",
     })
     if not skills:

@@ -27,6 +27,7 @@ def band_for(estimate: float | None) -> str:
 def skills_with_mastery(*, institution_id: str, user_id: str, course_id: str) -> list[dict]:
     skills = db.select("skills", {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.approved",  # never surface unreviewed proposals to a learner
         "select": "id,name,bloom_level", "order": "name.asc",
     })
     if not skills:
