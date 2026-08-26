@@ -14,9 +14,9 @@ export const BAND_LABELS: Record<MasteryBand, string> = {
 
 const BAND_STYLES: Record<MasteryBand, string> = {
   "no-evidence": "border-border bg-muted text-muted-foreground",
-  developing: "border-brand-gold/30 bg-brand-gold/15 text-brand-gold-foreground",
-  proficient: "border-brand-gold/30 bg-brand-gold/15 text-brand-gold-foreground",
-  mastered: "border-brand-gold/40 bg-brand-gold/25 text-brand-gold-foreground",
+  developing: "border-band-developing bg-band-developing text-band-developing-fg",
+  proficient: "border-band-proficient bg-band-proficient text-band-proficient-fg",
+  mastered: "border-band-mastered bg-band-mastered text-band-mastered-fg",
 };
 
 export function MasteryBand({ band, className }: { band: MasteryBand; className?: string }) {

@@ -64,6 +64,16 @@
   --brand-paper: #f7f5ef;            /* marketing + conference canvas */
   --brand-canvas: #f7f8fb;
 
+  /* mastery band fills, neutral-to-gold (heatmap + chips + badges) */
+  --band-none: #e7e9ee;
+  --band-none-fg: #6b7280;
+  --band-developing: #fbe3ae;
+  --band-developing-fg: #7a5a12;
+  --band-proficient: #ffd98a;
+  --band-proficient-fg: #5c3f09;
+  --band-mastered: #ffc63d;
+  --band-mastered-fg: #3a2600;
+
   /* charts, on-brand ramp (red reserved for the at-risk axis) */
   --chart-1: #0e1b33;
   --chart-2: #1f2f4d;
@@ -128,6 +138,15 @@
   --brand-paper: #f7f5ef;
   --brand-canvas: #0e1b33;
 
+  --band-none: #24355a;
+  --band-none-fg: #9aa3b2;
+  --band-developing: #5c3f09;
+  --band-developing-fg: #ffd98a;
+  --band-proficient: #7a5a12;
+  --band-proficient-fg: #fbe3ae;
+  --band-mastered: #3a2600;
+  --band-mastered-fg: #ffc63d;
+
   --chart-1: #f7f8fb;
   --chart-2: #9aa3b2;
   --chart-3: #ff8a00;
@@ -183,6 +202,15 @@
   --color-brand-paper: var(--brand-paper);
   --color-brand-canvas: var(--brand-canvas);
 
+  --color-band-none: var(--band-none);
+  --color-band-none-fg: var(--band-none-fg);
+  --color-band-developing: var(--band-developing);
+  --color-band-developing-fg: var(--band-developing-fg);
+  --color-band-proficient: var(--band-proficient);
+  --color-band-proficient-fg: var(--band-proficient-fg);
+  --color-band-mastered: var(--band-mastered);
+  --color-band-mastered-fg: var(--band-mastered-fg);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -228,4 +256,43 @@
   code, kbd, samp, pre, [data-metric] {
     font-family: var(--font-mono);
   }
+}
+
+/* Driver.js tour popovers — panel/hairline language, not the default
+   rounded look (design brief, motion section). */
+.driver-popover {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  box-shadow: none;
+}
+.driver-popover-title {
+  font-family: var(--font-display);
+  color: var(--foreground);
+}
+.driver-popover-description {
+  color: var(--muted-foreground);
+}
+.driver-popover-close-btn {
+  color: var(--muted-foreground);
+}
+.driver-popover-progress-text {
+  font-family: var(--font-mono);
+  color: var(--muted-foreground);
+}
+.driver-popover-footer button {
+  border-radius: 3px;
+  border-color: var(--border);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  text-shadow: none;
+}
+.driver-popover-footer button:hover {
+  background: color-mix(in oklch, var(--primary) 90%, transparent);
+}
+.driver-popover-prev-btn {
+  background: transparent !important;
+  color: var(--foreground) !important;
 }

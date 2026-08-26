@@ -9,13 +9,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactNode } from "react";
-import { useCourse } from "@/features/courses";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TopBar } from "@/components/shell/TopBar";
 
 // App shell for the course-scoped (LTI) surface. 56px icon side rail +
 // 48px top bar, per the mockups ("App Side Rail", "App Top Bar"):
@@ -59,7 +58,6 @@ export function CourseShell({
   displayName?: string;
   children: ReactNode;
 }) {
-  const { data: course } = useCourse(courseId);
   const { pathname } = useLocation();
   const section = SECTION_LABELS[pathname] ?? SECTION_LABELS["/course"];
 
@@ -111,22 +109,15 @@ export function CourseShell({
 
       {/* Content column */}
       <div className="pl-14">
-        {/* Top bar */}
-        <header className="flex h-12 items-center gap-2 border-b bg-card px-5">
-          <span className="text-[13px] font-semibold text-muted-foreground/80">Kala</span>
-          <span className="text-xs text-muted-foreground/50">/</span>
-          {course ? (
-            <span className="text-[13px] font-semibold text-foreground">{course.title}</span>
-          ) : (
-            <Skeleton className="h-3.5 w-40" />
-          )}
-          <span className="text-xs text-muted-foreground/50">/</span>
-          <span className="text-[13px] font-semibold text-brand-orange">{section}</span>
-          <div className="flex-1" />
-          <span className="font-mono text-xs text-muted-foreground">
-            {initials(displayName) || section}
-          </span>
-        </header>
+        <TopBar
+          courseId={courseId}
+          section={section}
+          right={
+            <span className="font-mono text-xs text-muted-foreground">
+              {initials(displayName) || section}
+            </span>
+          }
+        />
 
         <main className="mx-auto max-w-5xl px-6 py-8 pb-24">{children}</main>
       </div>

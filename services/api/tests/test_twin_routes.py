@@ -58,8 +58,8 @@ def test_twin_returns_skills_bands_and_evidence(monkeypatch) -> None:
             return mastery
         return events
 
-    monkeypatch.setattr(twin.db, "select", fake_select)
-    monkeypatch.setattr(twin.readiness, "compute", lambda **kwargs: 0.5)
+    monkeypatch.setattr(twin.summary.db, "select", fake_select)
+    monkeypatch.setattr(twin.summary.readiness, "compute", lambda **kwargs: 0.5)
 
     try:
         with TestClient(app) as client:
@@ -79,7 +79,7 @@ def test_twin_returns_skills_bands_and_evidence(monkeypatch) -> None:
 
 def test_twin_empty_when_course_has_no_skills(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(twin.db, "select", lambda table, params: [])
+    monkeypatch.setattr(twin.summary.db, "select", lambda table, params: [])
 
     try:
         with TestClient(app) as client:

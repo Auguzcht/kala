@@ -10,20 +10,28 @@
 
 import { Route as rootRouteImport } from './routes/__root';
 import { Route as IndexRouteImport } from './routes/index';
+import { Route as ClassRouteImport } from './routes/class';
 import { Route as CourseRouteImport } from './routes/course';
 import { Route as LaunchRouteImport } from './routes/launch';
 import { Route as SessionExpiredRouteImport } from './routes/session-expired';
 import { Route as UnauthorizedRouteImport } from './routes/unauthorized';
+import { Route as ClassIndexRouteImport } from './routes/class/index';
 import { Route as CourseIndexRouteImport } from './routes/course/index';
 import { Route as CourseDiagnosticRouteImport } from './routes/course/diagnostic';
 import { Route as CourseFlashcardsRouteImport } from './routes/course/flashcards';
 import { Route as CoursePracticeRouteImport } from './routes/course/practice';
 import { Route as CourseTutorRouteImport } from './routes/course/tutor';
 import { Route as CourseTwinRouteImport } from './routes/course/twin';
+import { Route as ClassStudentUidRouteImport } from './routes/class/student.$uid';
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ClassRoute = ClassRouteImport.update({
+  id: '/class',
+  path: '/class',
   getParentRoute: () => rootRouteImport,
 } as any);
 const CourseRoute = CourseRouteImport.update({
@@ -45,6 +53,11 @@ const UnauthorizedRoute = UnauthorizedRouteImport.update({
   id: '/unauthorized',
   path: '/unauthorized',
   getParentRoute: () => rootRouteImport,
+} as any);
+const ClassIndexRoute = ClassIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ClassRoute,
 } as any);
 const CourseIndexRoute = CourseIndexRouteImport.update({
   id: '/',
@@ -76,9 +89,15 @@ const CourseTwinRoute = CourseTwinRouteImport.update({
   path: '/twin',
   getParentRoute: () => CourseRoute,
 } as any);
+const ClassStudentUidRoute = ClassStudentUidRouteImport.update({
+  id: '/student/$uid',
+  path: '/student/$uid',
+  getParentRoute: () => ClassRoute,
+} as any);
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute;
+  '/class': typeof ClassRouteWithChildren;
   '/course': typeof CourseRouteWithChildren;
   '/launch': typeof LaunchRoute;
   '/session-expired': typeof SessionExpiredRoute;
@@ -88,7 +107,9 @@ export interface FileRoutesByFullPath {
   '/course/practice': typeof CoursePracticeRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
+  '/class/': typeof ClassIndexRoute;
   '/course/': typeof CourseIndexRoute;
+  '/class/student/$uid': typeof ClassStudentUidRoute;
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute;
@@ -100,11 +121,14 @@ export interface FileRoutesByTo {
   '/course/practice': typeof CoursePracticeRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
+  '/class': typeof ClassIndexRoute;
   '/course': typeof CourseIndexRoute;
+  '/class/student/$uid': typeof ClassStudentUidRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   '/': typeof IndexRoute;
+  '/class': typeof ClassRouteWithChildren;
   '/course': typeof CourseRouteWithChildren;
   '/launch': typeof LaunchRoute;
   '/session-expired': typeof SessionExpiredRoute;
@@ -114,12 +138,15 @@ export interface FileRoutesById {
   '/course/practice': typeof CoursePracticeRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
+  '/class/': typeof ClassIndexRoute;
   '/course/': typeof CourseIndexRoute;
+  '/class/student/$uid': typeof ClassStudentUidRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | '/'
+    | '/class'
     | '/course'
     | '/launch'
     | '/session-expired'
@@ -129,7 +156,9 @@ export interface FileRouteTypes {
     | '/course/practice'
     | '/course/tutor'
     | '/course/twin'
-    | '/course/';
+    | '/class/'
+    | '/course/'
+    | '/class/student/$uid';
   fileRoutesByTo: FileRoutesByTo;
   to:
     | '/'
@@ -141,10 +170,13 @@ export interface FileRouteTypes {
     | '/course/practice'
     | '/course/tutor'
     | '/course/twin'
-    | '/course';
+    | '/class'
+    | '/course'
+    | '/class/student/$uid';
   id:
     | '__root__'
     | '/'
+    | '/class'
     | '/course'
     | '/launch'
     | '/session-expired'
@@ -154,11 +186,14 @@ export interface FileRouteTypes {
     | '/course/practice'
     | '/course/tutor'
     | '/course/twin'
-    | '/course/';
+    | '/class/'
+    | '/course/'
+    | '/class/student/$uid';
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
+  ClassRoute: typeof ClassRouteWithChildren;
   CourseRoute: typeof CourseRouteWithChildren;
   LaunchRoute: typeof LaunchRoute;
   SessionExpiredRoute: typeof SessionExpiredRoute;
@@ -172,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/';
       fullPath: '/';
       preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/class': {
+      id: '/class';
+      path: '/class';
+      fullPath: '/class';
+      preLoaderRoute: typeof ClassRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/course': {
@@ -201,6 +243,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/unauthorized';
       preLoaderRoute: typeof UnauthorizedRouteImport;
       parentRoute: typeof rootRouteImport;
+    };
+    '/class/': {
+      id: '/class/';
+      path: '/';
+      fullPath: '/class/';
+      preLoaderRoute: typeof ClassIndexRouteImport;
+      parentRoute: typeof ClassRoute;
     };
     '/course/': {
       id: '/course/';
@@ -244,8 +293,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CourseTwinRouteImport;
       parentRoute: typeof CourseRoute;
     };
+    '/class/student/$uid': {
+      id: '/class/student/$uid';
+      path: '/student/$uid';
+      fullPath: '/class/student/$uid';
+      preLoaderRoute: typeof ClassStudentUidRouteImport;
+      parentRoute: typeof ClassRoute;
+    };
   }
 }
+
+interface ClassRouteChildren {
+  ClassIndexRoute: typeof ClassIndexRoute;
+  ClassStudentUidRoute: typeof ClassStudentUidRoute;
+}
+
+const ClassRouteChildren: ClassRouteChildren = {
+  ClassIndexRoute: ClassIndexRoute,
+  ClassStudentUidRoute: ClassStudentUidRoute,
+};
+
+const ClassRouteWithChildren = ClassRoute._addFileChildren(ClassRouteChildren);
 
 interface CourseRouteChildren {
   CourseDiagnosticRoute: typeof CourseDiagnosticRoute;
@@ -270,6 +338,7 @@ const CourseRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ClassRoute: ClassRouteWithChildren,
   CourseRoute: CourseRouteWithChildren,
   LaunchRoute: LaunchRoute,
   SessionExpiredRoute: SessionExpiredRoute,

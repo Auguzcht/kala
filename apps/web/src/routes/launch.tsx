@@ -25,9 +25,10 @@ function LaunchLanding() {
     // Brief branded pause so the "validating your launch" state is legible
     // (it doubles as the conference demo's opening beat).
     const t = setTimeout(() => {
-      // TODO: once features/instructor and features/twin exist, route
-      // instructor/admin to their own dashboard instead of the index page.
-      navigate({ to: session.role === "student" ? "/course" : "/" });
+      // Role routing: students to the learn loop, instructors/admins to the
+      // class dashboard (Phase 4). Standalone admin/researcher doors come
+      // later.
+      navigate({ to: session.role === "student" ? "/course" : "/class" });
     }, 700);
     return () => clearTimeout(t);
   }, [navigate]);
