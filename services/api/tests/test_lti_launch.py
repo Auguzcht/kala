@@ -176,7 +176,9 @@ def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> Non
     assert len(seed_calls) == 1
     assert seed_calls[0]["institution_id"] == "inst-1"
     assert seed_calls[0]["course_id"] == "course-1"
-    assert "Module 1 content here." in seed_calls[0]["course_content"]
+    # Raw content items pass through (the proposer groups by module itself).
+    assert seed_calls[0]["content_items"][0]["body_or_description"] == "Module 1 content here."
+    assert "course_content" not in seed_calls[0]
 
 
 def test_student_launch_does_not_seed_skills(monkeypatch) -> None:

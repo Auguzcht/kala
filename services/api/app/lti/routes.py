@@ -58,11 +58,14 @@ def _seed_course_skills(*, institution_id: str, course_id: str, course_ref: str,
         if existing:
             return {"skipped": True, "reason": "course already has skills"}
         items = connector.get_content(course_ref)
-        content = "\n".join(i.get("body_or_description") or "" for i in items).strip()
-        if not content:
+        if not items:
             return {"skipped": True, "reason": "course has no content"}
+        # Pass the raw items through: the proposer groups by module itself
+        # (one model call per module, lms/hierarchy.py) — a joined string
+        # here would silently starve every module after the first on a
+        # content-rich course.
         return seed_course_skills(
-            institution_id=institution_id, course_id=course_id, course_content=content,
+            institution_id=institution_id, course_id=course_id, content_items=items,
         )
     except Exception:
         logger.exception("skill proposal failed for %s; skipping", course_ref)

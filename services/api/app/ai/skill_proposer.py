@@ -6,14 +6,22 @@ course and an AEC course both covering Boolean logic, etc.). Hand-mapping a
 skill graph per course via a CEA spreadsheet does not scale to that catalog.
 
 The approach:
-  1. Propose  - one reasoning-model call per course reads the course's
-     ingested content (module/lesson/assessment text) and proposes a small
-     set of canonical, *assessable* skills, each with a Bloom level and a
-     blueprint weight. Guardrails live in the prompt: observable/assessable
-     wording, no vague "understand X" skills, deduped within the proposal.
+  0. Group by module - content items are grouped by module_ref (see
+     lms/hierarchy.py), and proposal runs ONCE PER MODULE, not once for the
+     whole course. This was a real bug in the first version: a single
+     whole-course call, with an arbitrary text cutoff, meant only the first
+     module's content reliably reached the model at all for a genuinely
+     content-rich course, later modules were silently starved. Grouping by
+     module also means each proposed skill's module_ref is known directly
+     from which group produced it, no inference needed at ingest time.
+  1. Propose  - one reasoning-model call per MODULE reads that module's
+     content (lesson/assessment text) and proposes a small set of canonical,
+     *assessable* skills, each with a Bloom level and a blueprint weight.
+     Guardrails live in the prompt: observable/assessable wording, no vague
+     "understand X" skills, deduped within the module's own proposal.
   2. Dedup across the institution - before writing any proposed skill, embed
      it and search every ALREADY-APPROVED skill in the institution (any
-     course) via match_skills. Three outcomes by similarity:
+     course, any module) via match_skills. Three outcomes by similarity:
        - >= AUTO_MATCH: treat as the same skill. Reuse the approved skill's
          name/bloom/weight, mark this course's row 'approved' immediately,
          and point canonical_skill_id at the origin. No human needed - it was
@@ -36,24 +44,36 @@ import json
 
 from app.ai import bedrock, router as model_router
 from app.db import supabase as db
+from app.lms.hierarchy import build_folder_paths, module_ref_for
 
 # Similarity thresholds (cosine, 0..1). Tuned conservatively: better to send a
 # borderline skill to a human than to silently collapse two distinct skills.
 AUTO_MATCH = 0.92    # same skill; reuse the approved one, no review needed
 REVIEW_HINT = 0.82   # likely duplicate; create as proposed, flag the match
 
+# Per-module content size cap. This is generous, not a real prompt-length
+# limit, current default model (minimax-m3:free) supports a 1M-token
+# context; this exists only to guard against one pathologically large single
+# module (a course with everything dumped in one folder), not to trim normal
+# content. The original version of this file capped the WHOLE COURSE at
+# 24,000 characters in one call, which silently starved every module after
+# the first on any real, content-rich course. Per-module + generous is the
+# actual fix, not just a bigger number on the same design.
+MAX_CHARS_PER_MODULE = 120_000
+
 # Guardrails for the proposal call. Kept here (not just in the prompt) so the
 # intent is reviewable in code.
 _SYSTEM = (
-    "You extract a small set of CANONICAL, ASSESSABLE skills from course "
-    "content for a mastery-tracking system. Rules:\n"
+    "You extract a small set of CANONICAL, ASSESSABLE skills from ONE "
+    "module's course content for a mastery-tracking system. Rules:\n"
     "- Each skill must be observable and assessable: something a student "
     "demonstrably DOES. Prefer 'Construct a truth table' over 'Understand "
     "logic'. Never output vague skills like 'Understand embedded systems'.\n"
     "- Start each skill with a cognitive verb matching its Bloom level.\n"
     "- Deduplicate within your own output: if two activities exercise the "
     "same underlying skill, emit ONE skill, not two.\n"
-    "- Prefer FEWER, higher-quality skills. A typical module yields 3-6.\n"
+    "- Prefer FEWER, higher-quality skills for THIS module. 3-6 is typical "
+    "for one module's worth of content, not for an entire course.\n"
     "- bloom_level is the cognitive demand of the SKILL, one of: remember, "
     "understand, apply, analyze, evaluate, create.\n"
     "- weight is relative assessment importance, 0.5 (minor) to 2.0 (central "
@@ -89,14 +109,32 @@ def _parse_proposals(raw: str) -> list[dict]:
 
 
 def propose_skills_from_text(*, course_content: str) -> list[dict]:
-    """One reasoning-model call. Returns validated, in-proposal-deduped skill
-    dicts (name, bloom_level, weight). Pure: no DB writes, easy to test."""
+    """One reasoning-model call, for ONE module's content (see module
+    docstring for why this must be per-module, not per-course). Returns
+    validated, in-proposal-deduped skill dicts. Pure: no DB writes, easy to
+    test."""
     raw = model_router.answer(
         system=_SYSTEM,
-        user_text=json.dumps({"course_content": course_content})[:24000],
+        user_text=json.dumps({"module_content": course_content})[:MAX_CHARS_PER_MODULE],
         escalate=True,  # skill design is worth the reasoning-tier model
     )
     return _parse_proposals(raw)
+
+
+def _group_content_by_module(content_items: list[dict]) -> dict[str | None, str]:
+    """Group content items' text by resolved module_ref (see
+    lms/hierarchy.py), joined into one string per module. None is a real key
+    here, content that lives at the course root with no enclosing folder, it
+    still gets proposed, just without a module_ref attached to the result."""
+    folder_paths = build_folder_paths(content_items)
+    groups: dict[str | None, list[str]] = {}
+    for item in content_items:
+        body = item.get("body_or_description", "")
+        if not body:
+            continue
+        ref = module_ref_for(folder_paths.get(item.get("lms_content_id"), []))
+        groups.setdefault(ref, []).append(body)
+    return {ref: "\n\n".join(texts) for ref, texts in groups.items()}
 
 
 def _find_approved_match(*, institution_id: str, name: str) -> dict | None:
@@ -111,14 +149,20 @@ def _find_approved_match(*, institution_id: str, name: str) -> dict | None:
 
 
 def seed_course_skills(
-    *, institution_id: str, course_id: str, course_content: str,
-    module_ref: str | None = None,
+    *, institution_id: str, course_id: str, content_items: list[dict],
 ) -> dict:
-    """Propose skills for a course and reconcile each against the institution's
-    approved catalog. Idempotent-ish: skips proposing if the course already has
-    any skills (approved or proposed), so a re-launch doesn't duplicate work.
+    """Propose skills for a course, one model call per detected module (not
+    one call for the whole course, see module docstring), and reconcile each
+    proposal against the institution's approved catalog. Idempotent-ish:
+    skips proposing entirely if the course already has any skills (approved
+    or proposed), so a re-launch doesn't duplicate work.
 
-    Returns counts for logging: proposed, auto_approved (matched), flagged.
+    content_items is the raw list from LMSConnector.get_content(), the same
+    shape ingest_course() already consumes.
+
+    Returns counts for logging: proposed, auto_approved (matched), flagged,
+    plus modulesProcessed so a demo-day sanity check can confirm every
+    module was actually seen, not just the first one.
     Best-effort by contract: the caller (launch handler) must treat a raised
     exception as non-fatal, this must never block a launch.
     """
@@ -129,45 +173,51 @@ def seed_course_skills(
     if existing:
         return {"skipped": True, "reason": "course already has skills"}
 
-    proposals = propose_skills_from_text(course_content=course_content)
+    by_module = _group_content_by_module(content_items)
     proposed = auto_approved = flagged = 0
 
-    for p in proposals:
-        match = _find_approved_match(institution_id=institution_id, name=p["name"])
-        sim = float(match["similarity"]) if match else 0.0
-        emb = bedrock.embed(p["name"], input_type="search_document")
+    for mod_ref, joined_text in by_module.items():
+        proposals = propose_skills_from_text(course_content=joined_text)
 
-        if match and sim >= AUTO_MATCH:
-            # Same skill, already vetted elsewhere. Reuse it verbatim and go
-            # straight to approved, pointing at the canonical origin.
-            db.insert("skills", [{
-                "institution_id": institution_id, "course_id": course_id,
-                "name": match["name"], "bloom_level": match["bloom_level"],
-                "blueprint_weight": match["blueprint_weight"],
-                "status": "approved",
-                "canonical_skill_id": match["id"],
-                "embedding": emb,
-                "proposed_source": module_ref,
-            }])
-            auto_approved += 1
-        else:
-            # Novel, or only a possible duplicate: stage for human review.
-            note = None
-            if match and sim >= REVIEW_HINT:
-                note = f"possible duplicate of '{match['name']}' (sim {sim:.2f})"
-                flagged += 1
-            db.insert("skills", [{
-                "institution_id": institution_id, "course_id": course_id,
-                "name": p["name"], "bloom_level": p["bloom_level"],
-                "blueprint_weight": p["weight"],
-                "status": "proposed",
-                "embedding": emb,
-                "proposed_source": note or module_ref,
-            }])
-            proposed += 1
+        for p in proposals:
+            match = _find_approved_match(institution_id=institution_id, name=p["name"])
+            sim = float(match["similarity"]) if match else 0.0
+            emb = bedrock.embed(p["name"], input_type="search_document")
+
+            if match and sim >= AUTO_MATCH:
+                # Same skill, already vetted elsewhere. Reuse it verbatim and
+                # go straight to approved, pointing at the canonical origin.
+                db.insert("skills", [{
+                    "institution_id": institution_id, "course_id": course_id,
+                    "name": match["name"], "bloom_level": match["bloom_level"],
+                    "blueprint_weight": match["blueprint_weight"],
+                    "status": "approved",
+                    "canonical_skill_id": match["id"],
+                    "embedding": emb,
+                    "module_ref": mod_ref,
+                    "proposed_source": mod_ref,
+                }])
+                auto_approved += 1
+            else:
+                # Novel, or only a possible duplicate: stage for human review.
+                note = None
+                if match and sim >= REVIEW_HINT:
+                    note = f"possible duplicate of '{match['name']}' (sim {sim:.2f})"
+                    flagged += 1
+                db.insert("skills", [{
+                    "institution_id": institution_id, "course_id": course_id,
+                    "name": p["name"], "bloom_level": p["bloom_level"],
+                    "blueprint_weight": p["weight"],
+                    "status": "proposed",
+                    "embedding": emb,
+                    "module_ref": mod_ref,
+                    "proposed_source": note or mod_ref,
+                }])
+                proposed += 1
 
     return {
         "skipped": False,
+        "modulesProcessed": len(by_module),
         "proposed": proposed,
         "auto_approved": auto_approved,
         "flagged_possible_duplicate": flagged,
