@@ -263,6 +263,31 @@ def list_proposed_skills(
     return {"courseId": course_id, "proposed": rows}
 
 
+@router.get("/{course_id}/skills/auto-matched")
+def list_auto_matched_skills(
+    course_id: str,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """Skills that were auto-approved by cross-course match (they resembled a
+    skill already approved in another course, above the AUTO_MATCH bar, so
+    they went live without individual review, that's the scaling win).
+
+    Surfacing them here is the auditability half of that trade: an instructor
+    can SEE which of their live skills were inherited from elsewhere
+    (canonical_skill_id is set, and proposed_source records what it matched),
+    rather than the reuse being invisible. If an inherited skill's wording
+    isn't quite right for THIS course, the detach endpoint below turns it
+    back into a course-local proposed skill they can fine-tune."""
+    rows = db.select("skills", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.approved",
+        "canonical_skill_id": "not.is.null",
+        "select": "id,name,bloom_level,blueprint_weight,module_ref,proposed_source,canonical_skill_id",
+        "order": "name.asc",
+    })
+    return {"courseId": course_id, "autoMatched": rows}
+
+
 @router.patch("/{course_id}/skills/{skill_id}/review")
 def review_proposed_skill(
     course_id: str, skill_id: str, body: ReviewDecision,
@@ -295,3 +320,42 @@ def review_proposed_skill(
     if not updated:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "proposed skill not found")
     return {"skillId": skill_id, "status": body.status}
+
+
+@router.patch("/{course_id}/skills/{skill_id}/detach")
+def detach_auto_matched_skill(
+    course_id: str, skill_id: str,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """Turn an auto-matched skill back into a course-local skill for review.
+
+    This is the reversibility half of cross-course auto-match: reuse is a
+    default, not a lock-in. When an instructor decides an inherited skill's
+    wording (or Bloom level, or weight) needs to be tuned specifically for
+    THIS course, detaching clears canonical_skill_id and sends the row back
+    to 'proposed', so it re-enters the normal review flow where they can edit
+    it freely. It stops feeding the learner surfaces until re-approved (same
+    as any proposed skill), which is the correct, conservative behavior, a
+    skill mid-edit shouldn't be live.
+
+    Only affects rows that were actually auto-matched (canonical_skill_id set
+    and status approved); a 404 otherwise."""
+    updated = db.update(
+        "skills",
+        {"id": f"eq.{skill_id}", "institution_id": f"eq.{user.institution_id}",
+         "course_id": f"eq.{course_id}", "status": "eq.approved",
+         "canonical_skill_id": "not.is.null"},
+        {
+            "status": "proposed",
+            "canonical_skill_id": None,
+            "proposed_source": "detached from cross-course match for course-specific tuning",
+            "reviewed_by": None,
+            "reviewed_at": None,
+        },
+    )
+    if not updated:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "no auto-matched skill with that id in this course",
+        )
+    return {"skillId": skill_id, "status": "proposed", "detached": True}

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  detachAutoMatchedSkill,
   fetchAtRisk,
+  fetchAutoMatchedSkills,
   fetchHeatmap,
   fetchProposedSkills,
   fetchStudentTwin,
@@ -58,6 +60,25 @@ export function useProposeSkills(courseId: string) {
       queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
       // Auto-approved matches may have added live skills to the cohort.
       queryClient.invalidateQueries({ queryKey: ["heatmap", courseId] });
+    },
+  });
+}
+
+export function useAutoMatchedSkills(courseId: string) {
+  return useQuery({
+    queryKey: ["auto-matched-skills", courseId],
+    queryFn: () => fetchAutoMatchedSkills(courseId),
+  });
+}
+
+export function useDetachAutoMatchedSkill(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (skillId: string) => detachAutoMatchedSkill(courseId, skillId),
+    onSuccess: () => {
+      // The detached skill moves from auto-matched to the proposed list.
+      queryClient.invalidateQueries({ queryKey: ["auto-matched-skills", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
     },
   });
 }

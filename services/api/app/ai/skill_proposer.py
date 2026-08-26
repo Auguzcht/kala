@@ -50,6 +50,14 @@ from app.lms.hierarchy import build_folder_paths, module_ref_for
 # borderline skill to a human than to silently collapse two distinct skills.
 AUTO_MATCH = 0.92    # same skill; reuse the approved one, no review needed
 REVIEW_HINT = 0.82   # likely duplicate; create as proposed, flag the match
+# In-batch near-duplicate threshold. Two proposals FROM THE SAME RUN whose
+# names are at least this similar are flagged as probable duplicates of each
+# other. Same value as REVIEW_HINT on purpose: the bar for "worth a human's
+# attention as a possible dup" is identical whether the other side is an
+# already-approved skill or another fresh proposal. NEVER auto-collapsed --
+# two proposals from one run are both unvetted, so picking a winner between
+# them is a review decision, which belongs to the human, not the machine.
+INBATCH_DUP = 0.82
 
 # Per-module content size cap. This is generous, not a real prompt-length
 # limit, current default model (minimax-m3:free) supports a 1M-token
@@ -163,6 +171,42 @@ def _already_proposed_modules(*, institution_id: str, course_id: str) -> set[str
     return {r["module_ref"] for r in rows}
 
 
+def _flag_in_batch_duplicates(items: list[dict]) -> int:
+    """Annotate near-duplicate proposals WITHIN a single run, in place.
+
+    items: dicts each carrying at least {"name", "embedding", "dup_note": None}.
+    Embeddings are computed once by the caller and reused here, so this adds
+    no extra embed calls.
+
+    Deliberate design (matches HITL): in-batch duplicates are FLAGGED, never
+    auto-collapsed. Two proposals from the same run are BOTH unvetted;
+    auto-picking a winner would be the machine making a review decision a
+    human hasn't made yet. Cross-course auto-match stays separate and
+    unchanged, there the other side is an already-approved, human-vetted
+    skill, so reuse is earned. Unvetted-vs-unvetted always goes to a human.
+
+    Returns the number of proposals that got a dup note (for reporting).
+    O(n^2) over one run's proposals (tens of skills), so a plain pairwise
+    pass is fine, no clustering infra.
+    """
+    def cosine(a: list[float], b: list[float]) -> float:
+        dot = sum(x * y for x, y in zip(a, b))
+        na = sum(x * x for x in a) ** 0.5
+        nb = sum(y * y for y in b) ** 0.5
+        return dot / (na * nb) if na and nb else 0.0
+
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            a, b = items[i], items[j]
+            sim = cosine(a["embedding"], b["embedding"])
+            if sim >= INBATCH_DUP:
+                a["dup_note"] = a["dup_note"] or (
+                    f"possible duplicate of '{b['name']}' (this batch, sim {sim:.2f})")
+                b["dup_note"] = b["dup_note"] or (
+                    f"possible duplicate of '{a['name']}' (this batch, sim {sim:.2f})")
+    return sum(1 for it in items if it["dup_note"])
+
+
 def seed_course_skills(
     *, institution_id: str, course_id: str, content_items: list[dict],
 ) -> dict:
@@ -203,19 +247,45 @@ def seed_course_skills(
         }
 
     proposed = auto_approved = flagged = insert_failed = 0
+    flagged_in_batch = 0
 
     for mod_ref, joined_text in pending.items():
         proposals = propose_skills_from_text(course_content=joined_text)
 
+        # Phase 1: embed every proposal in this module once, and resolve its
+        # cross-course approved match, before writing anything. Doing this up
+        # front is what makes in-batch dedup possible: proposals can be
+        # compared to EACH OTHER, not only to already-approved skills. (The
+        # embedding is reused for both the dup check and the row write, so
+        # this is no extra embed calls vs before.)
+        staged = []
         for p in proposals:
             match = _find_approved_match(institution_id=institution_id, name=p["name"])
-            sim = float(match["similarity"]) if match else 0.0
             emb = bedrock.embed(p["name"], input_type="search_document")
+            staged.append({
+                "p": p,
+                "match": match,
+                "sim": float(match["similarity"]) if match else 0.0,
+                "embedding": emb,
+                "name": p["name"],
+                "dup_note": None,
+            })
 
+        # Flag near-duplicates within this run (mutates dup_note in place).
+        flagged_in_batch += _flag_in_batch_duplicates(staged)
+
+        # Phase 2: write. Cross-course auto-match and per-skill insert
+        # resilience are unchanged from before.
+        for s in staged:
+            p, match, sim, emb = s["p"], s["match"], s["sim"], s["embedding"]
             try:
                 if match and sim >= AUTO_MATCH:
-                    # Same skill, already vetted elsewhere. Reuse it verbatim and
-                    # go straight to approved, pointing at the canonical origin.
+                    # Same skill, already vetted elsewhere. Reuse it verbatim
+                    # and go straight to approved, pointing at the canonical
+                    # origin. Even an auto-match is auditable + reversible:
+                    # canonical_skill_id records what it was matched to, and
+                    # the review UI can detach it (see review endpoint) so an
+                    # instructor can fine-tune it for THIS course.
                     db.insert("skills", [{
                         "institution_id": institution_id, "course_id": course_id,
                         "name": match["name"], "bloom_level": match["bloom_level"],
@@ -224,15 +294,20 @@ def seed_course_skills(
                         "canonical_skill_id": match["id"],
                         "embedding": emb,
                         "module_ref": mod_ref,
-                        "proposed_source": mod_ref,
+                        "proposed_source": f"auto-matched to '{match['name']}' (sim {sim:.2f})",
                     }])
                     auto_approved += 1
                 else:
-                    # Novel, or only a possible duplicate: stage for human review.
-                    note = None
+                    # Novel, or a possible duplicate (of an approved skill
+                    # and/or of another proposal in this same batch). Stage
+                    # for human review, carrying whichever hint(s) apply.
+                    notes = []
                     if match and sim >= REVIEW_HINT:
-                        note = f"possible duplicate of '{match['name']}' (sim {sim:.2f})"
+                        notes.append(f"possible duplicate of approved '{match['name']}' (sim {sim:.2f})")
                         flagged += 1
+                    if s["dup_note"]:
+                        notes.append(s["dup_note"])
+                    source = "; ".join(notes) if notes else mod_ref
                     db.insert("skills", [{
                         "institution_id": institution_id, "course_id": course_id,
                         "name": p["name"], "bloom_level": p["bloom_level"],
@@ -240,16 +315,15 @@ def seed_course_skills(
                         "status": "proposed",
                         "embedding": emb,
                         "module_ref": mod_ref,
-                        "proposed_source": note or mod_ref,
+                        "proposed_source": source,
                     }])
                     proposed += 1
             except Exception as exc:
                 # A single bad write (timeout on a heavy vector insert, etc.)
                 # must not abort the run and discard modules already
-                # processed — log it, count it, and keep going. The proposal
-                # work (model + embed) already succeeded and is cheap to
-                # re-attempt on the next refresh, but completed modules are
-                # not.
+                # processed, log it, count it, keep going. The proposal work
+                # (model + embed) already succeeded and is cheap to re-attempt
+                # on the next refresh, but completed modules are not.
                 print(f"skill insert failed for '{p['name']}': {exc}")
                 insert_failed += 1
 
@@ -260,5 +334,6 @@ def seed_course_skills(
         "proposed": proposed,
         "auto_approved": auto_approved,
         "flagged_possible_duplicate": flagged,
+        "flagged_in_batch_duplicate": flagged_in_batch,
         "insertFailed": insert_failed,
     }

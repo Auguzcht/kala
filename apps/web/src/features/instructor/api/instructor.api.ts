@@ -1,12 +1,16 @@
 import { api } from "@/lib/api/client";
 import {
   atRiskSchema,
+  autoMatchedSkillsSchema,
+  detachResponseSchema,
   heatmapSchema,
   proposedSkillsSchema,
   proposeSkillsResultSchema,
   reviewResponseSchema,
   studentTwinSchema,
   type AtRisk,
+  type AutoMatchedSkills,
+  type DetachResponse,
   type HeatmapData,
   type ProposedSkills,
   type ProposeSkillsResult,
@@ -49,4 +53,19 @@ export async function reviewProposedSkill(
 export async function proposeSkills(courseId: string): Promise<ProposeSkillsResult> {
   const data = await api<unknown>(`/courses/${courseId}/skills/propose`, { method: "POST" });
   return proposeSkillsResultSchema.parse(data);
+}
+
+export async function fetchAutoMatchedSkills(courseId: string): Promise<AutoMatchedSkills> {
+  const data = await api<unknown>(`/dashboard/${courseId}/skills/auto-matched`);
+  return autoMatchedSkillsSchema.parse(data);
+}
+
+export async function detachAutoMatchedSkill(
+  courseId: string,
+  skillId: string
+): Promise<DetachResponse> {
+  const data = await api<unknown>(`/dashboard/${courseId}/skills/${skillId}/detach`, {
+    method: "PATCH",
+  });
+  return detachResponseSchema.parse(data);
 }

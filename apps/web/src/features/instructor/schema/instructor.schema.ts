@@ -79,7 +79,32 @@ export const proposeSkillsResultSchema = z.object({
   proposed: z.number().optional(),
   auto_approved: z.number().optional(),
   flagged_possible_duplicate: z.number().optional(),
+  flagged_in_batch_duplicate: z.number().optional(),
   insertFailed: z.number().optional(),
+});
+
+// Live skills inherited via cross-course auto-match (canonical_skill_id
+// set). Auditable reuse: the instructor can see what was inherited and
+// detach it to tune for this course.
+export const autoMatchedSkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  bloom_level: z.string(),
+  blueprint_weight: z.number(),
+  module_ref: z.string().nullable(),
+  proposed_source: z.string().nullable(),
+  canonical_skill_id: z.string().nullable(),
+});
+
+export const autoMatchedSkillsSchema = z.object({
+  courseId: z.string(),
+  autoMatched: z.array(autoMatchedSkillSchema),
+});
+
+export const detachResponseSchema = z.object({
+  skillId: z.string(),
+  status: z.enum(["proposed"]),
+  detached: z.literal(true),
 });
 
 export type HeatmapSkill = z.infer<typeof heatmapSkillSchema>;
@@ -93,3 +118,6 @@ export type ProposedSkill = z.infer<typeof proposedSkillSchema>;
 export type ProposedSkills = z.infer<typeof proposedSkillsSchema>;
 export type ReviewResponse = z.infer<typeof reviewResponseSchema>;
 export type ProposeSkillsResult = z.infer<typeof proposeSkillsResultSchema>;
+export type AutoMatchedSkill = z.infer<typeof autoMatchedSkillSchema>;
+export type AutoMatchedSkills = z.infer<typeof autoMatchedSkillsSchema>;
+export type DetachResponse = z.infer<typeof detachResponseSchema>;

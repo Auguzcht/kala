@@ -301,3 +301,91 @@ def test_seed_continues_past_a_failed_insert(monkeypatch):
     assert result["modulesProcessed"] == 2  # both modules were processed
     assert result["insertFailed"] == 1     # the one failed write is counted, not fatal
     assert result["proposed"] == 1         # the second skill landed
+
+
+def test_flag_in_batch_duplicates_annotates_both_sides_of_a_near_pair():
+    """Two proposals with near-identical embeddings both get a dup note
+    pointing at each other; a distinct third is left alone."""
+    items = [
+        {"name": "Convert numbers between bases", "embedding": [1.0, 0.0, 0.0], "dup_note": None},
+        {"name": "Apply number system conversions", "embedding": [0.99, 0.01, 0.0], "dup_note": None},
+        {"name": "Diagnose a sensor fault", "embedding": [0.0, 0.0, 1.0], "dup_note": None},
+    ]
+    n = skill_proposer._flag_in_batch_duplicates(items)
+    assert n == 2  # the pair, not the loner
+    assert "Apply number system conversions" in items[0]["dup_note"]
+    assert "Convert numbers between bases" in items[1]["dup_note"]
+    assert items[2]["dup_note"] is None
+
+
+def test_flag_in_batch_duplicates_never_collapses_only_annotates():
+    """Design guarantee: the flagger only writes notes, it never removes or
+    merges an item. Both survive for the human to decide."""
+    items = [
+        {"name": "A", "embedding": [1.0, 0.0], "dup_note": None},
+        {"name": "A prime", "embedding": [1.0, 0.001], "dup_note": None},
+    ]
+    skill_proposer._flag_in_batch_duplicates(items)
+    assert len(items) == 2  # nothing dropped
+
+
+def test_seed_flags_in_batch_duplicates_and_keeps_both(monkeypatch):
+    """End to end: a module producing two near-duplicate proposals stages
+    BOTH as 'proposed', each carrying an in-batch dup note, never one
+    silently collapsed. This is the exact case seen live (two number-system
+    skills from one run)."""
+    items = [
+        {"lms_content_id": "mod-1", "title": "Module 1", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l1", "title": "L1", "parent_id": "mod-1", "body_or_description": "number systems"},
+    ]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [])  # no cross-course match
+    # Two near-duplicate proposals; identical embedding forces a dup flag.
+    monkeypatch.setattr(
+        skill_proposer, "propose_skills_from_text",
+        lambda **k: [
+            {"name": "Convert numbers between bases", "bloom_level": "apply", "weight": 2.0},
+            {"name": "Apply number system conversions", "bloom_level": "apply", "weight": 1.2},
+        ],
+    )
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [1.0, 0.0, 0.0])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+
+    result = skill_proposer.seed_course_skills(
+        institution_id="i", course_id="c", content_items=items,
+    )
+    assert result["proposed"] == 2  # both kept, neither collapsed
+    assert result["flagged_in_batch_duplicate"] == 2
+    assert all(r["status"] == "proposed" for r in inserted)
+    assert all("this batch" in r["proposed_source"] for r in inserted)
+
+
+def test_seed_cross_course_automatch_still_auto_approves(monkeypatch):
+    """The in-batch work must not change cross-course behavior: a proposal
+    that strongly matches an APPROVED skill elsewhere still auto-approves,
+    now with an auditable proposed_source noting what it matched."""
+    items = [
+        {"lms_content_id": "mod-1", "title": "Module 1", "parent_id": None, "body_or_description": ""},
+        {"lms_content_id": "l1", "title": "L1", "parent_id": "mod-1", "body_or_description": "truth tables"},
+    ]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [])
+    monkeypatch.setattr(
+        skill_proposer, "propose_skills_from_text",
+        lambda **k: [{"name": "Construct a truth table", "bloom_level": "apply", "weight": 1.0}],
+    )
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [0.0] * 3)
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [{
+        "id": "canon-1", "name": "Construct a truth table", "bloom_level": "apply",
+        "blueprint_weight": 1.0, "course_id": "other", "similarity": 0.97,
+    }])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+
+    result = skill_proposer.seed_course_skills(
+        institution_id="i", course_id="c", content_items=items,
+    )
+    assert result["auto_approved"] == 1
+    assert inserted[0]["status"] == "approved"
+    assert inserted[0]["canonical_skill_id"] == "canon-1"
+    assert "auto-matched" in inserted[0]["proposed_source"]  # auditable

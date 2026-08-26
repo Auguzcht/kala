@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Heatmap, AtRiskList, SkillReviewPanel, useHeatmap } from "@/features/instructor";
+import { Heatmap, AtRiskList, SkillReviewPanel, AutoMatchedSection, useHeatmap } from "@/features/instructor";
 import { MasteryRing } from "@/components/kala";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,8 +58,9 @@ function ClassDashboard() {
 
       {/* HITL skill proposals: nothing proposed reaches learners until a
           human approves here (docs/SKILL_PIPELINE.md). */}
-      <div className="mt-6">
+      <div className="mt-6 space-y-6">
         <SkillReviewPanel courseId={courseId} />
+        <AutoMatchedSection courseId={courseId} />
       </div>
     </>
   );

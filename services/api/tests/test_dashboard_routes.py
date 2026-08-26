@@ -131,3 +131,73 @@ def test_student_twin_drill_down(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["pseudonym"] == "Mica V."
     assert response.json()["readiness"] == 0.3
+
+
+def test_list_auto_matched_requires_instructor() -> None:
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="stu-1", institution_id="institution-1", app_role="student")
+    try:
+        with TestClient(app) as client:
+            response = client.get("/dashboard/course-1/skills/auto-matched")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
+def test_list_auto_matched_returns_inherited_skills(monkeypatch) -> None:
+    """Auditability: an instructor can see which live skills were auto-matched
+    from another course (canonical_skill_id set), not just that they exist."""
+    app.dependency_overrides[get_current_user] = instructor_user
+    monkeypatch.setattr(dashboard.db, "select", lambda t, p: [{
+        "id": "sk-1", "name": "Construct a truth table", "bloom_level": "apply",
+        "blueprint_weight": 1.0, "module_ref": "Module 1",
+        "proposed_source": "auto-matched to 'Construct a truth table' (sim 0.97)",
+        "canonical_skill_id": "canon-1",
+    }])
+    try:
+        with TestClient(app) as client:
+            response = client.get("/dashboard/course-1/skills/auto-matched")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["autoMatched"][0]["canonical_skill_id"] == "canon-1"
+
+
+def test_detach_sends_auto_matched_skill_back_to_proposed(monkeypatch) -> None:
+    """Reversibility: detaching an inherited skill clears its canonical link
+    and returns it to 'proposed' so the instructor can tune it for this
+    course, and it stops feeding learner surfaces until re-approved."""
+    app.dependency_overrides[get_current_user] = instructor_user
+    captured = {}
+
+    def fake_update(table, filters, values):
+        captured["filters"] = filters
+        captured["values"] = values
+        return [{"id": "sk-1"}]  # one row matched
+
+    monkeypatch.setattr(dashboard.db, "update", fake_update)
+    try:
+        with TestClient(app) as client:
+            response = client.patch("/dashboard/course-1/skills/sk-1/detach")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["detached"] is True
+    # It only targets rows that were actually auto-matched...
+    assert captured["filters"]["canonical_skill_id"] == "not.is.null"
+    assert captured["filters"]["status"] == "eq.approved"
+    # ...and sends them back to proposed with the canonical link cleared.
+    assert captured["values"]["status"] == "proposed"
+    assert captured["values"]["canonical_skill_id"] is None
+
+
+def test_detach_404s_when_skill_is_not_auto_matched(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = instructor_user
+    monkeypatch.setattr(dashboard.db, "update", lambda t, f, v: [])  # nothing matched
+    try:
+        with TestClient(app) as client:
+            response = client.patch("/dashboard/course-1/skills/sk-1/detach")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 404
