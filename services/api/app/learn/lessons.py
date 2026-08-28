@@ -35,6 +35,7 @@ import json
 import httpx
 
 from app.ai import bedrock, rag
+from app.ai.concurrency import map_concurrent
 from app.ai.router import get_model_for
 from app.db import supabase as db
 from app.learn import items as item_gen
@@ -261,30 +262,56 @@ def _reclaim_for_regeneration(lesson_id: str) -> None:
     db.update("guided_lessons", {"id": f"eq.{lesson_id}"}, {"status": "generating"})
 
 
+def _build_step_payload(*, institution_id: str, course_id: str, skill: dict,
+                        step: dict, context: str) -> dict:
+    """One step's worth of work: teaching content + its comprehension check.
+    Fully independent of every other step (only reads the shared, read-only
+    `context`), which is what makes running these on a thread pool safe."""
+    content = _generate_step_content(skill=skill, step=step, context=context)
+
+    # The comprehension check: a real generated_items MCQ (kind='tutor'),
+    # so passing it grades server-side and writes a tutor evidence_event.
+    # Reuses the tested item generator rather than a parallel path.
+    check_item_id = None
+    try:
+        check = item_gen.generate_question(
+            institution_id=institution_id, course_id=course_id,
+            skill=skill, kind="tutor",
+        )
+        check_item_id = check["id"]
+    except Exception:
+        check_item_id = None  # explanation-only step; still valid
+
+    return {"content": content, "check_item_id": check_item_id, "bloom_level": step.get("bloom_level")}
+
+
 def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
                          lesson_id: str) -> None:
     """Phases 1+2: outline, then per-step content + check, persisted under an
     already-created lesson row. Raises on failure; the caller is responsible
-    for marking the row 'failed'."""
+    for marking the row 'failed'.
+
+    Per-step generation (content + its comprehension check) is TWO model
+    calls each, and every step is independent of the others — this used to
+    run fully serial (up to 2N sequential Bedrock round trips for an N-step
+    lesson, the actual cause of guided lessons taking minutes to first open),
+    so it is parallelized across steps via map_concurrent. Only the DB
+    inserts stay sequential, so `position` is still written in outline order
+    regardless of which step's generation happened to finish first.
+    """
     context, _ = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
     outline = _generate_outline(skill=skill, context=context)
 
-    for position, step in enumerate(outline):
-        content = _generate_step_content(skill=skill, step=step, context=context)
+    built = map_concurrent(
+        lambda step: _build_step_payload(
+            institution_id=institution_id, course_id=course_id,
+            skill=skill, step=step, context=context,
+        ),
+        outline,
+    )
 
-        # The comprehension check: a real generated_items MCQ (kind='tutor'),
-        # so passing it grades server-side and writes a tutor evidence_event.
-        # Reuses the tested item generator rather than a parallel path.
-        check_item_id = None
-        try:
-            check = item_gen.generate_question(
-                institution_id=institution_id, course_id=course_id,
-                skill=skill, kind="tutor",
-            )
-            check_item_id = check["id"]
-        except Exception:
-            check_item_id = None  # explanation-only step; still valid
-
+    for position, payload in enumerate(built):
+        content = payload["content"]
         db.insert("guided_lesson_steps", [{
             "lesson_id": lesson_id,
             "position": position,
@@ -292,8 +319,8 @@ def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
             "detail_points": content["detail_points"],
             "misconception": content["misconception"],
             "key_takeaway": content["key_takeaway"],
-            "bloom_level": step.get("bloom_level"),
-            "check_item_id": check_item_id,
+            "bloom_level": payload["bloom_level"],
+            "check_item_id": payload["check_item_id"],
         }], prefer="return=minimal")
 
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.ai import bedrock, router as model_router
 from app.ai.chunking import chunk_text
+from app.ai.concurrency import map_concurrent
 from app.ai.deidentify import strip_pii
 from app.ai.skill_proposer import seed_course_skills
 from app.db import supabase as db
@@ -251,13 +252,16 @@ def get_diagnostic(
     if module_ref is not None:
         skill_filters["module_ref"] = f"eq.{module_ref}"
     skills = db.select("skills", skill_filters)
-    questions = [
-        item_gen.generate_question(
+    # One Bedrock call per skill (RAG retrieval + generation), each fully
+    # independent — parallelized so a 10-skill diagnostic is one round trip's
+    # worth of wall-clock time, not ten serial ones. See ai/concurrency.py.
+    questions = map_concurrent(
+        lambda s: item_gen.generate_question(
             institution_id=user.institution_id, course_id=course_id,
             skill=s, kind="diagnostic",
-        )
-        for s in skills
-    ]
+        ),
+        skills,
+    )
     return {"courseId": course_id, "questions": questions}
 
 

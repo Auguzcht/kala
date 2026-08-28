@@ -35,6 +35,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.ai.concurrency import map_concurrent
 from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user
 from app.learn import items as item_gen
@@ -109,11 +110,20 @@ def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
         tracked_skill_ids = {t["skill_id"] for t in tracked}
         fresh_skills = [s for sid, s in skills.items() if sid not in tracked_skill_ids]
 
-        for skill in fresh_skills[: limit - len(cards)]:
-            card = item_gen.generate_question(
+        # Generation is one Bedrock call per skill, independent of the
+        # others — parallelized so seeding N new cards is one round trip's
+        # worth of wall-clock time, not N serial ones. Scheduling writes
+        # (ensure_tracked) stay sequential after, they're cheap DB I/O and
+        # keeping them in order avoids any need to reason about interleaving.
+        to_generate = fresh_skills[: limit - len(cards)]
+        generated = map_concurrent(
+            lambda skill: item_gen.generate_question(
                 institution_id=user.institution_id, course_id=course_id,
                 skill=skill, kind="flashcard",
-            )
+            ),
+            to_generate,
+        )
+        for skill, card in zip(to_generate, generated):
             srs.ensure_tracked(
                 institution_id=user.institution_id, user_id=user.user_id,
                 course_id=course_id, item_id=card["id"], skill_id=skill["id"],

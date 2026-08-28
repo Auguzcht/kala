@@ -71,6 +71,49 @@ def test_step_content_falls_back_cleanly(monkeypatch):
     assert content["misconception"] is None
 
 
+def test_generation_persists_steps_in_position_order_even_when_parallel_completion_is_out_of_order(monkeypatch):
+    """The risky part of parallelizing per-step generation: content is built
+    concurrently (so steps can finish in any order), but they must still be
+    INSERTED with position matching their place in the outline, not their
+    completion order."""
+    import time
+
+    inserted_positions = []
+
+    monkeypatch.setattr(lessons, "_context_for", lambda **kw: ("ctx", []))
+    monkeypatch.setattr(lessons, "_generate_outline", lambda **kw: [
+        {"title": f"Step {i}", "focus": f"focus {i}", "bloom_level": "understand"}
+        for i in range(4)
+    ])
+
+    def content_with_variable_delay(*, skill, step, context):
+        # Step 0 is slowest, step 3 is fastest — completion order is the
+        # REVERSE of outline order, the worst case for the bug this guards.
+        idx = int(step["title"].split()[-1])
+        time.sleep(0.02 * (4 - idx))
+        return {"summary": step["focus"], "detail_points": [], "misconception": None,
+                "key_takeaway": None}
+
+    monkeypatch.setattr(lessons, "_generate_step_content", content_with_variable_delay)
+    monkeypatch.setattr(lessons.item_gen, "generate_question", lambda **kw: {"id": "check"})
+
+    def fake_insert(table, rows, prefer="return=representation"):
+        if table == "guided_lesson_steps":
+            inserted_positions.append((rows[0]["position"], rows[0]["summary"]))
+        return []
+
+    monkeypatch.setattr(lessons.db, "insert", fake_insert)
+
+    lessons._generate_steps_into(
+        institution_id="inst-1", course_id="c-1",
+        skill={"id": "s-1", "name": "Skill"}, lesson_id="lesson-1",
+    )
+
+    assert inserted_positions == [
+        (0, "focus 0"), (1, "focus 1"), (2, "focus 2"), (3, "focus 3"),
+    ]
+
+
 def test_generation_persists_steps_and_wires_check_item(monkeypatch):
     """First open: outline -> per-step content + a check MCQ, all persisted,
     lesson flipped to ready."""
