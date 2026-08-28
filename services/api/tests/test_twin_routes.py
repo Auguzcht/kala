@@ -42,8 +42,8 @@ def test_course_meta_404s_outside_the_institution(monkeypatch) -> None:
 def test_twin_returns_skills_bands_and_evidence(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     skills = [
-        {"id": "skill-1", "name": "Cycle Analysis", "bloom_level": "apply"},
-        {"id": "skill-2", "name": "Entropy", "bloom_level": "understand"},
+        {"id": "skill-1", "name": "Cycle Analysis", "bloom_level": "apply", "module_ref": "Module 1"},
+        {"id": "skill-2", "name": "Entropy", "bloom_level": "understand", "module_ref": None},
     ]
     mastery = [{"skill_id": "skill-1", "estimate": 0.5, "attempts": 3}]
     events = [
@@ -72,6 +72,8 @@ def test_twin_returns_skills_bands_and_evidence(monkeypatch) -> None:
     assert body["readiness"] == 0.5
     assert len(body["skills"]) == 2
     assert body["skills"][0]["band"] == "proficient"   # 0.5
+    assert body["skills"][0]["moduleRef"] == "Module 1"
+    assert body["skills"][1]["moduleRef"] is None
     assert body["skills"][1]["band"] == "no-evidence"  # no mastery row
     assert body["skills"][1]["estimate"] is None
     assert body["evidence"][0]["skillName"] == "Cycle Analysis"

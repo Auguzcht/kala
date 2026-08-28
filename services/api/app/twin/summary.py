@@ -28,7 +28,7 @@ def skills_with_mastery(*, institution_id: str, user_id: str, course_id: str) ->
     skills = db.select("skills", {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
         "status": "eq.approved",  # never surface unreviewed proposals to a learner
-        "select": "id,name,bloom_level", "order": "name.asc",
+        "select": "id,name,bloom_level,module_ref", "order": "name.asc",
     })
     if not skills:
         return []
@@ -41,6 +41,7 @@ def skills_with_mastery(*, institution_id: str, user_id: str, course_id: str) ->
         "skillId": s["id"],
         "name": s["name"],
         "bloomLevel": s["bloom_level"],
+        "moduleRef": s.get("module_ref"),
         "estimate": float(estimates[s["id"]]["estimate"]) if s["id"] in estimates else None,
         "attempts": int(estimates[s["id"]]["attempts"]) if s["id"] in estimates else 0,
         "band": band_for(float(estimates[s["id"]]["estimate"]) if s["id"] in estimates else None),
