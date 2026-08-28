@@ -12,6 +12,7 @@ Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`cu
 pnpm setup        # installs apps/web (pnpm) + services/api and services/worker (uv)
 pnpm dev          # web app on :5173
 pnpm api:dev      # backend on :8000
+pnpm --filter web gen:api   # regenerate backend OpenAPI export + frontend types (one chain, via pregen:api)
 pnpm exec supabase --help
 pnpm aws --version
 ```

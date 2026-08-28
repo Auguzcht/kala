@@ -28,7 +28,7 @@ A tenant is an LMS deployment. Every persisted row carries `institution_id`. The
 
 ## Types stay in sync
 
-The backend emits an OpenAPI schema (`python scripts/export_openapi.py` writes `openapi.json`). The frontend generates its API types from it (`pnpm gen:api`). Do not hand-write API types on either side.
+The backend emits an OpenAPI schema (`python scripts/export_openapi.py` writes `openapi.json`). The frontend generates its API types from it — `pnpm --filter web gen:api` runs the export first (via a `pregen:api` hook) and then regenerates `types.gen.ts`, so one command keeps both sides in sync. Do not hand-write API types on either side.
 
 ## Deploy pipeline
 

@@ -17,6 +17,12 @@ python scripts/export_openapi.py    # writes openapi.json
 ```
 Then from apps/web: `pnpm gen:api`.
 
+Both steps are chained now: `pnpm --filter web gen:api` runs the export first
+via a `pregen:api` hook (which calls `uv run python scripts/export_openapi.py`
+in this folder), so a single command refreshes `openapi.json` AND the
+frontend's generated types. Run it from the repo root after changing any
+endpoint.
+
 ## What is here
 - `app/main.py` — app, routers, CORS, Lambda handler.
 - `app/config.py` — settings (env or AWS Secrets Manager).
