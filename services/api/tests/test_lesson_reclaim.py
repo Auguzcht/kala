@@ -47,7 +47,7 @@ def test_stuck_generating_lesson_is_reclaimed_not_served_incomplete(monkeypatch)
         if table == "guided_lessons":
             # First lookup finds the stuck row; final load_lesson call needs
             # the full row shape.
-            if params.get("select") == "id,status":
+            if params.get("select") == "id,status,skill_id,module_ref,title":
                 return [{"id": "lesson-1", "status": "generating"}]
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill"}]
@@ -82,7 +82,7 @@ def test_failed_lesson_is_retried_on_next_open(monkeypatch):
 
     def fake_select(table, params):
         if table == "guided_lessons":
-            if params.get("select") == "id,status":
+            if params.get("select") == "id,status,skill_id,module_ref,title":
                 return [{"id": "lesson-1", "status": "failed"}]
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill"}]
@@ -114,7 +114,7 @@ def test_exception_during_generation_marks_failed_and_reraises(monkeypatch):
     _stub_generation(monkeypatch, raise_on_step=True)
 
     def fake_select(table, params):
-        if table == "guided_lessons" and params.get("select") == "id,status":
+        if table == "guided_lessons" and params.get("select") == "id,status,skill_id,module_ref,title":
             return []  # none yet -> fresh insert
         return []
 
@@ -148,7 +148,7 @@ def test_concurrent_insert_conflict_is_treated_as_found_not_an_error(monkeypatch
     select_calls = {"n": 0}
 
     def fake_select(table, params):
-        if table == "guided_lessons" and params.get("select") == "id,status":
+        if table == "guided_lessons" and params.get("select") == "id,status,skill_id,module_ref,title":
             select_calls["n"] += 1
             if select_calls["n"] == 1:
                 return []  # initial lookup: nothing yet, so we attempt insert

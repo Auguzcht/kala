@@ -3,6 +3,7 @@ import { useAskTutor } from "@/features/tutor/hooks/use-tutor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { TutorMessage } from "@/features/tutor/schema/tutor.schema";
 
@@ -89,7 +90,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
                   "mt-0.5 size-7 shrink-0 object-contain opacity-80 motion-safe:animate-pulse"
                 )}
               />
-              <p className="rounded-md border bg-card px-4 py-2.5 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2 rounded-md border bg-card px-4 py-2.5 text-sm text-muted-foreground">
+                <Spinner className="size-3.5" />
                 Kala is thinking…
               </p>
             </div>
@@ -104,6 +106,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
             placeholder="Ask about this course…"
           />
           <Button type="submit" variant="orange" disabled={ask.isPending || !question.trim()}>
+            {ask.isPending ? <Spinner className="size-4" /> : null}
             Ask
           </Button>
         </form>

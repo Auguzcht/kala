@@ -252,16 +252,66 @@ def get_diagnostic(
     if module_ref is not None:
         skill_filters["module_ref"] = f"eq.{module_ref}"
     skills = db.select("skills", skill_filters)
-    # One Bedrock call per skill (RAG retrieval + generation), each fully
-    # independent — parallelized so a 10-skill diagnostic is one round trip's
-    # worth of wall-clock time, not ten serial ones. See ai/concurrency.py.
-    questions = map_concurrent(
+    if not skills:
+        return {"courseId": course_id, "questions": []}
+
+    # The diagnostic is a fixed baseline instrument ("Build your baseline"),
+    # not a randomized quiz — the page copy promises "one question per
+    # skill," singular, so re-fetching must return the SAME set every time,
+    # not a fresh batch. Before this fix, every GET called generate_question
+    # unconditionally, which meant a refetch (window refocus, a remount,
+    # React Query's own defaults) silently created new generated_items rows
+    # and swapped the question set out from under the student mid-session —
+    # this is what "questions keep changing" was.
+    #
+    # Fix: check for an existing diagnostic item per skill first (course-wide,
+    # shared across students taking this course's diagnostic — items have no
+    # user_id, matching how flashcards' MCQ items are already shared), and
+    # only generate for skills that don't have one yet. Same check-first
+    # pattern already used in flashcards.py's deck top-up.
+    skill_ids = [s["id"] for s in skills]
+    existing_rows = db.select("generated_items", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "kind": "eq.diagnostic",
+        "skill_id": f"in.({','.join(skill_ids)})",
+        "select": "id,skill_id,bloom_level,prompt,choices",
+    })
+    # First existing item per skill wins; if somehow more than one exists for
+    # a skill (e.g. a pre-fix duplicate), don't add to the confusion by
+    # rotating between them — pick deterministically and move on.
+    existing_by_skill: dict[str, dict] = {}
+    for row in existing_rows:
+        existing_by_skill.setdefault(row["skill_id"], row)
+
+    skills_needing_items = [s for s in skills if s["id"] not in existing_by_skill]
+
+    # One Bedrock call per skill still missing an item (RAG retrieval +
+    # generation), each fully independent — parallelized so generating for
+    # several skills at once is one round trip's worth of wall-clock time,
+    # not several serial ones. See ai/concurrency.py.
+    newly_generated = map_concurrent(
         lambda s: item_gen.generate_question(
             institution_id=user.institution_id, course_id=course_id,
             skill=s, kind="diagnostic",
         ),
-        skills,
+        skills_needing_items,
     )
+    new_by_skill = dict(zip((s["id"] for s in skills_needing_items), newly_generated))
+
+    # Reassemble in the original skills order, whichever source each came
+    # from, so the response shape is identical to before this fix.
+    questions = []
+    for s in skills:
+        if s["id"] in existing_by_skill:
+            item = existing_by_skill[s["id"]]
+            questions.append({
+                "id": item["id"], "skillId": item["skill_id"],
+                "bloomLevel": item.get("bloom_level"),
+                "prompt": item["prompt"], "choices": item["choices"],
+            })
+        else:
+            questions.append(new_by_skill[s["id"]])
+
     return {"courseId": course_id, "questions": questions}
 
 

@@ -17,7 +17,13 @@ export function useSubmitPractice(courseId: string) {
       submitPracticeAttempt(courseId, args),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["practice", courseId, "next"] });
-      queryClient.invalidateQueries({ queryKey: ["mastery", courseId] });
+      // "mastery" was invalidated here before, but no query in the app ever
+      // uses that key — it did nothing. The queries that actually need to
+      // refresh after evidence changes mastery are the twin (per-skill
+      // estimates + readiness) and next-up (the weakest-skill
+      // recommendation on Home), so those are what get invalidated now.
+      queryClient.invalidateQueries({ queryKey: ["twin", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["next-up", courseId] });
       queryClient.invalidateQueries({ queryKey: ["gamification", courseId] });
     },
   });

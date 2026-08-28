@@ -183,17 +183,28 @@ def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) 
     Generation itself is wrapped so any exception marks the row 'failed'
     (never left at 'generating') before re-raising, so the NEXT open can
     always recover instead of 500ing forever.
+
+    Performance note on the 'ready' fast path: this used to re-select
+    guided_lessons a second time inside load_lesson() even though the row
+    was just fetched right here to check its status — a fully redundant
+    round trip on the hot path (a student re-opening a lesson they've
+    already generated should be near-instant, not pay for an extra DB call
+    every time). The existence check below now selects every field the
+    assembly step needs, so the ready case calls _assemble_lesson() directly
+    with the row already in hand instead of going through load_lesson()'s
+    own select.
     """
+    lesson_fields = "id,status,skill_id,module_ref,title"
     existing = db.select("guided_lessons", {
         "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill['id']}",
         "institution_id": f"eq.{institution_id}",
-        "select": "id,status", "limit": "1",
+        "select": lesson_fields, "limit": "1",
     })
 
     if existing:
         row = existing[0]
         if row["status"] == "ready":
-            return load_lesson(institution_id=institution_id, lesson_id=row["id"])
+            return _assemble_lesson(lesson_row=row, institution_id=institution_id)
         lesson_id = row["id"]
         _reclaim_for_regeneration(lesson_id)
     else:
@@ -209,12 +220,12 @@ def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) 
                 refetched = db.select("guided_lessons", {
                     "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill['id']}",
                     "institution_id": f"eq.{institution_id}",
-                    "select": "id,status", "limit": "1",
+                    "select": lesson_fields, "limit": "1",
                 })
                 if not refetched:
                     raise  # genuinely unexpected; surface the original error
                 if refetched[0]["status"] == "ready":
-                    return load_lesson(institution_id=institution_id, lesson_id=refetched[0]["id"])
+                    return _assemble_lesson(lesson_row=refetched[0], institution_id=institution_id)
                 lesson_id = refetched[0]["id"]
                 _reclaim_for_regeneration(lesson_id)
             else:
@@ -325,17 +336,26 @@ def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
 
 
 def load_lesson(*, institution_id: str, lesson_id: str) -> dict:
-    """Assemble a stored lesson for the client. Never returns a check item's
-    answer key — the check MCQ is delivered like any other item (prompt +
-    choices), and grading happens server-side on submit."""
+    """Public entry point when only a lesson_id is in hand (e.g. a future
+    caller that doesn't already have the row). Selects the lesson row once,
+    then delegates to _assemble_lesson for the steps/checks assembly shared
+    with the fast 'ready' path in get_or_generate_lesson, which already has
+    the row and skips this select entirely."""
     lessons = db.select("guided_lessons", {
         "id": f"eq.{lesson_id}", "institution_id": f"eq.{institution_id}",
         "select": "id,skill_id,module_ref,title,status", "limit": "1",
     })
     if not lessons:
         raise ValueError(f"lesson {lesson_id} not found")
-    lesson = lessons[0]
+    return _assemble_lesson(lesson_row=lessons[0], institution_id=institution_id)
 
+
+def _assemble_lesson(*, lesson_row: dict, institution_id: str) -> dict:
+    """Steps + check-item assembly for a lesson row the caller already has.
+    Never returns a check item's answer key — the check MCQ is delivered
+    like any other item (prompt + choices), and grading happens server-side
+    on submit."""
+    lesson_id = lesson_row["id"]
     steps = db.select("guided_lesson_steps", {
         "lesson_id": f"eq.{lesson_id}",
         "select": "id,position,summary,detail_points,misconception,"
@@ -377,10 +397,10 @@ def load_lesson(*, institution_id: str, lesson_id: str) -> dict:
         })
 
     return {
-        "lessonId": lesson["id"],
-        "skillId": lesson["skill_id"],
-        "moduleRef": lesson.get("module_ref"),
-        "title": lesson["title"],
-        "status": lesson["status"],
+        "lessonId": lesson_row["id"],
+        "skillId": lesson_row["skill_id"],
+        "moduleRef": lesson_row.get("module_ref"),
+        "title": lesson_row["title"],
+        "status": lesson_row["status"],
         "steps": out_steps,
     }

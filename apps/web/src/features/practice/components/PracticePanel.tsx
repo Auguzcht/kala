@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { MasteryBand as Band } from "@/features/twin";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
@@ -138,10 +139,13 @@ export function PracticePanel({ courseId }: { courseId: string }) {
               <Button
                 key={c.id}
                 variant={selectedChoice === c.id ? "orange" : "outline"}
-                disabled={!!lastResult}
+                disabled={!!lastResult || submit.isPending}
                 onClick={() => handleAnswer(c.id)}
                 className="h-auto justify-start whitespace-normal text-left transition-colors hover:border-brand-orange/40 hover:bg-accent/40"
               >
+                {submit.isPending && selectedChoice === c.id ? (
+                  <Spinner className="size-3.5" />
+                ) : null}
                 {c.label}
               </Button>
             ))}

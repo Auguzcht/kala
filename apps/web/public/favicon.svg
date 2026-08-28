@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M6 5 L18 16 L6 27" fill="none" stroke="#17294B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 5 L28 16 L16 27" fill="none" stroke="#E8A33C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The real hornbill mark (public/assets/kala-mark.png), referenced rather
+       than re-drawn: there is no vector source for it yet (see the note in
+       src/components/brand/KalaMark.tsx). Browsers render an <image> inside
+       an SVG favicon fine, so this replaces the old two-chevron placeholder
+       with the actual brand mark instead of leaving a TODO in place. -->
+  <image href="/assets/kala-mark.png" width="32" height="32" />
+</svg>

@@ -4,6 +4,34 @@ generated step carries structured content plus a server-graded check item."""
 from app.learn import lessons
 
 
+def test_ready_lesson_fast_path_selects_guided_lessons_only_once(monkeypatch):
+    """The perf fix: get_or_generate_lesson's existence check already fetches
+    every field the assembly step needs, so a lesson already at 'ready'
+    should hit guided_lessons exactly once, not once to check status and
+    again inside load_lesson to re-fetch the same row."""
+    guided_lessons_select_calls = []
+
+    def fake_select(table, params):
+        if table == "guided_lessons":
+            guided_lessons_select_calls.append(params.get("select"))
+            return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
+                     "module_ref": None, "title": "Skill One"}]
+        if table == "guided_lesson_steps":
+            return [{"id": "step-1", "position": 0, "summary": "sum",
+                     "detail_points": [], "misconception": None, "key_takeaway": None,
+                     "bloom_level": "understand", "check_item_id": None}]
+        return []
+
+    monkeypatch.setattr(lessons.db, "select", fake_select)
+
+    lesson = lessons.get_or_generate_lesson(
+        institution_id="inst-1", course_id="c-1", skill={"id": "s-1", "name": "Skill One"},
+    )
+
+    assert len(guided_lessons_select_calls) == 1
+    assert lesson["lessonId"] == "lesson-1"
+
+
 def test_get_or_generate_returns_stored_lesson_without_regenerating(monkeypatch):
     """If a ready lesson exists, load it and never call the model."""
     called = {"converse": 0}
@@ -131,15 +159,20 @@ def test_generation_persists_steps_and_wires_check_item(monkeypatch):
     monkeypatch.setattr(lessons.item_gen, "generate_question",
                         lambda **kw: {"id": "check-1", "prompt": "Q?", "choices": []})
 
+    guided_lessons_calls = {"n": 0}
+
     def fake_select(table, params):
         if table == "guided_lessons":
-            # Existence check (select id,status) sees nothing -> generate.
-            # load_lesson's read (which asks for skill_id/title) sees the
-            # row the generation just inserted.
-            if "skill_id" in params.get("select", ""):
-                return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
-                         "module_ref": "Module 1", "title": "Skill"}]
-            return []
+            # Existence check (call 1) sees nothing -> generate. load_lesson's
+            # read at the end (call 2) sees the row the generation just
+            # inserted. Both calls request the same fields now (the whole
+            # point of the perf fix: the ready-path doesn't need a second
+            # distinct select), so this discriminates by call order, not content.
+            guided_lessons_calls["n"] += 1
+            if guided_lessons_calls["n"] == 1:
+                return []
+            return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
+                     "module_ref": "Module 1", "title": "Skill"}]
         if table == "guided_lesson_steps":
             return [{"id": "step-1", "position": 0, "summary": "explained",
                      "detail_points": ["p1", "p2"], "misconception": "a myth",

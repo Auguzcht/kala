@@ -10,6 +10,12 @@ export function useLesson(courseId: string, skillId: string | null) {
     // the backend reports the lesson is still being written.
     refetchInterval: (query) =>
       query.state.data?.status === "generating" ? 2000 : false,
+    // Lessons are "written once and replayed" (the page's own copy) — a
+    // ready lesson's content never changes, so there is no reason to treat
+    // it as stale and re-fetch every time a student leaves and re-opens the
+    // same skill. refetchInterval above still forces its own polling while
+    // a lesson is actively generating, independent of this.
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -23,7 +29,10 @@ export function useSubmitStepCheck(courseId: string) {
       latencyMs: number;
     }) => submitStepCheck(courseId, args.stepId, args),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mastery", courseId] });
+      // "mastery" was invalidated here before, but no query in the app ever
+      // uses that key. twin + next-up are what actually need to refresh.
+      queryClient.invalidateQueries({ queryKey: ["twin", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["next-up", courseId] });
       queryClient.invalidateQueries({ queryKey: ["gamification", courseId] });
     },
   });

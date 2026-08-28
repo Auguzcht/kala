@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Flame, Target } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowRight, Flame, Target } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { InView } from "@/components/motion/in-view";
 import {
   Accordion,
@@ -15,6 +17,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { Button } from "@/components/ui/button";
 import { useGamification } from "@/features/gamification";
 import type { Twin, TwinSkill } from "@/features/twin";
 import { MasteryBand, BloomsLadder, EvidenceLedger, MasteryRing, MasteryRadar } from "@/components/kala";
@@ -36,6 +45,68 @@ const BLOOM_ORDER = [
 ];
 
 const PAGE_SIZE = 8;
+
+// Recent activity — a real graph built from the same evidence the ledger
+// already shows below, not decorative data. Buckets the (capped, most
+// recent) evidence events by calendar day and splits correct vs. missed, so
+// the shape of a study session is visible at a glance instead of only as a
+// scrolling log. The API caps evidence at the 20 most recent events, so on
+// a very active day this undercounts rather than overcounts — acceptable
+// for an at-a-glance trend, called out in the label below the chart.
+function activityByDay(evidence: Twin["evidence"]) {
+  const byDay = new Map<string, { correct: number; missed: number; label: string }>();
+  for (const e of evidence) {
+    if (!e.createdAt) continue;
+    const d = new Date(e.createdAt);
+    const key = d.toISOString().slice(0, 10);
+    const label = d.toLocaleDateString(undefined, { weekday: "short" });
+    const bucket = byDay.get(key) ?? { correct: 0, missed: 0, label };
+    if (e.correct === true) bucket.correct += 1;
+    else if (e.correct === false) bucket.missed += 1;
+    byDay.set(key, bucket);
+  }
+  // Oldest to newest, left to right, matching how a week reads.
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, v]) => v);
+}
+
+const activityChartConfig = {
+  correct: { label: "Correct", color: "var(--brand-gold)" },
+  missed: { label: "Missed", color: "var(--border)" },
+} satisfies ChartConfig;
+
+function ActivityChart({ evidence }: { evidence: Twin["evidence"] }) {
+  const data = activityByDay(evidence);
+  if (data.length === 0) {
+    return (
+      <p className="py-6 text-center text-xs text-muted-foreground">
+        No recent activity yet — it fills in as you study.
+      </p>
+    );
+  }
+  return (
+    <div>
+      <ChartContainer config={activityChartConfig} className="h-[120px] w-full">
+        <BarChart data={data} barGap={2}>
+          <CartesianGrid vertical={false} stroke="var(--border)" />
+          <XAxis
+            dataKey="label"
+            tickLine={false}
+            axisLine={false}
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+          />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Bar dataKey="correct" stackId="a" fill="var(--brand-gold)" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="missed" stackId="a" fill="var(--border)" radius={[2, 2, 0, 0]} />
+        </BarChart>
+      </ChartContainer>
+      <p className="mt-1 text-[10.5px] text-muted-foreground">
+        Last {evidence.length} events, most recent activity
+      </p>
+    </div>
+  );
+}
 
 function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
   const [page, setPage] = useState(0);
@@ -99,8 +170,17 @@ function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
   );
 }
 
-export function TwinBody({ twin }: { twin: Twin }) {
+export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
+  const navigate = useNavigate();
   const skills = twin.skills;
+  // The streak/XP tile and the "Practice this" CTA are OWNER-scoped: they
+  // read the signed-in user's gamification and navigate them into their own
+  // practice. The instructor drill-down renders this same body for a
+  // student's twin — for that viewer those two tiles would show the
+  // instructor's own numbers and navigate them somewhere wrong, so they're
+  // suppressed unless `own` (the student's own /course/twin). The hook
+  // itself stays unconditional (rules of hooks); the fetch is harmless and
+  // cached, only the render is gated.
   const gamification = useGamification(twin.courseId);
   const ranked = [...skills].sort((a, b) => {
     const aNull = a.estimate === null ? -1 : a.estimate;
@@ -138,28 +218,43 @@ export function TwinBody({ twin }: { twin: Twin }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-stretch gap-4">
-        <Card className="flex min-w-56 flex-1 flex-col items-center justify-center gap-3 py-8">
-          <MasteryRing estimate={twin.readiness} size={112} strokeWidth={8} label="Board readiness" />
+      {/*
+        A genuine bento grid, not flex-1 equal-stretch: explicit column spans
+        so the readiness ring and radar — the two signature instruments —
+        get real weight, and the four supporting tiles below don't all
+        inflate to match whichever one happens to be tallest. 12-column base
+        so spans divide cleanly; collapses to a single column on mobile.
+      */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+        <Card className="flex flex-col items-center justify-center gap-4 py-10 md:col-span-4">
+          <MasteryRing estimate={twin.readiness} size={176} strokeWidth={12} label="Board readiness" />
           <div className="text-center">
-            <p className="font-display text-sm font-semibold">Board readiness</p>
-            <p className="text-xs text-muted-foreground">Rollup of mastery across skills</p>
+            <p className="font-display text-base font-semibold">Board readiness</p>
+            <p className="mt-1 text-xs text-muted-foreground">Rollup of mastery across skills</p>
+            <p className="mt-3 font-mono text-[11px] text-muted-foreground">
+              {twin.evidence.length > 0
+                ? `${twin.evidence.length} recent event${twin.evidence.length === 1 ? "" : "s"} feeding this estimate`
+                : "Fills in as you study"}
+            </p>
           </div>
         </Card>
 
-        <Card className="min-w-72 flex-1">
+        <Card className="md:col-span-8">
           <CardHeader>
             <CardTitle className="text-base">Mastery across skills</CardTitle>
           </CardHeader>
           <CardContent>
-            <MasteryRadar skills={skills} pulseKey={twin.evidence.length} />
+            <MasteryRadar
+              skills={skills}
+              pulseKey={twin.evidence.length}
+              className="mx-auto max-w-lg"
+            />
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-stretch gap-4">
-        {/* Module-by-module progress — the topic axis a student works in */}
-        <Card className="min-w-64 flex-[2]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+        <Card className="md:col-span-5">
           <CardHeader>
             <CardTitle className="text-base">Progress by module</CardTitle>
           </CardHeader>
@@ -194,44 +289,65 @@ export function TwinBody({ twin }: { twin: Twin }) {
           </CardContent>
         </Card>
 
-        {/* Focus area — one point of view, not a data dump */}
+        <Card className="md:col-span-7">
+          <CardHeader>
+            <CardTitle className="text-base">Recent activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityChart evidence={twin.evidence} />
+          </CardContent>
+        </Card>
+
+        {/* Focus area — one point of view, not a data dump, now with a
+            direct path to act on it instead of just describing it. */}
         {focus ? (
-          <Card className="min-w-64 flex-1">
+          <Card className={own ? "md:col-span-7" : "md:col-span-12"}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Target className="size-4 text-brand-orange" aria-hidden />
                 Focus area
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <p className="text-sm font-semibold text-foreground">{focus.name}</p>
-              <div className="flex items-center gap-2">
-                <MasteryBand band={focus.band} />
-                <span className="font-mono text-xs text-muted-foreground">
-                  {focus.attempts > 0 ? `${focus.attempts}× practiced` : "not practiced yet"}
-                </span>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">{focus.name}</p>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <MasteryBand band={focus.band} />
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {focus.attempts > 0 ? `${focus.attempts}× practiced` : "not practiced yet"}
+                  </span>
+                </div>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {focus.estimate === null
                   ? "This skill has no evidence yet — one practice session starts its curve."
                   : "This is your lowest mastery right now — practice moves the needle most here."}
               </p>
+              {own ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate({ to: "/course/practice" })}
+                >
+                  Practice this <ArrowRight className="size-3.5" />
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
 
-        {/* Streak + XP + badges — the same derived reward view as the header */}
-        <Card className="min-w-52 flex-1">
-          <CardHeader>
-            <CardTitle className="text-base">Streak & XP</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-5">
+        {own ? (
+          <Card className="md:col-span-5">
+            <CardHeader>
+              <CardTitle className="text-base">Streak & XP</CardTitle>
+            </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-6">
               <div>
-                <p className="flex items-center gap-1.5 font-display text-2xl font-semibold text-foreground">
+                <p className="flex items-center gap-1.5 font-display text-3xl font-semibold text-foreground">
                   <Flame
                     className={cn(
-                      "size-5",
+                      "size-6",
                       (gamification.data?.streakDays ?? 0) > 0
                         ? "text-brand-gold"
                         : "text-muted-foreground/50"
@@ -245,15 +361,28 @@ export function TwinBody({ twin }: { twin: Twin }) {
                 </p>
               </div>
               <div>
-                <p className="font-display text-2xl font-semibold text-foreground">
+                <p className="font-display text-3xl font-semibold text-foreground">
                   {gamification.data?.xp ?? 0}
                 </p>
                 <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">XP</p>
               </div>
+              {gamification.data ? (
+                <div>
+                  <p className="font-display text-3xl font-semibold text-foreground">
+                    {gamification.data.correct}
+                    <span className="text-base font-medium text-muted-foreground">
+                      /{gamification.data.attempts}
+                    </span>
+                  </p>
+                  <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                    correct
+                  </p>
+                </div>
+              ) : null}
             </div>
             {gamification.data && gamification.data.badges.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 border-t pt-2.5">
-                {gamification.data.badges.slice(0, 3).map((b) => (
+              <div className="flex flex-wrap gap-1.5 border-t pt-3">
+                {gamification.data.badges.map((b) => (
                   <span
                     key={`${b.kind}-${b.label}`}
                     className="rounded-sm bg-brand-gold/15 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-foreground"
@@ -262,15 +391,15 @@ export function TwinBody({ twin }: { twin: Twin }) {
                     {b.label}
                   </span>
                 ))}
-                {gamification.data.badges.length > 3 ? (
-                  <span className="px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
-                    +{gamification.data.badges.length - 3} more
-                  </span>
-                ) : null}
               </div>
-            ) : null}
+            ) : (
+              <p className="border-t pt-3 text-xs text-muted-foreground">
+                Badges appear here as skills and Bloom's levels reach proficient.
+              </p>
+            )}
           </CardContent>
-        </Card>
+          </Card>
+        ) : null}
       </div>
 
       <Card>
