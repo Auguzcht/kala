@@ -8,6 +8,7 @@ export const twinSkillSchema = z.object({
   skillId: z.string(),
   name: z.string(),
   bloomLevel: z.string().nullable().optional(),
+  moduleRef: z.string().nullable().optional(),
   estimate: z.number().nullable(),
   attempts: z.number(),
   band: masteryBandSchema,

@@ -22,23 +22,19 @@ export const Route = createFileRoute("/course/lessons")({
   component: LessonsPage,
 });
 
-const BLOOM_ORDER = [
-  "remember",
-  "understand",
-  "apply",
-  "analyze",
-  "evaluate",
-  "create",
-];
-
-function groupByBloom(skills: TwinSkill[]) {
-  const groups = BLOOM_ORDER.map((level) => ({
-    level,
-    skills: skills.filter((s) => (s.bloomLevel ?? "").toLowerCase() === level),
-  })).filter((g) => g.skills.length > 0);
-  const untyped = skills.filter((s) => !BLOOM_ORDER.includes((s.bloomLevel ?? "").toLowerCase()));
-  if (untyped.length > 0) groups.push({ level: "other", skills: untyped });
-  return groups;
+// Lessons are grouped by TOPIC (module_ref), not by Bloom's level — a
+// student opening Lessons wants "what topic is this," not "what cognitive
+// tier." Bloom stays as a small secondary tag on each card. Skills without a
+// module land in "Other topics" so nothing is hidden.
+function groupByModule(skills: TwinSkill[]) {
+  const byModule = new Map<string, TwinSkill[]>();
+  for (const s of skills) {
+    const key = s.moduleRef?.trim() || "Other topics";
+    byModule.set(key, [...(byModule.get(key) ?? []), s]);
+  }
+  return [...byModule.entries()].sort((a, b) =>
+    a[0] === "Other topics" ? 1 : b[0] === "Other topics" ? -1 : a[0].localeCompare(b[0])
+  );
 }
 
 function LessonsPage() {
@@ -76,18 +72,23 @@ function LessonsPage() {
           variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
           transition={{ duration: 0.35 }}
         >
-          <Accordion type="multiple" defaultValue={groupByBloom(twin.skills).map((g) => g.level)}>
-            {groupByBloom(twin.skills).map((group) => (
-              <AccordionItem key={group.level} value={group.level}>
+          <Accordion
+            type="multiple"
+            defaultValue={groupByModule(twin.skills).map(([module]) => module)}
+          >
+            {groupByModule(twin.skills).map(([module, moduleSkills]) => (
+              <AccordionItem key={module} value={module}>
                 <AccordionTrigger>
-                  <span className="capitalize">{group.level}</span>
-                  <span className="ml-2 font-mono text-xs text-muted-foreground">
-                    {group.skills.length}
+                  <span className="flex items-center gap-1.5">
+                    <span className="capitalize">{module}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {moduleSkills.length}
+                    </span>
                   </span>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {group.skills.map((s) => (
+                    {moduleSkills.map((s) => (
                       <button
                         key={s.skillId}
                         type="button"
@@ -100,8 +101,13 @@ function LessonsPage() {
                           </span>
                           <MasteryBand band={s.band} />
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          guided walkthrough with checks
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {s.bloomLevel ? (
+                            <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
+                              {s.bloomLevel}
+                            </span>
+                          ) : null}
+                          <span>guided walkthrough with checks</span>
                         </p>
                       </button>
                     ))}

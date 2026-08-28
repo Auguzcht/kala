@@ -18,6 +18,7 @@ export function useSubmitPractice(courseId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["practice", courseId, "next"] });
       queryClient.invalidateQueries({ queryKey: ["mastery", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["gamification", courseId] });
     },
   });
 }

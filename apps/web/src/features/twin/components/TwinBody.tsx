@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Flame, Target } from "lucide-react";
 import { InView } from "@/components/motion/in-view";
 import {
   Accordion,
@@ -14,9 +15,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { useGamification } from "@/features/gamification";
 import type { Twin, TwinSkill } from "@/features/twin";
 import { MasteryBand, BloomsLadder, EvidenceLedger, MasteryRing, MasteryRadar } from "@/components/kala";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 // Presentational twin body: readiness gauge, mastery radar, skills grouped
 // by Bloom level with pagination, Bloom's ladder, and the append-only
@@ -98,11 +101,33 @@ function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
 
 export function TwinBody({ twin }: { twin: Twin }) {
   const skills = twin.skills;
+  const gamification = useGamification(twin.courseId);
   const ranked = [...skills].sort((a, b) => {
     const aNull = a.estimate === null ? -1 : a.estimate;
     const bNull = b.estimate === null ? -1 : b.estimate;
     return aNull - bNull;
   });
+
+  // Module rollup: average mastery per module_ref (mirrors the radar's
+  // aggregation, but along the topic axis the learner actually works in).
+  const modules = new Map<string, { total: number; count: number; attempts: number }>();
+  for (const s of skills) {
+    const key = s.moduleRef?.trim() || "Other topics";
+    const m = modules.get(key) ?? { total: 0, count: 0, attempts: 0 };
+    m.total += s.estimate ?? 0;
+    m.count += 1;
+    m.attempts += s.attempts;
+    modules.set(key, m);
+  }
+  const moduleRows = [...modules.entries()]
+    .map(([name, m]) => ({ name, avg: m.count > 0 ? m.total / m.count : 0, count: m.count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Focus area: the weakest skill, mirroring the server's weakest_skill
+  // rule (never-attempted ranks weakest of all).
+  const focus = [...skills].sort(
+    (a, b) => (a.estimate ?? -1) - (b.estimate ?? -1)
+  )[0];
 
   const groups = BLOOM_ORDER.map((level) => ({
     level,
@@ -132,6 +157,122 @@ export function TwinBody({ twin }: { twin: Twin }) {
         </Card>
       </div>
 
+      <div className="flex flex-wrap items-stretch gap-4">
+        {/* Module-by-module progress — the topic axis a student works in */}
+        <Card className="min-w-64 flex-[2]">
+          <CardHeader>
+            <CardTitle className="text-base">Progress by module</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {moduleRows.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">
+                No modules mapped yet.
+              </p>
+            ) : (
+              moduleRows.map((m) => (
+                <div key={m.name} className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[13px] font-medium text-foreground">
+                      {m.name}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                      {Math.round(m.avg * 100)}% · {m.count} skill{m.count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        m.avg > 0 ? "bg-brand-gold" : "bg-border"
+                      )}
+                      style={{ width: `${Math.min(100, Math.round(m.avg * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Focus area — one point of view, not a data dump */}
+        {focus ? (
+          <Card className="min-w-64 flex-1">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Target className="size-4 text-brand-orange" aria-hidden />
+                Focus area
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">{focus.name}</p>
+              <div className="flex items-center gap-2">
+                <MasteryBand band={focus.band} />
+                <span className="font-mono text-xs text-muted-foreground">
+                  {focus.attempts > 0 ? `${focus.attempts}× practiced` : "not practiced yet"}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {focus.estimate === null
+                  ? "This skill has no evidence yet — one practice session starts its curve."
+                  : "This is your lowest mastery right now — practice moves the needle most here."}
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* Streak + XP + badges — the same derived reward view as the header */}
+        <Card className="min-w-52 flex-1">
+          <CardHeader>
+            <CardTitle className="text-base">Streak & XP</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-5">
+              <div>
+                <p className="flex items-center gap-1.5 font-display text-2xl font-semibold text-foreground">
+                  <Flame
+                    className={cn(
+                      "size-5",
+                      (gamification.data?.streakDays ?? 0) > 0
+                        ? "text-brand-gold"
+                        : "text-muted-foreground/50"
+                    )}
+                    aria-hidden
+                  />
+                  {gamification.data?.streakDays ?? 0}
+                </p>
+                <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                  day streak
+                </p>
+              </div>
+              <div>
+                <p className="font-display text-2xl font-semibold text-foreground">
+                  {gamification.data?.xp ?? 0}
+                </p>
+                <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">XP</p>
+              </div>
+            </div>
+            {gamification.data && gamification.data.badges.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 border-t pt-2.5">
+                {gamification.data.badges.slice(0, 3).map((b) => (
+                  <span
+                    key={`${b.kind}-${b.label}`}
+                    className="rounded-sm bg-brand-gold/15 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-foreground"
+                    title={`${b.kind} badge · ${b.tier}`}
+                  >
+                    {b.label}
+                  </span>
+                ))}
+                {gamification.data.badges.length > 3 ? (
+                  <span className="px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+                    +{gamification.data.badges.length - 3} more
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Skills</CardTitle>
@@ -151,9 +292,11 @@ export function TwinBody({ twin }: { twin: Twin }) {
                 {groups.map((g) => (
                   <AccordionItem key={g.level} value={g.level}>
                     <AccordionTrigger>
-                      <span className="capitalize">{g.level}</span>
-                      <span className="ml-2 font-mono text-xs text-muted-foreground">
-                        {g.skills.length}
+                      <span className="flex items-center gap-1.5">
+                        <span className="capitalize">{g.level}</span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {g.skills.length}
+                        </span>
                       </span>
                     </AccordionTrigger>
                     <AccordionContent>

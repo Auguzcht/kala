@@ -81,7 +81,6 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
       <LoadingPanel
         label="Building your deck — Kala is writing the first cards…"
         lines={4}
-        className="max-w-2xl"
       />
     );
   if (isError)

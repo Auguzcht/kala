@@ -49,7 +49,6 @@ export function LessonStepper({
       <LoadingPanel
         label="Kala is writing your lesson — first pass takes a moment…"
         lines={5}
-        className="max-w-2xl"
       />
     );
   if (isError)

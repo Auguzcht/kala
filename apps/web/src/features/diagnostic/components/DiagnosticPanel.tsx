@@ -22,7 +22,6 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
       <LoadingPanel
         label="Building your diagnostic…"
         lines={4}
-        className="max-w-2xl"
       />
     );
   if (isError)
@@ -64,20 +63,17 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
       <CardHeader>
         <CardTitle>Course diagnostic</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {data.questions.map((q) => {
           const result = resultsByItem[q.id];
           return (
-            <div key={q.id} className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-slate">
-                {q.bloomLevel}
-              </p>
+            <div key={q.id} className="space-y-3 border-t border-border/60 pt-6 first:border-t-0 first:pt-0">
               <p className="font-medium">{q.prompt}</p>
               <div className="flex flex-col gap-2">
                 {q.choices.map((c) => (
                   <label
                     key={c.id}
-                    className="flex min-w-0 cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 text-sm has-[:checked]:border-brand-orange has-[:checked]:bg-brand-orange/5"
+                    className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors has-[:checked]:border-brand-orange has-[:checked]:bg-brand-orange/5 hover:border-brand-orange/40 hover:bg-accent/40"
                   >
                     <input
                       type="radio"
@@ -86,7 +82,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
                       disabled={submitted}
                       checked={selections[q.id] === c.id}
                       onChange={() => setSelections((s) => ({ ...s, [q.id]: c.id }))}
-                      className="mt-0.5 shrink-0"
+                      className="size-4 shrink-0"
                     />
                     <span className="min-w-0 flex-1 break-words leading-relaxed">{c.label}</span>
                   </label>

@@ -14,7 +14,7 @@ function DiagnosticPage() {
       <PageHeader
         eyebrow="Diagnostic"
         title="Build your baseline"
-        description="One RAG-grounded question per skill, self-paced. Graded server-side — your answers set the starting estimate for your twin."
+        description="One question per topic, at your own pace. This builds your starting point — you'll see it improve as you practice."
       />
       <DiagnosticPanel courseId={courseId} />
     </>
