@@ -1,5 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import {
+  BookOpen,
   ClipboardList,
   Layers,
   LayoutGrid,
@@ -15,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TopBar } from "@/components/shell/TopBar";
+import { GamificationSummary } from "@/features/gamification";
 
 // App shell for the course-scoped (LTI) surface. 56px icon side rail +
 // 48px top bar, per the mockups ("App Side Rail", "App Top Bar"):
@@ -24,6 +26,7 @@ import { TopBar } from "@/components/shell/TopBar";
 const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: "/course", label: "Workspace", icon: LayoutGrid, end: true },
   { to: "/course/diagnostic", label: "Diagnostic", icon: ClipboardList },
+  { to: "/course/lessons", label: "Lessons", icon: BookOpen },
   { to: "/course/practice", label: "Practice", icon: Target },
   { to: "/course/flashcards", label: "Flashcards", icon: Layers },
   { to: "/course/tutor", label: "Tutor", icon: MessagesSquare },
@@ -33,6 +36,7 @@ const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
 const SECTION_LABELS: Record<string, string> = {
   "/course": "Workspace",
   "/course/diagnostic": "Diagnostic",
+  "/course/lessons": "Lessons",
   "/course/practice": "Practice",
   "/course/flashcards": "Flashcards",
   "/course/tutor": "Tutor",
@@ -113,9 +117,12 @@ export function CourseShell({
           courseId={courseId}
           section={section}
           right={
-            <span className="font-mono text-xs text-muted-foreground">
-              {initials(displayName) || section}
-            </span>
+            <div className="flex items-center gap-4">
+              <GamificationSummary courseId={courseId} />
+              <span className="font-mono text-xs text-muted-foreground">
+                {initials(displayName) || section}
+              </span>
+            </div>
           }
         />
 

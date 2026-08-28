@@ -13,8 +13,8 @@ function FlashcardsPage() {
     <>
       <PageHeader
         eyebrow="Flashcards"
-        title="Review key terms"
-        description="Flip, then self-report recall. A lighter signal for your twin — not graded like practice."
+        title="Spaced recall"
+        description="Recall first, then check yourself. Graded by Kala and scheduled so missed cards resurface sooner."
       />
       <FlashcardDeck courseId={courseId} />
     </>

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "pnpm routes:generate && tsc --noEmit",
+    "pregen:api": "cd ../../services/api && uv run python scripts/export_openapi.py",
     "gen:api": "openapi-typescript ../../services/api/openapi.json -o src/lib/api/types.gen.ts"
   },
   "dependencies": {

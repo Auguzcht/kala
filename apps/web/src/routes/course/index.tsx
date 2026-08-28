@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, ClipboardList, Layers, MessagesSquare, Target, type LucideIcon } from "lucide-react";
+import { ArrowRight, BookOpen, ClipboardList, Layers, MessagesSquare, Target, type LucideIcon } from "lucide-react";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { useCourse } from "@/features/courses";
 import { useNextUp, useTwin } from "@/features/twin";
@@ -13,6 +13,7 @@ export const Route = createFileRoute("/course/")({
 
 const QUICK_LINKS: { label: string; copy: string; icon: LucideIcon; iconBg: string; to: string }[] = [
   { label: "Diagnostic", copy: "Build your baseline for this course.", icon: ClipboardList, iconBg: "bg-brand-slate", to: "/course/diagnostic" },
+  { label: "Lessons", copy: "Step-by-step walkthroughs with checks.", icon: BookOpen, iconBg: "bg-brand-gold", to: "/course/lessons" },
   { label: "Practice", copy: "Quick sets tuned to your twin.", icon: Target, iconBg: "bg-brand-orange", to: "/course/practice" },
   { label: "Flashcards", copy: "Spaced review of key terms.", icon: Layers, iconBg: "bg-brand-green", to: "/course/flashcards" },
   { label: "Tutor", copy: "Ask Kala to work through it with you.", icon: MessagesSquare, iconBg: "bg-brand-gold", to: "/course/tutor" },

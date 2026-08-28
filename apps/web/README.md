@@ -16,7 +16,9 @@ pnpm dev         # Vite dev server
 pnpm build       # production build (tsc -b && vite build)
 pnpm lint        # eslint
 pnpm typecheck   # tsc --noEmit
-pnpm gen:api     # regenerate src/lib/api/types.gen.ts from services/api's OpenAPI export
+pnpm gen:api     # regenerate the OpenAPI schema AND src/lib/api/types.gen.ts
+                 # (a pregen hook runs `uv run python scripts/export_openapi.py`
+                 #  in services/api first, so one command does the whole chain)
 ```
 
 ## What is here

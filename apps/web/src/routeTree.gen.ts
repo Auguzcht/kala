@@ -19,6 +19,7 @@ import { Route as ClassIndexRouteImport } from './routes/class/index';
 import { Route as CourseIndexRouteImport } from './routes/course/index';
 import { Route as CourseDiagnosticRouteImport } from './routes/course/diagnostic';
 import { Route as CourseFlashcardsRouteImport } from './routes/course/flashcards';
+import { Route as CourseLessonsRouteImport } from './routes/course/lessons';
 import { Route as CoursePracticeRouteImport } from './routes/course/practice';
 import { Route as CourseTutorRouteImport } from './routes/course/tutor';
 import { Route as CourseTwinRouteImport } from './routes/course/twin';
@@ -74,6 +75,11 @@ const CourseFlashcardsRoute = CourseFlashcardsRouteImport.update({
   path: '/flashcards',
   getParentRoute: () => CourseRoute,
 } as any);
+const CourseLessonsRoute = CourseLessonsRouteImport.update({
+  id: '/lessons',
+  path: '/lessons',
+  getParentRoute: () => CourseRoute,
+} as any);
 const CoursePracticeRoute = CoursePracticeRouteImport.update({
   id: '/practice',
   path: '/practice',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/unauthorized': typeof UnauthorizedRoute;
   '/course/diagnostic': typeof CourseDiagnosticRoute;
   '/course/flashcards': typeof CourseFlashcardsRoute;
+  '/course/lessons': typeof CourseLessonsRoute;
   '/course/practice': typeof CoursePracticeRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/unauthorized': typeof UnauthorizedRoute;
   '/course/diagnostic': typeof CourseDiagnosticRoute;
   '/course/flashcards': typeof CourseFlashcardsRoute;
+  '/course/lessons': typeof CourseLessonsRoute;
   '/course/practice': typeof CoursePracticeRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/unauthorized': typeof UnauthorizedRoute;
   '/course/diagnostic': typeof CourseDiagnosticRoute;
   '/course/flashcards': typeof CourseFlashcardsRoute;
+  '/course/lessons': typeof CourseLessonsRoute;
   '/course/practice': typeof CoursePracticeRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/unauthorized'
     | '/course/diagnostic'
     | '/course/flashcards'
+    | '/course/lessons'
     | '/course/practice'
     | '/course/tutor'
     | '/course/twin'
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/unauthorized'
     | '/course/diagnostic'
     | '/course/flashcards'
+    | '/course/lessons'
     | '/course/practice'
     | '/course/tutor'
     | '/course/twin'
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/unauthorized'
     | '/course/diagnostic'
     | '/course/flashcards'
+    | '/course/lessons'
     | '/course/practice'
     | '/course/tutor'
     | '/course/twin'
@@ -272,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CourseFlashcardsRouteImport;
       parentRoute: typeof CourseRoute;
     };
+    '/course/lessons': {
+      id: '/course/lessons';
+      path: '/lessons';
+      fullPath: '/course/lessons';
+      preLoaderRoute: typeof CourseLessonsRouteImport;
+      parentRoute: typeof CourseRoute;
+    };
     '/course/practice': {
       id: '/course/practice';
       path: '/practice';
@@ -318,6 +337,7 @@ const ClassRouteWithChildren = ClassRoute._addFileChildren(ClassRouteChildren);
 interface CourseRouteChildren {
   CourseDiagnosticRoute: typeof CourseDiagnosticRoute;
   CourseFlashcardsRoute: typeof CourseFlashcardsRoute;
+  CourseLessonsRoute: typeof CourseLessonsRoute;
   CoursePracticeRoute: typeof CoursePracticeRoute;
   CourseTutorRoute: typeof CourseTutorRoute;
   CourseTwinRoute: typeof CourseTwinRoute;
@@ -327,6 +347,7 @@ interface CourseRouteChildren {
 const CourseRouteChildren: CourseRouteChildren = {
   CourseDiagnosticRoute: CourseDiagnosticRoute,
   CourseFlashcardsRoute: CourseFlashcardsRoute,
+  CourseLessonsRoute: CourseLessonsRoute,
   CoursePracticeRoute: CoursePracticeRoute,
   CourseTutorRoute: CourseTutorRoute,
   CourseTwinRoute: CourseTwinRoute,
