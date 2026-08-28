@@ -27,6 +27,7 @@ export function useSubmitStepCheck(courseId: string) {
       itemId: string;
       choiceId: string;
       latencyMs: number;
+      hintsUsed: number;
     }) => submitStepCheck(courseId, args.stepId, args),
     onSuccess: () => {
       // "mastery" was invalidated here before, but no query in the app ever

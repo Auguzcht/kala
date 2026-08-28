@@ -1,23 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Flame, XCircle } from "lucide-react";
-import { useNextPracticeItem, useSubmitPractice } from "@/features/practice/hooks/use-practice";
-import { useGamification } from "@/features/gamification";
-import { MasteryBand, bandFor } from "@/components/kala";
+import { FlameIcon } from "@/components/ui/flame";
+import type { FlameIconHandle } from "@/components/ui/flame";
+import { StudySessionShell } from "@/components/study/StudySessionShell";
+import { AnswerableCard } from "@/components/study/AnswerableCard";
+import { GamificationSummary } from "@/features/gamification";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { useNextPracticeItem, useSubmitPractice } from "@/features/practice/hooks/use-practice";
+import { useGamification } from "@/features/gamification";
 import { cn } from "@/lib/utils";
-import type { MasteryBand as Band } from "@/features/twin";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
 // Quick-practice loop: one item at a time, targeted at the student's
-// weakest skill. Answering advances automatically. The session strip shows
-// movement (answers + streak rail); after each answer the graded result
-// renders the REAL twin deltas — mastery band transition and the +XP gain
-// computed from the gamification summary (derived from evidence, never a
-// client balance).
+// weakest skill. Answering advances automatically. Shared chrome comes from
+// StudySessionShell; the question + graded result render through the shared
+// AnswerableCard (hover/selected states, disabled-during-pending fix, live
+// mastery band + XP delta all live there now, not in this file).
 
 export function PracticePanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError, refetch } = useNextPracticeItem(courseId);
@@ -30,11 +30,20 @@ export function PracticePanel({ courseId }: { courseId: string }) {
   const [sessionAnswers, setSessionAnswers] = useState(0);
   const [streak, setStreak] = useState(0);
   const [gain, setGain] = useState<{ xp: number; streakDays: number } | null>(null);
-  const [bandNow, setBandNow] = useState<Band | null>(null);
-  const [bandTransition, setBandTransition] = useState<{ from: Band; to: Band } | null>(null);
+  const [bandTransition, setBandTransition] = useState<{ from: string; to: string } | null>(null);
 
   const lastXpRef = useRef<number | null>(null);
   const prevEstimateRef = useRef<number | null>(null);
+  const prevStreakRef = useRef(streak);
+
+  // Streak went UP -> the flame draws once (real state change, not hover).
+  useEffect(() => {
+    if (streak > prevStreakRef.current) {
+      flameRef.current?.startAnimation();
+    }
+    prevStreakRef.current = streak;
+  }, [streak]);
+  const flameRef = useRef<FlameIconHandle | null>(null);
 
   // The gamification summary is derived from immutable evidence; when the
   // submit invalidates it, the refetched delta IS the real +XP for that
@@ -53,7 +62,6 @@ export function PracticePanel({ courseId }: { courseId: string }) {
     setSelectedChoice(null);
     setLastResult(null);
     setGain(null);
-    setBandNow(null);
     setBandTransition(null);
     setStartedAt(Date.now());
   }, [data?.item?.id]);
@@ -87,28 +95,46 @@ export function PracticePanel({ courseId }: { courseId: string }) {
           setLastResult(result);
           setSessionAnswers((n) => n + 1);
           setStreak((s) => (result.correct ? s + 1 : 0));
-          // Mastery band transition: compare against the previous answer's
-          // estimate (null on the first answer — show just the current band).
           const prev = prevEstimateRef.current;
           prevEstimateRef.current = result.mastery;
-          const to = bandFor(result.mastery).band;
-          setBandNow(to);
-          setBandTransition(prev === null ? null : { from: bandFor(prev).band, to });
+          if (prev !== null) {
+            setBandTransition({
+              from: bandForLabel(prev),
+              to: bandForLabel(result.mastery),
+            });
+          }
         },
       }
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Quick practice</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Session movement: answers rail + streak. Not a fixed total — the
-            loop has no end, so this shows momentum instead of progress. */}
-        <div className="flex items-center gap-3">
-          <div className="flex flex-1 gap-1" aria-hidden>
+    <StudySessionShell
+      progress={{ current: sessionAnswers, total: 0, label: "answered" }}
+      right={<GamificationSummary courseId={courseId} />}
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            Quick practice
+            <span
+              className="flex items-center gap-1.5 font-mono text-xs font-normal text-muted-foreground"
+              title="Correct answers in a row this session"
+            >
+              <FlameIcon
+                ref={flameRef}
+                size={16}
+                className={streak > 0 ? "text-brand-gold" : "text-muted-foreground/50"}
+                aria-hidden
+              />
+              {streak}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Session momentum: an 8-segment rail, not a fixed total — the
+              loop has no end, so this shows movement instead of progress. */}
+          <div className="mb-5 flex gap-1" aria-hidden>
             {Array.from({ length: 8 }).map((_, i) => (
               <span
                 key={i}
@@ -119,85 +145,51 @@ export function PracticePanel({ courseId }: { courseId: string }) {
               />
             ))}
           </div>
-          <span
-            className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground"
-            title="Correct answers in a row this session"
-          >
-            <Flame
-              className={cn("size-3.5", streak > 0 ? "text-brand-gold" : "text-muted-foreground/50")}
-              aria-hidden
-            />
-            {streak}
-          </span>
-          <span className="font-mono text-xs text-muted-foreground">{sessionAnswers} answered</span>
-        </div>
 
-        <div className="space-y-4">
-          <p className="font-medium">{item.prompt}</p>
-          <div className="flex flex-col gap-2">
-            {item.choices.map((c) => (
-              <Button
-                key={c.id}
-                variant={selectedChoice === c.id ? "orange" : "outline"}
-                disabled={!!lastResult || submit.isPending}
-                onClick={() => handleAnswer(c.id)}
-                className="h-auto justify-start whitespace-normal text-left transition-colors hover:border-brand-orange/40 hover:bg-accent/40"
-              >
-                {submit.isPending && selectedChoice === c.id ? (
-                  <Spinner className="size-3.5" />
+          <AnswerableCard
+            prompt={item.prompt}
+            choices={item.choices}
+            selectedId={selectedChoice}
+            onSelect={handleAnswer}
+            result={
+              lastResult
+                ? {
+                    correct: lastResult.correct,
+                    explanation: lastResult.explanation,
+                    mastery: lastResult.mastery,
+                  }
+                : null
+            }
+            isPending={submit.isPending}
+            meta={
+              <>
+                {bandTransition ? (
+                  <span className="capitalize">
+                    {bandTransition.from} → {bandTransition.to}
+                  </span>
                 ) : null}
-                {c.label}
+                {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
+                {gain ? <span>{gain.streakDays}-day streak</span> : null}
+              </>
+            }
+          />
+
+          {lastResult ? (
+            <div className="mt-4">
+              <Button variant="orange" onClick={() => refetch()}>
+                Next item
               </Button>
-            ))}
-          </div>
-        </div>
-
-        {lastResult ? (
-          <div className="space-y-3">
-            <div className="flex items-start gap-2.5">
-              {lastResult.correct ? (
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand-green" aria-hidden />
-              ) : (
-                <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-              )}
-              <div className="space-y-1">
-                <p
-                  className={cn(
-                    "text-sm font-semibold",
-                    lastResult.correct ? "text-brand-green" : "text-destructive"
-                  )}
-                >
-                  {lastResult.correct ? "Correct." : "Not quite."}
-                </p>
-                {lastResult.explanation ? (
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {lastResult.explanation}
-                  </p>
-                ) : null}
-              </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-2.5 font-mono text-xs text-muted-foreground">
-              {bandNow ? (
-                <span className="flex items-center gap-1.5">
-                  mastery <MasteryBand band={bandNow} />
-                </span>
-              ) : null}
-              {bandTransition ? (
-                <span className="capitalize">
-                  {bandTransition.from} → {bandTransition.to}
-                </span>
-              ) : null}
-              {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
-              {gain ? <span>{gain.streakDays}-day streak</span> : null}
-            </div>
-
-            <Button variant="orange" onClick={() => refetch()}>
-              Next item
-            </Button>
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+          ) : null}
+        </CardContent>
+      </Card>
+    </StudySessionShell>
   );
+}
+
+function bandForLabel(estimate: number | null): string {
+  if (estimate === null) return "no evidence";
+  if (estimate < 0.4) return "developing";
+  if (estimate < 0.7) return "proficient";
+  return "mastered";
 }

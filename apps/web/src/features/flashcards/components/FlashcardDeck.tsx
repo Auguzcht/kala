@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { TransitionPanel } from "@/components/motion/transition-panel";
-import {
-  useFlashcardDeck,
-  useRevealFlashcard,
-  useReviewFlashcard,
-} from "@/features/flashcards/hooks/use-flashcards";
-import { useTutorAsk } from "@/features/tutor";
-import { useTwin } from "@/features/twin";
+import { BrainIcon } from "@/components/ui/brain";
+import { EyeIcon } from "@/components/ui/eye";
+import { SparklesIcon } from "@/components/ui/sparkles";
+import { StudySessionShell } from "@/components/study/StudySessionShell";
+import { AnswerableCard } from "@/components/study/AnswerableCard";
+import { GamificationSummary } from "@/features/gamification";
 import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useFlashcardDeck, useRevealFlashcard, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
+import { useTwin } from "@/features/twin";
+import { useTutorAsk } from "@/features/tutor";
 import type {
   FlashcardCard,
   FlashcardReviewResult,
@@ -23,7 +25,8 @@ import type {
 // then Hint / Reveal / Explain as separate actions — matching the target
 // design (Flashcards.dc.html). Grading is server-side; Reveal is a committed
 // lapse, so a revealed card is terminal for this render (no follow-up review
-// call — see routers/flashcards.py).
+// call — see routers/flashcards.py). Shared chrome via StudySessionShell,
+// question + grading via AnswerableCard.
 
 type Phase = "think" | "choose" | "answered" | "revealed";
 
@@ -58,6 +61,7 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("think");
   const [deckDone, setDeckDone] = useState(false);
+  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [result, setResult] = useState<FlashcardReviewResult | null>(null);
   const [revealResult, setRevealResult] = useState<FlashcardRevealResult | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
@@ -68,6 +72,7 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
   useEffect(() => {
     setPhase("think");
     setDeckDone(false);
+    setSelectedChoice(null);
     setResult(null);
     setRevealResult(null);
     setHintText(null);
@@ -77,12 +82,7 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
   }, [index, data?.courseId]);
 
   if (isLoading)
-    return (
-      <LoadingPanel
-        label="Building your deck — Kala is writing the first cards…"
-        lines={4}
-      />
-    );
+    return <LoadingPanel label="Building your deck — Kala is writing the first cards…" lines={4} />;
   if (isError)
     return (
       <EmptyState
@@ -110,22 +110,10 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
 
   if (deckDone) {
     return (
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-          <div>
-            <p className="font-display text-3xl font-semibold leading-none text-foreground">
-              {data.stats.due}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {data.stats.due === 1 ? "card" : "cards"} due for review now
-            </p>
-          </div>
-          <div className="flex gap-4 pb-0.5 font-mono text-xs text-muted-foreground">
-            <span>{data.stats.learning} learning</span>
-            <span>{data.stats.mastered} mastered</span>
-            <span>{data.stats.tracked} tracked</span>
-          </div>
-        </div>
+      <StudySessionShell
+        progress={{ current: data.stats.due, total: 0, label: "due for review" }}
+        right={<GamificationSummary courseId={courseId} />}
+      >
         <div className="relative border bg-card p-6">
           <CornerBrackets />
           <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
@@ -144,15 +132,17 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
             </Button>
           </div>
         </div>
-      </div>
+      </StudySessionShell>
     );
   }
 
   const card: FlashcardCard = data.cards[index];
   const band = twin?.skills.find((s) => s.skillId === card.skillId)?.band;
 
+  const phaseIndex = phase === "think" ? 0 : phase === "choose" ? 1 : phase === "answered" ? 2 : 3;
+
   function answer(choiceId: string) {
-    setPhase("choose");
+    setSelectedChoice(choiceId);
     review.mutate(
       {
         itemId: card.itemId,
@@ -173,7 +163,6 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
 
   function nextCard() {
     if (index + 1 >= total) {
-      // Deck complete — refresh so the recap shows the real due count.
       setDeckDone(true);
       refetch();
       return;
@@ -207,11 +196,11 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
 
   const reward = result?.reward ?? revealResult?.reward;
 
-  const phaseIndex =
-    phase === "think" ? 0 : phase === "choose" ? 1 : phase === "answered" ? 2 : 3;
-
   return (
-    <div className="space-y-5">
+    <StudySessionShell
+      progress={{ current: index + 1, total, label: "card" }}
+      right={<GamificationSummary courseId={courseId} />}
+    >
       {/* The one number that drives the next action: due for review. */}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
         <div>
@@ -240,7 +229,7 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
             <StateBadge state={card.state} />
           </div>
           <span className="shrink-0 font-mono text-xs text-muted-foreground">
-            {index + 1}/{total} · box {card.box}
+            box {card.box}
           </span>
         </div>
 
@@ -252,9 +241,7 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
           {[
             // think — prompt alone, the recall beat
             <div key="think" className="space-y-5">
-              <p className="text-lg font-medium leading-relaxed text-foreground">
-                {card.prompt}
-              </p>
+              <p className="text-lg font-medium leading-relaxed text-foreground">{card.prompt}</p>
               <div className="flex items-center justify-between gap-4">
                 <p className="text-xs text-muted-foreground">
                   Think of the answer first — then check yourself.
@@ -264,78 +251,78 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
                 </Button>
               </div>
             </div>,
-            // choose — options + Hint / Reveal actions
-            <div key="choose" className="space-y-5">
-              <p className="text-lg font-medium leading-relaxed text-foreground">
-                {card.prompt}
-              </p>
-              <div className="space-y-4">
-                <div className="flex flex-col gap-2">
-                  {card.choices.map((c) => (
-                    <Button
-                      key={c.id}
-                      variant="outline"
-                      disabled={review.isPending || reveal.isPending}
-                      onClick={() => answer(c.id)}
-                      className="h-auto justify-start whitespace-normal text-left"
-                    >
-                      {c.label}
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
+            // choose — AnswerableCard + Hint / Reveal actions
+            <AnswerableCard
+              key="choose"
+              prompt={card.prompt}
+              choices={card.choices}
+              selectedId={selectedChoice}
+              onSelect={answer}
+              isPending={review.isPending || reveal.isPending}
+              actions={
+                <>
                   <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
                     {hint.isPending ? "Thinking…" : "Hint"}
                   </Button>
                   <Button variant="outline" size="sm" onClick={doReveal} disabled={reveal.isPending}>
-                    {reveal.isPending ? "Committing…" : "Reveal answer · counts as missed"}
+                    <EyeIcon size={15} className="text-muted-foreground" aria-hidden />
+                    {reveal.isPending ? "Committing…" : "Reveal · counts as missed"}
                   </Button>
                   {hintText ? (
                     <p className="w-full text-sm italic leading-relaxed text-muted-foreground">
                       {hintText}
                     </p>
                   ) : null}
-                </div>
-              </div>
-            </div>,
-            // answered — graded result
-            <div key="answered" className="space-y-4">
-              <p
-                className={cn(
-                  "text-sm font-semibold",
-                  result?.correct ? "text-brand-green" : "text-destructive"
-                )}
-              >
-                {result?.correct ? "Correct." : "Not quite."}
-              </p>
-              {result?.explanation ? (
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {result.explanation}
-                </p>
-              ) : null}
-              <ResultMeta
-                correct={result?.correct ?? false}
-                dueInHours={result?.dueInHours ?? 0}
-                box={result?.box ?? 0}
-                mastery={result?.mastery ?? null}
-                graduated={result?.graduated}
-              />
-              {explainText ? (
-                <p className="rounded-sm border bg-muted/50 p-3 text-sm leading-relaxed text-muted-foreground">
-                  {explainText}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <Button variant="outline" size="sm" onClick={askExplain} disabled={explain.isPending}>
-                  {explain.isPending ? "Thinking…" : "Explain more"}
-                </Button>
-                <Button variant="orange" onClick={nextCard}>
-                  {index + 1 >= total ? "See recap" : "Next card"}
-                </Button>
-              </div>
-            </div>,
-            // revealed — committed lapse, answer shown
+                </>
+              }
+            />,
+            // answered — graded result via AnswerableCard + Explain
+            <AnswerableCard
+              key="answered"
+              prompt={card.prompt}
+              choices={card.choices}
+              selectedId={selectedChoice}
+              onSelect={() => {}}
+              result={
+                result
+                  ? {
+                      correct: result.correct,
+                      explanation: result.explanation,
+                      mastery: result.mastery,
+                    }
+                  : null
+              }
+              meta={
+                <>
+                  <span>
+                    next review in{" "}
+                    {result?.dueInHours != null && result.dueInHours < 24
+                      ? `${result.dueInHours}h`
+                      : `${Math.round((result?.dueInHours ?? 0) / 24)}d`}
+                  </span>
+                  <span>box {result?.box}</span>
+                  {result?.graduated ? <span className="text-brand-green">graduated ✓</span> : null}
+                </>
+              }
+              actions={
+                <>
+                  <Button variant="outline" size="sm" onClick={askExplain} disabled={explain.isPending}>
+                    <SparklesIcon size={15} className="text-muted-foreground" aria-hidden />
+                    {explain.isPending ? "Thinking…" : "Explain more"}
+                  </Button>
+                  {explainText ? (
+                    <p className="w-full text-sm italic leading-relaxed text-muted-foreground">
+                      {explainText}
+                    </p>
+                  ) : null}
+                  <Button variant="orange" onClick={nextCard}>
+                    {index + 1 >= total ? "See recap" : "Next card"}
+                  </Button>
+                </>
+              }
+            />,
+            // revealed — committed lapse, answer shown (terminal for this card)
             <div key="revealed" className="space-y-4">
               <p className="text-sm font-semibold text-destructive">
                 Revealed — counted as missed, so this card resurfaces sooner.
@@ -353,12 +340,20 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
                   {revealResult.explanation}
                 </p>
               ) : null}
-              <ResultMeta
-                correct={false}
-                dueInHours={revealResult?.dueInHours ?? 0}
-                box={revealResult?.box ?? 0}
-                mastery={revealResult?.mastery ?? null}
-              />
+              <div className="flex items-center gap-x-4 gap-y-1.5 border-t pt-2.5 font-mono text-xs text-muted-foreground">
+                <span>
+                  next review in{" "}
+                  {revealResult && revealResult.dueInHours < 24
+                    ? `${revealResult.dueInHours}h`
+                    : `${Math.round((revealResult?.dueInHours ?? 0) / 24)}d`}
+                </span>
+                <span>box {revealResult?.box}</span>
+                {revealResult?.mastery != null ? (
+                  <span className="flex items-center gap-1.5">
+                    mastery <MasteryBand band={bandFor(revealResult.mastery).band} />
+                  </span>
+                ) : null}
+              </div>
               <Button variant="orange" onClick={nextCard}>
                 {index + 1 >= total ? "See recap" : "Next card"}
               </Button>
@@ -372,36 +367,6 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
           {reward.streakDays}-day streak · {reward.xp} XP
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function ResultMeta({
-  correct,
-  dueInHours,
-  box,
-  mastery,
-  graduated,
-}: {
-  correct: boolean;
-  dueInHours: number;
-  box: number;
-  mastery: number | null;
-  graduated?: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 font-mono text-xs text-muted-foreground">
-      <span>
-        next review in {dueInHours < 24 ? `${dueInHours}h` : `${Math.round(dueInHours / 24)}d`}
-      </span>
-      <span>box {box}</span>
-      {mastery != null ? (
-        <span className="inline-flex items-center gap-1.5">
-          mastery <MasteryBand band={bandFor(mastery).band} />
-        </span>
-      ) : null}
-      {graduated ? <span className="text-brand-green">graduated ✓</span> : null}
-      <span>{correct ? "earned" : "lapsed"}</span>
-    </div>
+    </StudySessionShell>
   );
 }

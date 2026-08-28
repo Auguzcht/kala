@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Flame, Target } from "lucide-react";
+import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { FlameIcon } from "@/components/ui/flame";
+import type { FlameIconHandle } from "@/components/ui/flame";
+import { ZapIcon } from "@/components/ui/zap";
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { InView } from "@/components/motion/in-view";
 import {
@@ -182,6 +185,17 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
   // itself stays unconditional (rules of hooks); the fetch is harmless and
   // cached, only the render is gated.
   const gamification = useGamification(twin.courseId);
+
+  // Flame draws once when the streak actually increases (real state change).
+  const streakFlameRef = useRef<FlameIconHandle | null>(null);
+  const prevStreakRef = useRef<number | null>(null);
+  useEffect(() => {
+    const s = gamification.data?.streakDays ?? 0;
+    if (prevStreakRef.current !== null && s > prevStreakRef.current) {
+      streakFlameRef.current?.startAnimation();
+    }
+    prevStreakRef.current = s;
+  }, [gamification.data?.streakDays]);
   const ranked = [...skills].sort((a, b) => {
     const aNull = a.estimate === null ? -1 : a.estimate;
     const bNull = b.estimate === null ? -1 : b.estimate;
@@ -304,7 +318,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
           <Card className={own ? "md:col-span-7" : "md:col-span-12"}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Target className="size-4 text-brand-orange" aria-hidden />
+                <ZapIcon size={16} className="text-brand-orange" aria-hidden />
                 Focus area
               </CardTitle>
             </CardHeader>
@@ -329,7 +343,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
                   size="sm"
                   onClick={() => navigate({ to: "/course/practice" })}
                 >
-                  Practice this <ArrowRight className="size-3.5" />
+                  Practice this <ArrowRightIcon size={14} />
                 </Button>
               ) : null}
             </CardContent>
@@ -345,13 +359,14 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
             <div className="flex items-center gap-6">
               <div>
                 <p className="flex items-center gap-1.5 font-display text-3xl font-semibold text-foreground">
-                  <Flame
-                    className={cn(
-                      "size-6",
+                  <FlameIcon
+                    ref={streakFlameRef}
+                    size={24}
+                    className={
                       (gamification.data?.streakDays ?? 0) > 0
                         ? "text-brand-gold"
                         : "text-muted-foreground/50"
-                    )}
+                    }
                     aria-hidden
                   />
                   {gamification.data?.streakDays ?? 0}

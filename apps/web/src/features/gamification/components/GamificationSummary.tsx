@@ -1,4 +1,6 @@
-import { Flame } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { FlameIcon } from "@/components/ui/flame";
+import type { FlameIconHandle } from "@/components/ui/flame";
 import { useGamification } from "@/features/gamification/hooks/use-gamification";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +18,16 @@ export function GamificationSummary({
 }) {
   const { data, isLoading } = useGamification(courseId);
 
+  const flameRef = useRef<FlameIconHandle | null>(null);
+  const prevStreakRef = useRef<number | null>(null);
+  useEffect(() => {
+    const s = data?.streakDays ?? 0;
+    if (prevStreakRef.current !== null && s > prevStreakRef.current) {
+      flameRef.current?.startAnimation();
+    }
+    prevStreakRef.current = s;
+  }, [data?.streakDays]);
+
   if (isLoading || !data) return null;
   const alive = data.streakDays > 0;
 
@@ -29,8 +41,10 @@ export function GamificationSummary({
       }
     >
       <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-        <Flame
-          className={cn("size-3.5", alive ? "text-brand-gold" : "text-muted-foreground/50")}
+        <FlameIcon
+          ref={flameRef}
+          size={14}
+          className={alive ? "text-brand-gold" : "text-muted-foreground/50"}
           aria-hidden
         />
         {data.streakDays}

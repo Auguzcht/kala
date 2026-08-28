@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { LessonStepper } from "@/features/lessons";
+import { LessonChat } from "@/features/lessons";
 import { useTwin } from "@/features/twin";
 import { MasteryBand } from "@/components/kala";
 import { InView } from "@/components/motion/in-view";
@@ -15,7 +15,7 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeftIcon } from "@/components/ui/chevron-left";
 import type { TwinSkill } from "@/features/twin";
 
 export const Route = createFileRoute("/course/lessons")({
@@ -52,9 +52,9 @@ function LessonsPage() {
       {skillId ? (
         <div className="space-y-4">
           <Button variant="outline" size="sm" onClick={() => setSkillId(null)}>
-            <ChevronLeft className="size-3.5" /> Choose another skill
+            <ChevronLeftIcon size={14} /> Choose another skill
           </Button>
-          <LessonStepper courseId={courseId} skillId={skillId} />
+          <LessonChat courseId={courseId} skillId={skillId} />
         </div>
       ) : isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2">

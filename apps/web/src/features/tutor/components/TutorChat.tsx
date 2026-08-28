@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { SendIcon } from "@/components/ui/send";
+import { StudySessionShell } from "@/components/study/StudySessionShell";
+import { GamificationSummary } from "@/features/gamification";
 import { useAskTutor } from "@/features/tutor/hooks/use-tutor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CornerBrackets } from "@/components/kala";
@@ -37,7 +40,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
   }
 
   return (
-    <Card className="relative">
+    <StudySessionShell right={<GamificationSummary courseId={courseId} />}>
+      <Card className="relative">
       <CornerBrackets />
       <CardHeader>
         <CardTitle>Ask Kala</CardTitle>
@@ -106,11 +110,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
             placeholder="Ask about this course…"
           />
           <Button type="submit" variant="orange" disabled={ask.isPending || !question.trim()}>
-            {ask.isPending ? <Spinner className="size-4" /> : null}
+            {ask.isPending ? <Spinner className="size-4" /> : <SendIcon size={16} aria-hidden />}
             Ask
           </Button>
         </form>
       </CardContent>
     </Card>
+    </StudySessionShell>
   );
 }

@@ -14,7 +14,7 @@ export async function fetchLesson(courseId: string, skillId: string): Promise<Le
 export async function submitStepCheck(
   courseId: string,
   stepId: string,
-  args: { itemId: string; choiceId: string; latencyMs: number }
+  args: { itemId: string; choiceId: string; latencyMs: number; hintsUsed: number }
 ): Promise<LessonCheckResult> {
   const data = await api<unknown>(`/lessons/${courseId}/steps/${stepId}/check`, {
     method: "POST",
@@ -22,6 +22,7 @@ export async function submitStepCheck(
       item_id: args.itemId,
       choice_id: args.choiceId,
       latency_ms: args.latencyMs,
+      hints_used: args.hintsUsed,
     }),
   });
   return lessonCheckResultSchema.parse(data);

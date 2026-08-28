@@ -1,15 +1,12 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import {
-  BookOpen,
-  ClipboardList,
-  Layers,
-  LayoutGrid,
-  MessagesSquare,
-  Radar,
-  Target,
-  type LucideIcon,
-} from "lucide-react";
-import { type ReactNode } from "react";
+import { type ComponentType, type ReactNode } from "react";
+import { ActivityIcon } from "@/components/ui/activity";
+import { FileTextIcon } from "@/components/ui/file-text";
+import { GraduationCapIcon } from "@/components/ui/graduation-cap";
+import { LayersIcon } from "@/components/ui/layers";
+import { LayoutGridIcon } from "@/components/ui/layout-grid";
+import { MessageSquareIcon } from "@/components/ui/message-square";
+import { ZapIcon } from "@/components/ui/zap";
 import {
   Tooltip,
   TooltipContent,
@@ -23,14 +20,19 @@ import { GamificationSummary } from "@/features/gamification";
 // hairline slate borders, white chrome, orange active accent.
 // The shell is the instrument frame; pages render inside it.
 
-const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
-  { to: "/course", label: "Workspace", icon: LayoutGrid, end: true },
-  { to: "/course/diagnostic", label: "Diagnostic", icon: ClipboardList },
-  { to: "/course/lessons", label: "Lessons", icon: BookOpen },
-  { to: "/course/practice", label: "Practice", icon: Target },
-  { to: "/course/flashcards", label: "Flashcards", icon: Layers },
-  { to: "/course/tutor", label: "Tutor", icon: MessagesSquare },
-  { to: "/course/twin", label: "Twin", icon: Radar },
+// Animated lucide icons (lucide-animated): hover-triggered by default, so
+// the rail icons draw on hover and on route activation — motion tied to the
+// cursor and the active state, never looping.
+type NavIcon = ComponentType<{ size?: number; className?: string }>;
+
+const NAV: { to: string; label: string; icon: NavIcon; end?: boolean }[] = [
+  { to: "/course", label: "Workspace", icon: LayoutGridIcon, end: true },
+  { to: "/course/diagnostic", label: "Diagnostic", icon: FileTextIcon },
+  { to: "/course/lessons", label: "Lessons", icon: GraduationCapIcon },
+  { to: "/course/practice", label: "Practice", icon: ZapIcon },
+  { to: "/course/flashcards", label: "Flashcards", icon: LayersIcon },
+  { to: "/course/tutor", label: "Tutor", icon: MessageSquareIcon },
+  { to: "/course/twin", label: "Twin", icon: ActivityIcon },
 ];
 
 const SECTION_LABELS: Record<string, string> = {
@@ -96,7 +98,7 @@ export function CourseShell({
                   }}
                   aria-label={label}
                 >
-                  <Icon className="size-4.5" />
+                  <Icon size={18} />
                 </Link>
               </TooltipTrigger>
               <TooltipContent side="right">{label}</TooltipContent>

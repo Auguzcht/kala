@@ -1,4 +1,4 @@
-export { LessonStepper } from "@/features/lessons/components/LessonStepper";
+export { LessonChat } from "@/features/lessons/components/LessonChat";
 export { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-lessons";
 export type {
   Lesson,
