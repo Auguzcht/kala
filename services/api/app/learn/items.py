@@ -23,11 +23,6 @@ _MCQ_SYSTEM = (
     "facts that are not supported by the excerpt."
 )
 
-_FLASHCARD_SYSTEM = (
-    "You write one flashcard grounded ONLY in the supplied course excerpt. "
-    'Return strict JSON and nothing else: {"front": str, "back": str}. '
-    "front is a short question or term; back is the concise answer."
-)
 
 
 def _parse_json(raw: str) -> dict:
@@ -101,37 +96,6 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
     }
 
 
-def generate_flashcard(*, institution_id: str, course_id: str, skill: dict) -> dict:
-    """Generate one RAG-grounded flashcard for a skill and persist it."""
-    context = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
-    try:
-        raw = bedrock.converse(
-            model_id=get_model_for("fast"),
-            system=_FLASHCARD_SYSTEM,
-            messages=[{"role": "user", "content": [{"text": json.dumps({
-                "skill": skill["name"], "excerpt": context,
-            })}]}],
-            max_tokens=256,
-        )
-        parsed = _parse_json(raw)
-        front, back = parsed["front"], parsed["back"]
-    except Exception:
-        front, back = skill["name"], "Review this skill's course material."
-
-    rows = db.insert("generated_items", [{
-        "institution_id": institution_id,
-        "course_id": course_id,
-        "skill_id": skill["id"],
-        "kind": "flashcard",
-        "bloom_level": skill.get("bloom_level"),
-        "prompt": front,
-        "front": front,
-        "back": back,
-    }])
-    item = rows[0]
-    return {"id": item["id"], "skillId": skill["id"], "front": front, "back": back}
-
-
 def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
     """Look up the stored answer key and grade server-side."""
     rows = db.select("generated_items", {
@@ -146,6 +110,35 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
         "skillId": item["skill_id"],
         "courseId": item["course_id"],
         "correct": correct,
+        "explanation": item.get("explanation") or "",
+    }
+
+
+def reveal(*, institution_id: str, item_id: str) -> dict:
+    """Look up an item's answer key WITHOUT a client choice — the pre-commit
+    Show Answer path. This is deliberately a separate function from grade(),
+    not grade() called with some sentinel choice_id: the caller (the reveal
+    endpoint) always treats a reveal as a lapse regardless of what this
+    returns, so the two must stay distinguishable in the code, not just in
+    intent. Still never trusts the client with anything beyond the single
+    correct label — choices/prompt aren't needed here, the client already has
+    them from the deck response."""
+    rows = db.select("generated_items", {
+        "id": f"eq.{item_id}", "institution_id": f"eq.{institution_id}",
+        "select": "id,skill_id,course_id,correct_choice_id,explanation,choices", "limit": "1",
+    })
+    if not rows:
+        raise ValueError(f"item {item_id} not found")
+    item = rows[0]
+    choices = item.get("choices") or []
+    correct_label = next(
+        (c["label"] for c in choices if c.get("id") == item["correct_choice_id"]), None,
+    )
+    return {
+        "skillId": item["skill_id"],
+        "courseId": item["course_id"],
+        "correctChoiceId": item["correct_choice_id"],
+        "correctLabel": correct_label,
         "explanation": item.get("explanation") or "",
     }
 

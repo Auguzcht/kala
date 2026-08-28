@@ -58,6 +58,17 @@ def update(table: str, filters: dict[str, str], values: dict[str, Any]) -> list[
         return r.json() if r.content else []
 
 
+def delete(table: str, filters: dict[str, str]) -> list[dict]:
+    """Hard delete matching rows. There is no soft-delete convention in this
+    schema outside evidence_events (which is append-only by trigger and must
+    never be deleted); this exists for cleaning up regenerable derived rows
+    like a failed/partial guided lesson's steps, never for user data."""
+    with _client() as c:
+        r = c.delete(f"/{table}", params=filters, headers={"Prefer": "return=representation"})
+        r.raise_for_status()
+        return r.json() if r.content else []
+
+
 def rpc(fn: str, args: dict[str, Any]) -> Any:
     with _client() as c:
         r = c.post(f"/rpc/{fn}", json=args)

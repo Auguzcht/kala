@@ -12,7 +12,9 @@ from app.routers.courses import router as courses_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.diagnostic import router as diagnostic_router
 from app.routers.flashcards import router as flashcards_router
+from app.routers.gamification import router as gamification_router
 from app.routers.health import router as health_router
+from app.routers.lessons import router as lessons_router
 from app.routers.practice import router as practice_router
 from app.routers.tutor import router as tutor_router
 from app.routers.twin import router as twin_router
@@ -34,9 +36,11 @@ app.include_router(courses_router)
 app.include_router(diagnostic_router)
 app.include_router(practice_router)
 app.include_router(flashcards_router)
+app.include_router(lessons_router)
 app.include_router(tutor_router)
 app.include_router(twin_router)
 app.include_router(dashboard_router)
+app.include_router(gamification_router)
 
 # Lambda entrypoint (referenced by the Dockerfile CMD: app.main.handler)
 handler = Mangum(app)
