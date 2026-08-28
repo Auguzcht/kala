@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import type { Answer, AnswerResult } from "@/features/diagnostic/schema/diagnostic.schema";
 
@@ -16,7 +17,14 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   const [startedAt] = useState(() => Date.now());
   const [resultsByItem, setResultsByItem] = useState<Record<string, AnswerResult>>({});
 
-  if (isLoading) return <p className="text-muted-foreground">Loading diagnostic…</p>;
+  if (isLoading)
+    return (
+      <LoadingPanel
+        label="Building your diagnostic…"
+        lines={4}
+        className="max-w-2xl"
+      />
+    );
   if (isError)
     return (
       <EmptyState
@@ -69,7 +77,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
                 {q.choices.map((c) => (
                   <label
                     key={c.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-[:checked]:border-brand-orange has-[:checked]:bg-brand-orange/5"
+                    className="flex min-w-0 cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 text-sm has-[:checked]:border-brand-orange has-[:checked]:bg-brand-orange/5"
                   >
                     <input
                       type="radio"
@@ -78,8 +86,9 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
                       disabled={submitted}
                       checked={selections[q.id] === c.id}
                       onChange={() => setSelections((s) => ({ ...s, [q.id]: c.id }))}
+                      className="mt-0.5 shrink-0"
                     />
-                    {c.label}
+                    <span className="min-w-0 flex-1 break-words leading-relaxed">{c.label}</span>
                   </label>
                 ))}
               </div>

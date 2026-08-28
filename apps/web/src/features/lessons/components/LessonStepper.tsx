@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
+import { useReducedMotion } from "motion/react";
+import { TransitionPanel } from "@/components/motion/transition-panel";
 import { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-lessons";
 import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { LessonCheckResult } from "@/features/lessons/schema/lessons.schema";
+import type {
+  LessonCheckResult,
+  LessonStep,
+} from "@/features/lessons/schema/lessons.schema";
 
 // Guided lesson stepper: read -> understand -> apply, one step at a time.
 // Each step teaches (summary, detail points, misconception, takeaway) then
 // gates progress on a server-graded comprehension check. The step advances
 // ONLY when the API says so (advance: true) — the client never skips.
+// Step bodies run through TransitionPanel so advancing is a real state
+// change with motion, not a hard content swap.
 
 export function LessonStepper({
   courseId,
@@ -18,6 +26,7 @@ export function LessonStepper({
   courseId: string;
   skillId: string;
 }) {
+  const reduceMotion = useReducedMotion();
   const { data, isLoading, isError, refetch } = useLesson(courseId, skillId);
   const submit = useSubmitStepCheck(courseId);
 
@@ -37,11 +46,11 @@ export function LessonStepper({
 
   if (isLoading || data?.status === "generating")
     return (
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">Kala is writing your lesson…</p>
-        <div className="h-2 w-full animate-pulse bg-muted" />
-        <div className="h-2 w-3/4 animate-pulse bg-muted" />
-      </div>
+      <LoadingPanel
+        label="Kala is writing your lesson — first pass takes a moment…"
+        lines={5}
+        className="max-w-2xl"
+      />
     );
   if (isError)
     return (
@@ -59,10 +68,9 @@ export function LessonStepper({
       />
     );
 
-  const step = data.steps[stepIndex];
   const lastStep = stepIndex >= data.steps.length - 1;
 
-  function choose(choiceId: string) {
+  function choose(step: LessonStep, choiceId: string) {
     if (!step.check || result) return;
     setSelected(choiceId);
     submit.mutate(
@@ -144,9 +152,9 @@ export function LessonStepper({
               <span className="truncate text-sm font-semibold text-foreground">
                 {data.title}
               </span>
-              {step.bloomLevel ? (
+              {data.steps[stepIndex]?.bloomLevel ? (
                 <span className="rounded-sm border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
-                  {step.bloomLevel}
+                  {data.steps[stepIndex].bloomLevel}
                 </span>
               ) : null}
             </div>
@@ -155,103 +163,111 @@ export function LessonStepper({
             </span>
           </div>
 
-          <div className="space-y-4 px-5 py-6">
-            <p className="text-lg font-medium leading-relaxed text-foreground">{step.summary}</p>
+          <TransitionPanel
+            activeIndex={stepIndex}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.25, ease: "easeOut" }}
+            className="px-5 py-6"
+          >
+            {data.steps.map((s) => (
+              <div key={s.id} className="space-y-4">
+                <p className="text-lg font-medium leading-relaxed text-foreground">{s.summary}</p>
 
-            {step.detailPoints.length > 0 ? (
-              <ul className="space-y-1.5 text-sm text-muted-foreground">
-                {step.detailPoints.map((d, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="mt-1.5 size-1 shrink-0 rounded-full bg-brand-slate/50" />
-                    <span className="leading-relaxed">{d}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+                {s.detailPoints.length > 0 ? (
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    {s.detailPoints.map((d, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="mt-1.5 size-1 shrink-0 rounded-full bg-brand-slate/50" />
+                        <span className="leading-relaxed">{d}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
 
-            {step.misconception ? (
-              <div className="border-l-2 border-destructive/60 pl-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-destructive">
-                  Common misconception
-                </p>
-                <p className="mt-0.5 text-sm text-muted-foreground">{step.misconception}</p>
-              </div>
-            ) : null}
-
-            {step.keyTakeaway ? (
-              <div className="border-l-2 border-brand-gold pl-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-brand-gold-foreground/70">
-                  Key takeaway
-                </p>
-                <p className="mt-0.5 text-sm font-medium text-foreground">{step.keyTakeaway}</p>
-              </div>
-            ) : null}
-
-            {step.check ? (
-              <div className="space-y-3 border-t pt-4">
-                <p className="text-sm font-semibold text-foreground">Check yourself</p>
-                <p className="text-sm text-muted-foreground">{step.check.prompt}</p>
-                <div className="flex flex-col gap-2">
-                  {step.check.choices.map((c) => (
-                    <Button
-                      key={c.id}
-                      variant={selected === c.id ? "orange" : "outline"}
-                      disabled={!!result || submit.isPending}
-                      onClick={() => choose(c.id)}
-                      className="justify-start text-left"
-                    >
-                      {c.label}
-                    </Button>
-                  ))}
-                </div>
-
-                {result ? (
-                  <div className="space-y-3">
-                    <p
-                      className={cn(
-                        "text-sm font-semibold",
-                        result.correct ? "text-brand-green" : "text-destructive"
-                      )}
-                    >
-                      {result.correct ? "Correct — that step is solid." : "Not quite."}
+                {s.misconception ? (
+                  <div className="border-l-2 border-destructive/60 pl-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-destructive">
+                      Common misconception
                     </p>
-                    {result.explanation ? (
-                      <p className="text-sm leading-relaxed text-muted-foreground">
-                        {result.explanation}
-                      </p>
-                    ) : null}
-                    {result.mastery != null ? (
-                      <p className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                        mastery <MasteryBand band={bandFor(result.mastery).band} />
-                      </p>
-                    ) : null}
-                    {result.advance ? (
-                      <Button variant="orange" onClick={advance}>
-                        {lastStep ? "Finish lesson" : "Next step"}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSelected(null);
-                          setResult(null);
-                          setStartedAt(Date.now());
-                        }}
-                      >
-                        Try again
-                      </Button>
-                    )}
+                    <p className="mt-0.5 text-sm text-muted-foreground">{s.misconception}</p>
                   </div>
                 ) : null}
+
+                {s.keyTakeaway ? (
+                  <div className="border-l-2 border-brand-gold pl-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-brand-gold-foreground/70">
+                      Key takeaway
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium text-foreground">{s.keyTakeaway}</p>
+                  </div>
+                ) : null}
+
+                {s.check ? (
+                  <div className="space-y-3 border-t pt-4">
+                    <p className="text-sm font-semibold text-foreground">Check yourself</p>
+                    <p className="text-sm text-muted-foreground">{s.check.prompt}</p>
+                    <div className="flex flex-col gap-2">
+                      {s.check.choices.map((c) => (
+                        <Button
+                          key={c.id}
+                          variant={selected === c.id ? "orange" : "outline"}
+                          disabled={!!result || submit.isPending}
+                          onClick={() => choose(s, c.id)}
+                          className="h-auto justify-start whitespace-normal text-left"
+                        >
+                          {c.label}
+                        </Button>
+                      ))}
+                    </div>
+
+                    {result ? (
+                      <div className="space-y-3">
+                        <p
+                          className={cn(
+                            "text-sm font-semibold",
+                            result.correct ? "text-brand-green" : "text-destructive"
+                          )}
+                        >
+                          {result.correct ? "Correct — that step is solid." : "Not quite."}
+                        </p>
+                        {result.explanation ? (
+                          <p className="text-sm leading-relaxed text-muted-foreground">
+                            {result.explanation}
+                          </p>
+                        ) : null}
+                        {result.mastery != null ? (
+                          <p className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                            mastery <MasteryBand band={bandFor(result.mastery).band} />
+                          </p>
+                        ) : null}
+                        {result.advance ? (
+                          <Button variant="orange" onClick={advance}>
+                            {lastStep ? "Finish lesson" : "Next step"}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setSelected(null);
+                              setResult(null);
+                              setStartedAt(Date.now());
+                            }}
+                          >
+                            Try again
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="border-t pt-4">
+                    <Button variant="orange" onClick={advance}>
+                      {lastStep ? "Finish lesson" : "Next step"}
+                    </Button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="border-t pt-4">
-                <Button variant="orange" onClick={advance}>
-                  {lastStep ? "Finish lesson" : "Next step"}
-                </Button>
-              </div>
-            )}
-          </div>
+            ))}
+          </TransitionPanel>
         </div>
       )}
     </div>

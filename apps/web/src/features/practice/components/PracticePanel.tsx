@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNextPracticeItem, useSubmitPractice } from "@/features/practice/hooks/use-practice";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
@@ -20,7 +21,14 @@ export function PracticePanel({ courseId }: { courseId: string }) {
     setStartedAt(Date.now());
   }, [data?.item?.id]);
 
-  if (isLoading) return <p className="text-muted-foreground">Finding your next item…</p>;
+  if (isLoading)
+    return (
+      <LoadingPanel
+        label="Finding your next item…"
+        lines={4}
+        className="max-w-2xl"
+      />
+    );
   if (isError)
     return (
       <EmptyState
@@ -66,7 +74,7 @@ export function PracticePanel({ courseId }: { courseId: string }) {
               variant={selectedChoice === c.id ? "orange" : "outline"}
               disabled={!!lastResult}
               onClick={() => handleAnswer(c.id)}
-              className="justify-start"
+              className="h-auto justify-start whitespace-normal text-left"
             >
               {c.label}
             </Button>
