@@ -104,3 +104,4 @@ infra/terraform/.terraform/
 
 # AWS secrets bundle (populated by hand, never committed)
 secrets.json
+infra/terraform/*.tfstate*
