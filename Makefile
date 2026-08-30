@@ -21,8 +21,8 @@ ecr-login:
 	$(AWS) ecr get-login-password --region $(REGION) | docker login --username AWS --password-stdin $(ECR)
 
 build:
-	docker build --platform linux/amd64 -t $(ECR)/kala-api:latest services/api
-	docker build --platform linux/amd64 -t $(ECR)/kala-worker:latest services/worker
+	docker build --platform linux/amd64 --provenance=false --sbom=false -t $(ECR)/kala-api:latest services/api
+	docker build --platform linux/amd64 --provenance=false --sbom=false -t $(ECR)/kala-worker:latest services/worker
 
 push: ecr-login build
 	docker push $(ECR)/kala-api:latest
