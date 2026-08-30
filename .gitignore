@@ -105,3 +105,7 @@ infra/terraform/.terraform/
 # AWS secrets bundle (populated by hand, never committed)
 secrets.json
 infra/terraform/*.tfstate*
+
+# DeepSeek session instructions / working notes (not product docs)
+docs/DEEPSEEK*.md
+docs/deepseek-*.md
