@@ -22,6 +22,54 @@ pnpm terraform -version
 
 Each module can also be installed independently. See the README in `apps/web`, `services/api`, and `services/worker`.
 
+## Development workflow (integrated stack)
+
+Kala's backend now runs on AWS (API Gateway + Lambda, see `infra/terraform`). The local frontend at `:5173` can talk to either the local backend or the deployed one, and the session is a bearer JWT either way — both environments sign with the same Supabase JWT secret, so a token minted by one backend works against the other.
+
+There are two ways to get a session into the local frontend:
+
+### Option A — Mock LTI launch (no LMS, no real data)
+
+Exercises the real `/lti/login` → `/lti/launch` flow against a fake platform, in-process — no Blackboard, no uvicorn needed. Requires Supabase creds in `services/api/.env`:
+
+```bash
+pnpm api:dev              # local backend on :8000 (separate terminal)
+pnpm dev                  # local frontend on :5173
+cd services/api && uv run python scripts/mock_lti_launch.py   # prints "Session token: ..."
+```
+
+Copy the printed token into the local frontend:
+
+```
+http://localhost:5173/launch#token=<mock token>
+```
+
+With `apps/web/.env.local` set to `VITE_API_BASE_URL=http://localhost:8000`, this runs the full stack locally against mock data — the auth spine, the UI, and Supabase writes (a `Mock Course` row appears).
+
+### Option B — Real Blackboard data (the integrated flow)
+
+Point the local frontend at the deployed backend, then reuse a real session token from a live LTI launch:
+
+1. `apps/web/.env.local`: set `VITE_API_BASE_URL` to the API Gateway URL (the `api_base_url` terraform output), e.g. `https://14vua0ys43.execute-api.ap-southeast-1.amazonaws.com`. Before the AWS integration this pointed at an ngrok tunnel to `localhost:8000`; ngrok is no longer needed — the deployed API is directly reachable and its CORS allows `localhost:5173`.
+2. Restart `pnpm dev` so Vite picks up the new env.
+3. In the real Blackboard instance, click the Kala LTI link. The launch redirects to the Vercel frontend with the token in the URL hash:
+   `https://kala-web-lovat.vercel.app/launch#token=<real token>`.
+4. Copy that token and open it in the local frontend:
+   `http://localhost:5173/launch#token=<same real token>`.
+
+The local app now runs with the real session: real course content, roster, and twin state served by the deployed backend — useful for UI work that needs real data without rebuilding the backend for every change.
+
+### Deploying backend changes
+
+After changing backend code, rebuild, push, and force Lambda to re-resolve the image digest in one command:
+
+```bash
+make deploy   # = ecr-login + build (amd64, no attestations) + push + lambda update-function-code
+```
+
+Infra changes (`.tf`) still go through `terraform apply` from `infra/terraform` (see that folder's README).
+
+
 ## Layout
 
 * `apps/web` — React + Vite SPA (product UI)
