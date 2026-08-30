@@ -6,7 +6,7 @@ For project context and implementation details, see `docs/masterplan.md`, `docs/
 
 ## Quick start
 
-Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). The root workspace installs both Supabase CLI and AWS CLI locally through setup, so no separate global `supabase` or `aws` install is needed.
+Prerequisites: [pnpm](https://pnpm.io) and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). The root workspace installs the Supabase CLI, AWS CLI, and Terraform locally through setup, so no separate global `supabase`, `aws`, or `terraform` install is needed. Docker is the one genuinely manual prerequisite — install Docker Desktop (Mac/Windows) or Docker Engine (Linux) from the official docs: <https://docs.docker.com/get-docker/>.
 
 ```bash
 pnpm setup        # installs apps/web (pnpm) + services/api and services/worker (uv)
@@ -15,9 +15,10 @@ pnpm api:dev      # backend on :8000
 pnpm --filter web gen:api   # regenerate backend OpenAPI export + frontend types (one chain, via pregen:api)
 pnpm exec supabase --help
 pnpm aws --version
+pnpm terraform -version
 ```
 
-`pnpm setup` also appends a small, idempotent PATH block to your shell rc file (`~/.zshrc` on macOS zsh, `~/.bashrc` on bash) so you can run `aws ...` directly after reloading your shell (`source ~/.zshrc`) or opening a new terminal.
+`pnpm setup` also appends small, idempotent PATH blocks to your shell rc file (`~/.zshrc` on macOS zsh, `~/.bashrc` on bash) so you can run `aws ...` and `terraform ...` directly after reloading your shell (`source ~/.zshrc`) or opening a new terminal. Docker is not vendored — see the Docker install link above — and `bash check_stack.sh` verifies it (section 5) plus the vendored Terraform (section 6) before you start dev.
 
 Each module can also be installed independently. See the README in `apps/web`, `services/api`, and `services/worker`.
 

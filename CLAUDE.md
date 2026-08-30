@@ -62,11 +62,13 @@ docs                masterplan.md, stack.md, architecture.md
 ## Commands
 
 ```
-pnpm setup                  # install everything: web (pnpm) + api and worker (uv)
+pnpm setup                  # install everything: web (pnpm) + api and worker (uv) + aws/terraform tooling
 pnpm install                # install workspace deps (web only)
 pnpm exec supabase --help    # run the locally installed Supabase CLI from the root workspace
 pnpm aws --version           # run the workspace-local AWS CLI from the root workspace
+pnpm terraform -version      # run the workspace-local Terraform from the root workspace
 pnpm setup:aws:path          # add workspace AWS CLI to your shell PATH (idempotent)
+pnpm setup:terraform:path    # add workspace Terraform to your shell PATH (idempotent)
 pnpm --filter web dev       # run the web app (Vite)
 pnpm --filter web build     # production build
 pnpm --filter web lint      # eslint

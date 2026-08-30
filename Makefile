@@ -1,11 +1,12 @@
 # Convenience targets. Adjust ACCOUNT/REGION or pass them in.
-# Uses the workspace-local AWS CLI installed by `pnpm setup`.
+# Uses the workspace-local AWS CLI and Terraform installed by `pnpm setup`.
 REGION ?= ap-southeast-1
 AWS ?= pnpm aws
+TF ?= pnpm terraform
 ACCOUNT ?= $(shell $(AWS) sts get-caller-identity --query Account --output text)
 ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
 
-.PHONY: web-dev api-dev openapi ecr-login build push tf-apply
+.PHONY: web-dev api-dev openapi ecr-login build push tf-init tf-plan tf-apply
 
 web-dev:
 	pnpm --filter web dev
@@ -27,5 +28,11 @@ push: ecr-login build
 	docker push $(ECR)/kala-api:latest
 	docker push $(ECR)/kala-worker:latest
 
+tf-init:
+	$(TF) -chdir=infra/terraform init
+
+tf-plan:
+	$(TF) -chdir=infra/terraform plan
+
 tf-apply:
-	cd infra/terraform && terraform apply
+	$(TF) -chdir=infra/terraform apply

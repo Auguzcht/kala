@@ -95,6 +95,33 @@ else
   fail "aws region missing"
 fi
 
+echo "== 5. Docker =="
+if command -v docker >/dev/null 2>&1; then
+  if docker info >/dev/null 2>&1; then
+    pass "docker installed and daemon running"
+  else
+    fail "docker installed but daemon not running (start Docker Desktop)"
+  fi
+else
+  fail "docker not installed (see README: Docker Desktop for Mac/Windows, or Docker Engine for Linux)"
+fi
+
+echo "== 6. Terraform =="
+TF_BIN="$ROOT_DIR/.tools/terraform/bin/terraform"
+if [ -x "$TF_BIN" ]; then
+  TF_VERSION=$("$TF_BIN" version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | tr -d v)
+  IFS=. read -r TF_MAJOR TF_MINOR _ <<EOF
+$TF_VERSION
+EOF
+  if [ -n "$TF_MAJOR" ] && { [ "$TF_MAJOR" -gt 1 ] || { [ "$TF_MAJOR" -eq 1 ] && [ "$TF_MINOR" -ge 6 ]; }; }; then
+    pass "terraform vendored at .tools/terraform/bin (v$TF_VERSION, satisfies >= 1.6)"
+  else
+    fail "terraform too old: v$TF_VERSION (need >= 1.6, run pnpm setup)"
+  fi
+else
+  fail "terraform not installed (run pnpm setup to vendor it into .tools/terraform/bin)"
+fi
+
 echo
 if [ "$OVERALL_STATUS" -eq 0 ]; then
   echo "Done. All checks passed."
