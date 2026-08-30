@@ -38,27 +38,3 @@ Three path-scoped GitHub Actions workflows live in `.github/workflows`, one per 
 Each workflow runs only when its corresponding module or shared `packages/` code changes. It installs dependencies using the module's actual package manager, pnpm or uv, against the committed lockfile, then runs the relevant linting, type checking or import validation, and build steps.
 
 Docker is intentionally excluded from CI and remains a deploy-time concern. See `services/api/Dockerfile`, `services/worker/Dockerfile`, and `infra/terraform`.
-
-## Deploying to Vercel (services model)
-
-One Vercel project, three services, wired in root `vercel.json`:
-
-- `web` (Vite SPA) serves everything at `/`; the catch-all rewrite sends SPA routes to it.
-- `api` (FastAPI) is mounted at `/api/api/*`; a `request.path` transform strips the prefix so the app sees its real routes (`/health`, `/lti/login`, `/courses/...`).
-- `worker` (async jobs) is mounted at `/api/worker` via a minimal ASGI entry (`services/worker/app/http.py`) — usable as a Vercel cron target in place of EventBridge.
-
-Python services install from the generated `requirements.txt` (uv export) — no build step. The Vite service uses its own `build` script (`tsr generate && tsc -b && vite build`).
-
-Required env vars, set per-service in the Vercel dashboard:
-
-| Service | Vars |
-|---|---|
-| `web` | `VITE_API_BASE_URL=/api/api` (client already defaults to this), `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
-| `api` | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_JWT_SECRET`, `FRONTEND_URL` (must be the deployed origin — the LTI launch redirects there), `AI_PROVIDER`/`EMBED_PROVIDER` plus provider keys, all `LTI_*` and `LMS_REST_*` values from `services/api/.env.example` |
-| `worker` | same Supabase values as `api` (for the future real jobs) |
-
-Gotchas:
-
-- If `FRONTEND_URL` is wrong, the LTI launch redirects to localhost. Set it to the Vercel deployment/production URL.
-- Long model runs (skill proposal, ingest) may exceed the plan's default `maxDuration`; raise it for the api service in the dashboard if those endpoints time out.
-- Vercel cold starts replace the Lambda warm-start concern; if the launch handshake feels flaky on stage, add a scheduled ping to `/api/api/lti/login`.
