@@ -35,5 +35,6 @@ jobs:
         run: uv run python -c "from app.main import app"
 
       - name: Tests
+        env:
+          SUPABASE_JWT_SECRET: ci-test-secret
         run: uv run pytest
-        continue-on-error: true # flip once there's a real test suite (services/api has none yet)
