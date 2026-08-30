@@ -182,7 +182,7 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
           {/* Done */}
           {done ? (
             <div className={cn(assistantBubble)}>
-              <img src="/assets/kala-mark.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
+              <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
               <div className={cn(assistantCard)}>
                 <p className="font-medium">Lesson complete — nice work.</p>
                 <p className="text-muted-foreground">
@@ -269,7 +269,7 @@ function TeachingMessage({
 }) {
   return (
     <div className={cn(bubble)}>
-      <img src="/assets/kala-mark.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
+      <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
       <div className={cn(card)}>
         <div className="flex items-center gap-2">
           <p className="font-medium text-foreground">{step.summary}</p>

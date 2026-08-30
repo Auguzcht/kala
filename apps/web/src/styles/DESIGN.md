@@ -89,5 +89,5 @@ Responsive to mobile, visible keyboard focus (the orange ring), reduced motion r
 - Do not hardcode colors or radii; use tokens.
 - Do not use the warm-cream-plus-terracotta or near-black-plus-acid-accent AI-default looks. Kala is ink, slate, orange, gold on cool near-white.
 - Do not round everything into pills. Boxy 2–4px radius; pills were the previous system's mistake.
-- Do not let the chevron become decoration; the previous chevron mark is superseded by the hornbill logo (see `public/assets/`).
+- Do not let the chevron become decoration; the previous chevron mark and the old hornbill are superseded by the current Kala logo (`public/Kala-Logo.png`).
 - Do not import Aceternity / Tailark / Magic UI flourishes into the daily-use app surfaces. Marketing components stay in `src/components/marketing/`.

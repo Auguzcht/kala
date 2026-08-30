@@ -54,7 +54,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
               <img
-                src="/assets/kala-mark.png"
+                src="/Kala-Logo.png"
                 alt=""
                 className="size-14 object-contain opacity-80"
               />
@@ -74,7 +74,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
               ) : (
                 <div key={i} className="mr-auto flex max-w-[85%] items-start gap-2.5">
                   <img
-                    src="/assets/kala-mark.png"
+                    src="/Kala-Logo.png"
                     alt="Kala"
                     className="mt-0.5 size-7 shrink-0 object-contain"
                   />
@@ -88,7 +88,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
           {ask.isPending ? (
             <div className="mr-auto flex items-start gap-2.5">
               <img
-                src="/assets/kala-mark.png"
+                src="/Kala-Logo.png"
                 alt=""
                 className={cn(
                   "mt-0.5 size-7 shrink-0 object-contain opacity-80 motion-safe:animate-pulse"

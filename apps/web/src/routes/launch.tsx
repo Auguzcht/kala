@@ -77,7 +77,7 @@ function LaunchLanding() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background text-center">
       <img
-        src="/assets/kala-mark.png"
+        src="/Kala-Logo.png"
         alt="Kala"
         className="mb-6 size-16 rounded-xl object-contain"
       />

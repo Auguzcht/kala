@@ -25,7 +25,7 @@ export function LoadingPanel({
       )}
     >
       <img
-        src="/assets/kala-mark.png"
+        src="/Kala-Logo.png"
         alt=""
         className="size-12 object-contain opacity-80"
       />

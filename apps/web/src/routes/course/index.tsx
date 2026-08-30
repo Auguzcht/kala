@@ -150,7 +150,7 @@ function WorkspaceHome() {
 
         {evidenceCount === 0 ? (
           <div className="flex w-full max-w-[300px] shrink-0 flex-col items-center justify-center gap-3 border bg-card p-6 text-center">
-            <img src="/assets/kala-mark.png" alt="" className="size-12 object-contain opacity-80" />
+            <img src="/Kala-Logo.png" alt="" className="size-12 object-contain opacity-80" />
             <div>
               <p className="text-[13.5px] font-semibold text-foreground">Building your baseline</p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

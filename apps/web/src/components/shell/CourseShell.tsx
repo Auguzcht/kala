@@ -76,7 +76,7 @@ export function CourseShell({
       >
         <Link to="/course" className="mb-5">
           <img
-            src="/assets/kala-mark.png"
+            src="/Kala-Logo.png"
             alt="Kala"
             className="h-6 w-6 object-contain"
           />
