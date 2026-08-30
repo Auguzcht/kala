@@ -3,7 +3,7 @@ resource "aws_apigatewayv2_api" "http" {
   name          = "kala-http"
   protocol_type = "HTTP"
   cors_configuration {
-    allow_origins     = [var.frontend_url]
+    allow_origins     = [var.frontend_url, "http://localhost:5173"]
     allow_methods     = ["GET", "POST", "OPTIONS"]
     allow_headers     = ["authorization", "content-type"]
     allow_credentials = true
