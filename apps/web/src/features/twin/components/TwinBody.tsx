@@ -358,7 +358,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
           <CardContent className="space-y-4">
             <div className="flex items-center gap-6">
               <div>
-                <p className="flex items-center gap-1.5 font-display text-3xl font-semibold text-foreground">
+                <div className="flex items-center gap-1.5 font-display text-3xl font-semibold text-foreground">
                   <FlameIcon
                     ref={streakFlameRef}
                     size={24}
@@ -370,7 +370,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
                     aria-hidden
                   />
                   {gamification.data?.streakDays ?? 0}
-                </p>
+                </div>
                 <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
                   day streak
                 </p>
