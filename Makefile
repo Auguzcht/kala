@@ -1,7 +1,7 @@
 # Convenience targets. Adjust ACCOUNT/REGION or pass them in.
 # Uses the workspace-local AWS CLI and Terraform installed by `pnpm setup`.
 REGION ?= ap-southeast-1
-AWS ?= pnpm aws
+AWS ?= aws
 TF ?= pnpm terraform
 ACCOUNT ?= $(shell $(AWS) sts get-caller-identity --query Account --output text)
 ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
