@@ -28,9 +28,12 @@ data "aws_iam_policy_document" "lambda_extra" {
     resources = [aws_secretsmanager_secret.app.arn]
   }
   statement {
-    sid       = "InvokeBedrock"
-    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-    resources = ["arn:aws:bedrock:${var.region}::foundation-model/*"]
+    sid     = "InvokeBedrock"
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
+    ]
   }
 }
 
