@@ -20,6 +20,7 @@ dist-ssr/
 !.env.template
 
 **/[Cc][Ll][Aa][Uu][Dd][Ee].[Mm][Dd]
+!/CLAUDE.md
 .claude/
 **/.claude/
 .claude.json
