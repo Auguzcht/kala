@@ -64,7 +64,12 @@ def _bedrock_embed(text: str, *, input_type: str) -> list[float]:
         body=json.dumps({"texts": [text], "input_type": input_type}),
     )
     body = json.loads(resp["body"].read())
-    return body["embeddings"][0]
+    embeddings = body["embeddings"]
+    # Cohere embed-v4 returns {"float": [[...]]} keyed by dtype (live-verified);
+    # the code has always assumed the older flat list [[...]] — handle both by
+    # taking the first dtype bucket when the value is a dict.
+    vectors = next(iter(embeddings.values())) if isinstance(embeddings, dict) else embeddings
+    return vectors[0]
 
 
 # ---- OpenRouter (interim, free-tier) ---------------------------------------
