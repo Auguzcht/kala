@@ -94,3 +94,8 @@ kala_lti_private.pem
 kala-scaffold.zip
 Kala Frontend Mockup
 PHASE3_GAP_CLOSURE.md
+
+# Terraform local configuration
+infra/terraform/terraform.tfvars
+*.tfvars
+*.tfvars.json
