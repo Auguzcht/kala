@@ -240,7 +240,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
         so spans divide cleanly; collapses to a single column on mobile.
       */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-        <Card className="flex flex-col items-center justify-center gap-4 py-10 md:col-span-4">
+        <Card className="flex flex-col items-center justify-center gap-4 py-10 md:col-span-4" id="tour-twin-readiness">
           <MasteryRing estimate={twin.readiness} size={176} strokeWidth={12} label="Board readiness" />
           <div className="text-center">
             <p className="font-display text-base font-semibold">Board readiness</p>
@@ -253,7 +253,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
           </div>
         </Card>
 
-        <Card className="md:col-span-8">
+        <Card id="tour-twin-radar" className="md:col-span-8">
           <CardHeader>
             <CardTitle className="text-base">Mastery across skills</CardTitle>
           </CardHeader>
@@ -268,7 +268,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-        <Card className="md:col-span-5">
+        <Card className="md:col-span-5" id="tour-twin-activity">
           <CardHeader>
             <CardTitle className="text-base">Progress by module</CardTitle>
           </CardHeader>

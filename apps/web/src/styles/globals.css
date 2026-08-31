@@ -296,3 +296,9 @@
   background: transparent !important;
   color: var(--foreground) !important;
 }
+
+/* Tour anchors: keep room under the fixed top bar (h-12) when the runner
+   scrolls a step's target into view, so the popover positions cleanly. */
+[id^="tour-"] {
+  scroll-margin-top: 4rem;
+}

@@ -111,9 +111,13 @@ export function PracticePanel({ courseId }: { courseId: string }) {
   return (
     <StudySessionShell
       progress={{ current: sessionAnswers, total: 0, label: "answered" }}
-      right={<GamificationSummary courseId={courseId} />}
+      right={
+        <span id="tour-practice-streak">
+          <GamificationSummary courseId={courseId} />
+        </span>
+      }
     >
-      <Card>
+      <Card id="tour-practice-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-3">
             Quick practice
@@ -151,6 +155,8 @@ export function PracticePanel({ courseId }: { courseId: string }) {
             choices={item.choices}
             selectedId={selectedChoice}
             onSelect={handleAnswer}
+            choicesAnchorId="tour-practice-choices"
+            resultAnchorId="tour-practice-feedback"
             result={
               lastResult
                 ? {

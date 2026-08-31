@@ -36,6 +36,8 @@ export function AnswerableCard({
   isPending = false,
   actions,
   meta,
+  choicesAnchorId,
+  resultAnchorId,
 }: {
   prompt: string;
   choices: { id: string; label: string }[];
@@ -45,6 +47,10 @@ export function AnswerableCard({
   isPending?: boolean;
   actions?: ReactNode;
   meta?: ReactNode;
+  /** Tour anchor for the choices block. */
+  choicesAnchorId?: string;
+  /** Tour anchor for the graded-result block. */
+  resultAnchorId?: string;
 }) {
   // One-shot animation on the graded result landing (motion encodes state
   // change): the check/x draw once when the result appears, never on hover
@@ -60,10 +66,11 @@ export function AnswerableCard({
     <div className="space-y-4">
       <p className="text-lg font-medium leading-relaxed text-foreground">{prompt}</p>
 
-      <div className="flex flex-col gap-2">
-        {choices.map((c) => (
+      <div id={choicesAnchorId} className="flex flex-col gap-2">
+        {choices.map((c, ci) => (
           <Button
             key={c.id}
+            id={ci === 0 ? "tour-first-choice" : undefined}
             variant={selectedId === c.id ? "orange" : "outline"}
             disabled={!!result || isPending}
             onClick={() => onSelect(c.id)}
@@ -78,7 +85,7 @@ export function AnswerableCard({
       {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
 
       {result ? (
-        <div className="space-y-3">
+        <div id={resultAnchorId} className="space-y-3">
           <div className="flex items-start gap-2.5">
             {result.correct ? (
               <CheckIcon ref={checkRef} size={18} className="mt-0.5 shrink-0 text-brand-green" aria-hidden />

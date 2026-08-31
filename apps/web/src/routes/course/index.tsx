@@ -6,6 +6,7 @@ import { LayersIcon } from "@/components/ui/layers";
 import { MessageSquareIcon } from "@/components/ui/message-square";
 import { ZapIcon } from "@/components/ui/zap";
 import { useSession } from "@/lib/auth/AuthProvider";
+import { cn } from "@/lib/utils";
 import { useCourse } from "@/features/courses";
 import { useNextUp, useTwin } from "@/features/twin";
 import { MasteryBand } from "@/components/kala";
@@ -54,20 +55,52 @@ function WorkspaceHome() {
         )}
       </div>
 
-      {/* Next up — the one recommendation, the primary action */}
-      {nextLoading ? (
-        <Skeleton className="h-28 w-full" />
-      ) : next ? (
-        <div className="flex items-center justify-between gap-6 bg-primary px-7 py-6">
-          <div>
+      {/* Next up — one persistent shell, never two different DOM structures:
+          only the text nodes skeleton while the recommendation loads, so
+          loading → populated is a text swap, not a remount. The genuinely-
+          empty "no skills mapped" state stays visually distinct (dashed
+          border) — that's a real state, not a loading artifact. */}
+      <div
+        className={cn(
+          "flex min-h-28 items-center justify-between gap-6 px-7 py-6",
+          nextLoading || next ? "bg-primary" : "border border-dashed bg-card"
+        )}
+      >
+        <div className="min-w-0">
+          {nextLoading ? (
+            <Skeleton className="h-3 w-14 bg-primary-foreground/20" />
+          ) : (
             <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-brand-gold">
               Next up
             </p>
-            <p className="mt-1.5 font-display text-lg font-semibold text-primary-foreground">
-              Practice: {next.skillName}
-            </p>
-            <p className="mt-1 text-[13px] text-primary-foreground/70">{next.reason}</p>
-          </div>
+          )}
+          {nextLoading ? (
+            <>
+              <Skeleton className="mt-2 h-5 w-64 max-w-full bg-primary-foreground/20" />
+              <Skeleton className="mt-2 h-3.5 w-96 max-w-full bg-primary-foreground/20" />
+            </>
+          ) : next ? (
+            <>
+              <p className="mt-1.5 font-display text-lg font-semibold text-primary-foreground">
+                Practice: {next.skillName}
+              </p>
+              <p className="mt-1 text-[13px] text-primary-foreground/70">{next.reason}</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
+                No skills mapped yet
+              </p>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Course content hasn't been tagged to the skill taxonomy yet. Check back after the
+                ingest pass.
+              </p>
+            </>
+          )}
+        </div>
+        {nextLoading ? (
+          <Skeleton className="h-9 w-36 shrink-0 rounded-md bg-primary-foreground/20" />
+        ) : next ? (
           <Button
             variant="orange"
             onClick={() => navigate({ to: "/course/practice" })}
@@ -75,23 +108,8 @@ function WorkspaceHome() {
           >
             Start practice <ArrowRightIcon size={16} />
           </Button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-6 border border-dashed bg-card px-7 py-6">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-brand-slate">
-              Next up
-            </p>
-            <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-              No skills mapped yet
-            </p>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              Course content hasn't been tagged to the skill taxonomy yet. Check back after the
-              ingest pass.
-            </p>
-          </div>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

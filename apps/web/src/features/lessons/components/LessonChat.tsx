@@ -57,7 +57,11 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
   }, [stepIndex, data?.lessonId, modalOpen]);
 
   if (isLoading || data?.status === "generating")
-    return <LoadingPanel label="Kala is writing your lesson — first pass takes a moment…" lines={5} />;
+    return (
+      <div id="tour-lesson-generating" className="w-full">
+        <LoadingPanel label="Kala is writing your lesson — first pass takes a moment…" lines={5} />
+      </div>
+    );
   if (isError)
     return (
       <EmptyState
@@ -164,11 +168,12 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
           {/* Current step teaching + continue chip */}
           {current ? (
             <>
-              <TeachingMessage step={current} bubble={assistantBubble} card={assistantCard} />
+              <TeachingMessage step={current} bubble={assistantBubble} card={assistantCard} id="tour-lesson-explain" />
               <div className={cn("flex flex-wrap items-center gap-2", assistantBubble)}>
                 <p className="text-xs text-muted-foreground">When you're ready, continue to the check.</p>
                 <button
                   type="button"
+                  id="tour-lesson-continue"
                   onClick={continueToCheck}
                   className="inline-flex items-center gap-1.5 rounded-full border border-brand-orange/50 bg-brand-orange/10 px-3.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-brand-orange/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -200,7 +205,7 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
 
       {/* The comprehension check as a modal flashcard, grounded to this lesson */}
       <Dialog open={modalOpen} onOpenChange={(open) => { if (!submit.isPending) setModalOpen(open); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent id="tour-lesson-check" className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-base">Check yourself</DialogTitle>
             <DialogDescription>
@@ -215,8 +220,8 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
               selectedId={selected}
               onSelect={choose}
               isPending={submit.isPending}
-              result={
-                result
+              resultAnchorId="tour-lesson-check-feedback"
+              result={result
                   ? {
                       correct: result.correct,
                       explanation: result.explanation,
@@ -262,15 +267,17 @@ function TeachingMessage({
   step,
   bubble,
   card,
+  id,
 }: {
   step: { summary: string; detailPoints: string[]; misconception: string | null; keyTakeaway: string | null; bloomLevel: string | null };
   bubble: string;
   card: string;
+  id?: string;
 }) {
   return (
     <div className={cn(bubble)}>
       <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
-      <div className={cn(card)}>
+      <div id={id} className={cn(card)}>
         <div className="flex items-center gap-2">
           <p className="font-medium text-foreground">{step.summary}</p>
           {step.bloomLevel ? (

@@ -77,17 +77,20 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   }
 
   return (
-    <Card>
+    <Card id="tour-diagnostic-card">
       <CardHeader>
         <CardTitle>Course diagnostic</CardTitle>
       </CardHeader>
       <CardContent className="space-y-8">
-        {data.questions.map((q) => {
+        {data.questions.map((q, qi) => {
           const result = resultsByItem[q.id];
           return (
             <div key={q.id} className="space-y-3 border-t border-border/60 pt-6 first:border-t-0 first:pt-0">
               <p className="font-medium">{q.prompt}</p>
-              <div className="flex flex-col gap-2">
+              <div
+                id={qi === 0 ? "tour-diagnostic-choices" : undefined}
+                className="flex flex-col gap-2"
+              >
                 {q.choices.map((c) => (
                   <label
                     key={c.id}
@@ -116,7 +119,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         })}
 
         {!submitted ? (
-          <Button variant="orange" disabled={!allAnswered || submit.isPending} onClick={handleSubmit}>
+          <Button id="tour-diagnostic-submit" variant="orange" disabled={!allAnswered || submit.isPending} onClick={handleSubmit}>
             {submit.isPending ? "Submitting…" : "Submit diagnostic"}
           </Button>
         ) : (

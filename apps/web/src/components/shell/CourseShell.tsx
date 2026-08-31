@@ -1,5 +1,14 @@
-import { Link, useLocation } from "@tanstack/react-router";
-import { type ComponentType, type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { Compass } from "lucide-react";
+import { useSession } from "@/lib/auth/AuthProvider";
 import { ActivityIcon } from "@/components/ui/activity";
 import { FileTextIcon } from "@/components/ui/file-text";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
@@ -12,8 +21,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TopBar } from "@/components/shell/TopBar";
 import { GamificationSummary } from "@/features/gamification";
+import { TourStepRunner } from "@/components/shell/StudentTour";
+import {
+  TOUR_STEPS,
+  studentTourDismissKey,
+} from "@/components/shell/student-tour";
+import { useUI } from "@/stores/ui-store";
 
 // App shell for the course-scoped (LTI) surface. 56px icon side rail +
 // 48px top bar, per the mockups ("App Side Rail", "App Top Bar"):
@@ -22,17 +45,21 @@ import { GamificationSummary } from "@/features/gamification";
 
 // Animated lucide icons (lucide-animated): hover-triggered by default, so
 // the rail icons draw on hover and on route activation — motion tied to the
-// cursor and the active state, never looping.
-type NavIcon = ComponentType<{ size?: number; className?: string }>;
+// cursor and the active state, never looping. Passing a ref switches each
+// icon to CONTROLLED mode (its isControlledRef gate disables the hover
+// trigger), and the shell drives startAnimation/stopAnimation from the
+// active route instead — animate on selection, not on hover.
+type NavIconHandle = { startAnimation: () => void; stopAnimation: () => void };
+type NavIcon = ComponentType<{ size?: number; className?: string } & { ref?: Ref<NavIconHandle> }>;
 
-const NAV: { to: string; label: string; icon: NavIcon; end?: boolean }[] = [
-  { to: "/course", label: "Workspace", icon: LayoutGridIcon, end: true },
-  { to: "/course/diagnostic", label: "Diagnostic", icon: FileTextIcon },
-  { to: "/course/lessons", label: "Lessons", icon: GraduationCapIcon },
-  { to: "/course/practice", label: "Practice", icon: ZapIcon },
-  { to: "/course/flashcards", label: "Flashcards", icon: LayersIcon },
-  { to: "/course/tutor", label: "Tutor", icon: MessageSquareIcon },
-  { to: "/course/twin", label: "Twin", icon: ActivityIcon },
+const NAV: { to: string; label: string; icon: NavIcon; end?: boolean; anchorId: string }[] = [
+  { to: "/course", label: "Workspace", icon: LayoutGridIcon, end: true, anchorId: "nav-workspace" },
+  { to: "/course/diagnostic", label: "Diagnostic", icon: FileTextIcon, anchorId: "nav-diagnostic" },
+  { to: "/course/lessons", label: "Lessons", icon: GraduationCapIcon, anchorId: "nav-lessons" },
+  { to: "/course/practice", label: "Practice", icon: ZapIcon, anchorId: "nav-practice" },
+  { to: "/course/flashcards", label: "Flashcards", icon: LayersIcon, anchorId: "nav-flashcards" },
+  { to: "/course/tutor", label: "Tutor", icon: MessageSquareIcon, anchorId: "nav-tutor" },
+  { to: "/course/twin", label: "Twin", icon: ActivityIcon, anchorId: "nav-twin" },
 ];
 
 const SECTION_LABELS: Record<string, string> = {
@@ -65,10 +92,66 @@ export function CourseShell({
   children: ReactNode;
 }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const session = useSession();
   const section = SECTION_LABELS[pathname] ?? SECTION_LABELS["/course"];
+
+  // One ref per rail icon; the active route's icon animates, the rest are
+  // stopped. Passing a ref is what disables each icon's own hover trigger.
+  const iconHandles = useRef<(NavIconHandle | null)[]>([]);
+  useEffect(() => {
+    const idx = NAV.findIndex((n) => (n.end ? pathname === n.to : pathname.startsWith(n.to)));
+    iconHandles.current.forEach((h, i) => {
+      if (!h) return;
+      if (i === idx) h.startAnimation();
+      else h.stopAnimation();
+    });
+  }, [pathname]);
+
+  // One loud prompt before the tour has ever been taken or dismissed: the
+  // workspace banner. After "Got it" or completing the walkthrough the
+  // banner is gone permanently and the TopBar affordance shrinks to a quiet
+  // icon — never both loud at once. Per-user key (unlike the instructor
+  // tour's global one): each student's state is theirs alone.
+  const tourKey = session?.userId ? studentTourDismissKey(session.userId) : null;
+  const [tourPrompted, setTourPrompted] = useState(
+    () => (tourKey ? localStorage.getItem(tourKey) !== "dismissed" : false)
+  );
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // The tour's completion path writes the same "dismissed" key as "Got it"
+  // (see TourStepRunner) — re-read it when the store goes back to idle so
+  // the banner hides without a remount.
+  const tourStep = useUI((s) => s.tourStep);
+  useEffect(() => {
+    if (tourStep === null && tourKey) {
+      setTourPrompted(localStorage.getItem(tourKey) !== "dismissed");
+    }
+  }, [tourStep, tourKey]);
+
+  const dismissTour = () => {
+    if (tourKey) localStorage.setItem(tourKey, "dismissed");
+    setTourPrompted(false);
+  };
+
+  // Confirmation before the walkthrough fires (pre-tour dialog, not a
+  // drive-into-the-user).
+  const confirmStart = () => setConfirmOpen(true);
+
+  const startTour = () => {
+    setConfirmOpen(false);
+    useUI.getState().setTourStep(0);
+    if (pathname !== TOUR_STEPS[0].route) {
+      void navigate({ to: TOUR_STEPS[0].route });
+    }
+  };
+
+  const bannerVisible = tourPrompted && pathname === "/course";
 
   return (
     <div className="min-h-dvh bg-background">
+      <TourStepRunner />
+
       {/* Side rail */}
       <nav
         aria-label="Course"
@@ -82,11 +165,12 @@ export function CourseShell({
           />
         </Link>
         <div className="flex flex-1 flex-col gap-1.5">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {NAV.map(({ to, label, icon: Icon, end, anchorId }, i) => (
             <Tooltip key={to}>
               <TooltipTrigger asChild>
                 <Link
                   to={to}
+                  id={anchorId}
                   activeOptions={{ exact: end }}
                   activeProps={{
                     className:
@@ -98,7 +182,12 @@ export function CourseShell({
                   }}
                   aria-label={label}
                 >
-                  <Icon size={18} />
+                  <Icon
+                    size={18}
+                    ref={(h) => {
+                      iconHandles.current[i] = h ?? null;
+                    }}
+                  />
                 </Link>
               </TooltipTrigger>
               <TooltipContent side="right">{label}</TooltipContent>
@@ -121,6 +210,45 @@ export function CourseShell({
           right={
             <div className="flex items-center gap-4">
               <GamificationSummary courseId={courseId} />
+              {bannerVisible ? (
+                // Quiet icon while the banner carries the loud CTA.
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={confirmStart}
+                      aria-label="Take the tour"
+                      className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                    >
+                      <Compass size={15} aria-hidden />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Take the tour</TooltipContent>
+                </Tooltip>
+              ) : tourPrompted ? (
+                // Never taken/dismissed but not on the workspace: full-text.
+                <button
+                  type="button"
+                  onClick={confirmStart}
+                  className="rounded-[3px] border border-primary/20 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-accent"
+                >
+                  Take the tour
+                </button>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={confirmStart}
+                      aria-label="Take the tour"
+                      className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                    >
+                      <Compass size={15} aria-hidden />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Take the tour</TooltipContent>
+                </Tooltip>
+              )}
               <span className="font-mono text-xs text-muted-foreground">
                 {initials(displayName) || section}
               </span>
@@ -128,8 +256,62 @@ export function CourseShell({
           }
         />
 
+        {bannerVisible ? (
+          <div className="flex flex-wrap items-center gap-3 border-b border-brand-orange/20 bg-brand-orange/8 px-6 py-2.5">
+            <span className="text-xs font-semibold text-brand-orange-foreground">
+              First time here?
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Take a short tour — diagnostic, lessons, practice, tutor, then your twin.
+            </span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={confirmStart}
+              className="rounded-[3px] bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Take the tour
+            </button>
+            <button
+              type="button"
+              onClick={dismissTour}
+              className="rounded-[3px] border border-primary/20 px-3 py-1 text-xs font-semibold text-foreground hover:bg-accent"
+            >
+              Got it
+            </button>
+          </div>
+        ) : null}
+
         <main className="mx-auto max-w-screen-2xl px-6 py-8 pb-24 lg:px-10">{children}</main>
       </div>
+
+      {/* Pre-tour confirmation */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Take the tour?</DialogTitle>
+            <DialogDescription>
+              About 2–3 minutes. You can exit anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+              className="rounded-[3px] border border-primary/20 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+            >
+              Maybe later
+            </button>
+            <button
+              type="button"
+              onClick={startTour}
+              className="rounded-[3px] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Start tour
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

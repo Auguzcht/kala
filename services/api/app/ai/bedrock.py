@@ -85,7 +85,19 @@ def _openrouter_client() -> httpx.Client:
             "HTTP-Referer": "https://kala.mmcm.edu.ph",
             "X-Title": "Kala",
         },
-        timeout=60.0,  # free-tier models can be slow; generous but bounded
+        # 20s, not 60s: this client is called synchronously inside
+        # user-facing requests (/lti/launch's skill proposal, /skills/propose,
+        # tutor, item generation) that run on a 30s Lambda timeout behind an
+        # API Gateway HTTP API integration — which hard-caps the wait at 30s
+        # regardless of this client's own setting. A 60s timeout here meant
+        # a hung free-tier model never raised its own httpx.TimeoutException;
+        # the platform killed the whole Lambda first, with no exception for
+        # the surrounding try/except (_seed_course_skills) to catch — silent
+        # "Service Unavailable" instead of the clean "skipped" behavior that
+        # code already has. 20s leaves headroom for whatever else runs in
+        # the same request (DB calls, other content) while still firing well
+        # before the 30s wall.
+        timeout=20.0,
     )
 
 
@@ -191,7 +203,10 @@ def _openai_client() -> httpx.Client:
             "Authorization": f"Bearer {s.openai_api_key}",
             "Content-Type": "application/json",
         },
-        timeout=30.0,
+        # 20s, not 30s — see _openrouter_client()'s comment above. This
+        # client is also called synchronously in a user-facing request
+        # (ingest_course, per chunk), same 30s platform ceiling applies.
+        timeout=20.0,
     )
 
 

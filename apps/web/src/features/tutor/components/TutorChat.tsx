@@ -78,7 +78,10 @@ export function TutorChat({ courseId }: { courseId: string }) {
                     alt="Kala"
                     className="mt-0.5 size-7 shrink-0 object-contain"
                   />
-                  <div className="min-w-0 rounded-md border bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground">
+                  <div
+                    id={i === messages.length - 1 ? "tour-tutor-response" : undefined}
+                    className="min-w-0 rounded-md border bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground"
+                  >
                     <p className="whitespace-pre-wrap">{m.text}</p>
                   </div>
                 </div>
@@ -86,7 +89,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
             )
           )}
           {ask.isPending ? (
-            <div className="mr-auto flex items-start gap-2.5">
+            <div id="tour-tutor-thinking" className="mr-auto flex items-start gap-2.5">
               <img
                 src="/Kala-Logo.png"
                 alt=""
@@ -102,7 +105,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
           ) : null}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form id="tour-tutor-input" onSubmit={handleSubmit} className="flex gap-2">
           <input
             className="h-10 flex-1 rounded-md border border-input bg-background px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={question}

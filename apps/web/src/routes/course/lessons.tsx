@@ -76,7 +76,7 @@ function LessonsPage() {
             type="multiple"
             defaultValue={groupByModule(twin.skills).map(([module]) => module)}
           >
-            {groupByModule(twin.skills).map(([module, moduleSkills]) => (
+            {groupByModule(twin.skills).map(([module, moduleSkills], mi) => (
               <AccordionItem key={module} value={module}>
                 <AccordionTrigger>
                   <span className="flex items-center gap-1.5">
@@ -87,11 +87,12 @@ function LessonsPage() {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {moduleSkills.map((s) => (
+                  <div id="tour-lessons-picker" className="grid gap-3 sm:grid-cols-2">
+                    {moduleSkills.map((s, si) => (
                       <button
                         key={s.skillId}
                         type="button"
+                        id={mi === 0 && si === 0 ? "tour-lessons-first-card" : undefined}
                         onClick={() => setSkillId(s.skillId)}
                         className="group border bg-card p-4 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
