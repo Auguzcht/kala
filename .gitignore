@@ -109,3 +109,4 @@ infra/terraform/*.tfstate*
 # DeepSeek session instructions / working notes (not product docs)
 docs/DEEPSEEK*.md
 docs/deepseek-*.md
+docs/Deepkseek_*.md
