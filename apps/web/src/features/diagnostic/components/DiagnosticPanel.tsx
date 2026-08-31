@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { MasteryDelta } from "@/components/kala";
 import type { Answer, AnswerResult } from "@/features/diagnostic/schema/diagnostic.schema";
 
 // Worked-example component. Shows the feature wiring: query hook -> UI ->
@@ -16,6 +17,23 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [startedAt] = useState(() => Date.now());
   const [resultsByItem, setResultsByItem] = useState<Record<string, AnswerResult>>({});
+
+  // Memoized on the actual masteryDelta reference (stable from React Query
+  // until a real refetch), not recreated on every unrelated re-render — the
+  // stagger effect in MasteryDelta keys off array identity, so an unstable
+  // array would silently restart the reveal animation on any parent re-render.
+  // Must sit above the early returns below: Hooks can't be called
+  // conditionally, and this component returns early while loading/erroring.
+  const masteryDeltaRows = useMemo(
+    () =>
+      (submit.data?.masteryDelta ?? []).map((d) => ({
+        skillId: d.skillId,
+        skillName: d.skillName,
+        priorBand: d.priorBand,
+        posteriorBand: d.posteriorBand,
+      })),
+    [submit.data?.masteryDelta]
+  );
 
   if (isLoading)
     return (
@@ -102,9 +120,12 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
             {submit.isPending ? "Submitting…" : "Submit diagnostic"}
           </Button>
         ) : (
-          <p className="text-sm font-medium">
-            You got {submit.data?.correctCount} of {submit.data?.total} correct.
-          </p>
+          <div className="space-y-4">
+            <p className="text-sm font-medium">
+              You got {submit.data?.correctCount} of {submit.data?.total} correct.
+            </p>
+            {masteryDeltaRows.length > 0 ? <MasteryDelta rows={masteryDeltaRows} /> : null}
+          </div>
         )}
       </CardContent>
     </Card>

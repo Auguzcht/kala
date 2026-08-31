@@ -17,6 +17,7 @@ from app.deps import CurrentUser, get_current_user, get_lms_connector, require_r
 from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
 from app.lms.hierarchy import build_folder_paths, module_ref_for
+from app.twin import summary as twin_summary
 from app.twin import tracer
 
 router = APIRouter(prefix="/courses", tags=["diagnostic"])
@@ -335,14 +336,51 @@ def submit_diagnostic(course_id: str, body: SubmitBody,
         })
     if rows:
         db.insert_evidence(rows)
+
+    # Mastery delta: the diagnostic is the one moment every mapped skill in
+    # the course moves at once, from no-evidence to a real baseline. Capture
+    # the "before" state up front (a fresh skill has no mastery_state row at
+    # all, which is the no-evidence case, distinct from a 0.0 estimate) so
+    # the response can show the actual before/after for each skill touched,
+    # not just a correct-count. The client never computes bands itself; this
+    # mirrors how app/twin/summary.py already does the estimate-to-band
+    # mapping for every other surface.
+    touched_skill_ids = sorted({r["skillId"] for r in results})
+    prior_rows = db.select("mastery_state", {
+        "user_id": f"eq.{user.user_id}",
+        "skill_id": f"in.({','.join(touched_skill_ids)})",
+        "select": "skill_id,estimate",
+    }) if touched_skill_ids else []
+    prior_estimate = {r["skill_id"]: float(r["estimate"]) for r in prior_rows}
+
+    posterior_estimate: dict[str, float] = {}
     for r in results:
-        tracer.apply_evidence(
+        state = tracer.apply_evidence(
             institution_id=user.institution_id, user_id=user.user_id,
             course_id=course_id, skill_id=r["skillId"], correct=r["correct"],
         )
+        posterior_estimate[r["skillId"]] = float(state["estimate"])
+
+    skill_names = {}
+    if touched_skill_ids:
+        skill_rows = db.select("skills", {
+            "id": f"in.({','.join(touched_skill_ids)})", "select": "id,name",
+        })
+        skill_names = {s["id"]: s["name"] for s in skill_rows}
+
+    mastery_delta = [{
+        "skillId": skill_id,
+        "skillName": skill_names.get(skill_id, "Unknown skill"),
+        "priorEstimate": prior_estimate.get(skill_id),
+        "priorBand": twin_summary.band_for(prior_estimate.get(skill_id)),
+        "posteriorEstimate": posterior_estimate[skill_id],
+        "posteriorBand": twin_summary.band_for(posterior_estimate[skill_id]),
+    } for skill_id in touched_skill_ids]
+
     correct = sum(1 for r in results if r["correct"])
     return {
         "correctCount": correct,
         "total": len(results),
         "results": [{"itemId": r["itemId"], "correct": r["correct"], "explanation": r["explanation"]} for r in results],
+        "masteryDelta": mastery_delta,
     }
