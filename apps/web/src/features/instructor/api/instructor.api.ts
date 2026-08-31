@@ -18,13 +18,13 @@ import {
   type StudentTwin,
 } from "@/features/instructor/schema/instructor.schema";
 
-export async function fetchHeatmap(courseId: string): Promise<HeatmapData> {
-  const data = await api<unknown>(`/dashboard/${courseId}/heatmap`);
+export async function fetchHeatmap(courseId: string, timeoutMs?: number): Promise<HeatmapData> {
+  const data = await api<unknown>(`/dashboard/${courseId}/heatmap`, undefined, timeoutMs);
   return heatmapSchema.parse(data);
 }
 
-export async function fetchAtRisk(courseId: string): Promise<AtRisk> {
-  const data = await api<unknown>(`/dashboard/${courseId}/at-risk`);
+export async function fetchAtRisk(courseId: string, timeoutMs?: number): Promise<AtRisk> {
+  const data = await api<unknown>(`/dashboard/${courseId}/at-risk`, undefined, timeoutMs);
   return atRiskSchema.parse(data);
 }
 
@@ -33,8 +33,8 @@ export async function fetchStudentTwin(courseId: string, userId: string): Promis
   return studentTwinSchema.parse(data);
 }
 
-export async function fetchProposedSkills(courseId: string): Promise<ProposedSkills> {
-  const data = await api<unknown>(`/dashboard/${courseId}/skills/proposed`);
+export async function fetchProposedSkills(courseId: string, timeoutMs?: number): Promise<ProposedSkills> {
+  const data = await api<unknown>(`/dashboard/${courseId}/skills/proposed`, undefined, timeoutMs);
   return proposedSkillsSchema.parse(data);
 }
 
@@ -55,8 +55,8 @@ export async function proposeSkills(courseId: string): Promise<ProposeSkillsResu
   return proposeSkillsResultSchema.parse(data);
 }
 
-export async function fetchAutoMatchedSkills(courseId: string): Promise<AutoMatchedSkills> {
-  const data = await api<unknown>(`/dashboard/${courseId}/skills/auto-matched`);
+export async function fetchAutoMatchedSkills(courseId: string, timeoutMs?: number): Promise<AutoMatchedSkills> {
+  const data = await api<unknown>(`/dashboard/${courseId}/skills/auto-matched`, undefined, timeoutMs);
   return autoMatchedSkillsSchema.parse(data);
 }
 

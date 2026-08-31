@@ -302,3 +302,18 @@
 [id^="tour-"] {
   scroll-margin-top: 4rem;
 }
+
+/* Launch erase retraction (reversed-geometry path): dashoffset 0→1 slides
+   the visible window [0,1] → [1,2] — the line retracts start-to-end with
+   round caps. CSS, not motion: motion's pathLength 1→0 on this path is
+   flaky (collapses to 0 early — probed). The path has pathLength={1} +
+   dasharray "1 1" (period 2), so the gap always exceeds the path — the
+   pattern can never fragment into separate pieces. */
+@keyframes kala-launch-retract {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1;
+  }
+}
