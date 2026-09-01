@@ -14,6 +14,11 @@ import httpx
 from app.config import get_settings
 from app.lms.base import LMSConnector
 
+# Blackboard's LTI test tool writes a literal placeholder into
+# preferredDisplayName when the name form is left blank; treat it as
+# missing and fall through to given/family (see get_roster).
+_PLACEHOLDER_NAMES = {"givenname", "given name", "familyname", "family name", "test student"}
+
 
 class BlackboardConnector(LMSConnector):
     def __init__(self) -> None:
@@ -101,8 +106,24 @@ class BlackboardConnector(LMSConnector):
         for membership in results:
             user = membership.get("user", {})
             name = user.get("name", {})
-            display_name = name.get("preferredDisplayName") or " ".join(
-                part for part in (name.get("given"), name.get("family")) if part
+            # preferredDisplayName must not shadow real names: Blackboard
+            # returns the literal placeholder "GivenName" as
+            # preferredDisplayName for accounts the LTI test tool created
+            # without filling the name form, and it is truthy, so it would
+            # win over given/family here and the roster sync would write
+            # "GivenName" into user_profiles on every launch — which is
+            # exactly why the roster showed "anon-*" for accounts whose
+            # real BB names (Alfred Nodado, Hanna Sato) were sitting in
+            # given/family all along. Same placeholder guard as
+            # cohort.load_identities; this fixes it at the source so the
+            # sync persists real names, durable across reconciles.
+            preferred = (name.get("preferredDisplayName") or "").strip()
+            display_name = (
+                preferred
+                if preferred and preferred.lower() not in _PLACEHOLDER_NAMES
+                else " ".join(
+                    part for part in (name.get("given"), name.get("family")) if part
+                )
             )
             roster.append({
                 "lms_user_id": membership["userId"],
