@@ -230,7 +230,12 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           {/* Roster-scale table: same Table primitives, cell padding, and
               font sizes as the class roster, so the review queue reads as
               part of the same instrument. */}
-          <Table>
+          <Table className="table-fixed">
+            <colgroup>
+              <col className="w-[42%]" />
+              <col className="w-[38%]" />
+              <col className="w-[170px]" />
+            </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="text-[11px] uppercase tracking-[0.05em]">
@@ -292,8 +297,8 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                           <p
                             className={
                               flagged
-                                ? "min-w-0 text-[12.5px] font-medium leading-relaxed [overflow-wrap:anywhere] text-brand-orange-foreground"
-                                : "min-w-0 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] text-foreground/80"
+                                ? "min-w-0 text-[12.5px] font-medium leading-relaxed [overflow-wrap:anywhere] text-brand-orange-foreground line-clamp-2"
+                                : "min-w-0 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] text-foreground/80 line-clamp-2"
                             }
                           >
                             {message}
