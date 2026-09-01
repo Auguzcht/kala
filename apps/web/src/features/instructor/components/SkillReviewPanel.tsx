@@ -105,6 +105,7 @@ function ReviewActions({
         onClick={onApprove}
         onMouseEnter={() => checkRef.current?.startAnimation()}
         onMouseLeave={() => checkRef.current?.stopAnimation()}
+        className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
       >
         <CheckIcon ref={checkRef} size={14} /> Approve
       </Button>
@@ -115,6 +116,7 @@ function ReviewActions({
         onClick={onReject}
         onMouseEnter={() => xRef.current?.startAnimation()}
         onMouseLeave={() => xRef.current?.stopAnimation()}
+        className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
       >
         <XIcon ref={xRef} size={14} /> Reject
       </Button>
@@ -226,10 +228,10 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-[13.5px] font-semibold text-foreground">{s.name}</p>
-                    <span className="rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span className="rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {s.bloom_level}
                     </span>
-                    <span className="font-mono text-[11px] text-muted-foreground">
+                    <span className="font-mono text-[10.5px] text-muted-foreground">
                       weight {s.blueprint_weight}
                     </span>
                   </div>
@@ -238,7 +240,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                       className={
                         isDuplicate
                           ? "mt-1.5 text-xs font-medium text-brand-orange-foreground"
-                          : "mt-1.5 text-xs text-muted-foreground"
+                          : "mt-1.5 text-[11.5px] text-muted-foreground"
                       }
                     >
                       {isDuplicate ? "⚠ " : ""}
