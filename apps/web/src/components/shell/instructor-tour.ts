@@ -113,6 +113,30 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
       "Rows are learners, columns are skills under their Bloom's level. Color plus a letter — never color alone.",
     waitFor: "#heatmap-panel",
   },
+  // ---- Skill mapping and review: the setup layer (HITL) -----------------
+  {
+    route: "/class",
+    selector: "#tour-skill-review-trigger",
+    title: "Skill mapping and review",
+    description:
+      "The setup layer, collapsed because it is not daily work. The orange badge is the queue: every pending skill was AI-drafted from the course's content and is waiting on a human decision.",
+    click: true,
+  },
+  {
+    route: "/class",
+    selector: "#tour-skill-review-panel",
+    title: "Skill mapping and review",
+    description:
+      "Each proposal shows its Bloom's level, weight, and where it came from — a module, or a flagged possible duplicate of a skill already approved elsewhere.",
+    waitFor: "#tour-skill-review-panel",
+  },
+  {
+    route: "/class",
+    selector: "#tour-skill-approve",
+    title: "Skill mapping and review",
+    description:
+      "Approve makes the skill live for learners to practice against; reject sends it back. Nothing proposed here reaches anyone until you decide — the same gate as the learner recommendations.",
+  },
   // ---- Cross to one learner's record via a needs-support flag ----------
   {
     route: "/class",

@@ -1,7 +1,24 @@
+import { useState } from "react";
 import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type ProposeSkillsResult } from "@/features/instructor";
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { pageWindow } from "@/lib/pagination";
+
+// A course's proposal queue can run to dozens of rows (this course has 32)
+// once every module's draft lands — a flat list pushes the first page of
+// reviews below the fold and hides how much queue is actually waiting.
+// Same pagination as the roster: 8 per page, windowed page links, and a
+// "1–8 of 32" range line so the queue length is always visible.
+const PAGE_SIZE = 8;
 
 // HITL skill proposals (docs/SKILL_PIPELINE.md). AI proposes skills from
 // the course's content, one module at a time; nothing proposed reaches
@@ -62,6 +79,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError, refetch } = useProposedSkills(courseId);
   const review = useReviewProposedSkill(courseId);
   const propose = useProposeSkills(courseId);
+  const [page, setPage] = useState(0);
 
   if (isLoading) {
     return (
@@ -88,9 +106,12 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
   }
 
   const proposed = data?.proposed ?? [];
+  const pages = Math.max(1, Math.ceil(proposed.length / PAGE_SIZE));
+  const safePage = Math.min(page, pages - 1);
+  const slice = proposed.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
-    <div className="relative border bg-card">
+    <div className="relative border bg-card" id="tour-skill-review-panel">
       <CornerBrackets />
       <div className="flex flex-wrap items-center gap-3 border-b px-5 py-4">
         <div className="min-w-0 flex-1">
@@ -140,7 +161,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
               data={propose.data}
             />
           </div>
-          {proposed.map((s) => {
+          {slice.map((s) => {
             const isDuplicate = (s.proposed_source ?? "").startsWith("possible duplicate");
             return (
               <div key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
@@ -169,6 +190,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <Button
+                    id={slice[0].id === s.id ? "tour-skill-approve" : undefined}
                     variant="green"
                     size="sm"
                     disabled={review.isPending}
@@ -190,6 +212,51 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           })}
         </div>
       )}
+
+      {/* Review queue footer: range line + windowed pager, same as the
+          roster. Approving/rejecting removes a row, so safePage clamps if
+          the last item on a page is cleared. */}
+      {proposed.length > PAGE_SIZE ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t px-5 py-3">
+          <p className="font-mono text-[11px] text-muted-foreground">
+            {proposed.length === 0
+              ? "0 pending"
+              : `${safePage * PAGE_SIZE + 1}–${Math.min(
+                  proposed.length,
+                  (safePage + 1) * PAGE_SIZE
+                )} of ${proposed.length}`}
+          </p>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  className={safePage === 0 ? "pointer-events-none opacity-40" : undefined}
+                />
+              </PaginationItem>
+              {pageWindow(safePage, pages).map((item, i) =>
+                item === null ? (
+                  <PaginationItem key={`gap-${i}`}>
+                    <span className="px-0.5 font-mono text-xs text-muted-foreground">…</span>
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={item}>
+                    <PaginationLink isActive={item === safePage} onClick={() => setPage(item)}>
+                      {item + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              )}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
+                  className={safePage >= pages - 1 ? "pointer-events-none opacity-40" : undefined}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      ) : null}
     </div>
   );
 }

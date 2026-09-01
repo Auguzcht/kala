@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { ChevronDownIcon } from "lucide-react";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
 import {
@@ -11,6 +12,7 @@ import {
   LearnerSheet,
   RosterTable,
   SkillReviewPanel,
+  useProposedSkills,
 } from "@/features/instructor";
 import type { LearnerStatus } from "@/features/instructor";
 import {
@@ -21,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/class/")({
   component: ClassDashboard,
@@ -55,6 +58,29 @@ function ClassDashboard() {
     setRosterFilter("needs-support");
     rosterRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  // The skill review section was disappearing in practice, not in code: a
+  // plain uppercase text link, collapsed by default, at the bottom of an
+  // already long page, with no visible signal that there was anything
+  // waiting behind it. If this course has skill proposals sitting unreviewed
+  // right now, nothing on the collapsed trigger said so.
+  //
+  // Two fixes: a real chevron so it reads as expandable at a glance, and a
+  // count badge sourced from the same query the panel itself uses (a cache
+  // hit, not a second request). The section still auto-opens the first
+  // time it learns there's something pending — but only once, tracked by
+  // the ref below, so it never fights a teacher who deliberately collapses
+  // it back after reviewing.
+  const proposedSkills = useProposedSkills(courseId);
+  const pendingSkillCount = proposedSkills.data?.proposed.length ?? 0;
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false);
+  const hasAutoOpened = useRef(false);
+  useEffect(() => {
+    if (!hasAutoOpened.current && pendingSkillCount > 0) {
+      setSkillPanelOpen(true);
+      hasAutoOpened.current = true;
+    }
+  }, [pendingSkillCount]);
 
   return (
     <>
@@ -121,13 +147,32 @@ function ClassDashboard() {
         </Tabs>
 
         {/* HITL skill proposals: nothing proposed reaches learners until a
-            human approves here (docs/SKILL_PIPELINE.md). Collapsed by
-            default because it is course-setup work, not daily teaching —
-            the panel itself still surfaces its own pending count. */}
-        <Collapsible>
-          <CollapsibleTrigger className="flex w-full items-center gap-2 border-t pt-4 text-left text-[11.5px] font-semibold uppercase tracking-[0.05em] text-brand-slate hover:text-foreground">
+            human approves here (docs/SKILL_PIPELINE.md). Auto-opens the
+            first time this page learns there's something pending, so a
+            real review queue is never hidden behind a click; stays exactly
+            where a teacher leaves it after that. */}
+        <Collapsible open={skillPanelOpen} onOpenChange={setSkillPanelOpen}>
+          <CollapsibleTrigger
+            id="tour-skill-review-trigger"
+            className={cn(
+              "flex w-full items-center gap-2 border-t pt-4 text-left text-[11.5px] font-semibold uppercase tracking-[0.05em] hover:text-foreground",
+              pendingSkillCount > 0 ? "text-foreground" : "text-brand-slate"
+            )}
+          >
+            <ChevronDownIcon
+              className={cn(
+                "size-3.5 shrink-0 transition-transform",
+                skillPanelOpen ? "rotate-0" : "-rotate-90"
+              )}
+              aria-hidden
+            />
             Skill mapping and review
-            <span className="text-[10.5px] font-normal normal-case tracking-normal text-muted-foreground">
+            {pendingSkillCount > 0 ? (
+              <span className="rounded-full bg-brand-orange px-2 py-0.5 font-mono text-[11px] font-bold normal-case tracking-normal text-brand-orange-foreground">
+                {pendingSkillCount} pending
+              </span>
+            ) : null}
+            <span className="font-normal normal-case tracking-normal text-muted-foreground">
               what Kala measures in this course
             </span>
           </CollapsibleTrigger>

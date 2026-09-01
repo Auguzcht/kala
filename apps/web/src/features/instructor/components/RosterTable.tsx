@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
+import { pageWindow } from "@/lib/pagination";
 
 // The class roster. This is the screen a teacher opens first, so it shows
 // the roster as a roster: real names, sortable, searchable, paginated,
@@ -371,21 +372,6 @@ export function RosterTable({
       )}
     </div>
   );
-}
-
-// Page-number window for the pager: first, last, current ±1, and ellipsis
-// for the gaps — never more than ~7 links regardless of class size. Returns
-// page indices (0-based) with null standing in for the ellipsis.
-function pageWindow(current: number, pages: number): (number | null)[] {
-  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i);
-  const items: (number | null)[] = [0];
-  const start = Math.max(1, current - 1);
-  const end = Math.min(pages - 2, current + 1);
-  if (start > 1) items.push(null);
-  for (let i = start; i <= end; i++) items.push(i);
-  if (end < pages - 2) items.push(null);
-  items.push(pages - 1);
-  return items;
 }
 
 function SortableHead({
