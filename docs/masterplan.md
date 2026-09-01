@@ -60,6 +60,16 @@ Keep responsible-AI framing visible: student learning data is sensitive, we de-i
 - Multi-modal content generation across text, visual, practice, and audio.
 - Deep knowledge tracing (a trained model) replacing the heuristic tracer.
 - Full Canvas parity and additional LMS connectors.
+- **Roster reconciliation via NRPS** — the LMS roster is the source of
+  truth for who is enrolled; the LTI launch handler upserts an enrollment
+  row on every launch, so a test-launcher account (or a co-teacher's
+  mis-mapped role claim) that launches a course writes a real enrollment
+  row the roster then reports. A scheduled sync that compares DB
+  enrollments against the NRPS roster and removes rows the LMS does not
+  list would fix this class of drift permanently. Deliberately not built:
+  the September-1 data hygiene problem it solves was a one-time cleanup,
+  and a sync job is new infrastructure days before a deadline. Tracked
+  here instead (added 09/01).
 
 > Note on "learning styles": the VARK "match teaching to a learner's style" claim is not well supported by evidence. Frame multi-modal support as offering the same concept in several representations (text, diagram, practice, audio) so learners can choose, not as detecting and matching a fixed style. This keeps the research defensible.
 

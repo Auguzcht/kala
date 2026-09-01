@@ -159,3 +159,24 @@ per-chunk: a failure is logged and that chunk simply has no embedding
 filters on `embedding is not null`), rather than failing the whole course's
 ingest. New `embedFailed` count in the response makes this visible instead
 of silent.
+
+
+## Teacher decision loop (added in the September polish pass)
+
+The instructor surface is no longer only analytics. It carries a gate:
+
+```
+evidence -> twin -> ai/prescriber (de-identified) -> recommendations(status='suggested')
+         -> instructor approves | modifies | rejects
+         -> recommendations(status='approved'|'modified')
+         -> GET /courses/{id}/plan  -> the learner's workspace
+```
+
+`suggested` rows are invisible to the learner by construction: the plan
+endpoint filters on the decided statuses. `modified` is deliberately a
+distinct value from `approved` so that "how often does a teacher rewrite
+the AI" stays an answerable research question.
+
+Surfaces: `features/instructor` (the gate) and `features/plan` (what comes
+out of it). Schema: `packages/db/migrations/0009_teacher_loop.sql`.
+Arithmetic: `services/api/app/twin/cohort.py`.
