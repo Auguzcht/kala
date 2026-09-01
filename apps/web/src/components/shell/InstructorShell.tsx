@@ -1,12 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { Compass } from "lucide-react";
 import "driver.js/dist/driver.css";
 import { TopBar } from "@/components/shell/TopBar";
 import { InstructorTourRunner } from "@/components/shell/InstructorTour";
-import { instructorTourDismissKey } from "@/components/shell/instructor-tour";
+import {
+  INSTRUCTOR_TOUR_STEPS,
+  instructorTourDismissKey,
+} from "@/components/shell/instructor-tour";
 import { useLearnerRecord } from "@/features/instructor";
 import { useUI } from "@/stores/ui-store";
 import { useSession } from "@/lib/auth/AuthProvider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Instructor shell: top bar + first-launch tour banner + the cross-page
 // tour runner (mirrors CourseShell's student side). The tour is the
@@ -29,6 +34,7 @@ export function InstructorShell({
   children: ReactNode;
 }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const session = useSession();
   const tourKey = session?.userId ? instructorTourDismissKey(session.userId) : null;
   const [tourPrompted, setTourPrompted] = useState(
@@ -72,6 +78,11 @@ export function InstructorShell({
 
   const startTour = () => {
     useUI.getState().setTourStep(0);
+    // The tour starts on the class overview; starting it from the learner
+    // record needs a navigation, same as the student side.
+    if (pathname !== INSTRUCTOR_TOUR_STEPS[0].route) {
+      void navigate({ to: INSTRUCTOR_TOUR_STEPS[0].route });
+    }
   };
 
   const bannerVisible = tourPrompted && onOverview;
@@ -90,22 +101,55 @@ export function InstructorShell({
         section="Instructor dashboard"
         subsection={subsection}
         right={
-          <>
-            {/* Quiet replay affordance after the banner is gone — this is
-                the demo's "run the walkthrough on demand" control. */}
-            <button
-              type="button"
-              onClick={startTour}
-              className="rounded-[3px] border border-primary/15 px-2.5 py-1 text-[11.5px] font-semibold text-foreground transition-colors hover:bg-accent"
-            >
-              Take the tour
-            </button>
+          <div className="flex items-center gap-2">
+            {bannerVisible ? (
+              // Quiet icon while the banner carries the loud CTA — never
+              // both loud at once (same three-state pattern as the student
+              // workspace: banner → icon, prompted-but-elsewhere → text,
+              // dismissed → icon).
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={startTour}
+                    aria-label="Take the tour"
+                    className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                  >
+                    <Compass size={15} aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Take the tour</TooltipContent>
+              </Tooltip>
+            ) : tourPrompted ? (
+              // Prompted but on the learner record: full-text control.
+              <button
+                type="button"
+                onClick={startTour}
+                className="rounded-[3px] border border-primary/20 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-accent"
+              >
+                Take the tour
+              </button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={startTour}
+                    aria-label="Take the tour"
+                    className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                  >
+                    <Compass size={15} aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Take the tour</TooltipContent>
+              </Tooltip>
+            )}
             {initials ? (
               <span className="grid size-6.5 place-items-center rounded-full bg-brand-slate text-[10px] font-semibold text-background">
                 {initials}
               </span>
             ) : null}
-          </>
+          </div>
         }
       />
 

@@ -184,13 +184,17 @@ export function TourRunner({
           onCloseClick: exit,
         };
         if (s.click) {
-          // Click a target (the highlighted element, or clickSelector when
-          // the click target differs), then move on — the store advance
-          // swaps the page content.
-          popover.onNextClick = (el) => {
-            const target = s.clickSelector
-              ? document.querySelector(s.clickSelector)
-              : el;
+          // Click a target (clickSelector when the click target differs
+          // from the highlighted element, else the highlighted element
+          // itself), then move on — the store advance swaps the page
+          // content. IMPORTANT: driver.js calls onNextClick with NO
+          // arguments (its DriverHook type says it may pass the element,
+          // the implementation never does), so the target must be
+          // resolved from the step config, never from the callback arg.
+          popover.onNextClick = () => {
+            const target = document.querySelector(
+              s.clickSelector ?? s.selector
+            );
             (target as HTMLElement | undefined)?.click();
             advanceTo(globalIndex + 1);
           };

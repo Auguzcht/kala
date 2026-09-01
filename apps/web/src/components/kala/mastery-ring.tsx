@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
+import { SlidingNumber } from "@/components/motion/sliding-number";
 import { cn } from "@/lib/utils";
 
 // MasteryRing — the continuous 0-to-1 mastery estimate as a ring that fills,
@@ -7,7 +8,9 @@ import { cn } from "@/lib/utils";
 // different object, so it never appears here.
 //
 // `estimate` is 0..1. `band` maps the estimate to a qualitative label for
-// screen readers; the numeric value stays secondary (hover title).
+// screen readers; the numeric value stays secondary (hover title). The
+// center digit rolls when the estimate changes (SlidingNumber) — the
+// movement IS the mastery update; reduced motion renders the plain number.
 
 export type MasteryBand = "no-evidence" | "developing" | "proficient" | "mastered";
 
@@ -78,9 +81,9 @@ export function MasteryRing({
           transition={reduceMotion ? { duration: 0 } : { duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
         />
       </svg>
-      <span className="absolute font-mono text-xs font-medium tabular-nums text-foreground">
-        {estimate === null ? "—" : `${Math.round(filled * 100)}`}
-      </span>
+      <div className="absolute font-mono text-xs font-medium tabular-nums text-foreground">
+        {estimate === null ? "—" : reduceMotion ? `${Math.round(filled * 100)}` : <SlidingNumber value={Math.round(filled * 100)} />}
+      </div>
     </div>
   );
 }
