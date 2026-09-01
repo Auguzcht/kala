@@ -186,7 +186,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
         </div>
         <div className="flex-1" />
         <Button
-          variant="outline"
+          variant="orange"
           size="sm"
           disabled={propose.isPending}
           onClick={() => propose.mutate()}
@@ -285,25 +285,23 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                     </TableCell>
                     <TableCell>
                       {s.proposed_source ? (
-                        <div className="flex items-start gap-1.5">
+                        <p
+                          className={
+                            flagged
+                              ? "min-w-0 text-[12.5px] font-medium leading-relaxed text-brand-orange-foreground line-clamp-2"
+                              : "min-w-0 text-[12.5px] leading-relaxed text-foreground/80 line-clamp-2"
+                          }
+                        >
                           {flagged ? (
                             <span
-                              className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-[2px] bg-brand-orange/15 text-brand-orange"
+                              className="mr-1 inline-flex translate-y-[2px] items-center rounded-[2px] bg-brand-orange/15 p-0.5 text-brand-orange"
                               aria-hidden
                             >
                               <TriangleAlertIcon size={11} />
                             </span>
                           ) : null}
-                          <p
-                            className={
-                              flagged
-                                ? "min-w-0 text-[12.5px] font-medium leading-relaxed [overflow-wrap:anywhere] text-brand-orange-foreground line-clamp-2"
-                                : "min-w-0 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] text-foreground/80 line-clamp-2"
-                            }
-                          >
-                            {message}
-                          </p>
-                        </div>
+                          {message}
+                        </p>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
