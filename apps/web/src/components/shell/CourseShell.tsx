@@ -7,7 +7,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Compass } from "lucide-react";
+import { CompassIcon, type CompassIconHandle } from "@/components/ui/compass";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { ActivityIcon } from "@/components/ui/activity";
 import { FileTextIcon } from "@/components/ui/file-text";
@@ -138,6 +138,14 @@ export function CourseShell({
   // drive-into-the-user).
   const confirmStart = () => setConfirmOpen(true);
 
+  // The tour icon is the animated compass (lucide-animated registry,
+  // same source as the other ui icons): the needle turns when the BUTTON
+  // is hovered (controlled-mode handlers), same pattern as the instructor
+  // shell's tour button.
+  const tourIconRef = useRef<CompassIconHandle | null>(null);
+  const iconPlay = () => tourIconRef.current?.startAnimation();
+  const iconStop = () => tourIconRef.current?.stopAnimation();
+
   const startTour = () => {
     setConfirmOpen(false);
     useUI.getState().setTourStep(0);
@@ -217,10 +225,12 @@ export function CourseShell({
                     <button
                       type="button"
                       onClick={confirmStart}
+                      onMouseEnter={iconPlay}
+                      onMouseLeave={iconStop}
                       aria-label="Take the tour"
                       className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
                     >
-                      <Compass size={15} aria-hidden />
+                      <CompassIcon ref={tourIconRef} size={15} aria-hidden />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Take the tour</TooltipContent>
@@ -240,10 +250,12 @@ export function CourseShell({
                     <button
                       type="button"
                       onClick={confirmStart}
+                      onMouseEnter={iconPlay}
+                      onMouseLeave={iconStop}
                       aria-label="Take the tour"
                       className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
                     >
-                      <Compass size={15} aria-hidden />
+                      <CompassIcon ref={tourIconRef} size={15} aria-hidden />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Take the tour</TooltipContent>

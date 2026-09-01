@@ -1,6 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { Compass } from "lucide-react";
 import "driver.js/dist/driver.css";
 import { TopBar } from "@/components/shell/TopBar";
 import { InstructorTourRunner } from "@/components/shell/InstructorTour";
@@ -8,6 +7,7 @@ import {
   INSTRUCTOR_TOUR_STEPS,
   instructorTourDismissKey,
 } from "@/components/shell/instructor-tour";
+import { CompassIcon, type CompassIconHandle } from "@/components/ui/compass";
 import { useLearnerRecord } from "@/features/instructor";
 import { useUI } from "@/stores/ui-store";
 import { useSession } from "@/lib/auth/AuthProvider";
@@ -87,6 +87,14 @@ export function InstructorShell({
 
   const bannerVisible = tourPrompted && onOverview;
 
+  // The tour icon is the animated compass (lucide-animated registry, same
+  // source as the other ui icons): the needle turns when the BUTTON is
+  // hovered (controlled-mode handlers), same pattern as the decision
+  // buttons. A compass for "take the tour" — orientation, not the AI mark.
+  const tourIconRef = useRef<CompassIconHandle | null>(null);
+  const iconPlay = () => tourIconRef.current?.startAnimation();
+  const iconStop = () => tourIconRef.current?.stopAnimation();
+
   const initials = (displayName ?? "")
     .split(/\s+/)
     .slice(0, 2)
@@ -112,10 +120,12 @@ export function InstructorShell({
                   <button
                     type="button"
                     onClick={startTour}
+                    onMouseEnter={iconPlay}
+                    onMouseLeave={iconStop}
                     aria-label="Take the tour"
                     className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
                   >
-                    <Compass size={15} aria-hidden />
+                    <CompassIcon ref={tourIconRef} size={15} aria-hidden />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Take the tour</TooltipContent>
@@ -135,10 +145,12 @@ export function InstructorShell({
                   <button
                     type="button"
                     onClick={startTour}
+                    onMouseEnter={iconPlay}
+                    onMouseLeave={iconStop}
                     aria-label="Take the tour"
                     className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
                   >
-                    <Compass size={15} aria-hidden />
+                    <CompassIcon ref={tourIconRef} size={15} aria-hidden />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Take the tour</TooltipContent>

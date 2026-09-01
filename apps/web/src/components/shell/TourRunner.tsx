@@ -191,11 +191,27 @@ export function TourRunner({
           // arguments (its DriverHook type says it may pass the element,
           // the implementation never does), so the target must be
           // resolved from the step config, never from the callback arg.
+          //
+          // Radix primitives (Tabs, Select, etc.) activate on onMouseDown,
+          // not onClick — a programmatic .click() dispatches no mousedown,
+          // so the tab never switches and the tour stalls until the user
+          // clicks by hand. Dispatch a real mousedown (button 0, ctrl-less
+          // — the exact condition Radix checks) before the click; plain
+          // onClick handlers ignore the mousedown, so both handler kinds
+          // work from the same step.
           popover.onNextClick = () => {
             const target = document.querySelector(
               s.clickSelector ?? s.selector
+            ) as HTMLElement | null;
+            target?.dispatchEvent(
+              new MouseEvent("mousedown", {
+                bubbles: true,
+                cancelable: true,
+                button: 0,
+                ctrlKey: false,
+              })
             );
-            (target as HTMLElement | undefined)?.click();
+            target?.click();
             advanceTo(globalIndex + 1);
           };
         } else if (s.tutorAsk) {
