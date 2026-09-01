@@ -164,6 +164,7 @@ export function RosterTable({
         <div className="flex-1" />
 
         <Input
+          id="tour-roster-search"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -175,6 +176,7 @@ export function RosterTable({
         />
 
         <ToggleGroup
+          id="tour-roster-filter"
           type="single"
           value={filter}
           onValueChange={(v) => {
@@ -226,11 +228,12 @@ export function RosterTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {slice.map((r) => {
+              {slice.map((r, i) => {
                 const meta = STATUS_META[r.status];
                 return (
                   <TableRow
                     key={r.userId}
+                    id={i === 0 ? "tour-roster-first-row" : undefined}
                     onClick={() => onSelect(r.userId)}
                     tabIndex={0}
                     onKeyDown={(e) => {

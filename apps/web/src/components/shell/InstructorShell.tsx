@@ -1,44 +1,23 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import { TopBar } from "@/components/shell/TopBar";
+import { InstructorTourRunner } from "@/components/shell/InstructorTour";
+import { instructorTourDismissKey } from "@/components/shell/instructor-tour";
 import { useLearnerRecord } from "@/features/instructor";
+import { useUI } from "@/stores/ui-store";
+import { useSession } from "@/lib/auth/AuthProvider";
 
-// Instructor shell: top bar + first-launch tour banner (per the mockup
-// "Instructor Dashboard"). The tour is the brief's named onboarding
-// mechanism (Driver.js) and doubles as the conference demo walkthrough:
-// roster → needs-support list → cohort trends → one learner's record.
+// Instructor shell: top bar + first-launch tour banner + the cross-page
+// tour runner (mirrors CourseShell's student side). The tour is the
+// brief's named onboarding mechanism (Driver.js) and doubles as the
+// conference demo walkthrough: KPI strip → roster → triage sheet → needs
+// support → trends → heatmap → one learner's record. The banner shows on
+// the overview only (the record page's anchors don't all exist there), but
+// the runner itself is mounted for every /class route so the walkthrough
+// can cross into the learner record.
 
-const TOUR_KEY = "kala.instructor.tour";
 const STUDENT_ROUTE = /^\/class\/student\/([^/]+)/;
-
-const tourSteps = [
-  {
-    element: "#roster-panel",
-    popover: {
-      title: "Your class, triaged",
-      description:
-        "Every enrolled student, sorted by who needs you first. Real names, because you are the teacher of record. Flip the de-identify switch to show pseudonyms when you are screen-sharing.",
-    },
-  },
-  {
-    element: "#at-risk-list",
-    popover: {
-      title: "Needs support",
-      description:
-        "Evidence-triggered flags with the specific reason behind each one. Supportive wording, never a verdict on a student.",
-    },
-  },
-  {
-    element: "#cohort-analytics",
-    popover: {
-      title: "Is the class moving?",
-      description:
-        "Readiness over time, practice volume, mastery mix, and the weakest skills across the class — the reteach list.",
-    },
-  },
-];
 
 export function InstructorShell({
   courseId,
@@ -50,8 +29,10 @@ export function InstructorShell({
   children: ReactNode;
 }) {
   const { pathname } = useLocation();
-  const [showTour, setShowTour] = useState(
-    () => localStorage.getItem(TOUR_KEY) !== "dismissed"
+  const session = useSession();
+  const tourKey = session?.userId ? instructorTourDismissKey(session.userId) : null;
+  const [tourPrompted, setTourPrompted] = useState(
+    () => (tourKey ? localStorage.getItem(tourKey) !== "dismissed" : false)
   );
 
   // This shell renders once for every route under /class via <Outlet/>, so
@@ -72,20 +53,28 @@ export function InstructorShell({
     ? learner.data?.displayName ?? "Learner record"
     : undefined;
 
-  // The tour's anchors (#roster-panel, #at-risk-list, #cohort-analytics)
-  // only exist on the overview. Showing the banner on a learner's record
-  // page would offer a tour that highlights nothing.
+  // The tour's anchors (#tour-cohort-kpis, #roster-panel, #at-risk-list,
+  // #cohort-analytics, #heatmap-panel) only exist on the overview. The
+  // banner reads tourStep so it hides when the walkthrough completes even
+  // without a remount (the runner writes the same "dismissed" key).
   const onOverview = pathname === "/class" || pathname === "/class/";
+  const tourStep = useUI((s) => s.tourStep);
+  useEffect(() => {
+    if (tourStep === null && tourKey) {
+      setTourPrompted(localStorage.getItem(tourKey) !== "dismissed");
+    }
+  }, [tourStep, tourKey]);
 
   const dismissTour = () => {
-    localStorage.setItem(TOUR_KEY, "dismissed");
-    setShowTour(false);
+    if (tourKey) localStorage.setItem(tourKey, "dismissed");
+    setTourPrompted(false);
   };
 
   const startTour = () => {
-    const instance = driver({ showProgress: true, steps: tourSteps, overlayColor: "rgba(14,27,51,0.35)" });
-    instance.drive();
+    useUI.getState().setTourStep(0);
   };
+
+  const bannerVisible = tourPrompted && onOverview;
 
   const initials = (displayName ?? "")
     .split(/\s+/)
@@ -101,21 +90,33 @@ export function InstructorShell({
         section="Instructor dashboard"
         subsection={subsection}
         right={
-          initials ? (
-            <span className="grid size-6.5 place-items-center rounded-full bg-brand-slate text-[10px] font-semibold text-background">
-              {initials}
-            </span>
-          ) : null
+          <>
+            {/* Quiet replay affordance after the banner is gone — this is
+                the demo's "run the walkthrough on demand" control. */}
+            <button
+              type="button"
+              onClick={startTour}
+              className="rounded-[3px] border border-primary/15 px-2.5 py-1 text-[11.5px] font-semibold text-foreground transition-colors hover:bg-accent"
+            >
+              Take the tour
+            </button>
+            {initials ? (
+              <span className="grid size-6.5 place-items-center rounded-full bg-brand-slate text-[10px] font-semibold text-background">
+                {initials}
+              </span>
+            ) : null}
+          </>
         }
       />
 
-      {showTour && onOverview ? (
+      {bannerVisible ? (
         <div className="flex flex-wrap items-center gap-3 border-b border-brand-orange/20 bg-brand-orange/8 px-6 py-2.5">
           <span className="text-xs font-semibold text-brand-orange-foreground">
             First time here?
           </span>
           <span className="text-xs text-muted-foreground">
-            Take the 60-second tour: your roster, who needs support, then how the class is moving.
+            Take the 90-second tour: your roster, who needs support, the charts, then one learner's
+            record.
           </span>
           <div className="flex-1" />
           <button
@@ -136,6 +137,10 @@ export function InstructorShell({
       ) : null}
 
       <main className="w-full px-6 py-7">{children}</main>
+
+      {/* Cross-page runner — mounted for every /class route, owns the
+          walkthrough across overview + learner record. */}
+      <InstructorTourRunner />
     </div>
   );
 }

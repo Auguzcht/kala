@@ -98,8 +98,12 @@ export function LearnerRecord({
       <Tabs defaultValue="decide">
         <TabsList>
           <TabsTrigger value="decide">Decide</TabsTrigger>
-          <TabsTrigger value="mastery">Mastery</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger id="tour-tab-mastery" value="mastery">
+            Mastery
+          </TabsTrigger>
+          <TabsTrigger id="tour-tab-activity" value="activity">
+            Activity
+          </TabsTrigger>
         </TabsList>
 
         {/* Decide first, deliberately. The teacher came here to do
@@ -116,7 +120,7 @@ export function LearnerRecord({
                 Blueprint-weighted rollup across {r.skills.length} tracked skills
               </p>
             </Card>
-            <Card className="lg:col-span-8">
+            <Card className="lg:col-span-8" id="tour-record-radar">
               <CardHeader>
                 <CardTitle className="text-base">Mastery across skills</CardTitle>
               </CardHeader>
@@ -126,7 +130,7 @@ export function LearnerRecord({
             </Card>
           </div>
 
-          <Card>
+          <Card id="tour-record-intervene">
             <CardHeader>
               <CardTitle className="text-base">Where to intervene</CardTitle>
               <p className="text-xs text-muted-foreground">
@@ -255,7 +259,7 @@ export function LearnerRecord({
             </Card>
           </div>
 
-          <Card>
+          <Card id="tour-record-ledger">
             <CardHeader>
               <CardTitle className="text-base">Evidence ledger</CardTitle>
               <p className="text-xs text-muted-foreground">

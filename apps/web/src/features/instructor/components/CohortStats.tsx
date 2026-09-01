@@ -82,7 +82,7 @@ export function CohortStats({ courseId }: { courseId: string }) {
   const activeShare = data.learners > 0 ? data.activeLearners / data.learners : 0;
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-6" id="tour-cohort-kpis">
       <StatTile
         label="Learners"
         value={String(data.learners)}

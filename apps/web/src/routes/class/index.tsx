@@ -103,8 +103,10 @@ function ClassDashboard() {
 
         <Tabs defaultValue="trends">
           <TabsList>
-            <TabsTrigger value="trends">Trends</TabsTrigger>
-            <TabsTrigger value="heatmap">Skills &times; Bloom&apos;s</TabsTrigger>
+            <TabsTrigger id="tour-tab-trends" value="trends">Trends</TabsTrigger>
+            <TabsTrigger id="tour-tab-heatmap" value="heatmap">
+              Skills &times; Bloom&apos;s
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="trends" className="mt-4">
             <div id="cohort-analytics">

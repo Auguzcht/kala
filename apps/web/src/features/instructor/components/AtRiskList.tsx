@@ -107,10 +107,11 @@ export function AtRiskList({
               className={boxHeight ? "overflow-hidden pr-3" : undefined}
             >
               <div className="space-y-2.5">
-                {flags.map((f) => (
+                {flags.map((f, i) => (
                   <button
                     key={f.userId}
                     type="button"
+                    id={i === 0 ? "tour-at-risk-first-flag" : undefined}
                     onClick={() => navigate({ to: "/class/student/$uid", params: { uid: f.userId } })}
                     // Fixed height, not min-height: the clamp on the reason
                     // below caps content at two lines, so h-[112px] is a

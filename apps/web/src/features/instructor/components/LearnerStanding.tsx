@@ -59,7 +59,7 @@ export function LearnerStanding({
   const status = STATUS_META[r.status];
 
   return (
-    <>
+    <div className="space-y-5" id="tour-standing">
       {/* Identity + standing. The header carries the judgement-relevant
           facts, so a teacher who reads nothing else still knows where this
           learner sits and how long since they showed up. */}
@@ -143,7 +143,7 @@ export function LearnerStanding({
           tone={r.momentum === null ? "neutral" : r.momentum >= 0 ? "green" : "red"}
         />
       </div>
-    </>
+    </div>
   );
 }
 

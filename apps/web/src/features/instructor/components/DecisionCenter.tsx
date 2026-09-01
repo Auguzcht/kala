@@ -111,7 +111,7 @@ export function DecisionCenter({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" id="tour-decide-center">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           {/* No icon here on purpose: the heading already says who is
@@ -126,6 +126,7 @@ export function DecisionCenter({
           </p>
         </div>
         <Button
+          id="tour-run-analysis"
           variant="orange"
           size="sm"
           onClick={runAnalysis}
@@ -266,6 +267,7 @@ function RecommendationCard({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
+      id={index === 1 ? "tour-rec-card" : undefined}
       className={cn("border bg-card", open && "ring-1 ring-brand-orange/20")}
     >
       <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -355,7 +357,7 @@ function RecommendationCard({
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.05em] text-brand-slate">
               Your decision
             </p>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="mt-2 grid grid-cols-3 gap-2" id="tour-decision-buttons">
               <DecisionButton
                 active={choice === "approved"}
                 tone="green"
