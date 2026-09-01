@@ -54,6 +54,10 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     click: true,
   },
   // ---- The triage sheet (standing + decide only) ------------------------
+  // Deliberately short: the sheet is triage, and the record page later
+  // goes deep on the same gate — repeating the full decision anatomy here
+  // would make the two sections redundant. Standing, the gate in one line,
+  // then close and keep triaging.
   {
     route: "/class",
     selector: "#tour-standing",
@@ -68,13 +72,6 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     title: "The gate",
     description:
       "Kala proposes next actions for this learner, each with the evidence behind it. Nothing reaches the learner until you decide.",
-  },
-  {
-    route: "/class",
-    selector: "#tour-run-analysis",
-    title: "The gate",
-    description:
-      "Run the analysis to generate recommendations from this learner's twin. It sends a pseudonym and mastery numbers — never a name.",
   },
   {
     route: "/class",
@@ -126,6 +123,11 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     click: true,
   },
   // ---- The record page (deep dive) --------------------------------------
+  // Every tab is opened by the tour itself — Decide, Mastery, Activity —
+  // so the tab structure is part of the walkthrough, not something the
+  // user happens to click. Decide is the default tab, but the tour clicks
+  // its trigger anyway for the explicit "here is the tab you work in"
+  // beat before diving into its content.
   {
     route: "/class/student/$uid",
     selector: "#tour-standing",
@@ -135,10 +137,18 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   },
   {
     route: "/class/student/$uid",
+    selector: "#tour-tab-decide",
+    title: "Decide",
+    description: "Three tabs, three tasks. Decide first, deliberately — the teacher came here to do something.",
+    click: true,
+  },
+  {
+    route: "/class/student/$uid",
     selector: "#tour-decide-center",
     title: "Decide",
     description:
       "The same gate as the sheet: evidence-backed proposals, your decision, nothing reaching the learner until then.",
+    waitFor: "#tour-decide-center",
   },
   {
     route: "/class/student/$uid",
@@ -176,6 +186,12 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     description:
       "The twin's radar, broken out by Bloom's level — and where to intervene, weakest first.",
     waitFor: "#tour-record-radar",
+  },
+  {
+    route: "/class/student/$uid",
+    selector: "#tour-record-intervene",
+    title: "Mastery",
+    description: "Weakest first — the intervention list that decides what to assign.",
   },
   {
     route: "/class/student/$uid",

@@ -97,7 +97,9 @@ export function LearnerRecord({
 
       <Tabs defaultValue="decide">
         <TabsList>
-          <TabsTrigger value="decide">Decide</TabsTrigger>
+          <TabsTrigger id="tour-tab-decide" value="decide">
+            Decide
+          </TabsTrigger>
           <TabsTrigger id="tour-tab-mastery" value="mastery">
             Mastery
           </TabsTrigger>
