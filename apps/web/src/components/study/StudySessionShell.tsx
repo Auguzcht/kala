@@ -24,9 +24,14 @@ export function StudySessionShell({
   children: ReactNode;
 }) {
   const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  // The chrome row only exists when it has content. A surface with none of
+  // the three (back / progress / right slot) gets no bar and no separator
+  // — an empty header with a bare border reads as a broken layout.
+  const hasChrome = Boolean(onBack || progress || right);
 
   return (
     <div className="space-y-5">
+      {hasChrome ? (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/60 pb-3">
         {onBack ? (
           <Button variant="ghost" size="sm" onClick={onBack} className="px-2">
@@ -61,6 +66,7 @@ export function StudySessionShell({
 
         {right ? <div className="ml-auto">{right}</div> : null}
       </div>
+      ) : null}
 
       <div className={cn("min-w-0")}>{children}</div>
     </div>

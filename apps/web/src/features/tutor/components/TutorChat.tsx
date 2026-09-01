@@ -4,7 +4,6 @@ import { UserIcon } from "lucide-react";
 import { SendIcon } from "@/components/ui/send";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
-import { GamificationSummary } from "@/features/gamification";
 import { useAskTutor } from "@/features/tutor/hooks/use-tutor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CornerBrackets } from "@/components/kala";
@@ -68,7 +67,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
   }
 
   return (
-    <StudySessionShell right={<GamificationSummary courseId={courseId} />}>
+    <StudySessionShell>
       <Card className="relative">
       <CornerBrackets />
       <CardHeader>
