@@ -188,6 +188,13 @@ export function CourseShell({
                     className:
                       "flex h-9 w-9 items-center justify-center border-l-2 border-transparent text-muted-foreground/70 hover:bg-accent hover:text-foreground",
                   }}
+                  // The ref switches each icon to controlled mode, which
+                  // disables its native hover — so hover is forwarded to
+                  // the handle here, on the BUTTON (the Link), not the
+                  // icon: the rail icon draws when the nav button is
+                  // hovered, and still draws on route activation.
+                  onMouseEnter={() => iconHandles.current[i]?.startAnimation()}
+                  onMouseLeave={() => iconHandles.current[i]?.stopAnimation()}
                   aria-label={label}
                 >
                   <Icon
@@ -218,49 +225,25 @@ export function CourseShell({
           right={
             <div className="flex items-center gap-4">
               <GamificationSummary courseId={courseId} />
-              {bannerVisible ? (
-                // Quiet icon while the banner carries the loud CTA.
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={confirmStart}
-                      onMouseEnter={iconPlay}
-                      onMouseLeave={iconStop}
-                      aria-label="Take the tour"
-                      className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                    >
-                      <CompassIcon ref={tourIconRef} size={15} aria-hidden />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Take the tour</TooltipContent>
-                </Tooltip>
-              ) : tourPrompted ? (
-                // Never taken/dismissed but not on the workspace: full-text.
-                <button
-                  type="button"
-                  onClick={confirmStart}
-                  className="rounded-[3px] border border-primary/20 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-accent"
-                >
-                  Take the tour
-                </button>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={confirmStart}
-                      onMouseEnter={iconPlay}
-                      onMouseLeave={iconStop}
-                      aria-label="Take the tour"
-                      className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                    >
-                      <CompassIcon ref={tourIconRef} size={15} aria-hidden />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Take the tour</TooltipContent>
-                </Tooltip>
-              )}
+              {/* One affordance, always: the quiet compass nav button. The
+                  banner is the loud CTA when it is up; off-workspace there
+                  is no banner, so the icon carries it — never a text
+                  button that fights the icon language of the rail. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={confirmStart}
+                    onMouseEnter={iconPlay}
+                    onMouseLeave={iconStop}
+                    aria-label="Take the tour"
+                    className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                  >
+                    <CompassIcon ref={tourIconRef} size={15} aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Take the tour</TooltipContent>
+              </Tooltip>
               <span className="font-mono text-xs text-muted-foreground">
                 {initials(displayName) || section}
               </span>

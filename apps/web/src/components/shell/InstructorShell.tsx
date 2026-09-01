@@ -124,52 +124,24 @@ export function InstructorShell({
         subsection={subsection}
         right={
           <div className="flex items-center gap-2">
-            {bannerVisible ? (
-              // Quiet icon while the banner carries the loud CTA — never
-              // both loud at once (same three-state pattern as the student
-              // workspace: banner → icon, prompted-but-elsewhere → text,
-              // dismissed → icon).
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={confirmStart}
-                    onMouseEnter={iconPlay}
-                    onMouseLeave={iconStop}
-                    aria-label="Take the tour"
-                    className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                  >
-                    <CompassIcon ref={tourIconRef} size={15} aria-hidden />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Take the tour</TooltipContent>
-              </Tooltip>
-            ) : tourPrompted ? (
-              // Prompted but on the learner record: full-text control.
-              <button
-                type="button"
-                onClick={confirmStart}
-                className="rounded-[3px] border border-primary/20 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-accent"
-              >
-                Take the tour
-              </button>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={confirmStart}
-                    onMouseEnter={iconPlay}
-                    onMouseLeave={iconStop}
-                    aria-label="Take the tour"
-                    className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                  >
-                    <CompassIcon ref={tourIconRef} size={15} aria-hidden />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Take the tour</TooltipContent>
-              </Tooltip>
-            )}
+            {/* One affordance, always: the quiet compass nav button. The
+                banner is the loud CTA when it is up; off-overview there is
+                no banner, so the icon carries it. */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={confirmStart}
+                  onMouseEnter={iconPlay}
+                  onMouseLeave={iconStop}
+                  aria-label="Take the tour"
+                  className="grid size-7 place-items-center rounded-[3px] text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                >
+                  <CompassIcon ref={tourIconRef} size={15} aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Take the tour</TooltipContent>
+            </Tooltip>
             {initials ? (
               <span className="grid size-6.5 place-items-center rounded-full bg-brand-slate text-[10px] font-semibold text-background">
                 {initials}
