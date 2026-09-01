@@ -176,9 +176,18 @@ def _days_since(iso: str | None) -> int | None:
 def _reason_for(*, evidence: list[dict], weakest: list[tuple[str, float | None]],
                 days_inactive: int | None) -> str | None:
     """Supportive, evidence-triggered wording. Never a verdict on the
-    student — a prompt to reach out (see the design brief guardrails)."""
+    student — a prompt to reach out (see the design brief guardrails).
+
+    Deliberately NOT triggered by zero evidence: a student who has never
+    started is triaged by the roster's own 'not-started' status (a nudge
+    to begin, not a support concern — see cohort._status_for, which keeps
+    the two buckets separate on purpose). Flagging every fresh enrollment
+    as 'needs support' would also break the roster handoff: the at-risk
+    list's 'View all in roster' switches to the needs-support filter, and
+    not-started students never match it, landing on an empty table.
+    """
     if not evidence:
-        return "No evidence yet — hasn't started the diagnostic. A first practice session builds the baseline."
+        return None
     correct = sum(1 for e in evidence if e.get("correct"))
     attempts = len(evidence)
     if days_inactive is not None and days_inactive >= INACTIVE_AFTER_DAYS:

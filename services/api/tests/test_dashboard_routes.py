@@ -99,8 +99,10 @@ def test_at_risk_flags_inactive_student_with_supportive_reason(monkeypatch) -> N
 
     assert response.status_code == 200
     flags = response.json()["flags"]
-    # stu-2 has no evidence (flagged), stu-1 is inactive but evidenced.
-    assert len(flags) == 2
+    # stu-1 is inactive but evidenced (flagged). stu-2 has no evidence at
+    # all — that is the roster's 'not-started' bucket, deliberately NOT a
+    # needs-support flag (see _reason_for), so it must not appear here.
+    assert len(flags) == 1
     assert flags[0]["pseudonym"] == "Mica V."
     assert "No activity in" in flags[0]["reason"]
 
