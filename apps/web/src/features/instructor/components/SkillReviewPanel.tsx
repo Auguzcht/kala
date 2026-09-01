@@ -234,7 +234,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
             <colgroup>
               <col className="w-[42%]" />
               <col className="w-[38%]" />
-              <col className="w-[170px]" />
+              <col className="w-[20%]" />
             </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -285,23 +285,26 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                     </TableCell>
                     <TableCell>
                       {s.proposed_source ? (
-                        <p
-                          className={
-                            flagged
-                              ? "min-w-0 text-[12.5px] font-medium leading-relaxed text-brand-orange-foreground line-clamp-2"
-                              : "min-w-0 text-[12.5px] leading-relaxed text-foreground/80 line-clamp-2"
-                          }
-                        >
+                        <div className="flex min-w-0 items-center gap-1.5">
                           {flagged ? (
                             <span
-                              className="mr-1 inline-flex translate-y-[2px] items-center rounded-[2px] bg-brand-orange/15 p-0.5 text-brand-orange"
+                              className="inline-flex size-4 shrink-0 items-center justify-center rounded-[2px] bg-brand-orange/15 text-brand-orange"
                               aria-hidden
                             >
                               <TriangleAlertIcon size={11} />
                             </span>
                           ) : null}
-                          {message}
-                        </p>
+                          <span
+                            className={
+                              flagged
+                                ? "min-w-0 flex-1 truncate text-[12.5px] font-medium text-brand-orange-foreground"
+                                : "min-w-0 flex-1 truncate text-[12.5px] text-foreground/80"
+                            }
+                            title={s.proposed_source}
+                          >
+                            {message}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
