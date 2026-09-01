@@ -53,22 +53,52 @@ class BlackboardConnector(LMSConnector):
         return resp.json()["id"]
 
     def get_roster(self, course_ref: str) -> list[dict]:
-        s = get_settings()
-        resp = httpx.get(
-            f"{s.lms_rest_base_url}/courses/{course_ref}/users",
-            headers=self._headers(),
-            params={
-                "expand": "users",
-                "fields": "userId,courseRoleId,user.id,user.name,user.contact.email",
-            },
-            verify=s.lms_verify_tls,
-            timeout=15.0,
-        )
-        resp.raise_for_status()
+        """Full course roster, following pagination to exhaustion.
 
-        memberships = resp.json().get("results", [])
+        This used to matter only for completeness — an unpaginated pull
+        just meant "you might be missing some students" on a display. Now
+        that a full pull also drives deletion (lti/routes.py._sync_roster
+        removes any Kala enrollment not present in this list), an
+        incomplete page is worse than incomplete: it would report a fully
+        enrolled student as absent and reconciliation would remove them.
+
+        Follows Learn REST's `paging.nextPage` continuation link, which is
+        typically returned as a path relative to the API root once a
+        response exceeds the default page size. VERIFY the exact key name
+        and whether your instance returns a relative path or an absolute
+        URL before relying on this in production — this loop handles both,
+        but it has not been run against a live paginated response.
+        """
+        s = get_settings()
+        params = {
+            "expand": "users",
+            "fields": "userId,courseRoleId,user.id,user.name,user.contact.email",
+        }
+        results: list[dict] = []
+        path = f"{s.lms_rest_base_url}/courses/{course_ref}/users"
+
+        while path:
+            resp = httpx.get(
+                path,
+                headers=self._headers(),
+                params=params if "?" not in path else None,
+                verify=s.lms_verify_tls,
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            results.extend(body.get("results", []))
+
+            next_page = (body.get("paging") or {}).get("nextPage")
+            if not next_page:
+                break
+            # nextPage may already be a full URL, or a path relative to the
+            # API host — handle both rather than assuming one.
+            path = next_page if next_page.startswith("http") else f"{s.lms_rest_base_url.rstrip('/')}{next_page}"
+            params = None  # the continuation link already encodes the query
+
         roster = []
-        for membership in memberships:
+        for membership in results:
             user = membership.get("user", {})
             name = user.get("name", {})
             display_name = name.get("preferredDisplayName") or " ".join(

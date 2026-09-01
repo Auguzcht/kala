@@ -69,20 +69,42 @@ def _seed_course_skills(*, institution_id: str, course_id: str, course_ref: str,
 
 
 def _sync_roster(*, institution_id: str, course_id: str, course_ref: str,
-                 connector: BlackboardConnector) -> int:
-    """NRPS-style roster pull (masterplan 3.1). Enrolls every member the LMS
-    returns, so the cohort exists before each student has individually
-    launched Kala once. Best-effort by design: a roster failure (LMS hiccup,
-    one malformed member) must never break the launching instructor's own
-    session — members are upserted one at a time and failures are logged and
-    skipped."""
+                 connector: BlackboardConnector) -> dict:
+    """NRPS-style roster reconciliation (masterplan 3.1). Enrolls every
+    member the LMS currently reports for this course, AND removes any
+    student enrollment Kala has that the LMS no longer reports — so a
+    one-off test launch, a student who dropped the course, or a stale row
+    from before this reconciliation existed cannot linger permanently.
+
+    Runs on every instructor launch, which for an actively-used course
+    means this self-heals on a timescale of minutes, not migrations.
+
+    Best-effort in both directions: a roster-pull failure never blocks the
+    launching instructor's own session (unchanged from before), and now
+    ALSO never triggers a deletion. An empty or failed pull is treated as
+    "unknown," not as "nobody is enrolled" — the one failure mode that
+    would be worse than the phantom-row bug this fixes is a transient LMS
+    hiccup wiping a real class roster on the next launch.
+    """
     try:
         members = connector.get_roster(course_ref)
     except Exception:
         logger.exception("roster pull failed for %s; skipping roster sync", course_ref)
-        return 0
+        return {"enrolled": 0, "removed": 0, "skipped": "pull_failed"}
+
+    if not members:
+        # A genuinely empty class is vanishingly unlikely for a course an
+        # instructor is actively launching into Kala from. Far more likely:
+        # a partial response, an unexpected schema, or a permissions edge
+        # case. Either way, reconciling against zero would delete every
+        # real student enrollment — treat it the same as a failure.
+        logger.warning(
+            "roster pull for %s returned zero members; skipping reconciliation", course_ref,
+        )
+        return {"enrolled": 0, "removed": 0, "skipped": "empty_pull"}
 
     enrolled = 0
+    current_ids: list[str] = []
     for member in members:
         lms_user_id = member.get("lms_user_id")
         if not lms_user_id:
@@ -99,10 +121,26 @@ def _sync_roster(*, institution_id: str, course_id: str, course_ref: str,
                 institution_id=institution_id, user_id=user["id"],
                 course_id=course_id, role=_roster_role(member.get("role")),
             )
+            current_ids.append(user["id"])
             enrolled += 1
         except Exception:
             logger.exception("roster member %s skipped", lms_user_id)
-    return enrolled
+
+    # The reconciliation step. Anyone Kala currently has as a STUDENT in
+    # this course who did not appear in this fresh pull is not on the LMS
+    # roster right now — remove their enrollment. Their user row, profile,
+    # and evidence history are untouched, so a real re-enrollment (or the
+    # same test account launching again) picks up exactly where it left
+    # off rather than starting over.
+    removed = db.remove_stale_student_enrollments(
+        institution_id=institution_id, course_id=course_id, keep_user_ids=current_ids,
+    )
+    if removed:
+        logger.info(
+            "roster sync for %s removed %d stale student enrollment(s): %s",
+            course_ref, len(removed), [r.get("user_id") for r in removed],
+        )
+    return {"enrolled": enrolled, "removed": len(removed)}
 
 
 async def _login(request: Request) -> RedirectResponse:

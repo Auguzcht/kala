@@ -54,6 +54,7 @@ def _patch_launch(monkeypatch, payload: dict, connector) -> dict:
     record db writes. Returns the recorded enrollments."""
     enrollments: list[dict] = []
     users: list[dict] = []
+    removals: list[dict] = []
     monkeypatch.setattr(lti_routes, "verify_state", lambda cookie: {"state": "state-1", "nonce": "nonce-1"})
     monkeypatch.setattr(lti_routes, "verify_id_token", lambda token: payload)
     monkeypatch.setattr(lti_routes.db, "get_or_create_institution", lambda **kw: {"id": "inst-1"})
@@ -69,8 +70,22 @@ def _patch_launch(monkeypatch, payload: dict, connector) -> dict:
         enrollments.append({"user_id": user_id, "role": role})
 
     monkeypatch.setattr(lti_routes.db, "upsert_enrollment", fake_upsert_enrollment)
+
+    # Roster reconciliation's other half. Recorded (not left unmocked) for
+    # two reasons: an unmocked call would hit the real Supabase client with
+    # no credentials in a test run, and the call args are exactly what the
+    # new reconciliation tests below assert on — which user ids survived
+    # into keep_user_ids is the whole point of the feature.
+    def fake_remove_stale(*, institution_id: str, course_id: str, keep_user_ids: list[str]) -> list[dict]:
+        removals.append({
+            "institution_id": institution_id, "course_id": course_id,
+            "keep_user_ids": list(keep_user_ids),
+        })
+        return []
+
+    monkeypatch.setattr(lti_routes.db, "remove_stale_student_enrollments", fake_remove_stale)
     app.dependency_overrides[get_lms_connector] = lambda: connector
-    return {"enrollments": enrollments, "users": users}
+    return {"enrollments": enrollments, "users": users, "removals": removals}
 
 
 def _launch(connector) -> TestClient:
@@ -151,6 +166,92 @@ def test_roster_failure_does_not_block_the_instructor_launch(monkeypatch) -> Non
     assert response.status_code == 302
     # The instructor still lands; only the roster sync was skipped.
     assert {"user_id": "user-lms-teacher-1", "role": "instructor"} in recorded["enrollments"]
+
+
+def test_instructor_launch_reconciles_stale_enrollments(monkeypatch) -> None:
+    """The half of roster sync that didn't exist before this change: anyone
+    Kala has as a student in this course who is NOT in the fresh pull must
+    be passed to remove_stale_student_enrollments — this is what turns a
+    one-off test launch or a dropped student into something that heals on
+    the next instructor launch instead of persisting forever.
+
+    The fixture includes the launching instructor's own membership, which
+    is realistic: Blackboard's course/users listing reports every member,
+    including the instructor doing the launching, not just their students.
+    """
+    roster = [
+        {"lms_user_id": "lms-teacher-1", "role": "Instructor", "name": "Prof. Ada", "email": None},
+        {"lms_user_id": "stu-1", "role": "Student", "name": "Mica V.", "email": "m@mmcm.edu"},
+    ]
+    connector = _fake_connector(roster)
+    payload = _launch_payload([C._ROLE_INSTRUCTOR])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    assert len(recorded["removals"]) == 1
+    call = recorded["removals"][0]
+    assert call["course_id"] == "course-1"
+    # keep_user_ids is exactly what this pull produced. Anyone Kala has
+    # enrolled as a STUDENT for this course outside that set is what gets
+    # removed — asserted here as "the call carries the right keep-list",
+    # since the actual delete is a real db.py function this test
+    # intentionally does not re-implement. Note deletion is also
+    # role-scoped in remove_stale_student_enrollments itself (role='student'
+    # only): even if a launching instructor were somehow absent from a
+    # pull, their own role='instructor' row could never match that filter,
+    # so this isn't the only thing standing between an instructor and
+    # accidentally reconciling away their own access.
+    assert set(call["keep_user_ids"]) == {"user-lms-teacher-1", "user-stu-1"}
+
+
+def test_empty_roster_pull_skips_reconciliation(monkeypatch) -> None:
+    """An empty pull must never be treated as 'this class has zero
+    students' — that would delete every real enrollment on the next
+    instructor launch. This is the guard that makes reconciliation safe to
+    run unattended on every launch rather than something that needs a human
+    to sanity-check the pull first."""
+    connector = _fake_connector([])  # instructor launch, but the LMS returns nothing
+    payload = _launch_payload([C._ROLE_INSTRUCTOR])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    # The instructor's own launch-time enrollment (step 3, unconditional)
+    # still happens; what must NOT happen is a reconciliation call derived
+    # from an empty roster.
+    assert recorded["removals"] == []
+
+
+def test_roster_pull_failure_skips_reconciliation(monkeypatch) -> None:
+    """Symmetric with the empty-pull guard: a raised exception from the
+    connector must also never reach reconciliation."""
+    class BrokenConnector:
+        def resolve_course_ref(self, external_id: str) -> str:
+            return f"ref-{external_id}"
+
+        def get_roster(self, course_ref: str) -> list[dict]:
+            raise RuntimeError("LMS unreachable")
+
+    connector = BrokenConnector()
+    payload = _launch_payload([C._ROLE_INSTRUCTOR])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    assert recorded["removals"] == []
 
 
 def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> None:

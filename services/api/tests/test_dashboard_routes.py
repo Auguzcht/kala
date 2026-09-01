@@ -25,6 +25,10 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
     skills = [{"id": "skill-1", "name": "Entropy", "bloom_level": "understand"}]
     enrollments = [{"user_id": "stu-1"}, {"user_id": "stu-2"}]
     users = [{"id": "stu-1", "pseudonym": "Mica V."}, {"id": "stu-2", "pseudonym": "Raf C."}]
+    profiles = [
+        {"user_id": "stu-1", "display_name": "Mica V."},
+        # stu-2 has no profile row -> displayName falls back to the pseudonym
+    ]
     mastery = [
         {"user_id": "stu-1", "skill_id": "skill-1", "estimate": 0.5, "attempts": 4},
         {"user_id": "stu-2", "skill_id": "skill-1", "estimate": 0.2, "attempts": 2},
@@ -37,6 +41,8 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
             return enrollments
         if table == "users":
             return users
+        if table == "user_profiles":
+            return profiles
         return mastery
 
     monkeypatch.setattr(dashboard.db, "select", fake_select)
@@ -54,6 +60,11 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
     assert len(body["cells"]) == 2
     assert body["cells"][0]["band"] == "proficient"
     assert body["students"][0]["pseudonym"] == "Mica V."
+    # The heatmap now resolves real names like the roster: displayName from
+    # the profile, falling back to the pseudonym when the profile is missing
+    # (stu-2) or holds a placeholder.
+    assert body["students"][0]["displayName"] == "Mica V."
+    assert body["students"][1]["displayName"] == "Raf C."
 
 
 def test_at_risk_flags_inactive_student_with_supportive_reason(monkeypatch) -> None:

@@ -130,5 +130,47 @@ def upsert_enrollment(*, institution_id: str, user_id: str, course_id: str, role
     }], on_conflict="user_id,course_id")
 
 
+def remove_stale_student_enrollments(
+    *, institution_id: str, course_id: str, keep_user_ids: list[str],
+) -> list[dict]:
+    """The other half of roster sync: NRPS pulls add members (upsert_enrollment,
+    called per-member on every instructor launch); this removes STUDENT
+    enrollments for the course whose user was NOT in that fresh pull.
+
+    Without this, roster sync was additive-only forever, so a one-off dev
+    launch or a student who dropped the course left a permanent phantom row
+    with no path back to correct — exactly what turned into six "students"
+    on the instructor dashboard when only two were real.
+
+    Two things this deliberately does NOT do:
+
+    - Touch instructor/admin enrollments. This is reconciling the LEARNER
+      roster specifically. A co-teacher whose role mapping is ambiguous in
+      one LMS response should never lose course access because of it. This
+      is enforced by the `role = eq.student` filter below, not by trusting
+      the caller to pass a complete keep-list — even if a launching
+      instructor were somehow absent from a pull (they shouldn't be; a
+      normal Blackboard roster listing includes them), their own
+      role='instructor' row can never match this filter.
+    - Touch users, user_profiles, or evidence_events. Removing someone's
+      enrollment in THIS course says nothing about whether they still exist
+      in other courses at this institution, and their evidence history is
+      exactly the kind of thing that should survive a re-enrollment intact.
+
+    Callers MUST NOT pass an empty keep_user_ids for "the class is empty" —
+    see the guard in lti/routes.py._sync_roster, which never calls this
+    unless the fresh pull actually returned at least one member. An empty
+    list here would delete every real student enrollment in the course.
+    """
+    if not keep_user_ids:
+        return []
+    return delete("enrollments", {
+        "institution_id": f"eq.{institution_id}",
+        "course_id": f"eq.{course_id}",
+        "role": "eq.student",
+        "user_id": f"not.in.({','.join(keep_user_ids)})",
+    })
+
+
 def insert_evidence(rows: list[dict]) -> list[dict]:
     return insert("evidence_events", rows, prefer="return=representation")
