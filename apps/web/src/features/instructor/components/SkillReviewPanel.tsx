@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type ProposeSkillsResult } from "@/features/instructor";
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CheckIcon, type CheckIconHandle } from "@/components/ui/check";
+import { XIcon, type XIconHandle } from "@/components/ui/x";
+import { SparklesIcon, type SparklesIconHandle } from "@/components/ui/sparkles";
 import {
   Pagination,
   PaginationContent,
@@ -75,11 +78,58 @@ function RefreshStatus({
   return null;
 }
 
+// Per-row decision buttons. Own refs so EVERY row's icons animate on its
+// own button hover (a shared ref would make all rows drive the last-mounted
+// icon). The check draws on Approve's hover, the x on Reject's; clicking
+// still fires the same mutation the panel drives.
+function ReviewActions({
+  disabled,
+  isFirst,
+  onApprove,
+  onReject,
+}: {
+  disabled: boolean;
+  isFirst: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const checkRef = useRef<CheckIconHandle | null>(null);
+  const xRef = useRef<XIconHandle | null>(null);
+  return (
+    <div className="flex shrink-0 gap-2">
+      <Button
+        id={isFirst ? "tour-skill-approve" : undefined}
+        variant="green"
+        size="sm"
+        disabled={disabled}
+        onClick={onApprove}
+        onMouseEnter={() => checkRef.current?.startAnimation()}
+        onMouseLeave={() => checkRef.current?.stopAnimation()}
+      >
+        <CheckIcon ref={checkRef} size={14} /> Approve
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={onReject}
+        onMouseEnter={() => xRef.current?.startAnimation()}
+        onMouseLeave={() => xRef.current?.stopAnimation()}
+      >
+        <XIcon ref={xRef} size={14} /> Reject
+      </Button>
+    </div>
+  );
+}
+
 export function SkillReviewPanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError, refetch } = useProposedSkills(courseId);
   const review = useReviewProposedSkill(courseId);
   const propose = useProposeSkills(courseId);
   const [page, setPage] = useState(0);
+  // Animated icons: the check/x/sparkle draw when their BUTTON is hovered
+  // (controlled-mode handlers), same as the decision buttons elsewhere.
+  const refreshRef = useRef<SparklesIconHandle | null>(null);
 
   if (isLoading) {
     return (
@@ -133,8 +183,16 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           size="sm"
           disabled={propose.isPending}
           onClick={() => propose.mutate()}
+          onMouseEnter={() => refreshRef.current?.startAnimation()}
+          onMouseLeave={() => refreshRef.current?.stopAnimation()}
         >
-          {propose.isPending ? "Refreshing…" : "Refresh skills"}
+          {propose.isPending ? (
+            "Refreshing…"
+          ) : (
+            <>
+              <SparklesIcon ref={refreshRef} size={13} /> Refresh skills
+            </>
+          )}
         </Button>
       </div>
 
@@ -188,25 +246,12 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                     </p>
                   ) : null}
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button
-                    id={slice[0].id === s.id ? "tour-skill-approve" : undefined}
-                    variant="green"
-                    size="sm"
-                    disabled={review.isPending}
-                    onClick={() => review.mutate({ skillId: s.id, status: "approved" })}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={review.isPending}
-                    onClick={() => review.mutate({ skillId: s.id, status: "rejected" })}
-                  >
-                    Reject
-                  </Button>
-                </div>
+                <ReviewActions
+                  disabled={review.isPending}
+                  isFirst={slice[0].id === s.id}
+                  onApprove={() => review.mutate({ skillId: s.id, status: "approved" })}
+                  onReject={() => review.mutate({ skillId: s.id, status: "rejected" })}
+                />
               </div>
             );
           })}

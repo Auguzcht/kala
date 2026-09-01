@@ -200,18 +200,29 @@ export function TourRunner({
           // onClick handlers ignore the mousedown, so both handler kinds
           // work from the same step.
           popover.onNextClick = () => {
-            const target = document.querySelector(
-              s.clickSelector ?? s.selector
-            ) as HTMLElement | null;
-            target?.dispatchEvent(
-              new MouseEvent("mousedown", {
-                bubbles: true,
-                cancelable: true,
-                button: 0,
-                ctrlKey: false,
-              })
-            );
-            target?.click();
+            // clickOnlyWhenClosed: skip the click when that selector is
+            // already present. The skill-review trigger is a toggle and
+            // the panel auto-opens when a queue exists — clicking an
+            // already-open trigger would collapse it mid-tour. This keeps
+            // the step working for both states (open → highlight only;
+            // closed → click to open).
+            const alreadyOpen =
+              s.clickOnlyWhenClosed &&
+              document.querySelector(s.clickOnlyWhenClosed);
+            if (!alreadyOpen) {
+              const target = document.querySelector(
+                s.clickSelector ?? s.selector
+              ) as HTMLElement | null;
+              target?.dispatchEvent(
+                new MouseEvent("mousedown", {
+                  bubbles: true,
+                  cancelable: true,
+                  button: 0,
+                  ctrlKey: false,
+                })
+              );
+              target?.click();
+            }
             advanceTo(globalIndex + 1);
           };
         } else if (s.tutorAsk) {

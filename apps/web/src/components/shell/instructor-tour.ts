@@ -121,6 +121,10 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     description:
       "The setup layer, collapsed because it is not daily work. The orange badge is the queue: every pending skill was AI-drafted from the course's content and is waiting on a human decision.",
     click: true,
+    // The section auto-opens when a queue exists — clicking an
+    // already-open trigger would collapse it. Skip the click in that
+    // case; only click when the panel is actually closed.
+    clickOnlyWhenClosed: "#tour-skill-review-panel",
   },
   {
     route: "/class",

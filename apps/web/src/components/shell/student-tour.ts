@@ -19,6 +19,11 @@ export type TourStepConfig = {
    * first lesson card). */
   click?: boolean;
   clickSelector?: string;
+  /** Skip the click when this selector is already present. For toggles
+   * whose open state is driven by data (the skill-review section
+   * auto-opens when a queue exists) — clicking an already-open trigger
+   * would collapse it mid-tour. */
+  clickOnlyWhenClosed?: string;
   /** Ask the tutor a canned question when Next is hit: fill the input and
    * submit through the same path the Ask button uses. */
   tutorAsk?: { question: string };
