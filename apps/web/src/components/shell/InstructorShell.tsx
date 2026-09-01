@@ -12,6 +12,14 @@ import { useLearnerRecord } from "@/features/instructor";
 import { useUI } from "@/stores/ui-store";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Instructor shell: top bar + first-launch tour banner + the cross-page
 // tour runner (mirrors CourseShell's student side). The tour is the
@@ -40,6 +48,7 @@ export function InstructorShell({
   const [tourPrompted, setTourPrompted] = useState(
     () => (tourKey ? localStorage.getItem(tourKey) !== "dismissed" : false)
   );
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // This shell renders once for every route under /class via <Outlet/>, so
   // the breadcrumb was stuck on a single hardcoded "Instructor dashboard"
@@ -76,7 +85,12 @@ export function InstructorShell({
     setTourPrompted(false);
   };
 
+  // Confirmation before the walkthrough fires (pre-tour dialog, not a
+  // drive-into-the-user) — same as the student workspace.
+  const confirmStart = () => setConfirmOpen(true);
+
   const startTour = () => {
+    setConfirmOpen(false);
     useUI.getState().setTourStep(0);
     // The tour starts on the class overview; starting it from the learner
     // record needs a navigation, same as the student side.
@@ -119,7 +133,7 @@ export function InstructorShell({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={startTour}
+                    onClick={confirmStart}
                     onMouseEnter={iconPlay}
                     onMouseLeave={iconStop}
                     aria-label="Take the tour"
@@ -134,7 +148,7 @@ export function InstructorShell({
               // Prompted but on the learner record: full-text control.
               <button
                 type="button"
-                onClick={startTour}
+                onClick={confirmStart}
                 className="rounded-[3px] border border-primary/20 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-accent"
               >
                 Take the tour
@@ -144,7 +158,7 @@ export function InstructorShell({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={startTour}
+                    onClick={confirmStart}
                     onMouseEnter={iconPlay}
                     onMouseLeave={iconStop}
                     aria-label="Take the tour"
@@ -177,7 +191,7 @@ export function InstructorShell({
           <div className="flex-1" />
           <button
             type="button"
-            onClick={startTour}
+            onClick={confirmStart}
             className="rounded-[3px] bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Take the tour
@@ -196,6 +210,34 @@ export function InstructorShell({
 
       {/* Cross-page runner — mounted for every /class route, owns the
           walkthrough across overview + learner record. */}
+      {/* Pre-tour confirmation, same as the student workspace. */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Take the tour?</DialogTitle>
+            <DialogDescription>
+              About 2 minutes — roster, triage sheet, charts, then one learner's record. You can exit anytime.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+              className="rounded-[3px] border border-primary/20 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+            >
+              Maybe later
+            </button>
+            <button
+              type="button"
+              onClick={startTour}
+              className="rounded-[3px] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Start tour
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <InstructorTourRunner />
     </div>
   );
