@@ -14,6 +14,14 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { pageWindow } from "@/lib/pagination";
 
 // A course's proposal queue can run to dozens of rows (this course has 32)
@@ -96,7 +104,7 @@ function ReviewActions({
   const checkRef = useRef<CheckIconHandle | null>(null);
   const xRef = useRef<XIconHandle | null>(null);
   return (
-    <div className="flex shrink-0 gap-2">
+    <div className="flex shrink-0 items-center justify-end gap-1.5">
       <Button
         id={isFirst ? "tour-skill-approve" : undefined}
         variant="green"
@@ -105,9 +113,9 @@ function ReviewActions({
         onClick={onApprove}
         onMouseEnter={() => checkRef.current?.startAnimation()}
         onMouseLeave={() => checkRef.current?.stopAnimation()}
-        className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
+        className="h-7 px-2.5 text-[12px] [&_svg]:size-3"
       >
-        <CheckIcon ref={checkRef} size={14} /> Approve
+        <CheckIcon ref={checkRef} size={13} /> Approve
       </Button>
       <Button
         variant="outline"
@@ -116,9 +124,9 @@ function ReviewActions({
         onClick={onReject}
         onMouseEnter={() => xRef.current?.startAnimation()}
         onMouseLeave={() => xRef.current?.stopAnimation()}
-        className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
+        className="h-7 px-2.5 text-[12px] [&_svg]:size-3"
       >
-        <XIcon ref={xRef} size={14} /> Reject
+        <XIcon ref={xRef} size={13} /> Reject
       </Button>
     </div>
   );
@@ -166,20 +174,16 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
     <div className="relative border bg-card" id="tour-skill-review-panel">
       <CornerBrackets />
       <div className="flex flex-wrap items-center gap-3 border-b px-5 py-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-[16px] font-semibold text-foreground">
+        <div className="min-w-0">
+          <h2 className="font-display text-[19px] font-semibold text-foreground">
             Skill proposals
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            AI-drafted from this course's content, one module at a time. Approve to make them
-            live for learners.
+            {proposed.length} pending · AI-drafted from this course's content, one module at a
+            time. Approve to make them live for learners.
           </p>
         </div>
-        {proposed.length > 0 ? (
-          <span className="rounded-full bg-brand-orange/15 px-2.5 py-0.5 font-mono text-[11.5px] font-bold text-brand-orange-foreground">
-            {proposed.length} pending
-          </span>
-        ) : null}
+        <div className="flex-1" />
         <Button
           variant="outline"
           size="sm"
@@ -187,6 +191,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           onClick={() => propose.mutate()}
           onMouseEnter={() => refreshRef.current?.startAnimation()}
           onMouseLeave={() => refreshRef.current?.stopAnimation()}
+          className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
         >
           {propose.isPending ? (
             "Refreshing…"
@@ -212,7 +217,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           />
         </div>
       ) : (
-        <div className="divide-y divide-border">
+        <>
           <div className="px-5 pt-3">
             <RefreshStatus
               isPending={propose.isPending}
@@ -221,43 +226,69 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
               data={propose.data}
             />
           </div>
-          {slice.map((s) => {
-            const isDuplicate = (s.proposed_source ?? "").startsWith("possible duplicate");
-            return (
-              <div key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[13.5px] font-semibold text-foreground">{s.name}</p>
-                    <span className="rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {s.bloom_level}
-                    </span>
-                    <span className="font-mono text-[10.5px] text-muted-foreground">
-                      weight {s.blueprint_weight}
-                    </span>
-                  </div>
-                  {s.proposed_source ? (
-                    <p
-                      className={
-                        isDuplicate
-                          ? "mt-1.5 text-xs font-medium text-brand-orange-foreground"
-                          : "mt-1.5 text-[11.5px] text-muted-foreground"
-                      }
-                    >
-                      {isDuplicate ? "⚠ " : ""}
-                      {s.proposed_source}
-                    </p>
-                  ) : null}
-                </div>
-                <ReviewActions
-                  disabled={review.isPending}
-                  isFirst={slice[0].id === s.id}
-                  onApprove={() => review.mutate({ skillId: s.id, status: "approved" })}
-                  onReject={() => review.mutate({ skillId: s.id, status: "rejected" })}
-                />
-              </div>
-            );
-          })}
-        </div>
+          {/* Roster-scale table: same Table primitives, cell padding, and
+              font sizes as the class roster, so the review queue reads as
+              part of the same instrument. */}
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-[11px] uppercase tracking-[0.05em]">
+                  Proposed skill
+                </TableHead>
+                <TableHead className="text-[11px] uppercase tracking-[0.05em]">
+                  Source
+                </TableHead>
+                <TableHead className="text-right text-[11px] uppercase tracking-[0.05em]">
+                  Review
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {slice.map((s) => {
+                const isDuplicate = (s.proposed_source ?? "").startsWith("possible duplicate");
+                return (
+                  <TableRow key={s.id}>
+                    <TableCell>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold text-foreground">
+                          {s.name}
+                        </p>
+                        <p className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                          {s.bloom_level ?? "unmapped"} · weight {s.blueprint_weight}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[280px]">
+                      {s.proposed_source ? (
+                        <p
+                          className={
+                            isDuplicate
+                              ? "truncate text-[12.5px] font-medium text-brand-orange-foreground"
+                              : "truncate text-[12.5px] text-foreground/80"
+                          }
+                          title={s.proposed_source}
+                        >
+                          {isDuplicate ? "⚠ " : ""}
+                          {s.proposed_source}
+                        </p>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <ReviewActions
+                        disabled={review.isPending}
+                        isFirst={slice[0].id === s.id}
+                        onApprove={() => review.mutate({ skillId: s.id, status: "approved" })}
+                        onReject={() => review.mutate({ skillId: s.id, status: "rejected" })}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </>
       )}
 
       {/* Review queue footer: range line + windowed pager, same as the
