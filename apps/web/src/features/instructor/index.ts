@@ -1,8 +1,14 @@
 export { Heatmap } from "@/features/instructor/components/Heatmap";
 export { AtRiskList } from "@/features/instructor/components/AtRiskList";
-export { StudentDrillDown } from "@/features/instructor/components/StudentDrillDown";
 export { SkillReviewPanel } from "@/features/instructor/components/SkillReviewPanel";
 export { AutoMatchedSection } from "@/features/instructor/components/AutoMatchedSection";
+export { CohortStats } from "@/features/instructor/components/CohortStats";
+export { CohortCharts } from "@/features/instructor/components/CohortCharts";
+export { RosterTable } from "@/features/instructor/components/RosterTable";
+export { LearnerRecord } from "@/features/instructor/components/LearnerRecord";
+export { LearnerTriage } from "@/features/instructor/components/LearnerTriage";
+export { LearnerSheet } from "@/features/instructor/components/LearnerSheet";
+export { DecisionCenter } from "@/features/instructor/components/DecisionCenter";
 export {
   useHeatmap,
   useAtRisk,
@@ -12,6 +18,13 @@ export {
   useProposeSkills,
   useAutoMatchedSkills,
   useDetachAutoMatchedSkill,
+  useRoster,
+  useCohortStats,
+  useLearnerRecord,
+  useRecommendations,
+  useGenerateRecommendations,
+  useDecideRecommendation,
+  useCreateIntervention,
 } from "@/features/instructor/hooks/use-instructor";
 export type {
   HeatmapData,
@@ -28,4 +41,14 @@ export type {
   AutoMatchedSkill,
   AutoMatchedSkills,
   DetachResponse,
+  LearnerStatus,
+  RosterRow,
+  Roster,
+  CohortStats as CohortStatsData,
+  LearnerRecord as LearnerRecordData,
+  Recommendation,
+  RecommendationList,
+  RecommendationStatus,
+  RecommendationKind,
+  GenerateRecommendations,
 } from "@/features/instructor/schema/instructor.schema";

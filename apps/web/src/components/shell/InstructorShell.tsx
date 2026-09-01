@@ -1,22 +1,25 @@
 import { useState, type ReactNode } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import { TopBar } from "@/components/shell/TopBar";
+import { useLearnerRecord } from "@/features/instructor";
 
 // Instructor shell: top bar + first-launch tour banner (per the mockup
 // "Instructor Dashboard"). The tour is the brief's named onboarding
 // mechanism (Driver.js) and doubles as the conference demo walkthrough:
-// heatmap → needs-support list → a student's twin.
+// roster → needs-support list → cohort trends → one learner's record.
 
 const TOUR_KEY = "kala.instructor.tour";
+const STUDENT_ROUTE = /^\/class\/student\/([^/]+)/;
 
 const tourSteps = [
   {
-    element: "#heatmap-panel",
+    element: "#roster-panel",
     popover: {
-      title: "Skills × Bloom's mastery",
+      title: "Your class, triaged",
       description:
-        "Cohort and per-student mastery across skills, grouped by Bloom's level. Cells pair color with a letter — never color alone.",
+        "Every enrolled student, sorted by who needs you first. Real names, because you are the teacher of record. Flip the de-identify switch to show pseudonyms when you are screen-sharing.",
     },
   },
   {
@@ -24,15 +27,15 @@ const tourSteps = [
     popover: {
       title: "Needs support",
       description:
-        "Evidence-triggered flags with their reasons. Supportive wording, never a verdict on a student.",
+        "Evidence-triggered flags with the specific reason behind each one. Supportive wording, never a verdict on a student.",
     },
   },
   {
-    element: "#cohort-readiness",
+    element: "#cohort-analytics",
     popover: {
-      title: "Cohort readiness",
+      title: "Is the class moving?",
       description:
-        "A heuristic rollup from evidence to date, weighted to the blueprint — not a grade prediction.",
+        "Readiness over time, practice volume, mastery mix, and the weakest skills across the class — the reteach list.",
     },
   },
 ];
@@ -46,9 +49,33 @@ export function InstructorShell({
   displayName?: string;
   children: ReactNode;
 }) {
+  const { pathname } = useLocation();
   const [showTour, setShowTour] = useState(
     () => localStorage.getItem(TOUR_KEY) !== "dismissed"
   );
+
+  // This shell renders once for every route under /class via <Outlet/>, so
+  // the breadcrumb was stuck on a single hardcoded "Instructor dashboard"
+  // no matter which page was actually open — the class overview and one
+  // learner's record looked identical in the crumb. Resolve a subsection
+  // from the path the same way CourseShell already does for the student
+  // side (SECTION_LABELS keyed on pathname); the one difference is the
+  // learner route is dynamic, so its label comes from a name lookup rather
+  // than a static table.
+  const studentMatch = pathname.match(STUDENT_ROUTE);
+  const studentUid = studentMatch?.[1];
+  // Same query key LearnerRecord itself uses, so this is a cache hit (or a
+  // request already in flight) rather than a second network call — the
+  // page below is fetching the identical data for its own header.
+  const learner = useLearnerRecord(courseId, studentUid ?? "");
+  const subsection = studentUid
+    ? learner.data?.displayName ?? "Learner record"
+    : undefined;
+
+  // The tour's anchors (#roster-panel, #at-risk-list, #cohort-analytics)
+  // only exist on the overview. Showing the banner on a learner's record
+  // page would offer a tour that highlights nothing.
+  const onOverview = pathname === "/class" || pathname === "/class/";
 
   const dismissTour = () => {
     localStorage.setItem(TOUR_KEY, "dismissed");
@@ -72,6 +99,7 @@ export function InstructorShell({
       <TopBar
         courseId={courseId}
         section="Instructor dashboard"
+        subsection={subsection}
         right={
           initials ? (
             <span className="grid size-6.5 place-items-center rounded-full bg-brand-slate text-[10px] font-semibold text-background">
@@ -81,13 +109,13 @@ export function InstructorShell({
         }
       />
 
-      {showTour ? (
+      {showTour && onOverview ? (
         <div className="flex flex-wrap items-center gap-3 border-b border-brand-orange/20 bg-brand-orange/8 px-6 py-2.5">
           <span className="text-xs font-semibold text-brand-orange-foreground">
             First time here?
           </span>
           <span className="text-xs text-muted-foreground">
-            Take the 60-second tour — heatmap, needs-support list, then a student's twin.
+            Take the 60-second tour: your roster, who needs support, then how the class is moving.
           </span>
           <div className="flex-1" />
           <button

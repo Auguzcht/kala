@@ -19,7 +19,7 @@ const BAND_META: Record<MasteryBand, { short: string; cell: string; label: strin
   mastered: { short: "M", cell: "bg-band-mastered text-band-mastered-fg", label: "Mastered" },
 };
 
-export function Heatmap({ courseId }: { courseId: string }) {
+export function Heatmap({ courseId, deidentified = false }: { courseId: string; deidentified?: boolean }) {
   const { data, isLoading, isError, refetch } = useHeatmap(courseId);
 
   if (isLoading) return <Skeleton className="h-80 w-full" />;
@@ -70,7 +70,7 @@ export function Heatmap({ courseId }: { courseId: string }) {
               Skills × Bloom's mastery
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Cohort average across {data.students.length} students · pseudonyms shown
+              Cohort average across {data.students.length} students
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -123,26 +123,29 @@ export function Heatmap({ courseId }: { courseId: string }) {
           })}
 
           {/* per-student rows */}
-          {data.students.map((stu) => (
-            <div key={stu.userId} className="contents">
-              <div className="flex items-center gap-2 border-b border-r border-border px-4 py-2.5">
-                <span className="text-[13px] font-medium text-foreground">{stu.pseudonym}</span>
+          {data.students.map((stu) => {
+            const name = deidentified ? stu.pseudonym : stu.displayName;
+            return (
+              <div key={stu.userId} className="contents">
+                <div className="flex items-center gap-2 border-b border-r border-border px-4 py-2.5">
+                  <span className="text-[13px] font-medium text-foreground">{name}</span>
+                </div>
+                {data.skills.map((s) => {
+                  const cell = cellFor(stu.userId, s.skillId);
+                  const meta = BAND_META[cell?.band ?? "no-evidence"];
+                  return (
+                    <div
+                      key={s.skillId}
+                      title={`${name} — ${s.name}: ${meta.label}`}
+                      className={`grid h-11 items-center justify-center border-b border-r border-border font-mono text-[13px] font-bold last:border-r-0 ${meta.cell}`}
+                    >
+                      {meta.short}
+                    </div>
+                  );
+                })}
               </div>
-              {data.skills.map((s) => {
-                const cell = cellFor(stu.userId, s.skillId);
-                const meta = BAND_META[cell?.band ?? "no-evidence"];
-                return (
-                  <div
-                    key={s.skillId}
-                    title={`${stu.pseudonym} — ${s.name}: ${meta.label}`}
-                    className={`grid h-11 items-center justify-center border-b border-r border-border font-mono text-[13px] font-bold last:border-r-0 ${meta.cell}`}
-                  >
-                    {meta.short}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

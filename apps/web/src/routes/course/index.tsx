@@ -9,6 +9,7 @@ import { useSession } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useCourse } from "@/features/courses";
 import { useNextUp, useTwin } from "@/features/twin";
+import { InstructorPlan } from "@/features/plan";
 import { MasteryBand } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -110,6 +111,12 @@ function WorkspaceHome() {
           </Button>
         ) : null}
       </div>
+
+      {/* What the instructor approved. Sits directly under "Next up" and
+          above the generic quick links on purpose: an action a human
+          teacher chose for this learner outranks one Kala picked. Renders
+          nothing when the plan is empty. */}
+      <InstructorPlan courseId={courseId} />
 
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
