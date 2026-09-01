@@ -253,20 +253,29 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                         <p className="truncate text-[13px] font-semibold text-foreground">
                           {s.name}
                         </p>
-                        <p className="font-mono text-[10.5px] uppercase tracking-wide text-muted-foreground">
-                          {s.bloom_level ?? "unmapped"} · weight {s.blueprint_weight}
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {s.bloom_level ?? "unmapped"}
+                          </span>
+                          {/* Weight is a real number a reviewer must see:
+                              it is how much this skill counts toward the
+                              readiness rollup (masterplan 8). Badge it in
+                              gold like the readiness accents, never inline
+                              muted text. */}
+                          <span className="rounded-sm border border-brand-gold/30 bg-brand-gold/10 px-1.5 py-0.5 font-mono text-[10.5px] font-bold text-brand-gold-foreground">
+                            w {s.blueprint_weight}
+                          </span>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-[280px]">
+                    <TableCell>
                       {s.proposed_source ? (
                         <p
                           className={
                             isDuplicate
-                              ? "truncate text-[12.5px] font-medium text-brand-orange-foreground"
-                              : "truncate text-[12.5px] text-foreground/80"
+                              ? "min-w-0 text-[12.5px] font-medium leading-relaxed text-brand-orange-foreground"
+                              : "min-w-0 text-[12.5px] leading-relaxed text-foreground/80"
                           }
-                          title={s.proposed_source}
                         >
                           {isDuplicate ? "⚠ " : ""}
                           {s.proposed_source}
