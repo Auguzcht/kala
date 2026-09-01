@@ -3,6 +3,7 @@ import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type Propo
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TriangleAlertIcon } from "lucide-react";
 import { CheckIcon, type CheckIconHandle } from "@/components/ui/check";
 import { XIcon, type XIconHandle } from "@/components/ui/x";
 import { SparklesIcon, type SparklesIconHandle } from "@/components/ui/sparkles";
@@ -245,12 +246,21 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
             </TableHeader>
             <TableBody>
               {slice.map((s) => {
-                const isDuplicate = (s.proposed_source ?? "").startsWith("possible duplicate");
+                const rawSource = s.proposed_source ?? "";
+                // Two warning flavors come from different places: the
+                // proposer bakes "⚠️ " into module-level sources, and the
+                // review layer prefixes "possible duplicate" rows. Both
+                // render as ONE warning badge (the triangle icon chip);
+                // the raw glyph is stripped from the message.
+                const isDuplicate = rawSource.startsWith("possible duplicate");
+                const hasWarningGlyph = /^\s*⚠/.test(rawSource);
+                const flagged = isDuplicate || hasWarningGlyph;
+                const message = rawSource.replace(/^\s*⚠️?\s*/, "");
                 return (
                   <TableRow key={s.id}>
                     <TableCell>
                       <div className="min-w-0">
-                        <p className="truncate text-[13px] font-semibold text-foreground">
+                        <p className="truncate text-[13px] font-semibold [overflow-wrap:anywhere] text-foreground">
                           {s.name}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -270,16 +280,25 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                     </TableCell>
                     <TableCell>
                       {s.proposed_source ? (
-                        <p
-                          className={
-                            isDuplicate
-                              ? "min-w-0 text-[12.5px] font-medium leading-relaxed text-brand-orange-foreground"
-                              : "min-w-0 text-[12.5px] leading-relaxed text-foreground/80"
-                          }
-                        >
-                          {isDuplicate ? "⚠ " : ""}
-                          {s.proposed_source}
-                        </p>
+                        <div className="flex items-start gap-1.5">
+                          {flagged ? (
+                            <span
+                              className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-[2px] bg-brand-orange/15 text-brand-orange"
+                              aria-hidden
+                            >
+                              <TriangleAlertIcon size={11} />
+                            </span>
+                          ) : null}
+                          <p
+                            className={
+                              flagged
+                                ? "min-w-0 text-[12.5px] font-medium leading-relaxed [overflow-wrap:anywhere] text-brand-orange-foreground"
+                                : "min-w-0 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] text-foreground/80"
+                            }
+                          >
+                            {message}
+                          </p>
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
