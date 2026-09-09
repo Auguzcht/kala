@@ -1,8 +1,18 @@
 export { TutorChat } from "@/features/tutor/components/TutorChat";
-export { useAskTutor, useTutorAsk } from "@/features/tutor/hooks/use-tutor";
+export {
+  useAskTutor,
+  useTutorAsk,
+  useTutorConversations,
+  useTutorConversation,
+  useCreateTutorConversation,
+  useAskInConversation,
+  useDeleteTutorConversation,
+} from "@/features/tutor/hooks/use-tutor";
 export type {
   TutorMessage,
   TutorAskResult,
   TutorStyle,
+  TutorConversation,
+  TutorPersistedMessage,
+  TutorConversationDetail,
 } from "@/features/tutor/schema/tutor.schema";
-

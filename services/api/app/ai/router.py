@@ -32,12 +32,22 @@ def get_model_for(task: str) -> str:
         raise ValueError(f"unknown model task: {task}") from exc
 
 
-def answer(*, system: str, user_text: str, escalate: bool = False) -> str:
+def answer(*, system: str, user_text: str, escalate: bool = False,
+           history: list[dict] | None = None) -> str:
+    """`history` is prior turns already in bedrock.converse's message shape
+    ({"role": "user"|"assistant", "content": [{"text": ...}]}), oldest
+    first. Optional and backward-compatible: every existing caller omits
+    it and gets exactly the single-turn behavior this function always
+    had. Added for the tutor's persistent conversations (Stage 2 of the
+    AI overhaul) so a follow-up question can actually reference what was
+    said earlier in the same thread, not just the current question alone."""
     model = get_model_for("reasoning" if escalate else "default")
+    messages = list(history) if history else []
+    messages.append({"role": "user", "content": [{"text": user_text}]})
     return bedrock.converse(
         model_id=model,
         system=system,
-        messages=[{"role": "user", "content": [{"text": user_text}]}],
+        messages=messages,
     )
 
 

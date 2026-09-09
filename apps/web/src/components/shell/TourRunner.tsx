@@ -93,11 +93,18 @@ export function TourRunner({
     // uses (native value setter + input event so React's controlled state
     // picks it up, then requestSubmit on the form). Two frames for React to
     // flush the state before submit.
+    //
+    // Targets a textarea, not an input: TutorChat's compose box moved onto
+    // ai-elements' PromptInputTextarea (Stage 2 of the AI overhaul), which
+    // renders a <textarea>, not the plain <input> this helper originally
+    // targeted. The native value setter is per-element-type — reusing
+    // HTMLInputElement's setter on a textarea node is a silent no-op, not
+    // an error, so this would have stalled the tour without ever throwing.
     const askTutor = async (question: string) => {
-      const input = document.querySelector<HTMLInputElement>("#tour-tutor-input input");
+      const input = document.querySelector<HTMLTextAreaElement>("#tour-tutor-input textarea");
       if (!input) return;
       const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
+        window.HTMLTextAreaElement.prototype,
         "value"
       )?.set;
       setter?.call(input, question);

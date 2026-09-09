@@ -1,46 +1,61 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Streamdown } from "streamdown";
-import { UserIcon } from "lucide-react";
-import { SendIcon } from "@/components/ui/send";
-import { useSession } from "@/lib/auth/AuthProvider";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
-import { useAskTutor } from "@/features/tutor/hooks/use-tutor";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StudyStream } from "@/components/study/StudyStream";
+import { UserBlock } from "@/components/study/UserBlock";
+import { AssistantBlock } from "@/components/study/AssistantBlock";
+import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { CornerBrackets } from "@/components/kala";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
-import type { TutorMessage } from "@/features/tutor/schema/tutor.schema";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { useSession } from "@/lib/auth/AuthProvider";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputSubmit,
+} from "@/components/ai-elements/prompt-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { askTutor, createTutorConversation } from "@/features/tutor/api/tutor.api";
+import { useTutorConversations, useTutorConversation } from "@/features/tutor";
+import type { TutorStyle } from "@/features/tutor";
 
-// RAG-grounded tutor. Teaches and hints, never hands back raw answers to
-// graded work (enforced server-side by the system prompt). The hornbill is
-// the guide (DESIGN.md signature element #7): it sits beside every answer,
-// and it's what the "thinking" beat is made of.
-
-// Markdown rendering for assistant answers: the model answers in
-// markdown (bold, lists, code), and raw ** asterisks read as a rendering
-// bug. Streamdown is the installed markdown renderer (already a
-// dependency, mode="static"). The user's own messages stay plain text.
+// Tutor as a real, resumable chat (Stage 2 of the AI overhaul, see
+// docs/AI_OVERHAUL_TODO.md). Previously this was a stateless single-turn
+// box — every question independent, nothing kept on refresh. Now it's a
+// stream of persisted turns, same StudyStream every other surface sits on,
+// plus a conversation switcher and follow-up chips wired to the eli5/
+// detail style hints that already existed server-side with nothing
+// calling them.
 //
-// The user avatar mirrors the assistant's: initials chip from the session
-// display name (the shell's own pattern), falling back to a user glyph.
-// The hornbill stays on the assistant side (DESIGN.md signature #7).
-const MD_BUBBLE =
-  "min-w-0 rounded-md border bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground " +
-  "[&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
-  "[&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 " +
-  "[&_li]:my-0.5 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 " +
-  "[&_pre]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 " +
-  "[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_a]:text-brand-orange [&_a]:underline " +
-  "[&_h1]:text-base [&_h2]:text-base [&_h3]:text-[13.5px] [&_blockquote]:border-l-2 " +
-  "[&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground";
+// The compose input is ALWAYS mounted, not gated behind picking or
+// creating a conversation first — the student tour drives this surface by
+// finding #tour-tutor-input, filling it, and calling requestSubmit() on
+// it directly (see TourRunner.tsx), synchronously on arrival at this
+// route, so the input existing only after some async setup would break
+// it. Conversation creation instead happens transparently inside the
+// send flow the first time a message actually goes out.
+//
+// File uploads are Stage 4. PromptInput already ships full attachment
+// support (drag-drop, paste, screenshot capture), it's just not surfaced
+// here yet — the backend to receive and ground an upload doesn't exist,
+// wiring the UI early would be a dead button.
 
 export function TutorChat({ courseId }: { courseId: string }) {
   const session = useSession();
-  const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<TutorMessage[]>([]);
-  const ask = useAskTutor(courseId);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const conversations = useTutorConversations(courseId);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const active = useTutorConversation(conversationId);
+  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const userInitials = (session?.displayName ?? "")
     .split(/\s+/)
     .slice(0, 2)
@@ -48,111 +63,145 @@ export function TutorChat({ courseId }: { courseId: string }) {
     .join("")
     .toUpperCase();
 
+  // Auto-resume the most recently active conversation once the list loads
+  // — a returning student sees their history without an extra click. Runs
+  // ONCE off the initial load only (the ref guard), not every time
+  // conversationId happens to be null, otherwise clicking "New chat"
+  // (which sets conversationId back to null) would immediately snap back
+  // to the old thread instead of actually starting fresh.
+  const autoResumedRef = useRef(false);
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, ask.isPending]);
+    if (autoResumedRef.current || conversations.isLoading) return;
+    autoResumedRef.current = true;
+    const mostRecent = conversations.data?.[0];
+    if (mostRecent) setConversationId(mostRecent.id);
+  }, [conversations.data, conversations.isLoading]);
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const text = question.trim();
-    if (!text || ask.isPending) return;
-    setMessages((m) => [...m, { role: "user", text }]);
-    setQuestion("");
-    ask.mutate(text, {
-      onSuccess: (result) => {
-        setMessages((m) => [...m, { role: "assistant", text: result.answer }]);
-      },
-    });
+  // One mutation covers both "create a conversation if this is the first
+  // message" and "ask within it" — a single composite step, not two
+  // separate hook calls coordinated by outer state. That coordination is
+  // exactly where a stale-closure bug lives: if creation and asking were
+  // two different useMutation objects, the ask mutation's closure could
+  // still be holding the pre-creation (null) conversationId depending on
+  // timing. Threading the resolved id through this mutation's OWN return
+  // value instead of reading outer state in onSuccess avoids that.
+  const send = useMutation({
+    mutationFn: async ({ question, style }: { question: string; style: TutorStyle }) => {
+      let id = conversationId;
+      if (!id) {
+        const convo = await createTutorConversation(courseId);
+        id = convo.id;
+        setConversationId(id);
+      }
+      const result = await askTutor(courseId, question, style, id);
+      return { ...result, conversationId: id };
+    },
+    onSuccess: (data, variables) => {
+      setLastQuestion(variables.question);
+      queryClient.invalidateQueries({ queryKey: ["tutor-conversation", data.conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
+    },
+  });
+
+  function startNewChat() {
+    setConversationId(null);
+    setLastQuestion(null);
   }
 
+  function askQuestion(question: string, style: TutorStyle = "default") {
+    if (!question.trim() || send.isPending) return;
+    send.mutate({ question, style });
+  }
+
+  const messages = active.data?.messages ?? [];
+  const lastMessage = messages.at(-1);
+
   return (
-    <StudySessionShell>
-      <Card className="relative">
-      <CornerBrackets />
-      <CardHeader>
-        <CardTitle>Ask Kala</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div
-          ref={scrollRef}
-          className="flex max-h-96 flex-col gap-4 overflow-y-auto pr-1"
-        >
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <img
-                src="/Kala-Logo.png"
-                alt=""
-                className="size-14 object-contain opacity-80"
-              />
-              <p className="max-w-sm text-sm text-muted-foreground">
-                Ask a question about this course. Kala will teach and give hints — not hand you
-                answers to graded work.
-              </p>
-            </div>
+    <StudySessionShell
+      right={
+        conversations.data && conversations.data.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <Select value={conversationId ?? undefined} onValueChange={setConversationId}>
+              <SelectTrigger size="sm" className="w-[200px]">
+                <SelectValue placeholder="Select a chat" />
+              </SelectTrigger>
+              <SelectContent>
+                {conversations.data.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <span className="truncate">{c.title ?? "Untitled chat"}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={startNewChat}>
+              New chat
+            </Button>
+          </div>
+        ) : null
+      }
+    >
+      <div className="relative border bg-card">
+        <CornerBrackets />
+        <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {active.data?.title ?? "Ask Kala"}
+          </span>
+        </div>
+
+        <StudyStream>
+          {conversationId && active.isLoading ? (
+            <Shimmer>Loading conversation…</Shimmer>
+          ) : messages.length === 0 ? (
+            <EmptyState
+              title="Ask anything about this course"
+              description="Kala answers grounded in the actual course content, and never the answer to something graded."
+            />
           ) : (
-            messages.map((m, i) =>
+            messages.map((m) =>
               m.role === "user" ? (
-                <div key={i} className="ml-auto flex max-w-[85%] items-start gap-2.5">
-                  <div className="rounded-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
-                    <p className="whitespace-pre-wrap">{m.text}</p>
-                  </div>
-                  <span
-                    className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-slate text-[10px] font-bold text-background"
-                    title={session?.displayName ?? "You"}
-                    aria-hidden
-                  >
-                    {userInitials || <UserIcon size={12} />}
-                  </span>
-                </div>
+                <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />
               ) : (
-                <div key={i} className="mr-auto flex max-w-[85%] items-start gap-2.5">
-                  <img
-                    src="/Kala-Logo.png"
-                    alt="Kala"
-                    className="mt-0.5 size-7 shrink-0 object-contain"
-                  />
-                  <div
-                    id={i === messages.length - 1 ? "tour-tutor-response" : undefined}
-                    className={MD_BUBBLE}
-                  >
-                    <Streamdown mode="static">{m.text}</Streamdown>
-                  </div>
-                </div>
+                <AssistantBlock
+                  key={m.id}
+                  text={m.content}
+                  id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
+                />
               )
             )
           )}
-          {ask.isPending ? (
-            <div id="tour-tutor-thinking" className="mr-auto flex items-start gap-2.5">
-              <img
-                src="/Kala-Logo.png"
-                alt=""
-                className={cn(
-                  "mt-0.5 size-7 shrink-0 object-contain opacity-80 motion-safe:animate-pulse"
-                )}
-              />
-              <p className="flex items-center gap-2 rounded-md border bg-card px-4 py-2.5 text-sm text-muted-foreground">
-                <Spinner className="size-3.5" />
-                Kala is thinking…
-              </p>
+
+          {send.isPending ? (
+            <div id="tour-tutor-thinking" className="mr-auto flex max-w-[88%] items-start gap-2.5">
+              <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
+              <div className="rounded-md border bg-card px-4 py-3.5">
+                <Shimmer>Kala is thinking…</Shimmer>
+              </div>
             </div>
           ) : null}
-        </div>
 
-        <form id="tour-tutor-input" onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            className="h-10 flex-1 rounded-md border border-input bg-background px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask about this course…"
-          />
-          <Button type="submit" variant="orange" disabled={ask.isPending || !question.trim()}>
-            {ask.isPending ? <Spinner className="size-4" /> : <SendIcon size={16} aria-hidden />}
-            Ask
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+          {!send.isPending && lastQuestion ? (
+            <div className="mr-auto max-w-[88%]">
+              <FollowUpChips onPick={(style) => askQuestion(lastQuestion, style)} />
+            </div>
+          ) : null}
+        </StudyStream>
+
+        <div className="border-t p-3">
+          <PromptInput
+            id="tour-tutor-input"
+            onSubmit={(message) => {
+              askQuestion(message.text);
+            }}
+          >
+            <PromptInputBody>
+              <PromptInputTextarea placeholder="Ask about this course…" />
+            </PromptInputBody>
+            <PromptInputFooter>
+              <PromptInputSubmit disabled={send.isPending} status={send.isPending ? "submitted" : undefined} />
+            </PromptInputFooter>
+          </PromptInput>
+        </div>
+      </div>
     </StudySessionShell>
   );
 }
