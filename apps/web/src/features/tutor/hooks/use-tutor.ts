@@ -8,9 +8,11 @@ import {
 } from "@/features/tutor/api/tutor.api";
 import type { TutorStyle } from "@/features/tutor/schema/tutor.schema";
 
-// Stateless per-turn ask: history lives client-side (see TutorChat), the
-// backend only ever sees the current question plus RAG context. Unchanged
-// by Stage 2 — this hook never passes a conversationId.
+// Stateless per-turn ask: no conversation, no persistence, nothing kept
+// after this call returns. Kept for any future one-off use (a quick ask
+// with no thread to attach it to) — TutorChat itself no longer calls this
+// directly as of Stage 2, it uses its own conversation-aware composite
+// mutation instead (see TutorChat.tsx's `send`).
 export function useAskTutor(courseId: string) {
   return useMutation({
     mutationFn: (question: string) => askTutor(courseId, question),

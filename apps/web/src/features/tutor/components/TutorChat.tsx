@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { StudyStream } from "@/components/study/StudyStream";
 import { UserBlock } from "@/components/study/UserBlock";
@@ -100,6 +101,11 @@ export function TutorChat({ courseId }: { courseId: string }) {
       setLastQuestion(variables.question);
       queryClient.invalidateQueries({ queryKey: ["tutor-conversation", data.conversationId] });
       queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
+    },
+    onError: () => {
+      toast.error("Kala couldn't answer that", {
+        description: "Check your connection and try again.",
+      });
     },
   });
 

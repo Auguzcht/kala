@@ -18,6 +18,7 @@ conversation_id, it just also now supports building on a real thread.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -83,6 +84,19 @@ class CreateConversation(BaseModel):
 
 @router.post("/conversations")
 def create_conversation(body: CreateConversation, user: CurrentUser = Depends(get_current_user)):
+    if body.skill_id:
+        # Client-supplied, not yet sent by any UI (a future "ask about
+        # this lesson step" flow would be the first caller) — validated
+        # the same way practice.py checks an explicit skill_id, rather
+        # than trusting the foreign key alone to catch a skill from a
+        # different course.
+        exists = db.select("skills", {
+            "id": f"eq.{body.skill_id}", "course_id": f"eq.{body.course_id}",
+            "institution_id": f"eq.{user.institution_id}",
+            "select": "id", "limit": "1",
+        })
+        if not exists:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "skill not found")
     rows = db.insert("tutor_conversations", [{
         "institution_id": user.institution_id,
         "course_id": body.course_id,
@@ -181,7 +195,7 @@ def ask(body: Ask, user: CurrentUser = Depends(get_current_user)):
         {"conversation_id": convo["id"], "role": "user", "content": body.question},
         {"conversation_id": convo["id"], "role": "assistant", "content": answer_text, "style": body.style},
     ])
-    updates: dict = {"updated_at": "now()"}
+    updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
     if not convo.get("title"):
         # First message in the thread: derive a short title from it rather
         # than leaving it null forever or spending a model call naming a
