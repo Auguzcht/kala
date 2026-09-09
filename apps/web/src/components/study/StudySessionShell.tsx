@@ -6,8 +6,11 @@ import { cn } from "@/lib/utils";
 // Study session chrome — the floating persistent bar the Gizmo-style surfaces
 // share: back affordance, a slim progress indicator whose meaning the caller
 // passes in (card N/total for flashcards, step N/total for lessons, session
-// count for practice), and a right slot (callers drop GamificationSummary in
-// there — this component stays feature-agnostic and never imports one).
+// count for practice), and an optional right slot for anything else a
+// specific surface needs. GamificationSummary is NOT dropped in here by
+// callers anymore — it lives once, persistently, in CourseShell's topbar
+// (mounting a second copy per-surface was firing duplicate badge toasts).
+// This component stays feature-agnostic and never imports one itself.
 //
 // It owns ONLY the chrome. Tutor, Lessons, Flashcards, and Practice render
 // their own content as children; the shell has no idea what's inside.

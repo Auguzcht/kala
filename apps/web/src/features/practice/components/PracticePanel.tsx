@@ -3,7 +3,6 @@ import { FlameIcon } from "@/components/ui/flame";
 import type { FlameIconHandle } from "@/components/ui/flame";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { GamificationSummary } from "@/features/gamification";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
@@ -111,11 +110,6 @@ export function PracticePanel({ courseId }: { courseId: string }) {
   return (
     <StudySessionShell
       progress={{ current: sessionAnswers, total: 0, label: "answered" }}
-      right={
-        <span id="tour-practice-streak">
-          <GamificationSummary courseId={courseId} />
-        </span>
-      }
     >
       <Card id="tour-practice-card">
         <CardHeader>

@@ -6,7 +6,6 @@ import { EyeIcon } from "@/components/ui/eye";
 import { SparklesIcon } from "@/components/ui/sparkles";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { GamificationSummary } from "@/features/gamification";
 import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
@@ -112,7 +111,6 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
     return (
       <StudySessionShell
         progress={{ current: data.stats.due, total: 0, label: "due for review" }}
-        right={<GamificationSummary courseId={courseId} />}
       >
         <div className="relative border bg-card p-6">
           <CornerBrackets />
@@ -199,7 +197,6 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
   return (
     <StudySessionShell
       progress={{ current: index + 1, total, label: "card" }}
-      right={<GamificationSummary courseId={courseId} />}
     >
       {/* The one number that drives the next action: due for review. */}
       <div className="flex flex-wrap items-end gap-x-6 gap-y-2">

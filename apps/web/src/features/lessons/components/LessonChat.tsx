@@ -3,7 +3,6 @@ import { BrainIcon } from "@/components/ui/brain";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { GamificationSummary } from "@/features/gamification";
 import {
   Dialog,
   DialogContent,
@@ -141,7 +140,6 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
   return (
     <StudySessionShell
       progress={done ? { current: total, total, label: "step" } : { current: stepIndex + 1, total, label: "step" }}
-      right={<GamificationSummary courseId={courseId} />}
     >
       <div className="relative border bg-card">
         <CornerBrackets />
