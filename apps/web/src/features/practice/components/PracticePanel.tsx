@@ -1,48 +1,50 @@
 import { useEffect, useRef, useState } from "react";
-import { FlameIcon } from "@/components/ui/flame";
-import type { FlameIconHandle } from "@/components/ui/flame";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
+import { TopicPicker, TOPIC_AUTO } from "@/components/study/TopicPicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useNextPracticeItem, useSubmitPractice } from "@/features/practice/hooks/use-practice";
 import { useGamification } from "@/features/gamification";
-import { cn } from "@/lib/utils";
+import { useTwin } from "@/features/twin";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
-// Quick-practice loop: one item at a time, targeted at the student's
-// weakest skill. Answering advances automatically. Shared chrome comes from
-// StudySessionShell; the question + graded result render through the shared
-// AnswerableCard (hover/selected states, disabled-during-pending fix, live
-// mastery band + XP delta all live there now, not in this file).
+// Quick-practice loop: one item at a time, defaulting to the student's
+// weakest skill but overridable via the topic picker. The graded result
+// stays on screen until the student clicks "Next item" — advancing is
+// explicit, not automatic (an earlier version force-refetched on submit,
+// which is what was wiping the result before it could be read). Shared
+// chrome comes from StudySessionShell, including its own "N answered"
+// progress readout, which is the ONE place session progress is shown now
+// (a second, separately-animated segmented rail used to live in this file
+// too; two progress indicators for the same number read as a bug, not a
+// feature, and one of them visibly moved the instant an answer was
+// picked, before the student had even read their result). The question +
+// graded result render through the shared AnswerableCard (hover/selected
+// states, disabled-during-pending fix, live mastery band +
+// XP delta all live there now, not in this file).
 
 export function PracticePanel({ courseId }: { courseId: string }) {
-  const { data, isLoading, isError, refetch } = useNextPracticeItem(courseId);
+  const [selectedTopic, setSelectedTopic] = useState(TOPIC_AUTO);
+  const activeSkillId = selectedTopic === TOPIC_AUTO ? undefined : selectedTopic;
+  const { data, isLoading, isFetching, isError, refetch } = useNextPracticeItem(courseId, activeSkillId);
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
+  const twin = useTwin(courseId);
 
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [sessionAnswers, setSessionAnswers] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [gain, setGain] = useState<{ xp: number; streakDays: number } | null>(null);
+  const [gain, setGain] = useState<{ xp: number } | null>(null);
   const [bandTransition, setBandTransition] = useState<{ from: string; to: string } | null>(null);
 
   const lastXpRef = useRef<number | null>(null);
   const prevEstimateRef = useRef<number | null>(null);
-  const prevStreakRef = useRef(streak);
-
-  // Streak went UP -> the flame draws once (real state change, not hover).
-  useEffect(() => {
-    if (streak > prevStreakRef.current) {
-      flameRef.current?.startAnimation();
-    }
-    prevStreakRef.current = streak;
-  }, [streak]);
-  const flameRef = useRef<FlameIconHandle | null>(null);
 
   // The gamification summary is derived from immutable evidence; when the
   // submit invalidates it, the refetched delta IS the real +XP for that
@@ -53,7 +55,7 @@ export function PracticePanel({ courseId }: { courseId: string }) {
     const prev = lastXpRef.current;
     lastXpRef.current = gamification.data.xp;
     if (prev !== null && gamification.data.xp > prev) {
-      setGain({ xp: gamification.data.xp - prev, streakDays: gamification.data.streakDays });
+      setGain({ xp: gamification.data.xp - prev });
     }
   }, [gamification.data]);
 
@@ -64,6 +66,17 @@ export function PracticePanel({ courseId }: { courseId: string }) {
     setBandTransition(null);
     setStartedAt(Date.now());
   }, [data?.item?.id]);
+
+  function handleTopicChange(topic: string) {
+    setSelectedTopic(topic);
+    // Switching topics reads as starting a focused sub-session, not a
+    // continuation of the last one's momentum — reset the visible counters
+    // so "3 answered" / a live streak don't carry an unrelated topic's
+    // history into the new one. The actual mastery data (twin, XP) is
+    // untouched, this only resets this panel's own session-local display.
+    setSessionAnswers(0);
+    setStreak(0);
+  }
 
   if (isLoading)
     return <LoadingPanel label="Finding your next item…" lines={4} />;
@@ -112,38 +125,23 @@ export function PracticePanel({ courseId }: { courseId: string }) {
       progress={{ current: sessionAnswers, total: 0, label: "answered" }}
     >
       <Card id="tour-practice-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+          <CardTitle className="flex items-center gap-2.5">
             Quick practice
-            <span
-              className="flex items-center gap-1.5 font-mono text-xs font-normal text-muted-foreground"
-              title="Correct answers in a row this session"
-            >
-              <FlameIcon
-                ref={flameRef}
-                size={16}
-                className={streak > 0 ? "text-brand-gold" : "text-muted-foreground/50"}
-                aria-hidden
-              />
-              {streak}
-            </span>
+            {isFetching && !isLoading ? (
+              <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                <Spinner className="size-3.5" /> Finding a question…
+              </span>
+            ) : null}
           </CardTitle>
+          <TopicPicker
+            skills={twin.data?.skills ?? []}
+            value={selectedTopic}
+            onChange={handleTopicChange}
+            disabled={isLoading || isFetching || submit.isPending}
+          />
         </CardHeader>
         <CardContent>
-          {/* Session momentum: an 8-segment rail, not a fixed total — the
-              loop has no end, so this shows movement instead of progress. */}
-          <div className="mb-5 flex gap-1" aria-hidden>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "h-1 flex-1 rounded-full transition-colors",
-                  i < sessionAnswers % 8 ? "bg-brand-orange" : "bg-muted"
-                )}
-              />
-            ))}
-          </div>
-
           <AnswerableCard
             prompt={item.prompt}
             choices={item.choices}
@@ -160,7 +158,7 @@ export function PracticePanel({ courseId }: { courseId: string }) {
                   }
                 : null
             }
-            isPending={submit.isPending}
+            isPending={submit.isPending || isFetching}
             meta={
               <>
                 {bandTransition ? (
@@ -168,8 +166,8 @@ export function PracticePanel({ courseId }: { courseId: string }) {
                     {bandTransition.from} → {bandTransition.to}
                   </span>
                 ) : null}
+                {streak > 1 ? <span>{streak} in a row</span> : null}
                 {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
-                {gain ? <span>{gain.streakDays}-day streak</span> : null}
               </>
             }
           />

@@ -6,8 +6,9 @@ import {
   type PracticeSubmitResult,
 } from "@/features/practice/schema/practice.schema";
 
-export async function fetchNextPracticeItem(courseId: string): Promise<PracticeNext> {
-  const data = await api<unknown>(`/practice/${courseId}/next`);
+export async function fetchNextPracticeItem(courseId: string, skillId?: string): Promise<PracticeNext> {
+  const query = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
+  const data = await api<unknown>(`/practice/${courseId}/next${query}`);
   return practiceNextSchema.parse(data);
 }
 
