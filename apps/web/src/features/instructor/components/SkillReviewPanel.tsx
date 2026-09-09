@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type ProposeSkillsResult } from "@/features/instructor";
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TriangleAlertIcon } from "lucide-react";
 import { CheckIcon, type CheckIconHandle } from "@/components/ui/check";
@@ -195,7 +196,9 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
         >
           {propose.isPending ? (
-            "Refreshing…"
+            <>
+              <Spinner className="size-3.5" /> Refreshing…
+            </>
           ) : (
             <>
               <SparklesIcon ref={refreshRef} size={13} /> Refresh skills

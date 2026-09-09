@@ -14,6 +14,7 @@ import { CornerBrackets } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-lessons";
 import { useTutorAsk } from "@/features/tutor";
 import { cn } from "@/lib/utils";
@@ -230,7 +231,11 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
               actions={
                 <>
                   <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
-                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    {hint.isPending ? (
+                      <Spinner className="size-3.5" />
+                    ) : (
+                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    )}
                     {hint.isPending ? "Thinking…" : "Hint"}
                   </Button>
                   {hintText ? (

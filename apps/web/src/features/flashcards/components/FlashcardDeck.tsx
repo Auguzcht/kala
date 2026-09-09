@@ -10,6 +10,7 @@ import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck, useRevealFlashcard, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
 import { useTwin } from "@/features/twin";
@@ -259,11 +260,19 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
               actions={
                 <>
                   <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
-                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    {hint.isPending ? (
+                      <Spinner className="size-3.5" />
+                    ) : (
+                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    )}
                     {hint.isPending ? "Thinking…" : "Hint"}
                   </Button>
                   <Button variant="outline" size="sm" onClick={doReveal} disabled={reveal.isPending}>
-                    <EyeIcon size={15} className="text-muted-foreground" aria-hidden />
+                    {reveal.isPending ? (
+                      <Spinner className="size-3.5" />
+                    ) : (
+                      <EyeIcon size={15} className="text-muted-foreground" aria-hidden />
+                    )}
                     {reveal.isPending ? "Committing…" : "Reveal · counts as missed"}
                   </Button>
                   {hintText ? (
@@ -305,7 +314,11 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
               actions={
                 <>
                   <Button variant="outline" size="sm" onClick={askExplain} disabled={explain.isPending}>
-                    <SparklesIcon size={15} className="text-muted-foreground" aria-hidden />
+                    {explain.isPending ? (
+                      <Spinner className="size-3.5" />
+                    ) : (
+                      <SparklesIcon size={15} className="text-muted-foreground" aria-hidden />
+                    )}
                     {explain.isPending ? "Thinking…" : "Explain more"}
                   </Button>
                   {explainText ? (

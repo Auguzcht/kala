@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { useAutoMatchedSkills, useDetachAutoMatchedSkill } from "@/features/instructor";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Collapsible,
@@ -76,7 +77,13 @@ export function AutoMatchedSection({ courseId }: { courseId: string }) {
                   disabled={detach.isPending}
                   onClick={() => detach.mutate(s.id)}
                 >
-                  {detach.isPending ? "Detaching…" : "Tune for this course"}
+                  {detach.isPending ? (
+                    <>
+                      <Spinner className="size-3.5" /> Detaching…
+                    </>
+                  ) : (
+                    "Tune for this course"
+                  )}
                 </Button>
               </div>
             ))}
