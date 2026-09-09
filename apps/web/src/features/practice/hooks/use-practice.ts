@@ -1,19 +1,12 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchNextPracticeItem, submitPracticeAttempt } from "@/features/practice/api/practice.api";
 
-// Quick practice: fetch the next item for the student's weakest skill (or
-// the topic picker's explicit override), submit an attempt, then refetch
-// the next item so the loop continues.
+// Quick practice: fetch the next item for a given skill, submit an
+// attempt, then refetch the next item so the loop continues.
 export function useNextPracticeItem(courseId: string, skillId?: string) {
   return useQuery({
     queryKey: ["practice", courseId, "next", skillId ?? "auto"],
     queryFn: () => fetchNextPracticeItem(courseId, skillId),
-    // Switching topics changes the query key entirely (a genuinely
-    // different query, not a refetch of the same one), so without this the
-    // whole panel — picker included — would flash to a loading skeleton on
-    // every topic change. Keep the last topic's item on screen until the
-    // new one lands instead.
-    placeholderData: keepPreviousData,
   });
 }
 

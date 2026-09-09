@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchFlashcardDeck,
   reviewFlashcard,
@@ -9,11 +9,6 @@ export function useFlashcardDeck(courseId: string, limit = 10, skillId?: string)
   return useQuery({
     queryKey: ["flashcards", courseId, limit, skillId ?? "auto"],
     queryFn: () => fetchFlashcardDeck(courseId, limit, skillId),
-    // Same reasoning as practice: a topic switch is a genuinely different
-    // query key, not a refetch of the same one. Without this the whole
-    // deck (picker included) would flash to a loading skeleton on every
-    // topic change instead of just swapping in the new deck once it lands.
-    placeholderData: keepPreviousData,
   });
 }
 

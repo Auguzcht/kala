@@ -94,7 +94,21 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     title: "Lessons",
     description: "Right or wrong, you see why — and your twin moves.",
   },
-  // Practice — overview, choices, graded result (the twin-moved moment).
+  // Practice — landing (choose or take the recommendation), then the
+  // session: overview, choices, graded result (the twin-moved moment).
+  // The landing step is new here — Practice used to land straight on the
+  // session panel; now that a topic choice comes first (Stage 3 of the
+  // AI overhaul), #tour-practice-card doesn't exist until that choice is
+  // made, so the tour has to make it the same way Lessons' own tour
+  // already clicks through its landing grid.
+  {
+    route: "/course/practice",
+    selector: "#tour-practice-picker",
+    title: "Practice",
+    description: "Pick a topic, or take the recommended one.",
+    click: true,
+    clickSelector: "#tour-practice-recommended",
+  },
   {
     route: "/course/practice",
     selector: "#tour-practice-card",

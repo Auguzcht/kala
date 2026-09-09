@@ -1,39 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { TopicPicker, TOPIC_AUTO } from "@/components/study/TopicPicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useNextPracticeItem, useSubmitPractice } from "@/features/practice/hooks/use-practice";
 import { useGamification } from "@/features/gamification";
-import { useTwin } from "@/features/twin";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
-// Quick-practice loop: one item at a time, defaulting to the student's
-// weakest skill but overridable via the topic picker. The graded result
-// stays on screen until the student clicks "Next item" — advancing is
-// explicit, not automatic (an earlier version force-refetched on submit,
-// which is what was wiping the result before it could be read). Shared
-// chrome comes from StudySessionShell, including its own "N answered"
-// progress readout, which is the ONE place session progress is shown now
-// (a second, separately-animated segmented rail used to live in this file
-// too; two progress indicators for the same number read as a bug, not a
-// feature, and one of them visibly moved the instant an answer was
-// picked, before the student had even read their result). The question +
-// graded result render through the shared AnswerableCard (hover/selected
-// states, disabled-during-pending fix, live mastery band +
-// XP delta all live there now, not in this file).
+// Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
+// docs/AI_OVERHAUL_TODO.md). `skillId` is a required prop now, not an
+// internally-managed topic with an in-panel picker to switch it — that
+// picker (first a Select, then a Sheet+Command rebuild) is what produced
+// most of the race-condition scaffolding this file used to carry
+// (keepPreviousData, isFetching gating everywhere, "Finding a question…"
+// spinners for a mid-session swap). The choice of topic now happens once,
+// on the landing page above this panel (routes/course/practice.tsx),
+// before a session starts — the honest structure for "the quiz changes
+// per topic" is choose-then-do, not do-while-being-able-to-switch. This
+// panel only ever runs against ONE skill for its whole session, so none
+// of that machinery is needed here anymore.
+//
+// The graded result stays on screen until the student clicks "Next item"
+// — advancing is explicit, not automatic (an earlier version force-
+// refetched on submit, which is what was wiping the result before it
+// could be read). The question + graded result render through the shared
+// AnswerableCard (hover/selected states, disabled-during-pending fix,
+// live mastery band + XP delta all live there, not in this file).
 
-export function PracticePanel({ courseId }: { courseId: string }) {
-  const [selectedTopic, setSelectedTopic] = useState(TOPIC_AUTO);
-  const activeSkillId = selectedTopic === TOPIC_AUTO ? undefined : selectedTopic;
-  const { data, isLoading, isFetching, isError, refetch } = useNextPracticeItem(courseId, activeSkillId);
+export function PracticePanel({ courseId, skillId }: { courseId: string; skillId: string }) {
+  const { data, isLoading, isError, refetch } = useNextPracticeItem(courseId, skillId);
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
-  const twin = useTwin(courseId);
 
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
@@ -67,17 +66,6 @@ export function PracticePanel({ courseId }: { courseId: string }) {
     setStartedAt(Date.now());
   }, [data?.item?.id]);
 
-  function handleTopicChange(topic: string) {
-    setSelectedTopic(topic);
-    // Switching topics reads as starting a focused sub-session, not a
-    // continuation of the last one's momentum — reset the visible counters
-    // so "3 answered" / a live streak don't carry an unrelated topic's
-    // history into the new one. The actual mastery data (twin, XP) is
-    // untouched, this only resets this panel's own session-local display.
-    setSessionAnswers(0);
-    setStreak(0);
-  }
-
   if (isLoading)
     return <LoadingPanel label="Finding your next item…" lines={4} />;
   if (isError)
@@ -92,7 +80,7 @@ export function PracticePanel({ courseId }: { courseId: string }) {
     return (
       <EmptyState
         title="Nothing to practice yet"
-        description="Skills for this course haven't been set up yet."
+        description="This skill isn't set up for practice yet."
       />
     );
 
@@ -125,21 +113,8 @@ export function PracticePanel({ courseId }: { courseId: string }) {
       progress={{ current: sessionAnswers, total: 0, label: "answered" }}
     >
       <Card id="tour-practice-card">
-        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-          <CardTitle className="flex items-center gap-2.5">
-            Quick practice
-            {isFetching && !isLoading ? (
-              <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-                <Spinner className="size-3.5" /> Finding a question…
-              </span>
-            ) : null}
-          </CardTitle>
-          <TopicPicker
-            skills={twin.data?.skills ?? []}
-            value={selectedTopic}
-            onChange={handleTopicChange}
-            disabled={isLoading || isFetching || submit.isPending}
-          />
+        <CardHeader>
+          <CardTitle>Quick practice</CardTitle>
         </CardHeader>
         <CardContent>
           <AnswerableCard
@@ -158,7 +133,7 @@ export function PracticePanel({ courseId }: { courseId: string }) {
                   }
                 : null
             }
-            isPending={submit.isPending || isFetching}
+            isPending={submit.isPending}
             meta={
               <>
                 {bandTransition ? (
