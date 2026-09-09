@@ -8,6 +8,7 @@ import { ZapIcon } from "@/components/ui/zap";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useCourse } from "@/features/courses";
+import { useDiagnosticStatus } from "@/features/diagnostic";
 import { useNextUp, useTwin } from "@/features/twin";
 import { InstructorPlan } from "@/features/plan";
 import { MasteryBand } from "@/components/kala";
@@ -38,6 +39,8 @@ function WorkspaceHome() {
   const { data: course } = useCourse(courseId);
   const { data: nextUp, isLoading: nextLoading } = useNextUp(courseId);
   const { data: twin, isLoading: twinLoading } = useTwin(courseId);
+  const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
+  const diagnosticDue = diagnosticStatus?.due ?? false;
 
   const next = nextUp?.next ?? null;
   const evidenceCount = twin?.evidence.length ?? 0;
@@ -55,6 +58,31 @@ function WorkspaceHome() {
           <Skeleton className="mt-2 h-4 w-56" />
         )}
       </div>
+
+      {/* Only renders when this student actually has something new to
+          baseline (see routers/diagnostic.py's due-check) — the diagnostic
+          no longer sits open as a permanent default tab, so this is the
+          moment it announces itself instead. */}
+      {diagnosticDue ? (
+        <div className="flex flex-wrap items-center justify-between gap-4 border border-brand-orange/30 bg-brand-orange/5 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">
+              {diagnosticStatus?.dueSkillCount}{" "}
+              {diagnosticStatus?.dueSkillCount === 1 ? "new skill needs" : "new skills need"} a baseline
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              A quick diagnostic sets your starting point so practice can actually target it.
+            </p>
+          </div>
+          <Button
+            variant="orange"
+            className="shrink-0"
+            onClick={() => navigate({ to: "/course/diagnostic" })}
+          >
+            Take diagnostic <ArrowRightIcon size={16} />
+          </Button>
+        </div>
+      ) : null}
 
       {/* Next up — one persistent shell, never two different DOM structures:
           only the text nodes skeleton while the recommendation loads, so

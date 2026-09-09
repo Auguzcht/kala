@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { TopBar } from "@/components/shell/TopBar";
 import { GamificationSummary } from "@/features/gamification";
+import { useDiagnosticStatus } from "@/features/diagnostic";
 import { TourStepRunner } from "@/components/shell/StudentTour";
 import {
   TOUR_STEPS,
@@ -95,6 +96,8 @@ export function CourseShell({
   const navigate = useNavigate();
   const session = useSession();
   const section = SECTION_LABELS[pathname] ?? SECTION_LABELS["/course"];
+  const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
+  const diagnosticDue = diagnosticStatus?.due ?? false;
 
   // One ref per rail icon; the active route's icon animates, the rest are
   // stopped. Passing a ref is what disables each icon's own hover trigger.
@@ -182,11 +185,11 @@ export function CourseShell({
                   activeOptions={{ exact: end }}
                   activeProps={{
                     className:
-                      "flex h-9 w-9 items-center justify-center border-l-2 border-brand-orange bg-brand-orange/10 text-brand-orange",
+                      "relative flex h-9 w-9 items-center justify-center border-l-2 border-brand-orange bg-brand-orange/10 text-brand-orange",
                   }}
                   inactiveProps={{
                     className:
-                      "flex h-9 w-9 items-center justify-center border-l-2 border-transparent text-muted-foreground/70 hover:bg-accent hover:text-foreground",
+                      "relative flex h-9 w-9 items-center justify-center border-l-2 border-transparent text-muted-foreground/70 hover:bg-accent hover:text-foreground",
                   }}
                   // The ref switches each icon to controlled mode, which
                   // disables its native hover — so hover is forwarded to
@@ -195,7 +198,11 @@ export function CourseShell({
                   // hovered, and still draws on route activation.
                   onMouseEnter={() => iconHandles.current[i]?.startAnimation()}
                   onMouseLeave={() => iconHandles.current[i]?.stopAnimation()}
-                  aria-label={label}
+                  aria-label={
+                    to === "/course/diagnostic" && diagnosticDue
+                      ? `${label} (new baseline due)`
+                      : label
+                  }
                 >
                   <Icon
                     size={18}
@@ -203,6 +210,12 @@ export function CourseShell({
                       iconHandles.current[i] = h ?? null;
                     }}
                   />
+                  {to === "/course/diagnostic" && diagnosticDue ? (
+                    <span
+                      aria-hidden
+                      className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-brand-orange"
+                    />
+                  ) : null}
                 </Link>
               </TooltipTrigger>
               <TooltipContent side="right">{label}</TooltipContent>

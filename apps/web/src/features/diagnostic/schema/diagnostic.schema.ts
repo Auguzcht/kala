@@ -21,6 +21,15 @@ export const diagnosticSchema = z.object({
   questions: z.array(questionSchema),
 });
 
+// The due-check. No questions here, just whether anything needs a
+// baseline right now — drives the nav badge and the workspace notice
+// instead of the diagnostic sitting open as a permanent default tab.
+export const diagnosticStatusSchema = z.object({
+  courseId: z.string(),
+  due: z.boolean(),
+  dueSkillCount: z.number().int().nonnegative(),
+});
+
 // itemId + choiceId only. The backend never trusts the client to say
 // whether an answer was correct, it looks the item back up and grades it.
 export const answerSchema = z.object({
@@ -59,6 +68,7 @@ export const diagnosticResultSchema = z.object({
 
 export type Question = z.infer<typeof questionSchema>;
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
+export type DiagnosticStatus = z.infer<typeof diagnosticStatusSchema>;
 export type Answer = z.infer<typeof answerSchema>;
 export type AnswerResult = z.infer<typeof answerResultSchema>;
 export type MasteryDelta = z.infer<typeof masteryDeltaSchema>;

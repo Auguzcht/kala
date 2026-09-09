@@ -1,9 +1,11 @@
 import { api } from "@/lib/api/client";
 import {
   diagnosticSchema,
+  diagnosticStatusSchema,
   diagnosticResultSchema,
   type Answer,
   type Diagnostic,
+  type DiagnosticStatus,
   type DiagnosticResult,
 } from "@/features/diagnostic/schema/diagnostic.schema";
 
@@ -12,6 +14,12 @@ import {
 export async function fetchDiagnostic(courseId: string): Promise<Diagnostic> {
   const data = await api<unknown>(`/courses/${courseId}/diagnostic`);
   return diagnosticSchema.parse(data);
+}
+
+// No generation involved, safe to poll cheaply for a nav badge.
+export async function fetchDiagnosticStatus(courseId: string): Promise<DiagnosticStatus> {
+  const data = await api<unknown>(`/courses/${courseId}/diagnostic/status`);
+  return diagnosticStatusSchema.parse(data);
 }
 
 export async function submitDiagnostic(
