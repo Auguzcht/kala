@@ -29,21 +29,32 @@ export function GamificationSummary({
   const flameRef = useRef<FlameIconHandle | null>(null);
   const prevStreakRef = useRef<number | null>(null);
   useEffect(() => {
-    const s = data?.streakDays ?? 0;
-    if (prevStreakRef.current !== null && s > prevStreakRef.current) {
+    // Don't seed the baseline off the loading state. data is undefined
+    // while the query is in flight, and `?? 0` used to treat that as a
+    // real "0 streak" reading — so the FIRST real data load on every
+    // mount (every refresh, every fresh LTI launch) looked like the
+    // streak had just gone from 0 to N, and animated the flame for a
+    // streak that already existed from a past session.
+    if (!data) return;
+    if (prevStreakRef.current !== null && data.streakDays > prevStreakRef.current) {
       flameRef.current?.startAnimation();
     }
-    prevStreakRef.current = s;
-  }, [data?.streakDays]);
+    prevStreakRef.current = data.streakDays;
+  }, [data]);
 
   // A badge crossing is a real, cross-context achievement: it happens in
   // the top bar while the student is mid-practice or mid-lesson, so an
   // inline panel cannot announce it. The toast is the announcement.
   const prevBadgeCountRef = useRef<number | null>(null);
   useEffect(() => {
-    const count = data?.badges.length ?? 0;
+    // Same fix as the streak effect above, and for the same reason: skip
+    // the loading state entirely rather than treating "no data yet" as
+    // "zero badges", so the baseline is only ever set from a REAL badge
+    // count, on the query's actual first resolution — not before it.
+    if (!data) return;
+    const count = data.badges.length;
     if (prevBadgeCountRef.current !== null && count > prevBadgeCountRef.current) {
-      const newest = data?.badges[count - 1];
+      const newest = data.badges[count - 1];
       if (newest) {
         toast.success("Badge earned", {
           description: `${newest.label} · ${newest.tier}`,
@@ -51,7 +62,7 @@ export function GamificationSummary({
       }
     }
     prevBadgeCountRef.current = count;
-  }, [data?.badges]);
+  }, [data]);
 
   if (isLoading || !data) return null;
   const alive = data.streakDays > 0;
