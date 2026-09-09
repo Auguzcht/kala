@@ -46,34 +46,55 @@ router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 
 
 def _skill_map(*, institution_id: str, course_id: str,
-               module_ref: str | None) -> dict[str, dict]:
+               module_ref: str | None, skill_id: str | None = None) -> dict[str, dict]:
     params = {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
         "status": "eq.approved", "select": "id,name,bloom_level,module_ref",
     }
     if module_ref is not None:
         params["module_ref"] = f"eq.{module_ref}"
+    if skill_id is not None:
+        params["id"] = f"eq.{skill_id}"
     return {s["id"]: s for s in db.select("skills", params)}
 
 
 @router.get("/{course_id}/deck")
 def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
+         skill_id: str | None = None,
          user: CurrentUser = Depends(get_current_user)):
     """The review queue: due scheduled cards first, topped up with fresh cards
     for skills the student hasn't started. Answer keys never leave the server.
+    `skill_id` is the topic picker's explicit override — when set, the whole
+    deck (due cards AND fresh top-up) scopes to that one skill instead of the
+    course-wide due-first mix, same "auto vs chosen" pattern as practice.
     """
+    if skill_id is not None:
+        # Same validation practice.py does for its own explicit skill_id —
+        # this is client input, not server-derived, so an id from another
+        # course or an unapproved skill should 404, not silently render as
+        # "nothing due" for a topic that was never real to begin with.
+        exists = db.select("skills", {
+            "id": f"eq.{skill_id}", "course_id": f"eq.{course_id}",
+            "institution_id": f"eq.{user.institution_id}", "status": "eq.approved",
+            "select": "id", "limit": "1",
+        })
+        if not exists:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "skill not found")
+
     skills = _skill_map(
-        institution_id=user.institution_id, course_id=course_id, module_ref=module_ref,
+        institution_id=user.institution_id, course_id=course_id,
+        module_ref=module_ref, skill_id=skill_id,
     )
     if not skills:
         return {"courseId": course_id, "cards": [], "stats": srs.stats(
             institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=skill_id,
         )}
 
     # 1) Due, already-scheduled cards (most overdue first, mastered excluded).
     due = srs.due_cards(
         institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, limit=limit, module_ref=module_ref,
+        course_id=course_id, limit=limit, module_ref=module_ref, skill_id=skill_id,
     )
     due_item_ids = [d["item_id"] for d in due]
     items_by_id: dict[str, dict] = {}
@@ -144,6 +165,7 @@ def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
         "cards": cards,
         "stats": srs.stats(
             institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=skill_id,
         ),
     }
 

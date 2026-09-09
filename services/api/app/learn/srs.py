@@ -207,7 +207,8 @@ def review(*, institution_id: str, user_id: str, course_id: str,
 
 
 def due_cards(*, institution_id: str, user_id: str, course_id: str,
-              limit: int = 20, module_ref: str | None = None) -> list[dict]:
+              limit: int = 20, module_ref: str | None = None,
+              skill_id: str | None = None) -> list[dict]:
     """The cards this student should see now, most-overdue first, excluding
     mastered ones. This replaces the old flat top-N skill slice: selection is
     driven by the schedule (due date + box), so missed cards resurface more
@@ -227,21 +228,30 @@ def due_cards(*, institution_id: str, user_id: str, course_id: str,
     }
     if module_ref is not None:
         params["module_ref"] = f"eq.{module_ref}"
+    if skill_id is not None:
+        params["skill_id"] = f"eq.{skill_id}"
     rows = db.select("srs_state", params)
 
     fresh = [r for r in rows if not is_mastered(box=int(r["box"]), streak=int(r["streak"]))]
     return fresh[:limit]
 
 
-def stats(*, institution_id: str, user_id: str, course_id: str) -> dict:
+def stats(*, institution_id: str, user_id: str, course_id: str,
+          skill_id: str | None = None) -> dict:
     """Lightweight review-queue summary for the course home surface: how many
     cards are due, learning (box 0-2), young, and mastered. This is the
     'show the one number that drives the next action' metadata — computed from
-    the schedule the student already has, no extra model calls."""
-    rows = db.select("srs_state", {
+    the schedule the student already has, no extra model calls. `skill_id`
+    scopes this to one topic — without it, a topic-scoped deck of 2 cards
+    would sit under a stats block still reporting the whole course's due
+    count, which contradicts what's actually on screen."""
+    params = {
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
         "select": "box,streak,due_at",
-    })
+    }
+    if skill_id is not None:
+        params["skill_id"] = f"eq.{skill_id}"
+    rows = db.select("srs_state", params)
     now_iso = _now().isoformat()
     due = sum(1 for r in rows if r["due_at"] <= now_iso
               and not is_mastered(box=int(r["box"]), streak=int(r["streak"])))
