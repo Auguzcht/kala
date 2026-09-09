@@ -35,8 +35,22 @@ export const tutorPersistedMessageSchema = z.object({
   createdAt: z.string(),
 });
 
+// Stage 4: private study-aid uploads, scoped to one conversation. Never
+// part of the shared RAG corpus — see migration 0011's own comment for
+// why. 'processing' is brief (extraction is synchronous on upload);
+// 'failed' means the file is kept but contributes no context.
+export const tutorAttachmentSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  status: z.enum(["processing", "ready", "failed"]),
+  createdAt: z.string(),
+});
+
 export const tutorConversationDetailSchema = tutorConversationSchema.extend({
   messages: z.array(tutorPersistedMessageSchema),
+  attachments: z.array(tutorAttachmentSchema).default([]),
 });
 
 export const tutorConversationListSchema = z.object({
@@ -48,4 +62,5 @@ export type TutorMessage = z.infer<typeof tutorMessageSchema>;
 export type TutorAskResult = z.infer<typeof tutorAskResultSchema>;
 export type TutorConversation = z.infer<typeof tutorConversationSchema>;
 export type TutorPersistedMessage = z.infer<typeof tutorPersistedMessageSchema>;
+export type TutorAttachment = z.infer<typeof tutorAttachmentSchema>;
 export type TutorConversationDetail = z.infer<typeof tutorConversationDetailSchema>;

@@ -5,6 +5,8 @@ import {
   listTutorConversations,
   fetchTutorConversation,
   deleteTutorConversation,
+  uploadTutorAttachment,
+  deleteTutorAttachment,
 } from "@/features/tutor/api/tutor.api";
 import type { TutorStyle } from "@/features/tutor/schema/tutor.schema";
 
@@ -79,6 +81,30 @@ export function useDeleteTutorConversation(courseId: string) {
     mutationFn: (conversationId: string) => deleteTutorConversation(conversationId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
+    },
+  });
+}
+
+// ---- Stage 4: private study-aid uploads ----
+
+export function useUploadTutorAttachment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, file }: { conversationId: string; file: File }) =>
+      uploadTutorAttachment(conversationId, file),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tutor-conversation", variables.conversationId] });
+    },
+  });
+}
+
+export function useDeleteTutorAttachment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, attachmentId }: { conversationId: string; attachmentId: string }) =>
+      deleteTutorAttachment(conversationId, attachmentId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tutor-conversation", variables.conversationId] });
     },
   });
 }

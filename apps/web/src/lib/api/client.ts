@@ -48,12 +48,17 @@ export async function api<T>(
   const controller = timeoutMs ? new AbortController() : undefined;
   const timer = timeoutMs ? setTimeout(() => controller!.abort(), timeoutMs) : undefined;
   try {
+    const isFormData = init?.body instanceof FormData;
     const res = await fetch(`${baseUrl}${path}`, {
       ...init,
       signal: controller?.signal,
       credentials: "include",
       headers: {
-        "Content-Type": "application/json",
+        // FormData bodies (file uploads) need the browser's own
+        // multipart/form-data boundary, not this default — setting
+        // Content-Type explicitly here would strip that boundary and the
+        // server couldn't parse the body at all.
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(init?.headers ?? {}),
         Authorization: `Bearer ${token}`,
       },

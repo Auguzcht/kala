@@ -7,6 +7,8 @@ export {
   useCreateTutorConversation,
   useAskInConversation,
   useDeleteTutorConversation,
+  useUploadTutorAttachment,
+  useDeleteTutorAttachment,
 } from "@/features/tutor/hooks/use-tutor";
 export type {
   TutorMessage,
@@ -14,5 +16,6 @@ export type {
   TutorStyle,
   TutorConversation,
   TutorPersistedMessage,
+  TutorAttachment,
   TutorConversationDetail,
 } from "@/features/tutor/schema/tutor.schema";

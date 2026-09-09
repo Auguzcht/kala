@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
@@ -10,12 +10,18 @@ import { CornerBrackets } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Spinner } from "@/components/ui/spinner";
+import { FileTextIcon } from "@/components/ui/file-text";
+import { XIcon } from "@/components/ui/x";
 import { useSession } from "@/lib/auth/AuthProvider";
+import { cn } from "@/lib/utils";
 import {
   PromptInput,
   PromptInputBody,
   PromptInputTextarea,
   PromptInputFooter,
+  PromptInputTools,
+  PromptInputButton,
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 import {
@@ -26,8 +32,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { askTutor, createTutorConversation } from "@/features/tutor/api/tutor.api";
-import { useTutorConversations, useTutorConversation } from "@/features/tutor";
-import type { TutorStyle } from "@/features/tutor";
+import {
+  useTutorConversations,
+  useTutorConversation,
+  useUploadTutorAttachment,
+  useDeleteTutorAttachment,
+} from "@/features/tutor";
+import type { TutorStyle, TutorAttachment } from "@/features/tutor";
 
 // Tutor as a real, resumable chat (Stage 2 of the AI overhaul, see
 // docs/AI_OVERHAUL_TODO.md). Previously this was a stateless single-turn
@@ -45,10 +56,55 @@ import type { TutorStyle } from "@/features/tutor";
 // it. Conversation creation instead happens transparently inside the
 // send flow the first time a message actually goes out.
 //
-// File uploads are Stage 4. PromptInput already ships full attachment
-// support (drag-drop, paste, screenshot capture), it's just not surfaced
-// here yet — the backend to receive and ground an upload doesn't exist,
-// wiring the UI early would be a dead button.
+// Stage 4: private study-aid uploads. A student's own file (.txt, .md,
+// .pdf, 5MB cap), scoped to exactly this conversation — never the shared
+// RAG corpus (see migration 0011's own comment for why). Deliberately NOT
+// wired through PromptInput's own built-in attachment staging (drag-drop,
+// paste, multi-file compose-then-send) — that system stages files as
+// blob-URLs meant to travel together with the next chat message, and
+// round-tripping a real File back out of that just to upload it
+// immediately and independently of any text message is more complexity
+// than this needs. A plain file input covers the actual model here:
+// attach, upload right away, show it as a chip.
+
+function AttachmentChip({
+  attachment,
+  onRemove,
+  removing,
+}: {
+  attachment: TutorAttachment;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  return (
+    <span className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs">
+      {attachment.status === "processing" ? (
+        <Spinner className="size-3 shrink-0" />
+      ) : (
+        <FileTextIcon
+          size={12}
+          className={cn(
+            "shrink-0",
+            attachment.status === "failed" ? "text-destructive" : "text-muted-foreground"
+          )}
+        />
+      )}
+      <span className="truncate">{attachment.filename}</span>
+      {attachment.status === "failed" ? (
+        <span className="shrink-0 text-destructive">couldn't read</span>
+      ) : null}
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        aria-label={`Remove ${attachment.filename}`}
+        className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
+      >
+        <XIcon size={12} />
+      </button>
+    </span>
+  );
+}
 
 export function TutorChat({ courseId }: { courseId: string }) {
   const session = useSession();
@@ -57,6 +113,10 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const active = useTutorConversation(conversationId);
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadAttachment = useUploadTutorAttachment();
+  const deleteAttachment = useDeleteTutorAttachment();
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const userInitials = (session?.displayName ?? "")
     .split(/\s+/)
     .slice(0, 2)
@@ -117,6 +177,49 @@ export function TutorChat({ courseId }: { courseId: string }) {
   function askQuestion(question: string, style: TutorStyle = "default") {
     if (!question.trim() || send.isPending) return;
     send.mutate({ question, style });
+  }
+
+  // Same "create transparently on first use" shape as askQuestion — a
+  // student attaching a file before ever typing anything still needs
+  // somewhere for it to live.
+  async function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so picking the same file again still fires onChange
+    if (!file) return;
+
+    let id = conversationId;
+    if (!id) {
+      try {
+        const convo = await createTutorConversation(courseId);
+        id = convo.id;
+        setConversationId(id);
+      } catch {
+        toast.error("Couldn't start a chat for that file");
+        return;
+      }
+    }
+    uploadAttachment.mutate(
+      { conversationId: id, file },
+      {
+        onError: () => {
+          toast.error("Couldn't attach that file", {
+            description: "Only .txt, .md, and .pdf under 5MB are supported.",
+          });
+        },
+      }
+    );
+  }
+
+  function handleRemoveAttachment(attachmentId: string) {
+    if (!conversationId) return;
+    setRemovingId(attachmentId);
+    deleteAttachment.mutate(
+      { conversationId, attachmentId },
+      {
+        onError: () => toast.error("Couldn't remove that file"),
+        onSettled: () => setRemovingId(null),
+      }
+    );
   }
 
   const messages = active.data?.messages ?? [];
@@ -193,6 +296,27 @@ export function TutorChat({ courseId }: { courseId: string }) {
         </StudyStream>
 
         <div className="border-t p-3">
+          {active.data?.attachments && active.data.attachments.length > 0 ? (
+            <div className="mb-2.5 flex flex-wrap gap-2">
+              {active.data.attachments.map((a) => (
+                <AttachmentChip
+                  key={a.id}
+                  attachment={a}
+                  removing={removingId === a.id}
+                  onRemove={() => handleRemoveAttachment(a.id)}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md,text/plain,text/markdown,application/pdf"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
           <PromptInput
             id="tour-tutor-input"
             onSubmit={(message) => {
@@ -203,6 +327,20 @@ export function TutorChat({ courseId }: { courseId: string }) {
               <PromptInputTextarea placeholder="Ask about this course…" />
             </PromptInputBody>
             <PromptInputFooter>
+              <PromptInputTools>
+                <PromptInputButton
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadAttachment.isPending}
+                  aria-label="Attach a file"
+                >
+                  {uploadAttachment.isPending ? (
+                    <Spinner className="size-3.5" />
+                  ) : (
+                    <FileTextIcon size={15} />
+                  )}
+                </PromptInputButton>
+              </PromptInputTools>
               <PromptInputSubmit disabled={send.isPending} status={send.isPending ? "submitted" : undefined} />
             </PromptInputFooter>
           </PromptInput>

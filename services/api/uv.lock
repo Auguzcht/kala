@@ -500,6 +500,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pylti1p3" },
+    { name = "pypdf" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -521,6 +522,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "pyjwt", specifier = ">=2.9" },
     { name = "pylti1p3", specifier = ">=2.0.0" },
+    { name = "pypdf", specifier = ">=5.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
@@ -705,6 +707,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/14/56eed10e98dc38a0ce376dfcebd079d3c6692e609ba1bb553116aba9d9db/PyLTI1p3-2.0.0.tar.gz", hash = "sha256:ebb95ff1397c21190f63cf47427e3b57cdc80e0fc524f2e35e68d78c603cae5a", size = 49730, upload-time = "2022-11-20T23:53:22.089Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/bb/09247495a87dfabcab069309b6b44b0d5b72109076ff49a6a25bc06e6c31/PyLTI1p3-2.0.0-py2.py3-none-any.whl", hash = "sha256:e0c6c53f8633abc3a20c20c71d7d26a4c946c9e8d33143dd8b1a5a1c3797e89a", size = 61452, upload-time = "2022-11-20T23:53:19.098Z" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.18.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/c3/9fa0666f280552bd3833562d985b785fce1ddb3804937edd2fd6a3f2bdb3/pypdf-6.18.0.tar.gz", hash = "sha256:ae58b7d93c22c169ffb02c3b06321c45c4f223b4916536568adb57d789d95d01", size = 7024871, upload-time = "2026-09-07T16:48:16.444Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/a5/d5922a078c9a612327681d4793404f82998f4d66213add6fdc0659245856/pypdf-6.18.0-py3-none-any.whl", hash = "sha256:05b762b77bcb9dcb4a7c91fcf5dded585b25bee7269ab3d3001d7c55fa1b324b", size = 393848, upload-time = "2026-09-07T16:48:14.254Z" },
 ]
 
 [[package]]
