@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
@@ -87,28 +88,25 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
           return (
             <div key={q.id} className="space-y-3 border-t border-border/60 pt-6 first:border-t-0 first:pt-0">
               <p className="font-medium">{q.prompt}</p>
-              <div
+              <RadioGroup
                 id={qi === 0 ? "tour-diagnostic-choices" : undefined}
+                aria-label={q.prompt}
                 className="flex flex-col gap-2"
+                value={selections[q.id]}
+                onValueChange={(value) => setSelections((s) => ({ ...s, [q.id]: value }))}
+                disabled={submitted}
               >
                 {q.choices.map((c) => (
                   <label
                     key={c.id}
-                    className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors has-[:checked]:border-brand-orange has-[:checked]:bg-brand-orange/5 hover:border-brand-orange/40 hover:bg-accent/40"
+                    htmlFor={`${q.id}-${c.id}`}
+                    className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors has-[[data-state=checked]]:border-brand-orange has-[[data-state=checked]]:bg-brand-orange/5 has-[[data-disabled]]:cursor-not-allowed hover:border-brand-orange/40 hover:bg-accent/40"
                   >
-                    <input
-                      type="radio"
-                      name={q.id}
-                      value={c.id}
-                      disabled={submitted}
-                      checked={selections[q.id] === c.id}
-                      onChange={() => setSelections((s) => ({ ...s, [q.id]: c.id }))}
-                      className="size-4 shrink-0"
-                    />
+                    <RadioGroupItem id={`${q.id}-${c.id}`} value={c.id} className="shrink-0" />
                     <span className="min-w-0 flex-1 break-words leading-relaxed">{c.label}</span>
                   </label>
                 ))}
-              </div>
+              </RadioGroup>
               {result ? (
                 <p className={result.correct ? "text-sm font-medium text-brand-green" : "text-sm font-medium text-destructive"}>
                   {result.correct ? "Correct." : "Not quite."} {result.explanation}
