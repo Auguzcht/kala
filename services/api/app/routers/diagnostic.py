@@ -22,6 +22,14 @@ from app.twin import tracer
 
 router = APIRouter(prefix="/courses", tags=["diagnostic"])
 
+# A student who is far behind (many skills never diagnosed at once, e.g.
+# first ever visit to a course with a large skill map) still only gets a
+# short sitting, not everything at once. The rest stays due and simply
+# resurfaces next time — status reports the TRUE due count, uncapped, so
+# the notification is honest about total volume even though one sitting
+# only serves this many.
+MAX_DIAGNOSTIC_QUESTIONS = 10
+
 
 def _course_ref(course_id: str, institution_id: str) -> str:
     courses = db.select("courses", {
@@ -236,6 +244,70 @@ def post_grade(course_id: str, column_id: str, body: GradeBody,
     return {"courseId": course_id, "columnId": column_id, "userId": body.user_id, "score": body.score}
 
 
+def _skills_needing_diagnostic(
+    *, institution_id: str, course_id: str, user_id: str, module_ref: str | None = None,
+) -> list[dict]:
+    """Approved skills this SPECIFIC student has never given diagnostic
+    evidence for. This is the "is there something new to baseline" check,
+    per student, not per course. A skill only drops off this list once this
+    user has actually answered a diagnostic question for it, so a skill the
+    instructor adds mid-term (or one this student simply hasn't reached
+    yet) stays on it until they do. Deliberately distinct from
+    generated_items existence, which only tracks whether a question has
+    ever been WRITTEN for the skill course-wide (the shared item bank),
+    not whether THIS student has taken it. Used both by GET /diagnostic
+    (to decide what to include) and GET /diagnostic/status (to decide
+    whether the diagnostic should even surface as available)."""
+    skill_filters = {
+        "course_id": f"eq.{course_id}", "institution_id": f"eq.{institution_id}",
+        "status": "eq.approved",
+        "select": "id,name,bloom_level",
+        # Deterministic order so a student with more than
+        # MAX_DIAGNOSTIC_QUESTIONS due gets the SAME slice on every
+        # refetch, not an arbitrary 10 each time. created_at is stable and
+        # already indexed via the primary key's default ordering behavior
+        # elsewhere in this file (see cohort.py's own created_at ordering).
+        "order": "created_at.asc",
+    }
+    if module_ref is not None:
+        skill_filters["module_ref"] = f"eq.{module_ref}"
+    skills = db.select("skills", skill_filters)
+    if not skills:
+        return []
+
+    skill_ids = [s["id"] for s in skills]
+    diagnosed_rows = db.select("evidence_events", {
+        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "user_id": f"eq.{user_id}", "type": "eq.diagnostic",
+        "skill_id": f"in.({','.join(skill_ids)})",
+        "select": "skill_id",
+    })
+    diagnosed_skill_ids = {r["skill_id"] for r in diagnosed_rows}
+    return [s for s in skills if s["id"] not in diagnosed_skill_ids]
+
+
+@router.get("/{course_id}/diagnostic/status")
+def get_diagnostic_status(
+    course_id: str,
+    module_ref: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Lightweight due-check for a notification badge. No generation
+    happens here, just skill + evidence reads, so this is safe to poll from
+    the workspace home or the sidebar without generating anything. The
+    diagnostic should not sit open as a permanent default tab; it should
+    surface only when there is something new for THIS student to baseline."""
+    due_skills = _skills_needing_diagnostic(
+        institution_id=user.institution_id, course_id=course_id,
+        user_id=user.user_id, module_ref=module_ref,
+    )
+    return {
+        "courseId": course_id,
+        "due": len(due_skills) > 0,
+        "dueSkillCount": len(due_skills),
+    }
+
+
 @router.get("/{course_id}/diagnostic")
 def get_diagnostic(
     course_id: str,
@@ -244,17 +316,14 @@ def get_diagnostic(
 ):
     # module_ref lets a future UI scope the diagnostic to one module (e.g.
     # "just Module 2") once skills.module_ref is populated by ingest.
-    # Omitted, this is unchanged: the whole course's skills, as before.
-    skill_filters = {
-        "course_id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
-        "status": "eq.approved",
-        "select": "id,name,bloom_level", "limit": "10",
-    }
-    if module_ref is not None:
-        skill_filters["module_ref"] = f"eq.{module_ref}"
-    skills = db.select("skills", skill_filters)
+    # Omitted, this covers every skill still due for this student.
+    skills = _skills_needing_diagnostic(
+        institution_id=user.institution_id, course_id=course_id,
+        user_id=user.user_id, module_ref=module_ref,
+    )
     if not skills:
         return {"courseId": course_id, "questions": []}
+    skills = skills[:MAX_DIAGNOSTIC_QUESTIONS]
 
     # The diagnostic is a fixed baseline instrument ("Build your baseline"),
     # not a randomized quiz — the page copy promises "one question per
