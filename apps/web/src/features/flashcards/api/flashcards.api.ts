@@ -10,9 +10,12 @@ import {
 
 export async function fetchFlashcardDeck(
   courseId: string,
-  limit = 10
+  limit = 10,
+  skillId?: string
 ): Promise<FlashcardDeck> {
-  const data = await api<unknown>(`/flashcards/${courseId}/deck?limit=${limit}`);
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (skillId) params.set("skill_id", skillId);
+  const data = await api<unknown>(`/flashcards/${courseId}/deck?${params.toString()}`);
   return flashcardDeckSchema.parse(data);
 }
 

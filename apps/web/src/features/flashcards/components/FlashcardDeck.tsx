@@ -6,6 +6,7 @@ import { EyeIcon } from "@/components/ui/eye";
 import { SparklesIcon } from "@/components/ui/sparkles";
 import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
+import { TopicPicker, TOPIC_AUTO } from "@/components/study/TopicPicker";
 import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
@@ -51,7 +52,9 @@ function StateBadge({ state }: { state: "due" | "new" }) {
 
 export function FlashcardDeck({ courseId }: { courseId: string }) {
   const reduceMotion = useReducedMotion();
-  const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10);
+  const [selectedTopic, setSelectedTopic] = useState(TOPIC_AUTO);
+  const activeSkillId = selectedTopic === TOPIC_AUTO ? undefined : selectedTopic;
+  const { data, isLoading, isFetching, isError, refetch } = useFlashcardDeck(courseId, 10, activeSkillId);
   const review = useReviewFlashcard(courseId);
   const reveal = useRevealFlashcard(courseId);
   const hint = useTutorAsk(courseId);
@@ -79,7 +82,13 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
     setExplainText(null);
     hintsUsedRef.current = 0;
     startedAtRef.current = Date.now();
-  }, [index, data?.courseId]);
+  }, [index, data?.courseId, activeSkillId]);
+
+  function handleTopicChange(topic: string) {
+    setSelectedTopic(topic);
+    setIndex(0);
+    setDeckDone(false);
+  }
 
   if (isLoading)
     return <LoadingPanel label="Building your deck — Kala is writing the first cards…" lines={4} />;
@@ -98,10 +107,23 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
         title={allCaughtUp ? "All caught up" : "No cards yet"}
         description={
           allCaughtUp
-            ? "Nothing is due for review right now. Missed cards resurface sooner — come back later or practice now."
+            ? "Nothing is due for review right now. Missed cards resurface sooner — come back later, practice now, or pick another topic below."
             : "Skills for this course haven't been mapped yet."
         }
-        action={<Button variant="outline" onClick={() => refetch()}>Refresh deck</Button>}
+        action={
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <TopicPicker
+              skills={twin?.skills ?? []}
+              value={selectedTopic}
+              onChange={handleTopicChange}
+              autoLabel="Due for review (recommended)"
+              disabled={isFetching}
+            />
+            <Button variant="outline" onClick={() => refetch()}>
+              Refresh deck
+            </Button>
+          </div>
+        }
       />
     );
   }
@@ -115,12 +137,23 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
       >
         <div className="relative border bg-card p-6">
           <CornerBrackets />
-          <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
-            Deck complete
-          </p>
-          <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-            Nice work on {total} cards
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
+                Deck complete
+              </p>
+              <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
+                Nice work on {total} cards
+              </p>
+            </div>
+            <TopicPicker
+              skills={twin?.skills ?? []}
+              value={selectedTopic}
+              onChange={handleTopicChange}
+              autoLabel="Due for review (recommended)"
+              disabled={isFetching}
+            />
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Missed cards resurface sooner, so your next pass is exactly what your schedule says
             you need.
@@ -200,21 +233,35 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
       progress={{ current: index + 1, total, label: "card" }}
     >
       {/* The one number that drives the next action: due for review. */}
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-        <div>
-          <p className="font-display text-3xl font-semibold leading-none text-foreground">
-            {data.stats.due}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {data.stats.due === 1 ? "card" : "cards"} due for review now
-          </p>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+          <div>
+            <p className="font-display text-3xl font-semibold leading-none text-foreground">
+              {data.stats.due}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {data.stats.due === 1 ? "card" : "cards"} due for review now
+            </p>
+          </div>
+          <div className="flex gap-4 pb-0.5 font-mono text-xs text-muted-foreground">
+            <span>{data.stats.learning} learning</span>
+            <span>{data.stats.mastered} mastered</span>
+            <span>{data.stats.tracked} tracked</span>
+          </div>
         </div>
-        <div className="flex gap-4 pb-0.5 font-mono text-xs text-muted-foreground">
-          <span>{data.stats.learning} learning</span>
-          <span>{data.stats.mastered} mastered</span>
-          <span>{data.stats.tracked} tracked</span>
-        </div>
+        <TopicPicker
+          skills={twin?.skills ?? []}
+          value={selectedTopic}
+          onChange={handleTopicChange}
+          autoLabel="Due for review (recommended)"
+          disabled={isFetching}
+        />
       </div>
+      {isFetching ? (
+        <p className="-mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Spinner className="size-3.5" /> Finding cards for this topic…
+        </p>
+      ) : null}
 
       <div className="relative border bg-card">
         <CornerBrackets />
@@ -256,10 +303,10 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
               choices={card.choices}
               selectedId={selectedChoice}
               onSelect={answer}
-              isPending={review.isPending || reveal.isPending}
+              isPending={review.isPending || reveal.isPending || isFetching}
               actions={
                 <>
-                  <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
+                  <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending || isFetching}>
                     {hint.isPending ? (
                       <Spinner className="size-3.5" />
                     ) : (
@@ -267,7 +314,7 @@ export function FlashcardDeck({ courseId }: { courseId: string }) {
                     )}
                     {hint.isPending ? "Thinking…" : "Hint"}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={doReveal} disabled={reveal.isPending}>
+                  <Button variant="outline" size="sm" onClick={doReveal} disabled={reveal.isPending || isFetching}>
                     {reveal.isPending ? (
                       <Spinner className="size-3.5" />
                     ) : (
