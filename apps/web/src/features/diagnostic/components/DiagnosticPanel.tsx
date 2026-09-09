@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
 import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
+import { StudySessionShell } from "@/components/study/StudySessionShell";
+import { StudyStream } from "@/components/study/StudyStream";
+import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +17,7 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { MasteryDelta } from "@/components/kala";
+import { MasteryDelta, CornerBrackets } from "@/components/kala";
 import { TransitionPanel } from "@/components/motion/transition-panel";
 import { Spinner } from "@/components/ui/spinner";
 import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
@@ -35,6 +37,19 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 //      crossfading into the mastery-delta reveal (MasteryDelta already
 //      builds that "your twin just updated" moment; this panel just stops
 //      undercutting it with an inline answer key).
+//
+// Stage 3 of the AI overhaul (docs/AI_OVERHAUL_TODO.md): the question list
+// now renders through the same AnswerableCard/StudyStream every other quiz
+// surface uses, instead of a bespoke RadioGroup — Diagnostic was the one
+// surface still on its own custom rendering. The batch-silent, blur/reveal,
+// closing-dialog mechanics below are UNCHANGED on purpose: they're tuned
+// and working, there was no bug driving this migration, only the shared
+// question-rendering primitive changed.
+//
+// Diagnostic is the one surface that puts more than one AnswerableCard on
+// screen at once (every other surface shows a single question/card at a
+// time) — every card below passes firstChoiceId={null} so their first
+// choice buttons don't all fight over the same "tour-first-choice" id.
 const REVEAL_VARIANTS = {
   enter: { opacity: 0, filter: "blur(6px)" },
   center: { opacity: 1, filter: "blur(0px)" },
@@ -110,6 +125,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
       />
     );
 
+  const answeredCount = data.questions.filter((q) => selections[q.id]).length;
   const allAnswered = data.questions.every((q) => selections[q.id]);
 
   function handleSubmit() {
@@ -123,79 +139,78 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
 
   return (
     <>
-      <TransitionPanel
-        activeIndex={submitted ? 1 : 0}
-        variants={reduceMotion ? REVEAL_VARIANTS_REDUCED : REVEAL_VARIANTS}
-        transition={{ duration: reduceMotion ? 0 : 0.35, ease: "easeInOut" }}
+      <StudySessionShell
+        progress={{ current: answeredCount, total: data.questions.length, label: "answered" }}
       >
-      {[
-        <Card id="tour-diagnostic-card" key="answering">
-          <CardHeader>
-            <CardTitle>Course diagnostic</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-8">
-            {data.questions.map((q, qi) => (
-              <div key={q.id} className="space-y-3 border-t border-border/60 pt-6 first:border-t-0 first:pt-0">
-                <p className="font-medium">{q.prompt}</p>
-                <RadioGroup
-                  id={qi === 0 ? "tour-diagnostic-choices" : undefined}
-                  aria-label={q.prompt}
-                  className="flex flex-col gap-2"
-                  value={selections[q.id]}
-                  onValueChange={(value) => setSelections((s) => ({ ...s, [q.id]: value }))}
-                  disabled={submit.isPending || submitted}
-                >
-                  {q.choices.map((c) => (
-                    <label
-                      key={c.id}
-                      htmlFor={`${q.id}-${c.id}`}
-                      className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors has-[[data-state=checked]]:border-brand-orange has-[[data-state=checked]]:bg-brand-orange/5 has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-70 hover:border-brand-orange/40 hover:bg-accent/40"
-                    >
-                      <RadioGroupItem id={`${q.id}-${c.id}`} value={c.id} className="shrink-0" />
-                      <span className="min-w-0 flex-1 break-words leading-relaxed">{c.label}</span>
-                    </label>
-                  ))}
-                </RadioGroup>
-              </div>
-            ))}
-            <Button
-              id="tour-diagnostic-submit"
-              variant="orange"
-              disabled={!allAnswered || submit.isPending}
-              onClick={handleSubmit}
-            >
-              {submit.isPending ? (
-                <>
-                  <Spinner className="size-3.5" /> Building your baseline…
-                </>
-              ) : (
-                "Submit diagnostic"
-              )}
-            </Button>
-          </CardContent>
-        </Card>,
+        <TransitionPanel
+          activeIndex={submitted ? 1 : 0}
+          variants={reduceMotion ? REVEAL_VARIANTS_REDUCED : REVEAL_VARIANTS}
+          transition={{ duration: reduceMotion ? 0 : 0.35, ease: "easeInOut" }}
+        >
+        {[
+          <div key="answering" id="tour-diagnostic-card" className="relative border bg-card">
+            <CornerBrackets />
+            <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
+              <span className="text-sm font-semibold text-foreground">Course diagnostic</span>
+            </div>
 
-        <Card key="reveal">
-          <CardHeader>
-            <CardTitle>Baseline set</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <p className="text-sm text-muted-foreground">
-              Here's where your twin landed. Practice moves it from here.
-            </p>
-            {masteryDeltaRows.length > 0 ? (
-              <MasteryDelta
-                rows={masteryDeltaRows}
-                onRevealComplete={() => setClosingDialogOpen(true)}
-              />
-            ) : null}
-            <Button variant="outline" onClick={() => navigate({ to: "/course" })}>
-              Back to workspace
-            </Button>
-          </CardContent>
-        </Card>,
-      ]}
-    </TransitionPanel>
+            <StudyStream height="h-[55vh]">
+              {data.questions.map((q, qi) => (
+                <div key={q.id} className="rounded-md border bg-card p-4">
+                  <AnswerableCard
+                    prompt={q.prompt}
+                    choices={q.choices}
+                    selectedId={selections[q.id] ?? null}
+                    onSelect={(choiceId) => setSelections((s) => ({ ...s, [q.id]: choiceId }))}
+                    result={null}
+                    isPending={submit.isPending}
+                    choicesAnchorId={qi === 0 ? "tour-diagnostic-choices" : undefined}
+                    firstChoiceId={null}
+                  />
+                </div>
+              ))}
+            </StudyStream>
+
+            <div className="border-t p-4">
+              <Button
+                id="tour-diagnostic-submit"
+                variant="orange"
+                disabled={!allAnswered || submit.isPending}
+                onClick={handleSubmit}
+              >
+                {submit.isPending ? (
+                  <>
+                    <Spinner className="size-3.5" /> Building your baseline…
+                  </>
+                ) : (
+                  "Submit diagnostic"
+                )}
+              </Button>
+            </div>
+          </div>,
+
+          <Card key="reveal">
+            <CardHeader>
+              <CardTitle>Baseline set</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Here's where your twin landed. Practice moves it from here.
+              </p>
+              {masteryDeltaRows.length > 0 ? (
+                <MasteryDelta
+                  rows={masteryDeltaRows}
+                  onRevealComplete={() => setClosingDialogOpen(true)}
+                />
+              ) : null}
+              <Button variant="outline" onClick={() => navigate({ to: "/course" })}>
+                Back to workspace
+              </Button>
+            </CardContent>
+          </Card>,
+        ]}
+      </TransitionPanel>
+      </StudySessionShell>
 
       <Dialog open={closingDialogOpen} onOpenChange={setClosingDialogOpen}>
         <DialogContent>

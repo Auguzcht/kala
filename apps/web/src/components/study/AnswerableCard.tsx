@@ -38,6 +38,7 @@ export function AnswerableCard({
   meta,
   choicesAnchorId,
   resultAnchorId,
+  firstChoiceId = "tour-first-choice",
 }: {
   prompt: string;
   choices: { id: string; label: string }[];
@@ -51,6 +52,12 @@ export function AnswerableCard({
   choicesAnchorId?: string;
   /** Tour anchor for the graded-result block. */
   resultAnchorId?: string;
+  /** id for the first choice button, defaults to "tour-first-choice" (what
+   * Lessons' and Practice's tour steps click through). Every surface but
+   * one shows a single AnswerableCard at a time, so the default is safe.
+   * Diagnostic renders N of these on one page simultaneously — pass null
+   * there, or every question's first choice would share the same id. */
+  firstChoiceId?: string | null;
 }) {
   // One-shot animation on the graded result landing (motion encodes state
   // change): the check/x draw once when the result appears, never on hover
@@ -90,7 +97,7 @@ export function AnswerableCard({
         {choices.map((c, ci) => (
           <Button
             key={c.id}
-            id={ci === 0 ? "tour-first-choice" : undefined}
+            id={ci === 0 ? (firstChoiceId ?? undefined) : undefined}
             variant={selectedId === c.id ? "orange" : "outline"}
             disabled={!!result || isPending}
             onClick={() => onSelect(c.id)}
