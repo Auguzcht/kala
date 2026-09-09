@@ -62,6 +62,19 @@ Rules:
 - Prefer the weakest skills with the most blueprint weight.
 - Use "outreach" when the pattern is disengagement (no recent attempts)
   rather than difficulty — the action is a conversation, not more practice.
+- Choosing between "lesson" and "tutor" is the most common mistake, apply
+  this test: if the learner has not yet grasped the skill at all (low
+  mastery, few or no attempts), use "lesson" — a structured, guided
+  walkthrough that teaches the concept end to end. Use "tutor" ONLY when
+  the learner already has some grounding and the gap is a follow-up
+  question or a specific point of confusion, not the whole topic. When in
+  doubt, prefer "lesson": a walkthrough that reaches a step the learner
+  already knows is a minor redundancy, but "tutor" on a concept never
+  taught leaves the learner asking open-ended questions about something
+  they don't have the vocabulary for yet.
+- Use "practice" for repeated retrieval once the learner has already been
+  introduced to the skill. Use "flashcards" only for recalling discrete
+  facts or terminology, not for skills that need worked reasoning.
 - Write about the learner supportively. Describe what would help, never
   judge the person."""
 
