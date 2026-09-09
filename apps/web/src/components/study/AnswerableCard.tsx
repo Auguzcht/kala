@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CheckIcon } from "@/components/ui/check";
 import type { CheckIconHandle } from "@/components/ui/check";
 import { XIcon } from "@/components/ui/x";
@@ -62,6 +62,26 @@ export function AnswerableCard({
     (result.correct ? checkRef : xRef).current?.startAnimation();
   }, [result]);
 
+  // Grading is a DB lookup (the answer key is already stored server-side),
+  // not a model call — the round trip is normally well under 200ms. Showing
+  // a spinner the INSTANT the request fires (isPending flips true on the
+  // same tick as the click) makes a fast, ordinary click read as "loading
+  // the answer," which is exactly the wrong impression for something this
+  // quick. Delay the spinner: if the request resolves before the delay
+  // elapses (the common case), no spinner ever renders at all. A genuinely
+  // slow response (network hiccup, cold start) still gets one, just not
+  // for the normal fast path. Buttons stay disabled immediately either
+  // way — that's what actually prevents a double-submit, not the spinner.
+  const [showSpinner, setShowSpinner] = useState(false);
+  useEffect(() => {
+    if (!isPending) {
+      setShowSpinner(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowSpinner(true), 200);
+    return () => clearTimeout(timer);
+  }, [isPending]);
+
   return (
     <div className="space-y-4">
       <p className="text-lg font-medium leading-relaxed text-foreground">{prompt}</p>
@@ -76,7 +96,7 @@ export function AnswerableCard({
             onClick={() => onSelect(c.id)}
             className="h-auto justify-start whitespace-normal text-left transition-colors hover:border-brand-orange/40 hover:bg-accent/40"
           >
-            {isPending && selectedId === c.id ? <Spinner className="size-3.5" /> : null}
+            {showSpinner && selectedId === c.id ? <Spinner className="size-3.5" /> : null}
             {c.label}
           </Button>
         ))}
