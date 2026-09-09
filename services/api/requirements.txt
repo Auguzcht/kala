@@ -74,6 +74,8 @@ pyjwt==2.13.0
     #   pylti1p3
 pylti1p3==2.0.0
     # via kala-api
+pypdf==6.18.0
+    # via kala-api
 python-dateutil==2.9.0.post0
     # via botocore
 python-dotenv==1.2.3
