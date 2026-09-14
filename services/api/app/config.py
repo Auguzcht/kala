@@ -57,35 +57,53 @@ class Settings(BaseSettings):
     # signatures regardless of which provider is actually behind them.
     ai_provider: str = Field(default="bedrock", alias="AI_PROVIDER")
 
-    # OpenRouter (interim provider). Free-tier chat models rotate over time,
-    # see https://openrouter.ai/collections/free-models, current defaults
-    # below were verified working as of this integration.
+    # OpenRouter (interim provider). Free-tier chat models rotate and get
+    # RETIRED without notice — see https://openrouter.ai/collections/free-models.
+    # A retired id does not 400/401, it 404s (unknown model), which used to
+    # surface as a raw 500 from every model-backed endpoint until
+    # ai/bedrock.py learned to translate it (see _openrouter_converse).
+    #
+    # Fast/default = nex-agi/nex-n2.5-mini (verified live, ~3s answers): an
+    # instruction-tuned model that produces short, grounded tutor prose.
+    # Reasoning/premium = nex-agi/nex-n2.5-pro, the larger sibling, for the
+    # background work already routed through the reasoning role (grading
+    # explanations, misconception + item generation) where latency is
+    # tolerable and quality matters more.
+    #
+    # Deliberately NOT the NVIDIA nemotron free models despite their headline
+    # speed: both leak their full chain of thought into the message content
+    # ("Here's a thinking process: …"), which reaches the student, and burns
+    # the response budget on the monologue so the real answer never arrives.
+    # ai/reasoning.py strips a leaked preamble defensively, but the right fix
+    # is not to pick a model that needs stripping in the first place.
+    #
+    # All four stay env-overridable (OPENROUTER_MODEL_*) so swapping the
+    # interim provider for Bedrock later is a config change, never a code one.
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL",
     )
     openrouter_model_fast: str = Field(
-        default="nvidia/nemotron-3.5-lightning:free", alias="OPENROUTER_MODEL_FAST",
+        default="nex-agi/nex-n2.5-mini:free", alias="OPENROUTER_MODEL_FAST",
     )
-    # minimax/minimax-m3:free chosen over z-ai/glm-5.2:free after live testing:
-    # cleaner instruction-following for structured JSON extraction, which is
-    # what both skill_proposer.py and learn/items.py actually need (they
-    # parse strict JSON out of the response; a model that "rambles" around
-    # the JSON, like nemotron-3-super below, still works since it's parsed,
-    # but is a less reliable target for max_tokens-constrained calls).
     openrouter_model_default: str = Field(
-        default="minimax/minimax-m3:free", alias="OPENROUTER_MODEL_DEFAULT",
+        default="nex-agi/nex-n2.5-mini:free", alias="OPENROUTER_MODEL_DEFAULT",
     )
     openrouter_model_reasoning: str = Field(
-        default="minimax/minimax-m3:free", alias="OPENROUTER_MODEL_REASONING",
+        default="nex-agi/nex-n2.5-pro:free", alias="OPENROUTER_MODEL_REASONING",
     )
     openrouter_model_premium: str = Field(
-        default="nvidia/nemotron-3-super-120b-a12b:free", alias="OPENROUTER_MODEL_PREMIUM",
+        default="nex-agi/nex-n2.5-pro:free", alias="OPENROUTER_MODEL_PREMIUM",
     )
     # Nemotron 3 Embed 1B natively outputs 2048 dims; ai/bedrock.py slices to
     # the first 1024 and re-normalizes (NVIDIA's own documented technique for
     # this model family) so it matches the existing vector(1024) schema with
-    # no migration change.
+    # no migration change. Note: this id is ALSO no longer served on
+    # OpenRouter at the time of writing, so the OpenRouter embed path is
+    # effectively unavailable — which is exactly why EMBED_PROVIDER defaults
+    # to "openai" below and production runs embeddings there. Left in place
+    # as the documented Bedrock-parity fallback; embeddings never depend on
+    # the chat provider.
     openrouter_embed_model: str = Field(
         default="nvidia/nemotron-3-embed-1b:free", alias="OPENROUTER_EMBED_MODEL",
     )

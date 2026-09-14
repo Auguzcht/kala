@@ -2,10 +2,12 @@
 Wires the LTI auth spine and the feature routers together."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from mangum import Mangum
 
+from app.ai.errors import ModelUnavailableError
 from app.config import get_settings
 from app.lti.routes import router as lti_router
 from app.routers.courses import router as courses_router
@@ -20,6 +22,21 @@ from app.routers.tutor import router as tutor_router
 from app.routers.twin import router as twin_router
 
 app = FastAPI(title="Kala API", version="0.1.0")
+
+
+@app.exception_handler(ModelUnavailableError)
+def _model_unavailable(_request: Request, exc: ModelUnavailableError) -> JSONResponse:
+    """A retired model id, provider outage, or timeout in the model layer is
+    a dependency being unavailable, not a bug in the request — so it must not
+    surface as a bare 500. 502 (Bad Gateway) is the honest status: an
+    upstream we depend on failed. The message is intentionally generic
+    (never leaks the provider, model id, or upstream body to the client) and
+    always safe to show the user directly; the specifics are in the Lambda
+    logs from bedrock.py's own error lines."""
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
 
 _settings = get_settings()
 app.add_middleware(

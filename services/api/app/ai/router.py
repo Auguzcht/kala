@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from app.ai import bedrock
+from app.ai.reasoning import strip_reasoning
 from app.config import get_settings
 
 
@@ -32,6 +33,16 @@ def get_model_for(task: str) -> str:
         raise ValueError(f"unknown model task: {task}") from exc
 
 
+# Response budget for prose answers (tutor, hints, lesson explanations). The
+# old default of 1024 was silently truncating longer explanations mid-sentence
+# once a model leaked its reasoning preamble into the content (see
+# ai/reasoning.py) — and even without a leak, a "why the other options are
+# wrong" explanation legitimately needs more room than a one-liner. Raised to
+# a value that comfortably fits a full multi-paragraph answer while staying
+# well inside every configured model's context window.
+_ANSWER_MAX_TOKENS = 2048
+
+
 def answer(*, system: str, user_text: str, escalate: bool = False,
            history: list[dict] | None = None) -> str:
     """`history` is prior turns already in bedrock.converse's message shape
@@ -40,15 +51,21 @@ def answer(*, system: str, user_text: str, escalate: bool = False,
     it and gets exactly the single-turn behavior this function always
     had. Added for the tutor's persistent conversations (Stage 2 of the
     AI overhaul) so a follow-up question can actually reference what was
-    said earlier in the same thread, not just the current question alone."""
+    said earlier in the same thread, not just the current question alone.
+
+    The reply is post-processed with strip_reasoning() so a leaked
+    chain-of-thought preamble never reaches a student (see ai/reasoning.py for
+    why this is enforced here rather than left to the prompt)."""
     model = get_model_for("reasoning" if escalate else "default")
     messages = list(history) if history else []
     messages.append({"role": "user", "content": [{"text": user_text}]})
-    return bedrock.converse(
+    raw = bedrock.converse(
         model_id=model,
         system=system,
         messages=messages,
+        max_tokens=_ANSWER_MAX_TOKENS,
     )
+    return strip_reasoning(raw)
 
 
 def tag_content(*, text: str, skills: list[dict]) -> dict:

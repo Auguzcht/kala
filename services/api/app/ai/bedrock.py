@@ -11,10 +11,14 @@ does, with zero changes anywhere else in the codebase either way.
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
 
+from app.ai.errors import ModelUnavailableError
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int = 1024) -> str:
@@ -47,12 +51,22 @@ def _bedrock_runtime():
 
 
 def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int) -> str:
-    resp = _bedrock_runtime().converse(
-        modelId=model_id,
-        system=[{"text": system}],
-        messages=messages,
-        inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
-    )
+    try:
+        resp = _bedrock_runtime().converse(
+            modelId=model_id,
+            system=[{"text": system}],
+            messages=messages,
+            inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
+        )
+    except Exception as exc:  # botocore ClientError, EndpointConnectionError, timeouts…
+        # Whether the model id is unknown or Bedrock itself is unreachable,
+        # the caller's remedy is the same (retry later / fix config), so this
+        # is one typed, non-500 failure rather than a provider-specific throw.
+        logger.error("bedrock converse failed (model=%s): %s", model_id, exc)
+        raise ModelUnavailableError(
+            "The model provider could not be reached. Please try again.",
+            provider="bedrock", model_id=model_id,
+        ) from exc
     parts = resp["output"]["message"]["content"]
     return "".join(p.get("text", "") for p in parts)
 
@@ -116,28 +130,85 @@ def _openrouter_converse(*, model_id: str, system: str, messages: list[dict], ma
     for m in messages:
         oai_messages.append({"role": m["role"], "content": _flatten_text(m["content"])})
 
-    with _openrouter_client() as c:
-        r = c.post("/chat/completions", json={
-            "model": model_id,
-            "messages": oai_messages,
-            "max_tokens": max_tokens,
-            "temperature": 0.2,
-        })
-        r.raise_for_status()
-        data = r.json()
+    try:
+        with _openrouter_client() as c:
+            r = c.post("/chat/completions", json={
+                "model": model_id,
+                "messages": oai_messages,
+                "max_tokens": max_tokens,
+                "temperature": 0.2,
+            })
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        # 404 from OpenRouter means the MODEL ID DOES NOT EXIST, nearly always
+        # because a free-tier model was retired upstream. That is a config
+        # problem, not an outage, and it is the failure that used to take
+        # every AI endpoint down silently — log it loudly and specifically so
+        # the next deprecation is caught in the logs before a user reports a
+        # broken screen. 401/403 (bad key), 429 (rate limit) and 5xx (provider
+        # outage) share the same typed failure but not the same log line.
+        model_not_found = status_code == 404
+        if model_not_found:
+            logger.error(
+                "OpenRouter model id no longer exists (model=%s). It was "
+                "likely retired from the free tier — set OPENROUTER_MODEL_* "
+                "to a current id (see https://openrouter.ai/models). Body: %s",
+                model_id, exc.response.text[:300],
+            )
+        else:
+            logger.error(
+                "OpenRouter chat request failed (model=%s, status=%s): %s",
+                model_id, status_code, exc.response.text[:300],
+            )
+        raise ModelUnavailableError(
+            "Kala's model provider is unavailable right now. Please try again.",
+            provider="openrouter", model_id=model_id,
+            status_code=status_code, model_not_found=model_not_found,
+        ) from exc
+    except httpx.HTTPError as exc:
+        # Transport-level failure (timeout, DNS, connection reset) — no
+        # response object to read a status from. Same typed failure.
+        logger.error("OpenRouter request errored (model=%s): %s", model_id, exc)
+        raise ModelUnavailableError(
+            "Kala's model provider is unavailable right now. Please try again.",
+            provider="openrouter", model_id=model_id,
+        ) from exc
     return data["choices"][0]["message"]["content"] or ""
 
 
 def _openrouter_embed(text: str, *, input_type: str) -> list[float]:
     s = get_settings()
-    with _openrouter_client() as c:
-        r = c.post("/embeddings", json={
-            "model": s.openrouter_embed_model,
-            "input": text,
-            "input_type": _to_openrouter_input_type(input_type),
-        })
-        r.raise_for_status()
-        data = r.json()
+    try:
+        with _openrouter_client() as c:
+            r = c.post("/embeddings", json={
+                "model": s.openrouter_embed_model,
+                "input": text,
+                "input_type": _to_openrouter_input_type(input_type),
+            })
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as exc:
+        model_not_found = exc.response.status_code == 404
+        logger.error(
+            "OpenRouter embedding request failed (model=%s, status=%s%s): %s",
+            s.openrouter_embed_model, exc.response.status_code,
+            ", model id likely retired" if model_not_found else "",
+            exc.response.text[:300],
+        )
+        raise ModelUnavailableError(
+            "Kala's model provider is unavailable right now. Please try again.",
+            provider="openrouter", model_id=s.openrouter_embed_model,
+            status_code=exc.response.status_code, model_not_found=model_not_found,
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.error("OpenRouter embedding request errored (model=%s): %s",
+                     s.openrouter_embed_model, exc)
+        raise ModelUnavailableError(
+            "Kala's model provider is unavailable right now. Please try again.",
+            provider="openrouter", model_id=s.openrouter_embed_model,
+        ) from exc
     raw = data["data"][0]["embedding"]
 
     # Nemotron 3 Embed 1B natively outputs 2048 dims and the hosted API
@@ -212,12 +283,31 @@ def _openai_client() -> httpx.Client:
 
 def _openai_embed(text: str, *, input_type: str) -> list[float]:
     s = get_settings()
-    with _openai_client() as c:
-        r = c.post("/embeddings", json={
-            "model": s.openai_embed_model,
-            "input": text,
-            "dimensions": 1024,  # matches vector(1024); OpenAI truncates+renormalizes server-side
-        })
-        r.raise_for_status()
-        data = r.json()
+    try:
+        with _openai_client() as c:
+            r = c.post("/embeddings", json={
+                "model": s.openai_embed_model,
+                "input": text,
+                "dimensions": 1024,  # matches vector(1024); OpenAI truncates+renormalizes server-side
+            })
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "OpenAI embedding request failed (model=%s, status=%s): %s",
+            s.openai_embed_model, exc.response.status_code, exc.response.text[:300],
+        )
+        raise ModelUnavailableError(
+            "Kala's model provider is unavailable right now. Please try again.",
+            provider="openai", model_id=s.openai_embed_model,
+            status_code=exc.response.status_code,
+            model_not_found=exc.response.status_code == 404,
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.error("OpenAI embedding request errored (model=%s): %s",
+                     s.openai_embed_model, exc)
+        raise ModelUnavailableError(
+            "Kala's model provider is unavailable right now. Please try again.",
+            provider="openai", model_id=s.openai_embed_model,
+        ) from exc
     return data["data"][0]["embedding"]
