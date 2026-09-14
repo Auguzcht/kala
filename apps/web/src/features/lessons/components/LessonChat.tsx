@@ -286,6 +286,11 @@ export function LessonChat({
   const isCheckTakeover = Boolean(checkOpen && current?.check);
   const checkDockVisible = isCheckTakeover && (checkThreadOpen || hasGradedCheck || hasAnsweredOnce);
   const hintPending = checkThreadKind === "hint";
+  // Answering again after a miss: the dock is present but inert (disabled
+  // primary, no follow-up input and so no toggle). Asking Kala mid-re-answer
+  // would be the only way to reach the answer key, which is exactly what the
+  // retry is trying to withhold.
+  const isReanswering = isCheckTakeover && hasAnsweredOnce && !hasGradedCheck;
   // Every dock primary carries an animated icon so the dock reads the same
   // as the workspace rail: arrow for "keep moving", check/popper for "done",
   // undo for "try again".
@@ -306,12 +311,18 @@ export function LessonChat({
               icon: stepIndex + 1 >= total ? PartyPopperIcon : ArrowRightIcon,
             }
           : { label: "Try again", onClick: retry, icon: RotateCCWIcon }
-        : // Pre-grade. Uses the dock only to stay mounted through a retry: no
-          // primary action here on purpose, since the next move is picking a
-          // different choice on the card. ComposeDock drops the action button
-          // (and its toggle) when `primary` is unset, leaving just the ask
-          // field, so the dock does not vanish under the student's cursor.
-          undefined;
+        : // Pre-grade after a miss. The dock stays mounted so the layout does
+          // not jump and the student keeps a visible anchor, but the action is
+          // deliberately inert: answering happens by picking a different
+          // choice on the card, which auto-grades on pick. Without an `onAsk`
+          // ComposeDock renders action mode, so this stays a disabled button
+          // rather than falling through to the follow-up text input.
+          {
+            label: "Try again",
+            onClick: retry,
+            icon: RotateCCWIcon,
+            disabled: true,
+          };
 
   return (
     <StudySurface
@@ -331,8 +342,22 @@ export function LessonChat({
       dock={isCheckTakeover && !checkDockVisible ? undefined : (
         <ComposeDock
           primary={dockPrimary}
-          onAsk={isCheckTakeover ? askCheckFollowUp : !done ? askFollowUp : undefined}
-          askPending={isCheckTakeover ? checkFollowUp.isPending : followUp.isPending}
+          onAsk={
+            isReanswering
+              ? undefined
+              : isCheckTakeover
+              ? askCheckFollowUp
+              : !done
+                ? askFollowUp
+                : undefined
+          }
+          askPending={
+            isReanswering
+              ? false
+              : isCheckTakeover
+                ? checkFollowUp.isPending
+                : followUp.isPending
+          }
           placeholder={isCheckTakeover ? "Ask Kala about this check…" : "Ask Kala about this step…"}
         />
       )}
