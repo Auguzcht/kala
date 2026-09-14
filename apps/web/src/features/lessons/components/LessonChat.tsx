@@ -1,64 +1,107 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrainIcon } from "@/components/ui/brain";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
-import { StudySessionShell } from "@/components/study/StudySessionShell";
-import { StudyStream } from "@/components/study/StudyStream";
-import { TeachingBlock } from "@/components/study/TeachingBlock";
+import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { PartyPopperIcon } from "@/components/ui/party-popper";
+import { RotateCCWIcon } from "@/components/ui/rotate-ccw";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { CornerBrackets } from "@/components/kala";
+import { AssistantBlock } from "@/components/study/AssistantBlock";
+import { ComposeDock, type ComposeDockPrimary } from "@/components/study/ComposeDock";
+import { SessionBar } from "@/components/study/SessionBar";
+import { StudyStream } from "@/components/study/StudyStream";
+import { StudySurface } from "@/components/study/StudySurface";
+import { TeachingBlock } from "@/components/study/TeachingBlock";
+import { UserBlock } from "@/components/study/UserBlock";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-lessons";
-import { useTutorAsk } from "@/features/tutor";
-import { cn } from "@/lib/utils";
 import type { LessonCheckResult } from "@/features/lessons/schema/lessons.schema";
+import { useTutorAsk } from "@/features/tutor";
+import { celebrate } from "@/lib/celebrate";
 
-// Guided lesson as a guided stream (Stage 1 of the AI-overhaul plan, see
-// docs/AI_OVERHAUL_TODO.md): Kala teaches step by step in a continuous
-// thread, and each step ends with a suggested-reply chip ("I understand —
-// continue"). Continuing reveals the step's comprehension check as the
-// NEXT block in the same stream — this used to be a Dialog that covered
-// the thread; Gizmo's own lesson flow (the reference point for this
-// rework) never does that, the check is just the next thing you scroll to.
-// Only a correct check advances the thread — the gate stays server-side
-// (advance: true), nothing about that changed.
+type FollowUpTurn = { question: string; answer: string };
 
-export function LessonChat({ courseId, skillId }: { courseId: string; skillId: string }) {
+// A lesson's current step is one slot, not a growing list. The teaching turn
+// stays dimmed behind the mounted check so the check takes the slot over rather
+// than becoming another bubble below it.
+export function LessonChat({
+  courseId,
+  skillId,
+  onExit,
+}: {
+  courseId: string;
+  skillId: string;
+  onExit: () => void;
+}) {
+  const reduceMotion = useReducedMotion();
   const { data, isLoading, isError, refetch } = useLesson(courseId, skillId);
   const submit = useSubmitStepCheck(courseId);
-  const hint = useTutorAsk(courseId);
+  const checkAsk = useTutorAsk(courseId);
+  const checkFollowUp = useTutorAsk(courseId);
+  const followUp = useTutorAsk(courseId);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [checkOpen, setCheckOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [result, setResult] = useState<LessonCheckResult | null>(null);
-  const [hintText, setHintText] = useState<string | null>(null);
+  const [checkThreadOpen, setCheckThreadOpen] = useState(false);
+  const [checkExplanation, setCheckExplanation] = useState<string | null>(null);
+  // Which check-thread request is in flight, so the loading placeholder can
+  // say the right thing (a hint is not an explanation).
+  const [checkThreadKind, setCheckThreadKind] = useState<"hint" | "explain">("hint");
+  const [checkFollowUpTurns, setCheckFollowUpTurns] = useState<FollowUpTurn[]>([]);
+  const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
+  // The question whose answer is still in flight. Rendered immediately as a
+  // student turn + pending Kala reply, then cleared once the answer lands.
+  const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
+  const [pendingCheckFollowUp, setPendingCheckFollowUp] = useState<string | null>(null);
+  const checkThreadRef = useRef<HTMLDivElement | null>(null);
   const hintsUsedRef = useRef(0);
   const startedAtRef = useRef(Date.now());
 
-  // Reset on a genuinely new lesson load (a different skillId resolving),
-  // not on every step — per-step state resets when that step's check
-  // actually opens (openCheck below), same boundary the original modal
-  // version used.
-  useEffect(() => {
-    setStepIndex(0);
+  function resetStepState() {
     setCheckOpen(false);
     setSelected(null);
     setResult(null);
-    setHintText(null);
+    setCheckThreadOpen(false);
+    setCheckExplanation(null);
+    setCheckThreadKind("hint");
+    setCheckFollowUpTurns([]);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
+    setPendingCheckFollowUp(null);
     hintsUsedRef.current = 0;
     startedAtRef.current = Date.now();
+  }
+
+  useEffect(() => {
+    setStepIndex(0);
+    resetStepState();
   }, [data?.lessonId]);
 
-  if (isLoading || data?.status === "generating")
+  // Bring the opened check thread into view once it has actually painted.
+  // Runs on checkThreadOpen (and whenever an answer lands) so the student is
+  // taken to the explanation even if the check card is taller than the
+  // viewport — the "redirect the user there" half of the Explain/Hint
+  // interaction. Declared before the loading/error early returns below,
+  // since hooks must run in the same order on every render.
+  useEffect(() => {
+    if (!checkThreadOpen) return;
+    const node = checkThreadRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }, [checkThreadOpen, checkExplanation, checkAsk.isPending, reduceMotion]);
+
+  if (isLoading || data?.status === "generating") {
     return (
       <div id="tour-lesson-generating" className="w-full">
         <LoadingPanel label="Kala is writing your lesson — first pass takes a moment…" lines={5} />
       </div>
     );
-  if (isError)
+  }
+  if (isError) {
     return (
       <EmptyState
         title="We could not load this lesson"
@@ -66,27 +109,36 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
-  if (!data || data.steps.length === 0)
+  }
+  if (!data || data.steps.length === 0) {
     return (
       <EmptyState
         title="No lesson here yet"
         description="This skill doesn't have a lesson yet. Come back after course content is ingested."
       />
     );
+  }
 
   const total = data.steps.length;
   const done = stepIndex >= total;
   const current = done ? null : data.steps[stepIndex];
+  const hasGradedCheck = checkOpen && result !== null;
 
   function openCheck() {
     if (!current?.check) {
-      // Pure-explanation step: nothing to grade, advance straight on.
-      setStepIndex((i) => i + 1);
+      resetStepState();
+      setStepIndex((index) => index + 1);
       return;
     }
     setSelected(null);
     setResult(null);
-    setHintText(null);
+    setCheckThreadOpen(false);
+    setCheckExplanation(null);
+    setCheckThreadKind("hint");
+    setCheckFollowUpTurns([]);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
+    setPendingCheckFollowUp(null);
     hintsUsedRef.current = 0;
     startedAtRef.current = Date.now();
     setCheckOpen(true);
@@ -103,25 +155,96 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
         latencyMs: Date.now() - startedAtRef.current,
         hintsUsed: hintsUsedRef.current,
       },
-      { onSuccess: (r) => setResult(r) }
+      { onSuccess: (nextResult) => setResult(nextResult) }
     );
   }
 
-  function askHint() {
+  function checkContext(instruction: string) {
+    if (!current?.check) return instruction;
+    const grading = result
+      ? `The student's submission was graded ${result.correct ? "correct" : "incorrect"}. The authoritative feedback is: "${result.explanation}".`
+      : "The student has not submitted an answer yet.";
+
+    return [
+      "You are Kala in a guided lesson. Stay strictly within this one comprehension check; do not broaden into unrelated course material.",
+      `Check question: "${current.check.prompt}"`,
+      grading,
+      instruction,
+    ].join("\n\n");
+  }
+
+  function openCheckThread(kind: "hint" | "explain") {
     if (!current?.check) return;
-    setHintText(null);
-    hint.mutate(
+    // The thread opens IMMEDIATELY, before the answer exists — the student's
+    // attention moves to where the explanation will appear (a Kala header
+    // with a pending bubble), rather than staring at the button they just
+    // pressed while it silently swaps into a spinner. Guarded by isPending
+    // so a double-tap can't fire a second identical request.
+    setCheckThreadOpen(true);
+    if (checkExplanation || checkAsk.isPending) return;
+
+    setCheckThreadKind(kind);
+    checkAsk.mutate(
       {
-        question: `Give me a hint for this comprehension check without revealing the answer: "${current.check.prompt}"`,
-        style: "eli5",
+        question: checkContext(
+          kind === "hint"
+            ? "Give a concise hint that helps the student reason toward the answer without revealing it."
+            : "Explain the answer clearly, including why the other options do not fit."
+        ),
+        style: kind === "hint" ? "eli5" : "default",
       },
-      { onSuccess: (r) => { setHintText(r.answer); hintsUsedRef.current += 1; } }
+      {
+        onSuccess: (answer) => {
+          setCheckExplanation(answer.answer);
+          if (kind === "hint") hintsUsedRef.current += 1;
+        },
+      }
+    );
+  }
+
+  function askCheckFollowUp(question: string) {
+    if (!current?.check) return;
+    setCheckThreadOpen(true);
+    setPendingCheckFollowUp(question);
+    checkFollowUp.mutate(
+      { question: checkContext(`The student asks: "${question}"`), style: "default" },
+      {
+        onSuccess: (answer) => {
+          setCheckFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
+          setPendingCheckFollowUp(null);
+        },
+        onError: () => setPendingCheckFollowUp(null),
+      }
+    );
+  }
+
+  function askFollowUp(question: string) {
+    if (!current) return;
+    // The student's turn goes into the stream NOW, with a pending Kala reply
+    // under it. Waiting for onSuccess and then appending {question, answer}
+    // as one unit is why the whole exchange appeared at once with no
+    // animation: neither half existed until the model had finished.
+    setPendingFollowUp(question);
+    followUp.mutate(
+      { question, style: "default" },
+      {
+        onSuccess: (answer) => {
+          setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
+          setPendingFollowUp(null);
+        },
+        onError: () => setPendingFollowUp(null),
+      }
     );
   }
 
   function advanceStep() {
-    setCheckOpen(false);
-    setStepIndex((i) => i + 1);
+    if (!result?.advance) return;
+    const finishing = stepIndex + 1 >= total;
+    resetStepState();
+    setStepIndex((index) => index + 1);
+    // Fire only on the transition into the done state, and only when motion
+    // is welcome. `total` is the lesson length, so this is the last step.
+    if (finishing && !reduceMotion) celebrate();
   }
 
   function retry() {
@@ -130,132 +253,214 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
     startedAtRef.current = Date.now();
   }
 
-  const assistantBubble = "mr-auto flex max-w-[88%] items-start gap-2.5";
+  function goBack() {
+    if (checkThreadOpen) {
+      setCheckThreadOpen(false);
+      return;
+    }
+    if (checkOpen) {
+      setCheckOpen(false);
+      return;
+    }
+    onExit();
+  }
+
+  function restartLesson() {
+    resetStepState();
+    setStepIndex(0);
+  }
+
+  const isCheckTakeover = Boolean(checkOpen && current?.check);
+  const checkDockVisible = isCheckTakeover && (checkThreadOpen || hasGradedCheck);
+  const hintPending = checkThreadKind === "hint";
+  // Every dock primary carries an animated icon so the dock reads the same
+  // as the workspace rail: arrow for "keep moving", check/popper for "done",
+  // undo for "try again".
+  const dockPrimary: ComposeDockPrimary | undefined = done
+    ? { label: "Start again", onClick: restartLesson, icon: RotateCCWIcon }
+      : !checkOpen
+      ? {
+          id: "tour-lesson-continue",
+          label: "Continue",
+          onClick: openCheck,
+          icon: GraduationCapIcon,
+        }
+      : hasGradedCheck
+        ? result?.advance
+          ? {
+              label: stepIndex + 1 >= total ? "Finish lesson" : "Next step",
+              onClick: advanceStep,
+              icon: stepIndex + 1 >= total ? PartyPopperIcon : ArrowRightIcon,
+            }
+          : { label: "Try again", onClick: retry, icon: RotateCCWIcon }
+        : undefined;
 
   return (
-    <StudySessionShell
-      progress={done ? { current: total, total, label: "step" } : { current: stepIndex + 1, total, label: "step" }}
+    <StudySurface
+      bar={
+        <SessionBar
+          title={data.title}
+          progress={{
+            current: done ? total : stepIndex + 1,
+            total,
+            label: "step",
+            bloomLevel: current?.bloomLevel,
+          }}
+          onBack={goBack}
+          backLabel="Choose another topic"
+        />
+      }
+      dock={isCheckTakeover && !checkDockVisible ? undefined : (
+        <ComposeDock
+          primary={dockPrimary}
+          onAsk={isCheckTakeover ? askCheckFollowUp : !done ? askFollowUp : undefined}
+          askPending={isCheckTakeover ? checkFollowUp.isPending : followUp.isPending}
+          placeholder={isCheckTakeover ? "Ask Kala about this check…" : "Ask Kala about this step…"}
+        />
+      )}
     >
-      <div className="relative border bg-card">
-        <CornerBrackets />
-        <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
-          <span className="truncate text-sm font-semibold text-foreground">{data.title}</span>
-          <span className="shrink-0 font-mono text-xs text-muted-foreground">
-            {done ? total : stepIndex + 1}/{total} steps
-          </span>
-        </div>
-
-        <StudyStream height="h-[62vh]">
-          {/* Completed steps: teaching + outcome */}
-          {data.steps.slice(0, done ? total : stepIndex).map((s) => (
-            <div key={s.id} className="space-y-3">
-              <TeachingBlock step={s} />
-              <div className={cn("flex items-center gap-2", assistantBubble)}>
-                <span className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-2.5 py-1 text-xs font-semibold text-brand-green">
-                  Step complete ✓
-                </span>
-              </div>
-            </div>
-          ))}
-
-          {/* Current step: teaching, then continue OR the inline check */}
-          {current ? (
-            <div className="space-y-3">
-              <TeachingBlock step={current} id="tour-lesson-explain" />
-
-              {!checkOpen ? (
-                <div className={cn("flex flex-wrap items-center gap-2", assistantBubble)}>
-                  <p className="text-xs text-muted-foreground">When you're ready, continue to the check.</p>
-                  <button
-                    type="button"
-                    id="tour-lesson-continue"
-                    onClick={openCheck}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-brand-orange/50 bg-brand-orange/10 px-3.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-brand-orange/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <GraduationCapIcon size={15} className="text-brand-orange" aria-hidden />
-                    I understand — continue
-                  </button>
-                </div>
-              ) : null}
-
-              {checkOpen && current.check ? (
-                <div id="tour-lesson-check" className="mr-auto max-w-[92%] space-y-4">
-                  <div className="rounded-md border bg-card p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Check yourself
-                    </p>
-                    <AnswerableCard
-                      prompt={current.check.prompt}
-                      choices={current.check.choices}
-                      selectedId={selected}
-                      onSelect={choose}
-                      isPending={submit.isPending}
-                      resultAnchorId="tour-lesson-check-feedback"
-                      result={
-                        result
-                          ? {
-                              correct: result.correct,
-                              explanation: result.explanation,
-                              mastery: result.mastery,
-                            }
-                          : null
+      <AnimatePresence initial={false} mode="wait">
+        {isCheckTakeover && current?.check ? (
+          <motion.div
+            key="check-takeover"
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0, scale: 0.98 }}
+            transition={{ duration: reduceMotion ? 0 : 0.18 }}
+            className="h-full min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-10 sm:pt-14"
+          >
+            <div id="tour-lesson-check" className="mx-auto w-full max-w-[800px]">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Check yourself</p>
+              <AnswerableCard
+                prompt={current.check.prompt}
+                choices={current.check.choices}
+                selectedId={selected}
+                onSelect={choose}
+                isPending={submit.isPending}
+                resultAnchorId="tour-lesson-check-feedback"
+                result={
+                  result
+                    ? {
+                        correct: result.correct,
+                        explanation: result.explanation,
+                        mastery: result.mastery,
                       }
-                      actions={
-                        <>
-                          <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
-                            {hint.isPending ? (
-                              <Spinner className="size-3.5" />
-                            ) : (
-                              <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                            )}
-                            {hint.isPending ? "Thinking…" : "Hint"}
-                          </Button>
-                          {hintText ? (
-                            <p className="w-full text-sm italic leading-relaxed text-muted-foreground">
-                              {hintText}
-                            </p>
-                          ) : null}
-                        </>
-                      }
-                    />
-                  </div>
-
-                  {result?.advance ? (
-                    <div className="flex justify-end">
-                      <Button variant="orange" onClick={advanceStep}>
-                        {stepIndex + 1 >= total ? "Finish lesson" : "Next step"}
-                      </Button>
+                    : null
+                }
+                actions={
+                  // Keep the label stable. The old behavior swapped the
+                  // button into a "Thinking…" spinner, which read as "this
+                  // button is loading" rather than "Kala is answering below"
+                  // — the pending state now lives in the thread instead.
+                  !result ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openCheckThread("hint")}
+                      disabled={checkAsk.isPending}
+                    >
+                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                      Hint
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openCheckThread("explain")}
+                      disabled={checkAsk.isPending}
+                    >
+                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                      Explain
+                    </Button>
+                  )
+                }
+              />
+              {checkThreadOpen ? (
+                <div ref={checkThreadRef} className="mt-8 scroll-mt-4 border-t pt-6">
+                  {/* One AssistantBlock for the whole thread: it renders
+                      Kala's header while the answer is still loading and
+                      keeps it once the answer lands. Rendering a separate
+                      heading here plus AssistantBlock's own was what made
+                      two "Kala" headers stack up. */}
+                  <AssistantBlock
+                    text={checkExplanation ?? undefined}
+                    pending={checkAsk.isPending}
+                    pendingLabel={
+                      hintPending ? "Kala is preparing a hint…" : "Kala is preparing an explanation…"
+                    }
+                    // The graded explanation is reference text the student
+                    // reads after answering, not a live reply — it should be
+                    // there the moment it arrives, not type itself out.
+                    animate={false}
+                  />
+                  {checkFollowUpTurns.map((turn, index) => (
+                    <div key={`${turn.question}-${index}`} className="mt-5 space-y-3">
+                      <UserBlock text={turn.question} />
+                      <AssistantBlock text={turn.answer} />
                     </div>
-                  ) : result ? (
-                    <div className="flex justify-end">
-                      <Button variant="outline" onClick={retry}>
-                        Try again
-                      </Button>
+                  ))}
+                  {/* In-flight question: the student's turn and a pending Kala
+                      reply appear the moment they hit send. */}
+                  {pendingCheckFollowUp ? (
+                    <div className="mt-5 space-y-3">
+                      <UserBlock text={pendingCheckFollowUp} />
+                      <AssistantBlock pending pendingLabel="Kala is thinking…" />
                     </div>
                   ) : null}
                 </div>
               ) : null}
             </div>
-          ) : null}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="lesson-stream"
+            initial={reduceMotion ? false : { opacity: 0.7 }}
+            animate={{ opacity: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.14 }}
+            className="h-full min-h-0 flex-1"
+          >
+            <StudyStream>
+              {data.steps.slice(0, done ? total : stepIndex).map((step) => (
+                <div key={step.id} className="space-y-3">
+                  <TeachingBlock step={step} />
+                  <div className="mr-auto flex w-full max-w-full items-center gap-2">
+                    <span className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-2.5 py-1 text-xs font-semibold text-brand-green">
+                      Step complete ✓
+                    </span>
+                  </div>
+                </div>
+              ))}
 
-          {/* Done */}
-          {done ? (
-            <div className={cn(assistantBubble)}>
-              <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
-              <div className="min-w-0 space-y-3 rounded-md border bg-card px-4 py-3.5 text-sm leading-relaxed text-foreground">
-                <p className="font-medium">Lesson complete — nice work.</p>
-                <p className="text-muted-foreground">
-                  You worked through all {total} steps. The check answers fed your twin — keep the
-                  concepts fresh with spaced review.
-                </p>
-                <Button variant="outline" size="sm" onClick={() => refetch()}>
-                  Start again
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </StudyStream>
-      </div>
-    </StudySessionShell>
+              {current ? (
+                <div className="space-y-3">
+                  <TeachingBlock step={current} id="tour-lesson-explain" />
+                  {followUpTurns.map((turn, index) => (
+                    <div key={`${turn.question}-${index}`} className="space-y-3">
+                      <UserBlock text={turn.question} />
+                      <AssistantBlock text={turn.answer} />
+                    </div>
+                  ))}
+                  {/* In-flight question: the student's turn and a pending
+                      Kala reply appear the moment they hit send. */}
+                  {pendingFollowUp ? (
+                    <div className="space-y-3">
+                      <UserBlock text={pendingFollowUp} />
+                      <AssistantBlock pending pendingLabel="Kala is thinking…" />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {done ? (
+                <AssistantBlock
+                  text={`**Lesson complete — nice work.**\n\nYou worked through all ${total} steps. The check answers fed your twin — keep the concepts fresh with spaced review.`}
+                />
+              ) : null}
+            </StudyStream>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </StudySurface>
   );
 }

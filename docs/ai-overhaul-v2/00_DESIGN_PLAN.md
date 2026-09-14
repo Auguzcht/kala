@@ -140,14 +140,14 @@ right-aligned. The compose dock and session bar span the full content column.
 | Teaching bubble | `rounded-md` (6px) | content you read, but *in* the conversation — a hair of softening, not a pill |
 | Quiz/answer card | 0 border, corner brackets | pure "read this precisely + answer" data surface |
 | Answer option buttons | `rounded-md` | interactive, but disciplined — they are choices, not the AI |
-| **Compose dock** | `rounded-2xl` (16px) | THE conversational affordance — this is the launch-line's elegance applied to the one input that is the AI |
-| **Continue primary** | `rounded-full` | the single "move forward with the AI" action |
-| Back/forward chevrons | `rounded-full` icon buttons | Gizmo-style nav, and they are AI-session controls |
+| **Compose dock (both states)** | `rounded-full` | THE conversational affordance — one slot that toggles between the primary action and the follow-up input, same shape either way. **Checkpoint 2 correction:** originally spec'd as `rounded-2xl` for the input vs. `rounded-full` for a separate button; Checkpoint 2 review (screenshots against actual Gizmo) showed they're the same slot in two states and must match exactly, not two related-but-different radii. See `02`. |
+| Back/forward chevrons + dock toggle | `rounded-full` icon buttons | Gizmo-style nav, and they are AI-session controls |
 
-The generous radii (`rounded-2xl`, `rounded-full`) appear **only** on the
-compose dock and the two primary session controls — the elements that *are* the
-conversation. Everything you read stays boxy. That is the whole system: the
-eye learns in five seconds that "round = talk to Kala / move forward," "square
+The one generous radius (`rounded-full`) appears **only** on the
+compose dock and the small circular session controls around it — the elements
+that *are* the conversation. Everything you read stays boxy. That is the whole
+system: the eye learns in five seconds that "round = talk to Kala / move
+forward," "square
 = read this."
 
 ### Principles (what makes this Kala and not Gizmo)
@@ -197,8 +197,12 @@ Revision made during pass 2: my first cut had the teaching bubble at
 "everything's a little rounded" — the exact tell. Pulled the quiz card back to
 0-radius-with-brackets (it is a *data* surface) and held the bubble at a single
 `rounded-md`, so there is a clear two-step ladder (content `rounded-md`,
-conversational affordance `rounded-2xl`/`full`) instead of a mushy gradient of
-radii. Documented in the radius table.
+conversational affordance `rounded-full`) instead of a mushy gradient of
+radii. Documented in the radius table. **Checkpoint 2 sharpened this further:**
+the conversational tier itself collapsed from two radii (`rounded-2xl` compose,
+`rounded-full` button) to one (`rounded-full` for both), once it became clear
+via the Gizmo comparison that they're the same slot, not two related
+affordances — see `02`'s `ComposeDock` section.
 
 ## What this plan explicitly does NOT touch
 

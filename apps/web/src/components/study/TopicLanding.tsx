@@ -39,7 +39,7 @@ export function TopicLanding({
   /** Static caption shown under the Bloom chip on every card — what this
    * surface actually does ("guided walkthrough with checks", "quick
    * graded reps", "spaced recall card"), differs per surface. */
-  caption: string;
+  caption?: string;
   /** Tour anchor for the first module's grid. */
   gridId?: string;
   /** Tour anchor for the very first skill card — only relevant where the
@@ -114,7 +114,7 @@ export function TopicLanding({
                             {s.bloomLevel}
                           </span>
                         ) : null}
-                        <span>{caption}</span>
+                        {caption ? <span>{caption}</span> : null}
                       </p>
                     </button>
                   ))}

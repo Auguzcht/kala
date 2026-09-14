@@ -38,14 +38,14 @@ export function StudyStream({
   return (
     <div
       className={cn(
-        "relative flex min-h-0 flex-1 flex-col",
+        "relative flex h-full min-h-0 flex-1 flex-col",
         height,
         className
       )}
     >
       <Conversation>
-        <ConversationContent className="gap-5 px-5 py-6">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+        <ConversationContent className="gap-5 py-6">
+          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5 px-4">
             {children}
           </div>
         </ConversationContent>

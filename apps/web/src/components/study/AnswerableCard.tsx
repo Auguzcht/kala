@@ -3,6 +3,7 @@ import { CheckIcon } from "@/components/ui/check";
 import type { CheckIconHandle } from "@/components/ui/check";
 import { XIcon } from "@/components/ui/x";
 import type { XIconHandle } from "@/components/ui/x";
+import { MarkdownText } from "@/components/study/MarkdownText";
 import { MasteryBand, bandFor } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -119,28 +120,50 @@ export function AnswerableCard({
             ) : (
               <XIcon ref={xRef} size={18} className="mt-0.5 shrink-0 text-destructive" aria-hidden />
             )}
-            <div className="space-y-1">
-              <p
-                className={cn(
-                  "text-sm font-semibold",
-                  result.correct ? "text-brand-green" : "text-destructive"
-                )}
-              >
-                {result.correct ? "Correct." : "Not quite."}
-              </p>
+            <div className="min-w-0 space-y-1">
+              {/* Verdict and mastery share one line: the band is what the
+                  answer *did* to the student's twin, which belongs with the
+                  correct/incorrect verdict it resulted from — not stranded
+                  under the explanation behind a rule, where it read as an
+                  unrelated statistic and got scanned last. */}
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                <p
+                  className={cn(
+                    "text-sm font-semibold",
+                    result.correct ? "text-brand-green" : "text-destructive"
+                  )}
+                >
+                  {result.correct ? "Correct." : "Not quite."}
+                </p>
+                {result.mastery != null ? (
+                  <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                    mastery <MasteryBand band={bandFor(result.mastery).band} />
+                  </span>
+                ) : null}
+              </div>
               {result.explanation ? (
-                <p className="text-sm leading-relaxed text-muted-foreground">{result.explanation}</p>
+                <div className="text-sm text-muted-foreground">
+                  {/* The explanation is model-generated and may carry
+                      markdown (lists, bold, code) — render it, don't show
+                      the syntax. Not animated: this is reference text that
+                      should already be there when the result appears, unlike
+                      a reply being written out to the student. */}
+                  <MarkdownText
+                    className="text-sm leading-relaxed text-muted-foreground"
+                    animate={false}
+                  >
+                    {result.explanation}
+                  </MarkdownText>
+                </div>
               ) : null}
             </div>
           </div>
 
-          {result.mastery != null || meta ? (
+          {/* Surface-specific detail only (next-due, box, graduation…). The
+              separator is earned by this slot's presence — with mastery gone
+              above, an empty footer rule no longer renders. */}
+          {meta ? (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-2.5 font-mono text-xs text-muted-foreground">
-              {result.mastery != null ? (
-                <span className="flex items-center gap-1.5">
-                  mastery <MasteryBand band={bandFor(result.mastery).band} />
-                </span>
-              ) : null}
               {meta}
             </div>
           ) : null}

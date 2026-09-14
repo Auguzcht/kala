@@ -25,11 +25,17 @@ single "here's your next move with Kala" signal.
 |---|---|---|
 | (none) / `rounded-none` | instrument frame / data surface | SessionBar, quiz/answer card containers |
 | `rounded-sm` / `rounded-md` | content you read (slight softening) | teaching bubble, answer option buttons, chips |
-| `rounded-2xl` | **the conversational affordance** | ComposeDock input — ONLY here |
-| `rounded-full` | **the move-forward / nav control** | PrimaryAdvance, SessionBar chevrons |
+| `rounded-full` | **the conversational slot + move-forward / nav controls** | `ComposeDock` in both its action and compose states (they're the same slot — see `02`), the dock's toggle button, `SessionBar` chevrons |
 
-The two generous radii (`rounded-2xl`, `rounded-full`) are the spent boldness.
-They appear only on the elements that *are* the conversation. See `06`'s lint.
+**Checkpoint 2 correction:** the conversational tier used to be split across
+`rounded-2xl` (compose input) and `rounded-full` (the primary button), on the
+theory that they were two different affordances. Comparing the built Lessons
+dock against Gizmo showed that's wrong — button and input are the *same slot*
+toggling states, so they have to be pixel-identical in shape. `rounded-2xl` is
+retired; the conversational register is `rounded-full` only, everywhere.
+
+This one generous radius is the spent boldness. It appears only on the
+elements that *are* the conversation. See `06`'s lint (updated).
 
 ## Type — role, not decoration
 

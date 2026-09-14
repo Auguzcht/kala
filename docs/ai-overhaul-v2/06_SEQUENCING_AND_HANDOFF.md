@@ -21,6 +21,22 @@ each step, and the copy-paste-able notes for driving Codex CLI through it.
 > relevance, not just listed here — read the specs as written now, not as a
 > delta.
 
+> **Revision note 2 (Checkpoint 2):** after Step 1/2 were built and reviewed
+> against real screenshots of the running app side by side with Gizmo, two more
+> corrections landed. First, `ComposeDock` was redesigned from a side-by-side
+> layout (primary button + compose input, always both visible) to a **toggle**
+> — one `rounded-full` slot showing either the action button or the compose
+> input, swapped by a small circular icon button, default is the action button
+> — because that's what Gizmo actually does and the side-by-side version was
+> why the built dock read as mismatched. `rounded-2xl` is retired everywhere as
+> a result; the whole conversational register is `rounded-full`. `primary` is
+> now a config object, not a rendered node, so both states stay pixel-identical
+> in shape — `PrimaryAdvance` as a standalone component is retired. Second, the
+> per-step Bloom badge on `TeachingBlock` was checked against the actual lesson
+> generation code (not assumed): it's real per-step ladder data, not a repeat
+> of the topic picker's skill-level tag, so it moved to `SessionBar`'s progress
+> indicator rather than being deleted. See `02` and `03` for the full detail.
+
 ---
 
 ## Guardrails (check every stage against these before moving on)
@@ -62,22 +78,24 @@ Enforce this table; treat deviations as bugs:
 | Session bar, quiz/answer card container | (no radius) + `border`/brackets | not `rounded-*` |
 | Answer option buttons | `rounded-md` | not `rounded-full`, not `rounded-none` |
 | Teaching bubble | `rounded-md` | not `rounded-2xl`, not `rounded-lg` |
-| Compose dock input | `rounded-2xl` | not `rounded-md`, not square |
-| Primary advance (Continue/Next/Submit) | `rounded-full` | not `rounded-md` |
-| Back/forward chevrons | `rounded-full` | not square |
+| Compose dock, BOTH states (action button + compose input) | `rounded-full` | not `rounded-2xl` — **retired after Checkpoint 2**, see `02`/`07` |
+| Dock toggle, back/forward chevrons | `rounded-full` | not square |
 
-Quick self-audit grep after building (should return only the intended files):
+Quick self-audit grep after building (should return nothing — `rounded-2xl` has
+no legitimate use anywhere in this system anymore):
 
 ```bash
-# rounded-2xl should appear ONLY in ComposeDock
+# rounded-2xl is retired entirely (Checkpoint 2) — this should return NOTHING
 grep -rn "rounded-2xl" apps/web/src/components/study apps/web/src/features
-# rounded-full on interactive controls should be SessionBar chevrons +
-# PrimaryAdvance only (plus pre-existing avatar/badge uses)
+# rounded-full on interactive controls should be SessionBar chevrons, the
+# dock's toggle button, and the dock's own action-mode button/compose input
+# (plus pre-existing avatar/badge uses)
 grep -rn "rounded-full" apps/web/src/components/study
 ```
 
-If `rounded-2xl` shows up on a teaching bubble or a quiz card, that is the tell
-creeping back in — revert it.
+If `rounded-2xl` shows up anywhere, that's stale pre-Checkpoint-2 code — replace
+it with `rounded-full`. If it shows up on a teaching bubble or a quiz card,
+that's the uniformity tell creeping back in regardless — revert it.
 
 ---
 
@@ -137,9 +155,11 @@ Ship this first; nothing else depends on visuals yet and it is the load-bearing
 layout change.
 
 ### Step 1 — the three shared components (`02`)
-`StudySurface`, `SessionBar` (refactor `StudySessionShell`), `ComposeDock` +
-`PrimaryAdvance`. They compile standalone. Add `ChevronRightIcon` if missing.
-Do not wire any mode yet.
+`StudySurface`, `SessionBar` (refactor `StudySessionShell`), `ComposeDock`
+(which owns rendering of both its action and compose states internally — no
+separate `PrimaryAdvance` component needed, that was retired at Checkpoint 2).
+They compile standalone. Add `ChevronRightIcon` if missing. Do not wire any
+mode yet.
 
 ### Step 2 — Lessons (`03`)
 The hardest and highest-signal. Rebuild `LessonChat` on the shared components
@@ -182,10 +202,14 @@ exists on `<form>`; see `05`).
       intact, no duplicate `tour-first-choice` ids.
 - [ ] Tutor: input is the same rounded dock as lessons; switcher in bar;
       attachments work; `tour-tutor-input` resolves and tour can submit it.
-- [ ] All surfaces: back chevron returns to the picker; the rounded dock is the
-      ONLY `rounded-2xl` element; exactly one orange *primary action* per view
-      (progress fill and focus rings are semantic exceptions, not second
-      primaries — see `00`).
+- [ ] All surfaces: back chevron returns to the picker; `rounded-full` is the
+      only radius in play for the dock (action mode and compose mode match
+      exactly — no visible seam when it toggles); exactly one orange *primary
+      action* per view (progress fill and focus rings are semantic exceptions,
+      not second primaries — see `00`).
+- [ ] **Dock toggle specifically:** tap the small circular button, confirm the
+      slot swaps from the primary button to the compose input at the same size
+      and radius (no jump/resize), and the icon swaps chat-bubble ↔ ✕.
 - [ ] Reduced motion honored; keyboard focus visible on dock + primary + back.
 - [ ] Instructor dashboard untouched and still fine.
 
@@ -200,26 +224,50 @@ Example prompts:
 > Implement Step 0 and Step 1 from `06_SEQUENCING_AND_HANDOFF.md` only: the
 > CourseShell height flag and the three new shared components
 > (`StudySurface`, `SessionBar` refactored from `StudySessionShell`,
-> `ComposeDock` + `PrimaryAdvance`). Add `ChevronRightIcon` if it doesn't
-> exist. Do not migrate any feature yet. Keep every existing `#tour-*` anchor.
-> Hold the radius rule in the spec exactly.
+> `ComposeDock`). `ComposeDock` toggles between one action-mode button and one
+> compose-mode input in the same `rounded-full` slot, per its spec — it is not
+> a side-by-side layout, and there is no separate `PrimaryAdvance` component.
+> Add `ChevronRightIcon` if it doesn't exist. Do not migrate any feature yet.
+> Keep every existing `#tour-*` anchor. Hold the radius rule in the spec
+> exactly.
 
 Then, after review:
 
 > Now Step 2: rebuild `LessonChat` per `03_LESSONS_TAKEOVER.md`. The Check must
 > take over the current step slot (dimmed teaching behind), not append as a new
-> stream block. Move Continue/Next/Try-again into the ComposeDock. Strip the
-> PageHeader from `routes/course/lessons.tsx` in-session. Preserve all five
-> `tour-lesson-*` anchors — verify `tour-lesson-continue` still resolves now
-> that it's the dock's primary button. Don't touch grading or `result.advance`.
+> stream block. Move Continue/Next/Try-again into the ComposeDock via its
+> `primary` config prop. Strip the PageHeader from `routes/course/lessons.tsx`
+> in-session. Move the `bloomLevel` badge out of `TeachingBlock` into
+> `SessionBar`'s progress indicator. Preserve all five `tour-lesson-*` anchors
+> — verify `tour-lesson-continue` still resolves now that it's the id on the
+> dock's rendered action button. Don't touch grading or `result.advance`.
 
 …and so on per step. Keep each Codex run to one sequencing step so each is
 independently reviewable, matching the original overhaul's stage discipline.
 
+If Lessons was already built against the pre-Checkpoint-2 `ComposeDock` (the
+side-by-side version), it's a small delta, not a rebuild — feed Codex this
+instead of the fresh Step 2 prompt above:
+
+> Codex, apply the Checkpoint 2 corrections from `02_SHARED_COMPONENTS.md` and
+> `03_LESSONS_TAKEOVER.md` to the existing (uncommitted) Lessons build. Replace
+> `ComposeDock`'s side-by-side primary+compose layout with the toggle version:
+> one `rounded-full` slot that shows either the action button or the compose
+> `PromptInput`, swapped by a small circular icon button (chat-bubble ↔ ✕),
+> default state is the action button. `ComposeDock`'s `primaryAction` prop
+> becomes `primary`, a config object (`{ label, onClick, disabled?, icon?, id?
+> }`), not a pre-rendered `PrimaryAdvance` node — delete `PrimaryAdvance` as a
+> standalone component and have `ComposeDock` render the action button itself.
+> Retire `rounded-2xl` everywhere; the dock is `rounded-full` in both states.
+> Separately: move `TeachingBlock`'s `bloomLevel` badge out of the content
+> bubble into `SessionBar`'s progress indicator (`1/5 step · remember`).
+> Preserve `tour-lesson-continue` on the dock's action button. Don't touch
+> grading, `result.advance`, or any other tour anchor.
+
 After each Codex run, before accepting:
 ```bash
 grep -rho "tour-[a-z-]*" apps/web/src | sort -u   # diff vs the manifest
-grep -rn "rounded-2xl" apps/web/src/components/study apps/web/src/features
+grep -rn "rounded-2xl" apps/web/src/components/study apps/web/src/features  # should be empty — retired
 npm run build   # or the repo's typecheck/build task
 ```
 
@@ -231,10 +279,12 @@ Session surfaces today have two scroll owners because `StudyStream` sets its own
 `h-[62vh]` inside a scrolling page — fix that by making a live session a
 viewport takeover (`StudySurface`) with exactly three zones: a fixed
 `SessionBar` (back / progress / forward), the stream as the single scroll
-owner, and a fixed `ComposeDock`. The dock is the unifier: an orange
-`rounded-full` primary (Continue / Next / Submit) plus a `rounded-2xl` compose
-("ask a follow-up") — the ONLY rounded elements on an otherwise boxy instrument
-panel, echoing the launch line. In lessons the comprehension check *takes over
+owner, and a fixed `ComposeDock`. The dock is the unifier: one `rounded-full`
+slot that toggles between the mode's forward move (Continue / Next / Submit)
+and a free-text "ask a follow-up," swapped by a small circular button —
+never both showing at once, and never a different radius between the two
+states. It's the ONLY rounded element on an otherwise boxy instrument panel,
+echoing the launch line. In lessons the comprehension check *takes over
 the current step's slot* instead of appending below. Strip the eyebrow/"Work
 through it" headers from every in-session view. Keep every tour anchor, every
 server contract, and `AnswerableCard`'s logic exactly. Build the shared

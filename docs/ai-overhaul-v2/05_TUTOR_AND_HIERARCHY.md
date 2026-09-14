@@ -21,7 +21,9 @@ be *the same rounded dock* the lesson uses — that visual echo is the whole
   `right` slot (it is session chrome). Its title = active conversation title or
   "Ask Kala".
 - The entire bottom block (attachment chips + hidden file input + `PromptInput`)
-  becomes `ComposeDock` in **compose-only mode** (`primaryAction` omitted):
+  becomes `ComposeDock` in **compose-only mode** (`primary` omitted — per
+  `02`'s degenerate-case behavior this automatically drops the toggle chrome,
+  since there's nothing to toggle back to):
   - `onAsk` → `askQuestion(text)` (existing).
   - `attachmentSlot` → the existing attach `PromptInputButton` that triggers the
     hidden file input. **Ownership stays with `TutorChat`**: the hidden

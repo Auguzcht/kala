@@ -113,6 +113,13 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const active = useTutorConversation(conversationId);
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
+  // The question currently being answered, held until the server's message
+  // list actually contains it. Gating the optimistic turn on `isPending`
+  // instead meant it vanished the instant the request resolved — before the
+  // invalidated query had refetched — so the stream showed nothing, then
+  // snapped both turns in at once. Holding it until the real row exists makes
+  // the handoff seamless.
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAttachment = useUploadTutorAttachment();
   const deleteAttachment = useDeleteTutorAttachment();
@@ -157,12 +164,18 @@ export function TutorChat({ courseId }: { courseId: string }) {
       const result = await askTutor(courseId, question, style, id);
       return { ...result, conversationId: id };
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       setLastQuestion(variables.question);
-      queryClient.invalidateQueries({ queryKey: ["tutor-conversation", data.conversationId] });
+      // Await the refetch BEFORE dropping the optimistic turn, so the
+      // persisted row is on screen first and the swap is invisible.
+      await queryClient.invalidateQueries({
+        queryKey: ["tutor-conversation", data.conversationId],
+      });
       queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
+      setPendingQuestion(null);
     },
     onError: () => {
+      setPendingQuestion(null);
       toast.error("Kala couldn't answer that", {
         description: "Check your connection and try again.",
       });
@@ -172,10 +185,14 @@ export function TutorChat({ courseId }: { courseId: string }) {
   function startNewChat() {
     setConversationId(null);
     setLastQuestion(null);
+    setPendingQuestion(null);
   }
 
   function askQuestion(question: string, style: TutorStyle = "default") {
     if (!question.trim() || send.isPending) return;
+    // The student's turn appears immediately, before the request is even
+    // sent — this is the whole point of the optimistic turn.
+    setPendingQuestion(question);
     send.mutate({ question, style });
   }
 
@@ -230,7 +247,16 @@ export function TutorChat({ courseId }: { courseId: string }) {
       right={
         conversations.data && conversations.data.length > 0 ? (
           <div className="flex items-center gap-2">
-            <Select value={conversationId ?? undefined} onValueChange={setConversationId}>
+            <Select
+              value={conversationId ?? undefined}
+              onValueChange={(id) => {
+                // Switching threads must drop any optimistic turn — it belonged
+                // to the conversation being left, and a mutation still in
+                // flight for it would land on the wrong screen.
+                setPendingQuestion(null);
+                setConversationId(id);
+              }}
+            >
               <SelectTrigger size="sm" className="w-[200px]">
                 <SelectValue placeholder="Select a chat" />
               </SelectTrigger>
@@ -274,18 +300,31 @@ export function TutorChat({ courseId }: { courseId: string }) {
                   key={m.id}
                   text={m.content}
                   id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
+                  // Only the newest reply types itself out. Replaying the
+                  // reveal on every message would make opening an existing
+                  // thread look like the whole conversation is being
+                  // regenerated.
+                  animate={m.id === lastMessage?.id}
                 />
               )
             )
           )}
 
-          {send.isPending ? (
-            <div id="tour-tutor-thinking" className="mr-auto flex max-w-[88%] items-start gap-2.5">
-              <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
-              <div className="rounded-md border bg-card px-4 py-3.5">
-                <Shimmer>Kala is thinking…</Shimmer>
+          {pendingQuestion ? (
+            <>
+              {/* The student's own turn, present the moment they hit send.
+                  It stays until the persisted copy arrives (cleared in the
+                  mutation's onSuccess after the refetch resolves), so there
+                  is never a gap where the question disappears. */}
+              <div id="tour-tutor-user-turn" className="mr-auto w-full max-w-full">
+                <UserBlock text={pendingQuestion} initials={userInitials || undefined} />
               </div>
-            </div>
+              <AssistantBlock
+                id="tour-tutor-thinking"
+                pending
+                pendingLabel="Kala is thinking…"
+              />
+            </>
           ) : null}
 
           {!send.isPending && lastQuestion ? (

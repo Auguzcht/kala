@@ -4,10 +4,11 @@ Three new files, built first, before any mode migrates. Each compiles and can be
 smoke-tested on its own. All class names use existing tokens (`globals.css`) —
 no new tokens, no hardcoded hex.
 
-Radius rule reminder (from `00_DESIGN_PLAN.md`), enforced here:
+Radius rule reminder (from `00_DESIGN_PLAN.md`, **updated after Checkpoint 2** —
+`rounded-2xl` is retired, the conversational register is `rounded-full` only):
 - content you read → `rounded-md` max
 - data/answer surfaces → `0` + corner brackets
-- **conversational affordances → `rounded-2xl` / `rounded-full`, and ONLY here**
+- **conversational affordances → `rounded-full`, and ONLY here**
 
 ---
 
@@ -93,7 +94,18 @@ export function SessionBar({
   right,
 }: {
   title?: string;
-  progress?: { current: number; total: number; label?: string };
+  progress?: {
+    current: number;
+    total: number;
+    label?: string;
+    /** Checkpoint 2 addition: the current step's Bloom ladder position
+     * (e.g. "remember", "apply"). Lessons-only — the per-step value from
+     * `lessonStepSchema.bloomLevel`, NOT the skill-level tag already shown
+     * on the topic picker. Rendered inline with the counter, mono, same
+     * register as `1/5 step`. Omit for modes without a per-item ladder
+     * (Practice, Flashcards, Diagnostic). */
+    bloomLevel?: string | null;
+  };
   onBack?: () => void;
   backLabel?: string;
   onForward?: () => void;
@@ -145,6 +157,7 @@ export function SessionBar({
             {progress.current}
             {progress.total > 0 ? `/${progress.total}` : ""}
             {progress.label ? ` ${progress.label}` : ""}
+            {progress.bloomLevel ? ` · ${progress.bloomLevel}` : ""}
           </span>
         </div>
       ) : (
@@ -184,16 +197,45 @@ Notes:
 
 ---
 
+
 ## 3. `components/study/ComposeDock.tsx` (NEW)
 
-The unified rounded conversational dock. **This is the one component that makes
-the four features feel like one.** It is the only element (with the Continue
-primary) that gets the generous `rounded-2xl` — the launch-line's elegance,
-applied to the AI's input.
+> **Corrected after Checkpoint 2 review.** The first version of this component
+> put a `PrimaryAdvance` button and a compose input side by side, permanently
+> both visible. Checkpoint 2 (screenshots of the built Lessons mode against the
+> actual Gizmo reference) showed that's wrong on two counts: Gizmo shows only
+> ONE control by default (a full-width action button, "Ok, I understand"), and
+> a small circular toggle swaps that same slot into a text input — button and
+> input are literally the same box in two states, which is why they visually
+> match. The side-by-side layout is what made the built dock read as "two
+> different rounded things bolted together" instead of one coherent control.
+> This section replaces the original design. If Step 1/2 were already built
+> against the old version, see `08_CHECKPOINT2_FIXES.md` for the exact delta.
+
+The unified conversational dock — **one slot that toggles between two states**,
+plus a small circular toggle button beside it. This is the one component that
+makes the four features feel like one, and the toggle mechanic is the whole
+reason it reads as a single coherent object instead of a row of controls.
+
+```
+ action mode (default)                    compose mode (after tapping toggle)
+┌────────────────────────────┐  ╭───╮    ┌────────────────────────────┐  ╭───╮
+│      ▸  Continue            │  │ ⋯ │    │  Ask Kala a follow-up…     │  │ ✕ │
+└────────────────────────────┘  ╰───╯    └────────────────────────────┘  ╰───╯
+   rounded-full, bg-brand-orange  rounded-full     rounded-full, bg-card    rounded-full
+   (or bg-primary — see below)    icon toggle        border-input              icon toggle
+```
+
+Both states occupy the exact same `flex-1` slot at the exact same `rounded-full`
+radius — that identity is the point. The small circular button to the right is
+the only thing that's a second element, and it stays `rounded-full` too (same
+family as `SessionBar`'s chevrons).
 
 ```tsx
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { MessageCircleIcon } from "@/components/ui/message-circle"; // add if absent
+import { XIcon } from "@/components/ui/x";
 import {
   PromptInput,
   PromptInputBody,
@@ -203,25 +245,32 @@ import {
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 
-// The anchored conversational dock at the bottom of every session surface.
-// Two coexisting halves:
-//   • primaryAction — the mode's forward move (Continue / Next item / Next
-//     card / Submit). Orange, rounded-full. The default thing to do.
-//   • compose — "Ask Kala a follow-up." A PromptInput. Sending injects a
-//     grounded Q&A turn into the stream; it does NOT advance the session.
-//     After an answer, focus returns to the primary ("point back to Continue
-//     when ready").
+export type ComposeDockPrimary = {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  icon?: ReactNode;
+  /** Tour anchor, e.g. "tour-lesson-continue". */
+  id?: string;
+};
+
+// The anchored dock at the bottom of every session surface. ONE slot that
+// toggles between two states — "action" (the mode's forward move: Continue /
+// Next item / Next card / Submit) and "compose" (free-text "ask a follow-up").
+// They are never both visible at once; a small circular icon button (chat
+// bubble ↔ ✕) switches between them. This mirrors Gizmo exactly: the default
+// is the full-width action button, tapping the small circle swaps it for the
+// input, tapping the ✕ (same circle) swaps back.
 //
-// Tutor is the degenerate case: no primaryAction, compose only — which is
-// exactly what Tutor already is, now wearing the shared dock so it reads as
-// the same product as the lesson/quiz surfaces.
-//
-// Radius rule: this container is the ONE place rounded-2xl is allowed. It is
-// the conversational affordance. Everything you read stays boxy; this is what
-// you talk through. Do not "tidy" this to match the boxier panels — the
-// contrast is the design.
+// Degenerate cases, both valid and both drop the toggle chrome entirely
+// (nothing to toggle between):
+//   - `primary` omitted, `onAsk` present → compose-only, no toggle button.
+//     This is Tutor's shape: it's always composing, there's no "advance".
+//   - `primary` present, `onAsk` omitted → action-only, no toggle button.
+//     This is Diagnostic's shape: no mid-baseline ask, ever.
+// Both present → the toggle appears and the slot starts in "action" mode.
 export function ComposeDock({
-  primaryAction,
+  primary,
   onAsk,
   askDisabled,
   askPending,
@@ -230,60 +279,77 @@ export function ComposeDock({
   attachmentChips,
   inputId,
 }: {
-  /** The mode's forward move. Omit for Tutor (compose-only). */
-  primaryAction?: ReactNode;
-  /** Called when the student sends a free-text follow-up. */
+  /** The mode's forward move. Omit for Tutor (compose-only, no toggle). */
+  primary?: ComposeDockPrimary | null;
+  /** Called when the student sends a free-text follow-up. Omit for
+   * Diagnostic (action-only, no toggle — asking mid-baseline undercuts it). */
   onAsk?: (text: string) => void;
   askDisabled?: boolean;
   askPending?: boolean;
   placeholder?: string;
-  /** Optional attach control (Tutor's file input trigger) rendered in tools. */
   attachmentSlot?: ReactNode;
-  /** Optional row of attachment chips rendered above the input (Tutor). */
   attachmentChips?: ReactNode;
-  /** Tour anchor id. CORRECTED WORDING: this id goes on the PromptInput
-   * FORM (passed through to PromptInput's `id` prop below), not on the
-   * textarea. TourRunner.tsx does `document.querySelector("#tour-tutor-input
-   * textarea")` to find the field (a descendant lookup) but then does
-   * `document.querySelector("#tour-tutor-input")?.requestSubmit()` — and
-   * requestSubmit() only exists on a <form>. If this id is moved onto the
-   * <textarea> instead, requestSubmit() silently fails to submit and the
-   * tour stalls with no error, the same failure class the original
-   * HTMLInputElement/HTMLTextAreaElement native-setter bug was. Keep it on
-   * PromptInput ("#tour-tutor-input" on the form the Tutor surface). */
+  /** Tour anchor for the textarea's FORM ancestor — passed straight to
+   * PromptInput's own `id`. Do not move this onto the <textarea> itself;
+   * TourRunner calls requestSubmit() on this id, which only exists on
+   * <form>. See 05_TUTOR_AND_HIERARCHY.md. */
   inputId?: string;
 }) {
+  const canToggle = Boolean(primary) && Boolean(onAsk);
+  const [userMode, setUserMode] = useState<"action" | "compose">("action");
+  // No toggle available → the mode is forced by whichever prop exists.
+  const mode = !primary ? "compose" : !onAsk ? "action" : userMode;
+
   return (
     <div className="border-t border-border/60 bg-background/80 px-4 py-3 backdrop-blur">
-      <div className="mx-auto flex max-w-3xl items-end gap-3">
-        {primaryAction ? <div className="shrink-0 pb-1">{primaryAction}</div> : null}
+      <div className="mx-auto flex max-w-3xl items-center gap-2">
+        {attachmentChips ? (
+          <div className="flex w-full flex-wrap gap-2 sm:hidden">{attachmentChips}</div>
+        ) : null}
 
-        {onAsk ? (
-          <div className="min-w-0 flex-1">
-            {attachmentChips ? (
-              <div className="mb-2 flex flex-wrap gap-2">{attachmentChips}</div>
-            ) : null}
-            {/* rounded-2xl lives HERE — but NOT via className on PromptInput.
-                CORRECTED: PromptInput's className lands on the <form> it
-                renders (`<form className={cn("w-full", className)}>`), while
-                the actual visible border/radius comes from the FontGroup it
-                wraps internally — `<InputGroup className="overflow-hidden">`
-                — which is hardcoded `rounded-md border border-input` in
-                components/ui/input-group.tsx (data-slot="input-group"). A
-                bare className="rounded-2xl" on PromptInput compiles fine and
-                visibly does nothing; the dock stays boxy. Use a descendant
-                override targeting the slot: */}
+        <div className="min-w-0 flex-1">
+          {attachmentChips ? (
+            <div className="mb-2 hidden flex-wrap gap-2 sm:flex">{attachmentChips}</div>
+          ) : null}
+
+          {mode === "action" && primary ? (
+            <button
+              type="button"
+              id={primary.id}
+              onClick={primary.onClick}
+              disabled={primary.disabled}
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-full",
+                "bg-brand-orange px-5 py-3 text-sm font-semibold text-brand-orange-foreground",
+                "shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              )}
+            >
+              {primary.icon}
+              {primary.label}
+            </button>
+          ) : (
             <PromptInput
               id={inputId}
               onSubmit={(m) => {
-                if (m.text?.trim()) onAsk(m.text);
+                if (m.text?.trim()) onAsk?.(m.text);
               }}
-              className="[&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:shadow-sm"
+              // Same rounded-full slot the button occupies — this is the
+              // "button matches the roundedness of the input" fix. Target
+              // the internal InputGroup (see the note in the old section 3
+              // below, or 08_CHECKPOINT2_FIXES.md): PromptInput's own
+              // className lands on its <form>, not the bordered element.
+              className={cn(
+                "[&_[data-slot=input-group]]:rounded-full",
+                "[&_[data-slot=input-group]]:border-input",
+                "[&_[data-slot=input-group]]:shadow-sm",
+                "[&_[data-slot=input-group]]:px-1.5"
+              )}
             >
               <PromptInputBody>
-                <PromptInputTextarea placeholder={placeholder} />
+                <PromptInputTextarea placeholder={placeholder} className="py-2.5" />
               </PromptInputBody>
-              <PromptInputFooter>
+              <PromptInputFooter className="pr-1">
                 <PromptInputTools>{attachmentSlot}</PromptInputTools>
                 <PromptInputSubmit
                   disabled={askDisabled}
@@ -291,13 +357,26 @@ export function ComposeDock({
                 />
               </PromptInputFooter>
             </PromptInput>
-            {/* Alternative, if you'd rather not hand-write descendant
-                selectors: add a dedicated `inputGroupClassName` prop to
-                PromptInput itself (threaded onto its internal `<InputGroup>`)
-                and use that instead. Either is acceptable; the descendant
-                selector above needs no changes to the vendored ai-elements
-                file, so it's the lower-risk default. */}
-          </div>
+          )}
+        </div>
+
+        {canToggle ? (
+          <button
+            type="button"
+            onClick={() => setUserMode((m) => (m === "action" ? "compose" : "action"))}
+            aria-label={userMode === "action" ? "Ask a follow-up" : "Cancel"}
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center rounded-full",
+              "border border-border text-muted-foreground transition-colors",
+              "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            )}
+          >
+            {userMode === "action" ? (
+              <MessageCircleIcon size={18} />
+            ) : (
+              <XIcon size={18} />
+            )}
+          </button>
         ) : null}
       </div>
     </div>
@@ -305,62 +384,40 @@ export function ComposeDock({
 }
 ```
 
-### The primary-action helper (Continue / Next item / …)
+### Behavior notes
 
-To keep the orange `rounded-full` primary consistent everywhere, add a small
-shared button rather than re-styling per mode. Put it in the same file or in
-`components/study/PrimaryAdvance.tsx`:
+- **Default is action mode.** A session opens showing the primary move, not an
+  empty compose box — matches "its default is actually Ok I understand," not a
+  waiting-for-input state.
+- **Sending a follow-up does not auto-revert to action mode.** Let the student
+  ask a second question without re-tapping the toggle each time; they close it
+  themselves via the ✕ when they're done, or by taking the primary action once
+  they toggle back. (If in practice this reads as the dock "getting stuck open"
+  during testing, the alternative is auto-revert once an answer finishes
+  streaming — flag it as a judgment call during Lessons review, not a fixed
+  rule either way.)
+- **`primary` is a config object now, not a `ReactNode`.** This is the
+  breaking change from the original spec: `ComposeDock` has to own rendering
+  of both states itself to guarantee they're pixel-identical in shape, so it
+  needs structured data (`label`, `onClick`, `disabled`, `icon`, `id`), not a
+  pre-rendered element that might carry its own inconsistent styling. Every
+  mode spec (`03`, `04`, `05`) is updated for this — grep `primaryAction=` in
+  those files for any stale reference if you're reading an older copy.
+- **`PrimaryAdvance` as a standalone component is retired.** It existed only
+  to give the old side-by-side layout a `rounded-full` button; `ComposeDock`
+  now renders that button itself in `action` mode. If some other part of the UI
+  independently needs a lone advance button outside a dock context, it's fine
+  to keep a `PrimaryAdvance` helper around for that — just don't use it inside
+  `ComposeDock` anymore.
+- **Add `MessageCircleIcon` if it doesn't exist** in `components/ui`, mirroring
+  the existing animated-lucide pattern (`chevron-left.tsx` etc.).
 
-```tsx
-import { cn } from "@/lib/utils";
+### Why this collapses the radius rule
 
-// The single orange forward action, rounded-full (radius rule: the "move
-// forward with the AI" control). Used as ComposeDock's primaryAction across
-// modes: "Continue", "Next item", "Next card", "Submit", "Finish".
-export function PrimaryAdvance({
-  label,
-  onClick,
-  disabled,
-  icon,
-  id,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  icon?: React.ReactNode;
-  id?: string;
-}) {
-  return (
-    <button
-      type="button"
-      id={id}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full bg-brand-orange px-5 py-2.5",
-        "text-sm font-semibold text-brand-orange-foreground",
-        "transition-opacity hover:opacity-90 disabled:opacity-40",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-```
-
-Notes:
-- **Do not use `<Button variant="orange">` for the primary.** That variant is
-  hardcoded `rounded-md` in `components/ui/button.tsx`. The radius rule needs the
-  primary advance at `rounded-full`, so `PrimaryAdvance` is its own component. If
-  you'd rather add a `variant="advance"` to `button.tsx` with `rounded-full`,
-  that's fine too — just don't ship the primary at `rounded-md`.
-- `PromptInput` already accepts a `className` and forwards it to the root
-  (verified in the vendored `ai-elements`). The `rounded-2xl` must land on the
-  outer bordered element, not the textarea.
-- The dock's `max-w-3xl` keeps the compose measure readable and centered under
-  the stream; the stream content uses the same measure so they align.
-- Accessibility: the primary action and the textarea are both keyboard
-  reachable; `PromptInputSubmit` is the Enter target inside compose, the
-  primary is a separate Tab stop. Do not trap focus.
+The original design had two "conversational" radii — `rounded-2xl` for compose,
+`rounded-full` for the primary button — reasoning they were different affordances.
+Checkpoint 2 shows they're not different affordances, they're the *same* slot in
+two states, so they must be the *same* radius. **`rounded-2xl` is retired from
+the palette.** The conversational register is now just `rounded-full`,
+consistently: the dock slot in both modes, the toggle button, `SessionBar`'s
+chevrons. See `07_TOKEN_USAGE_REFERENCE.md` (updated) for the corrected table.

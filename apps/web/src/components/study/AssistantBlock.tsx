@@ -1,40 +1,54 @@
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
-import { cn } from "@/lib/utils";
-
-// Markdown element typography for free-text assistant answers. The model
-// answers in markdown (bold, lists, code) and Streamdown renders real
-// elements — without this recipe those land on raw browser defaults
-// (lists cramped, code invisible against the card, links unstyled). This
-// is the same deliberate recipe the original inline TutorChat bubble
-// carried; restored here when AssistantBlock replaced it. Keep it as one
-// shared constant so every stream surface that renders free-text markdown
-// reuses the same typography instead of drifting.
-const MD_RECIPE =
-  "[&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
-  "[&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 " +
-  "[&_li]:my-0.5 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 " +
-  "[&_pre]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 " +
-  "[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_a]:text-brand-orange [&_a]:underline " +
-  "[&_h1]:text-base [&_h2]:text-base [&_h3]:text-[13.5px] [&_blockquote]:border-l-2 " +
-  "[&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { MarkdownText } from "@/components/study/MarkdownText";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 
 // A plain-text (well, markdown) assistant reply — Tutor's freeform answers,
 // unlike TeachingBlock's structured lesson-step shape (summary/bullets/
 // misconception/key-takeaway), are just a string from the model. Rendered
-// through MessageResponse (Streamdown), so bold/bullets/code the model
-// actually produces render as real markdown instead of a wall of plain text.
-export function AssistantBlock({ text, id }: { text: string; id?: string }) {
+// through MarkdownText (Streamdown), so bold/bullets/code the model actually
+// produces render as real markdown instead of a wall of plain text.
+//
+// This component owns Kala's identity header, including while an answer is
+// still pending (`pending` with no `text` yet). That is deliberate: the header
+// is the one thing that must be present the moment the student asks something,
+// and it must never be rendered by both this component and its caller — that
+// duplication is exactly what produced two stacked "Kala" headings. Callers
+// that need a loading state render <AssistantBlock pending /> and get the
+// header plus a placeholder, not a separate heading of their own.
+export function AssistantBlock({
+  text,
+  id,
+  animate = true,
+  pending = false,
+  pendingLabel = "Kala is thinking…",
+}: {
+  text?: string;
+  id?: string;
+  /** Reveal the answer as it arrives. On for replies to a student's question
+   * (they just asked something and expect it to be written out); off for
+   * reference text that should simply be present, e.g. a graded explanation. */
+  animate?: boolean;
+  /** Show the header with a "thinking" placeholder instead of an answer.
+   * Used between asking and the answer arriving, so the conversation shows
+   * Kala immediately rather than a bare spinner in the student's own layout. */
+  pending?: boolean;
+  pendingLabel?: string;
+}) {
+  const showPending = pending && !text;
+
   return (
-    <div id={id} className="mr-auto flex max-w-[88%] items-start gap-2.5">
-      <img src="/Kala-Logo.png" alt="Kala" className="mt-0.5 size-7 shrink-0 object-contain" />
-      <Message from="assistant" className="min-w-0 max-w-full">
-        <MessageContent
-          className={cn(
-            "min-w-0 rounded-md border bg-card px-4 py-3.5 text-sm leading-relaxed text-foreground",
-            MD_RECIPE
+    <div id={id} className="mr-auto w-full max-w-full">
+      <div className="mb-2 flex items-center gap-2">
+        <img src="/Kala-Logo.png" alt="" className="size-7 shrink-0 object-contain" />
+        <span className="text-sm font-semibold text-foreground">Kala</span>
+      </div>
+      <Message from="assistant" className="min-w-0 w-full max-w-full">
+        <MessageContent className="min-w-0 w-full px-1 text-sm leading-relaxed text-foreground">
+          {showPending ? (
+            <Shimmer className="text-sm">{pendingLabel}</Shimmer>
+          ) : (
+            <MarkdownText animate={animate}>{text ?? ""}</MarkdownText>
           )}
-        >
-          <MessageResponse>{text}</MessageResponse>
         </MessageContent>
       </Message>
     </div>

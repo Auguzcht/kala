@@ -7,10 +7,9 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 // swap onto the shared Message/MessageContent primitives, not a rewrite of
 // what it says or how it's organized.
 //
-// Message itself lays out flex-col (it's built for content that may also
-// carry actions/branches underneath), so the avatar sits in a wrapping row
-// alongside it rather than inside it — same visual result as before
-// (avatar + bubble side by side), just composed from the shared parts.
+// The assistant identity introduces a response above its content. This keeps
+// Kala readable as a conversation partner without boxing an entire lesson
+// into a second, competing surface.
 export type TeachingStep = {
   summary: string;
   detailPoints: string[];
@@ -29,25 +28,17 @@ export function TeachingBlock({
   id?: string;
 }) {
   return (
-    <div className="mr-auto flex max-w-[88%] items-start gap-2.5">
-      <img
-        src="/Kala-Logo.png"
-        alt="Kala"
-        className="mt-0.5 size-7 shrink-0 object-contain"
-      />
-      <Message from="assistant" className="min-w-0 max-w-full">
+    <div className="mr-auto w-full max-w-full">
+      <div className="mb-2 flex items-center gap-2">
+        <img src="/Kala-Logo.png" alt="" className="size-7 shrink-0 object-contain" />
+        <span className="text-sm font-semibold text-foreground">Kala</span>
+      </div>
+      <Message from="assistant" className="min-w-0 w-full max-w-full">
         <MessageContent
           id={id}
-          className="min-w-0 space-y-3 rounded-md border bg-card px-4 py-3.5 text-sm leading-relaxed text-foreground"
+          className="min-w-0 w-full space-y-3 px-1 text-sm leading-relaxed text-foreground"
         >
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-foreground">{step.summary}</p>
-            {step.bloomLevel ? (
-              <span className="rounded-sm border bg-muted px-1.5 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
-                {step.bloomLevel}
-              </span>
-            ) : null}
-          </div>
+          <p className="font-medium text-foreground">{step.summary}</p>
 
           {step.detailPoints.length > 0 ? (
             <ul className="space-y-1.5 text-muted-foreground">

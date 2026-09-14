@@ -63,16 +63,19 @@ export function PracticePanel({ courseId, skillId, onExit }: {
       }
       dock={
         <ComposeDock
-          // Advance only exists AFTER a graded result. Before that, no primary.
-          primaryAction={
-            lastResult ? (
-              <PrimaryAdvance label="Next item" onClick={() => refetch()} />
-            ) : null
+          // Advance only exists AFTER a graded result. Before that, no
+          // primary — per ComposeDock's degenerate-case behavior (see `02`),
+          // that alone forces compose-only mode, no toggle chrome, which is
+          // exactly right pre-answer: nothing to advance to yet.
+          primary={
+            lastResult ? { label: "Next item", onClick: () => refetch() } : null
           }
           onAsk={(text) => askAboutItem(text) /* optional: a grounded "explain
-            this" via useTutorAsk, appended as an AssistantBlock; practice can
-            also omit onAsk entirely if you want practice to be heads-down.
-            Recommend KEEPING it — it's the whole "unified with the AI" point. */}
+            this" via a dedicated useTutorAsk instance (not shared with any
+            other mutation), appended as a UserBlock + AssistantBlock pair;
+            practice can also omit onAsk entirely if you want practice to be
+            heads-down. Recommend KEEPING it — it's the whole "unified with
+            the AI" point. */}
           placeholder="Ask Kala about this question…"
         />
       }

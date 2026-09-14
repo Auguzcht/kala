@@ -139,43 +139,65 @@ through it.
 
 ## `ComposeDock` — the heart of the convergence
 
-This is the new component that makes the surfaces feel like one product. It is
-the anchored, rounded conversational input at the bottom of every session.
+> **Corrected after Checkpoint 2.** This section originally described a
+> side-by-side layout (primary action button + compose input, both always
+> visible). Checkpoint 2 (screenshots of the built Lessons dock compared
+> directly against Gizmo) showed that's not what Gizmo does, and it's why the
+> built dock read as "two different rounded things bolted together" instead of
+> one control. Gizmo shows exactly one thing by default (a full-width action
+> button), and a small circular toggle swaps that same slot into a text input
+> — never both at once. Rewritten below to match. See `02`'s `ComposeDock`
+> spec for the actual component.
+
+This is the new component that makes the surfaces feel like one product: **one
+slot, two states, toggled by a small circular button.**
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  ▸ Continue        │  Ask Kala a follow-up…            ⌨  ◗  │  rounded-2xl
-└──────────────────────────────────────────────────────────────┘
-   primary action        free-text compose (PromptInput)     send
+ action mode (default)                        compose mode (toggled)
+┌──────────────────────────────────────┐╭───╮ ┌──────────────────────────────────────┐╭───╮
+│           ▸ Continue                  ││ ⋯ │ │  Ask Kala a follow-up…                ││ ✕ │
+└──────────────────────────────────────┘╰───╯ └──────────────────────────────────────┘╰───╯
+        rounded-full, orange      toggle              rounded-full, PromptInput      toggle
 ```
 
-It has two halves that coexist:
+Both states are `rounded-full` — the same radius, because they are the same
+box, not two related-but-different affordances. That identity is what makes
+the dock read as one control instead of a row of controls.
 
-1. **Primary action** (left, `rounded-full`): the mode's forward move —
-   "Continue," "Next item," "Next card," "Submit." Orange. This is the default
-   thing the student does.
-2. **Compose** (right, the `PromptInput` from `ai-elements`): "Ask Kala a
-   follow-up." Typing here and sending does NOT advance the session; it injects
-   a grounded Q&A turn into the stream and then the primary action re-focuses
-   ("point back to Continue when ready," verbatim from the user's ask).
+1. **Action mode** (default): the mode's forward move — "Continue," "Next
+   item," "Next card," "Submit." Orange fill. This is what the student sees the
+   moment a session opens, matching Gizmo's default state exactly (its
+   "Ok, I understand").
+2. **Compose mode** (toggled via the small circular button, chat-bubble icon →
+   ✕): the `PromptInput` from `ai-elements`, "Ask Kala a follow-up." Typing
+   here and sending does NOT advance the session; it injects a grounded Q&A
+   turn into the stream. The student closes it themselves (✕) to get back to
+   the action button — "point back to Continue when ready," verbatim from the
+   original ask.
 
 Behaviorally (this is the Gizmo interaction the user described):
 
-- Idle in a lesson step → primary shows **Continue**, compose shows the
-  follow-up placeholder.
-- Student types a question, sends → an assistant answer turn appears in the
-  stream (grounded, does not touch the gate), primary stays **Continue**. They
-  can ask again, or continue.
-- Student hits **Continue** → the step's Check takes over (see the takeover
-  mechanic in `02`), the dock's primary swaps to disabled/hidden until the
-  check is answered, compose stays available for "explain this differently"
-  style hints if the mode allows.
+- Idle in a lesson step → dock shows **Continue** (action mode), with the
+  small toggle button available beside it.
+- Student taps the toggle → the slot swaps to the follow-up input, same size,
+  same radius, no layout jump. Sends a question → an assistant answer turn
+  appears in the stream (grounded, does not touch the gate). The slot stays in
+  compose mode so they can ask again, or tap the toggle (now showing ✕) to
+  swap back to **Continue**.
+- Student taps **Continue** (from action mode, no need to have opened compose
+  at all) → the step's Check takes over (see the takeover mechanic below). The
+  dock unmounts with the conversation for the duration of the check: no input,
+  no toggle, and no competing scroll region. The card owns the central session
+  lane until it is resolved.
 - Check answered correctly → takeover unmounts, next Teaching turn streams in,
-  primary returns to **Continue**.
+  dock returns to action mode with the new **Continue**.
 
-One component, one visual language, every mode. Tutor is just the degenerate
-case where there is no primary action, only compose — which is exactly what it
-already is, now wearing the shared dock.
+One component, one visual language, every mode. Tutor is the degenerate case
+where `primary` is never set — no toggle button ever appears, the dock is
+permanently the compose slot, which is exactly what Tutor already is, now
+wearing the shared dock. Diagnostic is the mirror case — `onAsk` is never set,
+the dock is permanently the action slot (Submit), no toggle, no mid-baseline
+asking.
 
 ## The quiz "takeover" (not "append")
 
@@ -256,7 +278,7 @@ supersede it. Two options:
 | `routes/course/flashcards.tsx` | same |
 | `routes/course/tutor.tsx` | remove PageHeader eyebrow; tutor is session-only |
 | `components/shell/CourseShell.tsx` | `<main>` height flag for session routes (approach A) |
-| `components/study/TeachingBlock.tsx` | restyle to radius rule; no logic change |
+| `components/study/TeachingBlock.tsx` | restyle to radius rule; drop the `bloomLevel` badge (Checkpoint 2 — moved to `SessionBar`'s progress indicator, see `03`), no other logic change |
 | `components/study/AnswerableCard.tsx` | **owns** the bracketed zero-radius quiz container now (moved in from each feature file); logic untouched |
 | `components/study/TopicLanding.tsx` | stays (pre-session picker); minor: it is the "deck materials" view, see `05` |
 

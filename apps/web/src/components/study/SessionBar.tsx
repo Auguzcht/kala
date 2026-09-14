@@ -13,7 +13,12 @@ export function SessionBar({
   right,
 }: {
   title?: string;
-  progress?: { current: number; total: number; label?: string };
+  progress?: {
+    current: number;
+    total: number;
+    label?: string;
+    bloomLevel?: string | null;
+  };
   onBack?: () => void;
   backLabel?: string;
   onForward?: () => void;
@@ -26,7 +31,7 @@ export function SessionBar({
     : 0;
 
   return (
-    <div className="flex items-center gap-3 border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
+    <div className="flex items-center gap-3 bg-gradient-to-b from-background via-background/95 to-background/0 px-4 py-3 backdrop-blur-sm">
       {onBack ? (
         <button
           type="button"
@@ -62,6 +67,12 @@ export function SessionBar({
             {progress.current}
             {progress.total > 0 ? `/${progress.total}` : ""}
             {progress.label ? ` ${progress.label}` : ""}
+            {progress.bloomLevel ? (
+              <>
+                {" · "}
+                <span className="capitalize">{progress.bloomLevel}</span>
+              </>
+            ) : null}
           </span>
         </div>
       ) : <div className="flex-1" />}

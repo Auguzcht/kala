@@ -15,25 +15,27 @@ Target file: `features/lessons/components/LessonChat.tsx` (rebuild) and
 > OR ask a follow-up question (keeps a relevant grounded answer to the question
 > only, then points back to Continue when ready).
 
-So the step slot has three states, and the Check is a **takeover of the slot**,
+So the step slot has four states, and the Check is a **takeover of the slot**,
 not a new block appended under the teaching bubble.
 
 ## State model
 
 ```
 stepIndex → which step is current
-slotState ∈ { "teaching", "checking", "graded" }
+slotState ∈ { "teaching", "checking", "graded", "checkThread" }
 
 teaching : TeachingBlock visible in the slot. Dock primary = "Continue".
            Compose = "Ask a follow-up" (injects Q&A turns, never advances).
-checking : Check card OCCUPIES the slot (the teaching bubble is unmounted or
-           dimmed behind it — see "the pop" below). Dock primary hidden/disabled.
-           This is the "chat window hidden" moment.
+checking : Check card OCCUPIES the session lane; the teaching stream and dock
+           unmount together (see "the pop" below). This is the "chat window
+           hidden" moment — no input remains visible beneath the card.
 graded   : Check shows correct/incorrect via AnswerableCard's own result UI.
-           If correct (result.advance) → on Continue/Next, the slot unmounts the
-           Check, commits the teaching turn to history, stepIndex++, next step
-           streams in as a fresh teaching slot ("reveals the chat window with a
-           new AI response"). If incorrect → "Try again" resets to checking.
+           The dock returns with Continue/Next or Try again as its primary
+           action; Hint is gone, replaced by Explain.
+checkThread: Explain (or a pre-grade Hint) reveals a scoped Kala exchange
+           directly below the check. This single lane scrolls when needed and
+           its dock accepts only questions about that check. The back chevron
+           returns to graded/checking, not to topic selection.
 ```
 
 The committed history (steps already passed) renders above as static
@@ -46,12 +48,12 @@ from `01`: history is a list; the current step is a single stateful slot.
 The "pops up hiding the chat / pops out revealing" is a mount transition on the
 Check occupying the slot. Concretely:
 
-- When `slotState` goes `teaching → checking`: the Check card mounts into the
-  slot position with a short scale/opacity-in (`motion` is already a dep;
-  respect `useReducedMotion`). The teaching bubble it grew from either unmounts
-  or sits dimmed (`opacity-40 pointer-events-none`) directly behind — dimmed is
-  gentler and keeps context, matching Gizmo where the lesson text is still
-  faintly there. **Recommend dimmed-behind.**
+- When `slotState` goes `teaching → checking`: the stream and dock unmount as
+  one visual layer, then the Check card mounts into the same central session
+  lane with a short scale/opacity-in (`motion` is already a dep; respect
+  `useReducedMotion`). This is a true takeover, not a modal over a still-live
+  conversation: the underlying chat and its input are not visible or
+  scrollable while the check is active.
 - When correct and advancing: the Check unmounts (scale/opacity-out), the slot
   becomes the next teaching turn. Because it is a real unmount, you get the
   "pops out" for free — no manual "push everything up."
@@ -97,18 +99,25 @@ Wireframe of the current slot across states:
 
 Today `LessonChat` renders the "I understand — continue" chip *inside the
 stream* and the "Next step / Try again" buttons *inside the check block*. In v2
-those move to the **dock**:
+those move to the **dock**, passed as `ComposeDock`'s `primary` prop (a config
+object, not a rendered button — see `02`'s Checkpoint 2 correction):
 
-- `teaching` state → dock primary = **Continue** (`PrimaryAdvance`,
-  `id="tour-lesson-continue"` moves here). Clicking it calls `openCheck()`.
-- `checking` (ungraded) → dock primary hidden. The student answers in the card.
-- `graded` + `advance` → dock primary = **Next step** (or **Finish lesson** on
-  the last step). Clicking commits + advances.
-- `graded` + not advance → dock primary = **Try again** (or keep it in-card if
-  you prefer; but dock is more consistent). Resets to `checking`.
+- `teaching` state → `primary={{ label: "Continue", onClick: openCheck, id:
+  "tour-lesson-continue", icon: <GraduationCapIcon size={16} /> }}`. `onAsk`
+  is also present here, so the dock shows the toggle — student can ask a
+  follow-up without leaving teaching mode, or hit Continue directly.
+- `checking` → do not render `ComposeDock`. The check is a dedicated,
+  dock-free takeover while the student is choosing an answer.
+- `graded` → bring back `ComposeDock` with `Next step` / `Finish lesson` or
+  `Try again` as `primary`. The chat toggle remains available for a scoped
+  follow-up.
+- `checkThread` → keep the check in place and append the scoped Kala exchange
+  below it in the same scroll lane. The dock reuses its normal input, but its
+  request context is restricted to the current check.
 
-The Hint button stays inside the check card (it is contextual to the question),
-via `AnswerableCard`'s `actions` slot — unchanged.
+Hint stays inside an ungraded check and opens the scoped thread rather than
+appending inline copy. Once graded, it is replaced by Explain. The back chevron
+unwinds `checkThread → check → teaching → topic picker` one layer at a time.
 
 ## Tour anchors — must all survive
 
@@ -120,8 +129,9 @@ Placement in v2:
 - `tour-lesson-generating` → the loading panel (unchanged).
 - `tour-lesson-explain` → the current `TeachingBlock`'s content (pass `id`
   prop, as today).
-- `tour-lesson-continue` → the dock's **Continue** `PrimaryAdvance` (`id` prop
-  added to `PrimaryAdvance` exactly for this).
+- `tour-lesson-continue` → passed as `primary.id` in the `teaching`-state dock
+  config above; `ComposeDock` puts it on the action button it renders
+  internally.
 - `tour-lesson-check` → the Check card container in the slot.
 - `tour-lesson-check-feedback` → `AnswerableCard`'s `resultAnchorId` (unchanged
   prop pass-through).
@@ -129,7 +139,8 @@ Placement in v2:
 `TourRunner.tsx`'s tutor-input textarea fix (the `HTMLTextAreaElement` native
 setter) is unrelated and stays. But note: the lesson tour clicks
 `#tour-lesson-continue` — verify that selector still resolves to a clickable
-button after it moves into the dock (it will, `PrimaryAdvance` is a `<button>`).
+button after `ComposeDock` renders it (it will, `ComposeDock`'s action-mode
+button is a plain `<button id={primary.id}>`).
 
 ## Route file: strip the session header
 
@@ -197,26 +208,35 @@ export function LessonChat({ courseId, skillId, onExit }: {
       bar={
         <SessionBar
           title={data.title}
-          progress={{ current: done ? total : stepIndex + 1, total, label: "step" }}
+          progress={{
+            current: done ? total : stepIndex + 1,
+            total,
+            label: "step",
+            bloomLevel: current?.bloomLevel ?? undefined,
+          }}
           onBack={onExit}
           backLabel="Choose another topic"
         />
       }
-      dock={
+      dock={isCheckTakeover ? undefined : (
         <ComposeDock
-          primaryAction={dockPrimary /* Continue / Next step / Finish / Try again, per slotState */}
-          onAsk={(text) => askFollowUp(text) /* uses useTutorAsk, injects a turn, never advances */}
-          askPending={hint.isPending}
+          primary={dockPrimary}
+          onAsk={(text) => askFollowUp(text) /* uses a SEPARATE useTutorAsk
+            instance from the Hint button's — see the "Follow-up ask" section
+            below. Injects a turn, never advances. */}
+          askPending={followUp.isPending}
           placeholder="Ask Kala about this step…"
         />
-      }
+      )}
     >
-      <StudyStream>
+      {isCheckTakeover ? (
+        /* Dock-free takeover card in the same 800px session lane. */
+        <LessonCheckTakeover />
+      ) : <StudyStream>
         {/* committed history: passed steps as static TeachingBlocks + ✓ */}
-        {/* current slot: teaching bubble; when checking, Check card takes over
-            the slot (dimmed teaching behind), via AnswerableCard */}
+        {/* current teaching bubble + local follow-up turns */}
         {/* done: completion turn */}
-      </StudyStream>
+      </StudyStream>}
     </StudySurface>
   );
 }
@@ -266,6 +286,38 @@ the *current slot's* local turn list (not the committed history, not advancing
 the step), then the dock primary re-focuses on Continue. This is the "keeps a
 relevant grounded answer only, then points back to Continue" behavior.
 
+## `TeachingBlock`'s Bloom chip — move it, don't delete it (Checkpoint 2)
+
+Checkpoint 2 raised a fair question looking at the built screen: does the grey
+"Remember" chip on the teaching bubble just repeat what the topic picker
+already showed? **Checked against the actual generation logic, and no — it's
+different data, not a duplicate.** The topic picker's chip
+(`TopicLanding`/`s.bloomLevel`) is the *skill's* single target Bloom level, set
+once by `skill_proposer.py`. The per-step chip comes from a different source:
+`services/api/app/learn/lessons.py`'s outline prompt explicitly instructs the
+model to "break the skill into an ordered sequence of 3-6 teach-steps that
+build from recall toward application (read → understand → apply)," generating
+a *distinct* `bloom_level` per step. It's a ladder position within this one
+lesson, not the skill's overall level repeated.
+
+So the fix isn't deletion, it's presentation. A bare grey pill inside the
+content bubble gives no signal that this is a *progression* rather than a
+repeated tag — it reads exactly like duplicated chrome even though it isn't
+one. **Move it out of the teaching bubble and into `SessionBar`, next to the
+step counter**, using the same mono data-tick treatment already established
+there (`1/5 step`) rather than a separate pill floating in prose:
+
+```
+◂ back   Compare traditional IT infra…   1/5 step · remember   ▓▓░░░░░░  ▸
+```
+
+This does three things at once: gets it out of the content bubble (the actual
+decluttering the checkpoint asked for), puts it next to the thing it's
+genuinely related to (progress through the lesson), and reuses an existing
+visual language instead of inventing a new grey-pill pattern. `TeachingBlock`
+drops its `bloomLevel` badge entirely; `SessionBar`'s `progress` prop gains an
+optional `bloomLevel` field it renders inline with the counter.
+
 ## Acceptance check for this mode
 
 - One scrollbar, ever. Resize the window short — only the stream scrolls, the
@@ -279,3 +331,8 @@ relevant grounded answer only, then points back to Continue" behavior.
 - Ask a follow-up: answer appears, Continue still there, session did not
   advance.
 - All five `tour-lesson-*` anchors resolve (grep + click-through).
+- No `bloomLevel` badge inside the teaching bubble; the step's Bloom level
+  (when present) shows in `SessionBar` next to the step counter instead.
+- The dock's action button and compose input are the same `rounded-full` slot
+  — toggling between them via the small circular button produces no visible
+  seam, resize, or radius mismatch.
