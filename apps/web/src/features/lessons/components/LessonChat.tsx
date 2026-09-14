@@ -48,6 +48,12 @@ export function LessonChat({
   const [result, setResult] = useState<LessonCheckResult | null>(null);
   const [checkThreadOpen, setCheckThreadOpen] = useState(false);
   const [checkExplanation, setCheckExplanation] = useState<string | null>(null);
+  // True once this check has been graded at least once. Keeps the dock mounted
+  // through a retry: docking the check takes over the lane only while the
+  // student is answering for the FIRST time. After a miss they have just used
+  // the dock ("Try again") and it vanishing the moment they press it left the
+  // surface with no visible affordance at all.
+  const [hasAnsweredOnce, setHasAnsweredOnce] = useState(false);
   // Which check-thread request is in flight, so the loading placeholder can
   // say the right thing (a hint is not an explanation).
   const [checkThreadKind, setCheckThreadKind] = useState<"hint" | "explain">("hint");
@@ -139,6 +145,7 @@ export function LessonChat({
     setFollowUpTurns([]);
     setPendingFollowUp(null);
     setPendingCheckFollowUp(null);
+    setHasAnsweredOnce(false);
     hintsUsedRef.current = 0;
     startedAtRef.current = Date.now();
     setCheckOpen(true);
@@ -155,7 +162,7 @@ export function LessonChat({
         latencyMs: Date.now() - startedAtRef.current,
         hintsUsed: hintsUsedRef.current,
       },
-      { onSuccess: (nextResult) => setResult(nextResult) }
+      { onSuccess: (nextResult) => { setResult(nextResult); setHasAnsweredOnce(true); } }
     );
   }
 
@@ -250,6 +257,12 @@ export function LessonChat({
   function retry() {
     setSelected(null);
     setResult(null);
+    // The explanation is the answer key; leaving it on screen through a retry
+    // defeats the retry. Close the thread and drop any explanation with it.
+    setCheckThreadOpen(false);
+    setCheckExplanation(null);
+    setPendingCheckFollowUp(null);
+    setCheckFollowUpTurns([]);
     startedAtRef.current = Date.now();
   }
 
@@ -271,7 +284,7 @@ export function LessonChat({
   }
 
   const isCheckTakeover = Boolean(checkOpen && current?.check);
-  const checkDockVisible = isCheckTakeover && (checkThreadOpen || hasGradedCheck);
+  const checkDockVisible = isCheckTakeover && (checkThreadOpen || hasGradedCheck || hasAnsweredOnce);
   const hintPending = checkThreadKind === "hint";
   // Every dock primary carries an animated icon so the dock reads the same
   // as the workspace rail: arrow for "keep moving", check/popper for "done",
@@ -293,7 +306,12 @@ export function LessonChat({
               icon: stepIndex + 1 >= total ? PartyPopperIcon : ArrowRightIcon,
             }
           : { label: "Try again", onClick: retry, icon: RotateCCWIcon }
-        : undefined;
+        : // Pre-grade. Uses the dock only to stay mounted through a retry: no
+          // primary action here on purpose, since the next move is picking a
+          // different choice on the card. ComposeDock drops the action button
+          // (and its toggle) when `primary` is unset, leaving just the ask
+          // field, so the dock does not vanish under the student's cursor.
+          undefined;
 
   return (
     <StudySurface

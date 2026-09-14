@@ -115,7 +115,16 @@ def submit_check(course_id: str, step_id: str, body: CheckBody,
 
     return {
         "correct": graded["correct"],
-        "explanation": graded["explanation"],
+        # The explanation IS the answer key: it names the correct choice and
+        # says why the others are wrong. Lessons gates progression on getting
+        # the check right, so returning it on a miss handed the student the
+        # answer and made "Try again" pointless. On a miss they get a neutral
+        # nudge and retry; the real explanation arrives with the correct
+        # submission (or on demand via the Hint/Explain thread). Practice and
+        # Flashcards still show it on a miss on purpose — their model is
+        # learn-from-the-error, not gate-until-correct — which is why this is
+        # gated here in the lessons router and not inside grade().
+        "explanation": graded["explanation"] if graded["correct"] else "Not quite — give it another go.",
         "advance": graded["correct"],
         "mastery": state.get("estimate"),
         "reward": xp.summary(
