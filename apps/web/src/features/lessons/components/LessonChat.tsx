@@ -54,9 +54,15 @@ export function LessonChat({
   // the dock ("Try again") and it vanishing the moment they press it left the
   // surface with no visible affordance at all.
   const [hasAnsweredOnce, setHasAnsweredOnce] = useState(false);
-  // Which check-thread request is in flight, so the loading placeholder can
+  // Which check-thread requests are in flight, so the loading placeholder can
   // say the right thing (a hint is not an explanation).
   const [checkThreadKind, setCheckThreadKind] = useState<"hint" | "explain">("hint");
+  // Kinds already answered for this check. Used to disable the buttons once
+  // they have nothing left to do, and to allow a hint to be upgraded into a
+  // full explanation (but never a second time).
+  const [answeredKinds, setAnsweredKinds] = useState<Set<"hint" | "explain">>(
+    () => new Set()
+  );
   const [checkFollowUpTurns, setCheckFollowUpTurns] = useState<FollowUpTurn[]>([]);
   const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
   // The question whose answer is still in flight. Rendered immediately as a
@@ -141,6 +147,7 @@ export function LessonChat({
     setCheckThreadOpen(false);
     setCheckExplanation(null);
     setCheckThreadKind("hint");
+    setAnsweredKinds(new Set());
     setCheckFollowUpTurns([]);
     setFollowUpTurns([]);
     setPendingFollowUp(null);
@@ -185,10 +192,20 @@ export function LessonChat({
     // The thread opens IMMEDIATELY, before the answer exists — the student's
     // attention moves to where the explanation will appear (a Kala header
     // with a pending bubble), rather than staring at the button they just
-    // pressed while it silently swaps into a spinner. Guarded by isPending
-    // so a double-tap can't fire a second identical request.
+    // pressed while it silently swaps into a spinner.
     setCheckThreadOpen(true);
-    if (checkExplanation || checkAsk.isPending) return;
+
+    // One request per kind, ever. Previously this bailed out only while a
+    // request was in flight, which left two holes: a second tap after the
+    // answer had landed re-opened the thread with no new request (so the
+    // button looked live but did nothing), and asking for the OTHER kind
+    // was silently swallowed — a student who read the hint could never
+    // escalate to the full explanation. Tracking which kinds have already
+    // been answered fixes both: an answered kind is inert, an unanswered
+    // one still works. It also stops repeated taps from inflating
+    // hintsUsedRef, which feeds hints_used on the evidence event and so
+    // would have moved the student's mastery for free.
+    if (checkAsk.isPending || answeredKinds.has(kind)) return;
 
     setCheckThreadKind(kind);
     checkAsk.mutate(
@@ -203,6 +220,7 @@ export function LessonChat({
       {
         onSuccess: (answer) => {
           setCheckExplanation(answer.answer);
+          setAnsweredKinds((kinds) => new Set(kinds).add(kind));
           if (kind === "hint") hintsUsedRef.current += 1;
         },
       }
@@ -258,9 +276,12 @@ export function LessonChat({
     setSelected(null);
     setResult(null);
     // The explanation is the answer key; leaving it on screen through a retry
-    // defeats the retry. Close the thread and drop any explanation with it.
+    // defeats the retry. Close the thread and drop any explanation with it —
+    // including the answered-kind record, so the student can ask for a fresh
+    // hint on the retry rather than finding the button permanently dead.
     setCheckThreadOpen(false);
     setCheckExplanation(null);
+    setAnsweredKinds(new Set());
     setPendingCheckFollowUp(null);
     setCheckFollowUpTurns([]);
     startedAtRef.current = Date.now();
@@ -395,12 +416,15 @@ export function LessonChat({
                   // button into a "Thinking…" spinner, which read as "this
                   // button is loading" rather than "Kala is answering below"
                   // — the pending state now lives in the thread instead.
+                  // Disabled once this kind has been answered: the button has
+                  // nothing left to do, and leaving it live invited repeat
+                  // taps that produced no request and no feedback.
                   !result ? (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => openCheckThread("hint")}
-                      disabled={checkAsk.isPending}
+                      disabled={checkAsk.isPending || answeredKinds.has("hint")}
                     >
                       <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
                       Hint
@@ -410,7 +434,7 @@ export function LessonChat({
                       variant="outline"
                       size="sm"
                       onClick={() => openCheckThread("explain")}
-                      disabled={checkAsk.isPending}
+                      disabled={checkAsk.isPending || answeredKinds.has("explain")}
                     >
                       <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
                       Explain

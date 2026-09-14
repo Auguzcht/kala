@@ -118,13 +118,22 @@ def submit_check(course_id: str, step_id: str, body: CheckBody,
         # The explanation IS the answer key: it names the correct choice and
         # says why the others are wrong. Lessons gates progression on getting
         # the check right, so returning it on a miss handed the student the
-        # answer and made "Try again" pointless. On a miss they get a neutral
-        # nudge and retry; the real explanation arrives with the correct
-        # submission (or on demand via the Hint/Explain thread). Practice and
-        # Flashcards still show it on a miss on purpose — their model is
-        # learn-from-the-error, not gate-until-correct — which is why this is
-        # gated here in the lessons router and not inside grade().
-        "explanation": graded["explanation"] if graded["correct"] else "Not quite — give it another go.",
+        # answer and made "Try again" pointless. On a miss they get a nudge
+        # that says what to DO rather than repeating the verdict the card
+        # already prints above it, and the real explanation arrives with the
+        # correct submission (or on demand via the Hint/Explain thread).
+        # Practice and Flashcards still show it on a miss on purpose — their
+        # model is learn-from-the-error, not gate-until-correct — which is why
+        # this is gated here in the lessons router and not inside grade().
+        #
+        # Wording note: the card prints its own "Not quite." verdict directly
+        # above this line, so this must not repeat the verdict — it says what
+        # to DO instead. Opening with another negative stacked a second
+        # refusal under the first for no information gain.
+        "explanation": graded["explanation"] if graded["correct"] else (
+            "Re-read the step above and compare each option against it. "
+            "Tap Hint if you'd like a nudge that doesn't give the answer away."
+        ),
         "advance": graded["correct"],
         "mastery": state.get("estimate"),
         "reward": xp.summary(
