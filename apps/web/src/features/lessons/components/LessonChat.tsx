@@ -145,7 +145,7 @@ export function LessonChat({ courseId, skillId }: { courseId: string; skillId: s
           </span>
         </div>
 
-        <StudyStream>
+        <StudyStream height="h-[62vh]">
           {/* Completed steps: teaching + outcome */}
           {data.steps.slice(0, done ? total : stepIndex).map((s) => (
             <div key={s.id} className="space-y-3">

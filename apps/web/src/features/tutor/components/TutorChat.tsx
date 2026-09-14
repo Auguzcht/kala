@@ -257,7 +257,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
           </span>
         </div>
 
-        <StudyStream>
+        <StudyStream height="h-[62vh]">
           {conversationId && active.isLoading ? (
             <Shimmer>Loading conversation…</Shimmer>
           ) : messages.length === 0 ? (

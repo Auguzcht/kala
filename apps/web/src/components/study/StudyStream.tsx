@@ -21,24 +21,33 @@ import { cn } from "@/lib/utils";
 // has no way back down once you've scrolled up.
 //
 // Conversation needs a parent with a REAL height to flex into (it's
-// `flex-1` internally) — max-height alone isn't enough, so this wrapper
-// sets an explicit height rather than a cap.
+// `flex-1` internally). In a StudySurface it fills that flex slot; the
+// temporary height prop keeps the pre-migration surfaces stable until each
+// mode moves onto StudySurface.
 export function StudyStream({
   children,
   className,
-  height = "h-[62vh]",
+  height,
 }: {
   children: ReactNode;
   className?: string;
-  /** Explicit height Tailwind class. Must be a real height (h-*), not a
-   * max-height, or Conversation's internal flex-1 has nothing to fill. */
+  /** Transitional legacy height for surfaces not yet migrated to
+   * StudySurface. New surfaces must omit this and fill the flex slot. */
   height?: string;
 }) {
   return (
-    <div className={cn("relative flex flex-col", height, className)}>
+    <div
+      className={cn(
+        "relative flex min-h-0 flex-1 flex-col",
+        height,
+        className
+      )}
+    >
       <Conversation>
         <ConversationContent className="gap-5 px-5 py-6">
-          {children}
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+            {children}
+          </div>
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
