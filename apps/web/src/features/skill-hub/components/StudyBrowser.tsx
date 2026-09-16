@@ -1,4 +1,5 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { motion, useReducedMotion } from "motion/react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +41,7 @@ export function StudyBrowser({
     BROWSE_LIMIT,
     skillId,
   );
+  const reduceMotion = useReducedMotion();
 
   if (isLoading) {
     return (
@@ -104,7 +106,7 @@ export function StudyBrowser({
               also raise a question the schedule can't answer: what due date
               does a brand-new card get, and should it jump ahead of cards that
               are actually due? */}
-          <p className="mt-1 text-[11px] text-muted-foreground/80">
+          <p className="mt-1 text-[11px] text-muted-foreground">
             Cards are added automatically for this skill as you study — this isn't a set you
             generate.
           </p>
@@ -116,8 +118,14 @@ export function StudyBrowser({
 
       {/* Both sides shown: Study never grades, so there is nothing to hide. */}
       <ol className="divide-y divide-border border bg-card">
-        {cards.map((card: FlashcardCard) => (
-          <li key={card.itemId} className="flex flex-col gap-1 px-5 py-3.5">
+        {cards.map((card: FlashcardCard, i: number) => (
+          <motion.li
+            key={card.itemId}
+            initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: Math.min(i * 0.03, 0.18), ease: "easeOut" }}
+            className="flex flex-col gap-1 px-5 py-3.5"
+          >
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 text-sm font-medium text-foreground">{card.prompt}</p>
               <StateBadge state={card.state} box={card.box} />
@@ -130,7 +138,7 @@ export function StudyBrowser({
                 {card.back.label ?? "—"}
               </p>
             </div>
-          </li>
+          </motion.li>
         ))}
       </ol>
     </div>

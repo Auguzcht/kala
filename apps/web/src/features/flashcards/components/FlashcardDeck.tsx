@@ -370,7 +370,7 @@ export function FlashcardDeck({
               Reduced motion: the transform transition is dropped entirely, so
               the flip degrades to the instant swap it has always been, rather
               than forcing a rotation on someone who asked for less of it. */}
-          <div className="[perspective:1400px] px-5 py-6">
+          <div className="[perspective:1400px] px-5 py-5">
             <div
               className={cn(
                 "grid [transform-style:preserve-3d]",
@@ -397,20 +397,20 @@ export function FlashcardDeck({
                   </p>
                   <span className="font-mono text-xs text-muted-foreground">tap to flip</span>
                 </div>
-                {hintText ? (
-                  <p className="text-sm italic leading-relaxed text-muted-foreground">{hintText}</p>
-                ) : null}
               </button>
 
               {/* back — the answer, then the self-mark. This is the study move:
                   the student decides, and that decision drives the schedule. */}
               <div
                 aria-hidden={phase !== "back"}
-                className="space-y-5 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]"
+                className="space-y-4 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]"
               >
                 <p className="text-sm text-muted-foreground">{card.prompt}</p>
                 <div className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-3 py-2.5">
-                  <p className="text-xs font-medium uppercase tracking-wide text-brand-green-foreground/70">
+                  {/* solid token, not a /70 alpha: the low-opacity label on a
+                      tinted background was the lowest-contrast text on the
+                      screen. "Answer" is a real label and must be readable. */}
+                  <p className="text-xs font-medium uppercase tracking-wide text-foreground">
                     Answer
                   </p>
                   <p className="mt-0.5 text-base font-semibold text-foreground">
@@ -453,7 +453,7 @@ export function FlashcardDeck({
                     <p
                       className={cn(
                         "border-t pt-4 text-sm font-semibold",
-                        result?.remembered ? "text-brand-green" : "text-brand-orange"
+                        result?.remembered ? "text-brand-green" : "text-brand-orange",
                       )}
                     >
                       {result?.remembered
@@ -474,44 +474,62 @@ export function FlashcardDeck({
                     </div>
                   </>
                 )}
-
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
-                    {hint.isPending ? (
-                      <Spinner className="size-3.5" />
-                    ) : (
-                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                    )}
-                    {hint.isPending ? "Thinking…" : "Hint"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={askExplain}
-                    disabled={explain.isPending}
-                  >
-                    {explain.isPending ? (
-                      <Spinner className="size-3.5" />
-                    ) : (
-                      <SparklesIcon size={15} className="text-muted-foreground" aria-hidden />
-                    )}
-                    {explain.isPending ? "Thinking…" : "Explain more"}
-                  </Button>
-                </div>
-                {explainText ? (
-                  <p className="text-sm italic leading-relaxed text-muted-foreground">
-                    {explainText}
-                  </p>
-                ) : null}
               </div>
             </div>
           </div>
         </div>
 
+        {/* Ask-for-help row. These stay as plain text affordances rather than
+            buttons competing with the dock's primary action, because they
+            trigger distinct TUTOR STYLES (a nudge, a deep explanation) that
+            the free-text compose box cannot express. Their output lands as a
+            bubble in the thread below — see the thread block — instead of
+            inside the card, so this reads as one conversation with Kala rather
+            than a card with a text dump stuffed into it. */}
+        {phase === "back" ? (
+          <div className="flex items-center gap-4 text-xs">
+            <button
+              type="button"
+              onClick={askHint}
+              disabled={hint.isPending}
+              className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <BrainIcon size={14} aria-hidden />
+              {hint.isPending ? "Thinking…" : "Give me a hint"}
+            </button>
+            <button
+              type="button"
+              onClick={askExplain}
+              disabled={explain.isPending}
+              className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <SparklesIcon size={14} aria-hidden />
+              {explain.isPending ? "Thinking…" : "Explain more"}
+            </button>
+          </div>
+        ) : null}
+
         {result ? (
           <p className="text-right font-mono text-xs text-muted-foreground">
             {result.reward.streakDays}-day streak · {result.reward.xp} XP
           </p>
+        ) : null}
+
+        {/* Kala's thread for this card: the hint/explanation turn, then any
+            free-text follow-ups from the dock. Rendered as the same
+            UserBlock/AssistantBlock bubbles LessonChat uses, so every surface
+            talks the same way. */}
+        {hintText || explainText || hint.isPending || explain.isPending ? (
+          <div className="border-t pt-5">
+            <AssistantBlock
+              text={hintText ?? explainText ?? undefined}
+              pending={hint.isPending || explain.isPending}
+              pendingLabel={
+                hint.isPending ? "Kala is preparing a hint…" : "Kala is preparing an explanation…"
+              }
+              animate={false}
+            />
+          </div>
         ) : null}
 
         {followUpTurns.map((turn, turnIndex) => (

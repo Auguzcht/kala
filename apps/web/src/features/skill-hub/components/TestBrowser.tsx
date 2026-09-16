@@ -1,5 +1,6 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -144,6 +145,7 @@ function SetList({
 }) {
   const { data, isLoading, isError, refetch } = usePracticeSets(courseId, skillId);
   const generate = useGenerateSet(courseId);
+  const reduceMotion = useReducedMotion();
   const sets = data?.sets ?? [];
   const allSets = sets;
 
@@ -195,15 +197,22 @@ function SetList({
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {/* Real sets. The card's BORDER is tinted to match its own header bar,
             so the color reads as the set's identity across the whole card
-            outline rather than only on the 8px strip. */}
-        {sets.map((set: PracticeSetSummary) => (
-          <button
+            outline rather than only on the 8px strip. Motion matches the
+            other card grids in the app: a short lift + shadow on hover, and a
+            staggered fade/rise on entry so a list of sets arrives rather than
+            appearing all at once. */}
+        {sets.map((set: PracticeSetSummary, i: number) => (
+          <motion.button
             key={set.setId}
             type="button"
             onClick={() => onSelectSet(set.setId)}
+            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, delay: Math.min(i * 0.04, 0.2), ease: "easeOut" }}
+            whileHover={reduceMotion ? undefined : { y: -2 }}
             className={cn(
               "group flex flex-col overflow-hidden border-2 bg-card text-left",
-              "transition-[box-shadow,transform] hover:shadow-md hover:-translate-y-0.5",
+              "transition-shadow hover:shadow-md",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               borderColor(set.setId)
             )}
@@ -227,7 +236,7 @@ function SetList({
                 ) : null}
               </div>
             </div>
-          </button>
+          </motion.button>
         ))}
 
         {/* Generate — SAME footprint as a real set card so it sits in the grid
