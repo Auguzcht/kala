@@ -150,10 +150,160 @@ def create_set(
     return {"courseId": course_id, "setId": set_id, "items": items}
 
 
+class FromItemsBody(BaseModel):
+    item_ids: list[str]
+
+
+@router.post("/{course_id}/set/from-items")
+def create_set_from_items(
+    course_id: str,
+    body: FromItemsBody,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Group ALREADY-GENERATED items into a quiz set — the study -> test
+    bridge. "Test me on these" from the study deck hands the exact items the
+    student just studied here, so the quiz tests recognition of what they saw;
+    Optionally later, a fresh-items variant can call /set instead. This is
+    additive: it does NOT generate and does NOT grade — it is a caller of the
+    same quiz machinery, wrapping existing rows in a quiz_sets grouping.
+
+    Tenant safety: every item id is client-supplied, so each is verified to
+    belong to this institution AND course before it is grouped. Ids from
+    another course/institution are dropped (and the request 404s if none
+    survive) rather than silently attaching foreign items to a set in this
+    course.
+
+    Items must share one skill — a set is per-skill (quiz_sets.skill_id is NOT
+    NULL). A cross-skill deck ("review what's due") therefore can't bridge as
+    one set; the client sends one skill's items at a time, which is the
+    honest shape for "test me on this topic."
+    """
+    item_ids = list(dict.fromkeys(body.item_ids))  # de-dupe, keep order
+    if not item_ids:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "item_ids must not be empty")
+
+    rows = db.select("generated_items", {
+        "id": f"in.({','.join(item_ids)})",
+        "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}",
+        "select": "id,skill_id,prompt,choices,bloom_level",
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such items in this course")
+
+    skill_ids = {r["skill_id"] for r in rows if r.get("skill_id")}
+    if len(skill_ids) != 1:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "a set is scoped to one skill; items must share a skill",
+        )
+    skill_id = skill_ids.pop()
+
+    # Preserve the caller's order, dropping anything that didn't survive the
+    # tenant check, so the quiz runs in the order the student studied.
+    found = {r["id"]: r for r in rows}
+    ordered = [found[i] for i in item_ids if i in found]
+
+    set_rows = db.insert("quiz_sets", [{
+        "institution_id": user.institution_id,
+        "course_id": course_id,
+        "skill_id": skill_id,
+        "kind": "practice",
+        "size": len(ordered),
+    }])
+    set_id = set_rows[0]["id"]
+
+    # Attach the existing items to the set. This is the one place a set is
+    # built by re-pointing rows rather than inserting them — safe because
+    # set_id is a delivery grouping, not part of the answer key.
+    for item in ordered:
+        db.update("generated_items", {"id": f"eq.{item['id']}"}, {"set_id": set_id})
+
+    return {
+        "courseId": course_id,
+        "setId": set_id,
+        "items": [{
+            "id": r["id"], "skillId": r["skill_id"],
+            "bloomLevel": r.get("bloom_level"),
+            "prompt": r["prompt"], "choices": r.get("choices") or [],
+        } for r in ordered],
+    }
+
+
 class SubmitBody(BaseModel):
     item_id: str
     choice_id: str
     latency_ms: int = 0
+
+
+@router.get("/{course_id}/sets")
+def list_sets(
+    course_id: str,
+    skill_id: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Saved quiz sets for this course, newest first, optionally scoped to one
+    skill. Read-only: this is what lets a student see and retake a set they
+    already took (the Step 3 hub's Test tab; built here because it is a plain
+    read over quiz_sets, which already persists). Returns a count rather than
+    the items — the retake action re-enters test mode and items come from
+    /practice/{course_id}/set/from-items.
+    """
+    params = {
+        "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}",
+        "select": "id,skill_id,kind,size,created_at",
+        "order": "created_at.desc",
+    }
+    if skill_id:
+        params["skill_id"] = f"eq.{skill_id}"
+    rows = db.select("quiz_sets", params)
+    return {
+        "courseId": course_id,
+        "sets": [{
+            "setId": r["id"], "skillId": r["skill_id"], "kind": r["kind"],
+            "size": r["size"], "createdAt": r["created_at"],
+        } for r in rows],
+    }
+
+
+@router.get("/{course_id}/sets/{set_id}")
+def get_set(course_id: str, set_id: str, user: CurrentUser = Depends(get_current_user)):
+    """Load one saved set's items so it can be retaken or re-entered — the
+    read behind the study->test bridge navigation and the retake list. Items
+    are returned in their natural order (oldest first, the order they were
+    generated/studied in via the set_id grouping).
+
+    Ownership is verified against institution + course before anything is
+    returned; a set id from another course 404s rather than leaking items.
+    """
+    sets = db.select("quiz_sets", {
+        "id": f"eq.{set_id}",
+        "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}",
+        "select": "id,skill_id,kind,size,created_at", "limit": "1",
+    })
+    if not sets:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found")
+
+    items = db.select("generated_items", {
+        "set_id": f"eq.{set_id}",
+        "institution_id": f"eq.{user.institution_id}",
+        "select": "id,skill_id,prompt,choices,bloom_level",
+        "order": "created_at.asc",
+    })
+    s = sets[0]
+    return {
+        "courseId": course_id,
+        "setId": s["id"],
+        "skillId": s["skill_id"],
+        "kind": s["kind"],
+        "items": [{
+            "id": r["id"], "skillId": r["skill_id"],
+            "bloomLevel": r.get("bloom_level"),
+            "prompt": r["prompt"], "choices": r.get("choices") or [],
+        } for r in items],
+    }
 
 
 @router.post("/{course_id}/submit")

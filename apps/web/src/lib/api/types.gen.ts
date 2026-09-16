@@ -333,6 +333,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/practice/{course_id}/set/from-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Set From Items
+         * @description Group ALREADY-GENERATED items into a quiz set — the study -> test
+         *     bridge. "Test me on these" from the study deck hands the exact items the
+         *     student just studied here, so the quiz tests recognition of what they saw;
+         *     Optionally later, a fresh-items variant can call /set instead. This is
+         *     additive: it does NOT generate and does NOT grade — it is a caller of the
+         *     same quiz machinery, wrapping existing rows in a quiz_sets grouping.
+         *
+         *     Tenant safety: every item id is client-supplied, so each is verified to
+         *     belong to this institution AND course before it is grouped. Ids from
+         *     another course/institution are dropped (and the request 404s if none
+         *     survive) rather than silently attaching foreign items to a set in this
+         *     course.
+         *
+         *     Items must share one skill — a set is per-skill (quiz_sets.skill_id is NOT
+         *     NULL). A cross-skill deck ("review what's due") therefore can't bridge as
+         *     one set; the client sends one skill's items at a time, which is the
+         *     honest shape for "test me on this topic."
+         */
+        post: operations["create_set_from_items_practice__course_id__set_from_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/practice/{course_id}/sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sets
+         * @description Saved quiz sets for this course, newest first, optionally scoped to one
+         *     skill. Read-only: this is what lets a student see and retake a set they
+         *     already took (the Step 3 hub's Test tab; built here because it is a plain
+         *     read over quiz_sets, which already persists). Returns a count rather than
+         *     the items — the retake action re-enters test mode and items come from
+         *     /practice/{course_id}/set/from-items.
+         */
+        get: operations["list_sets_practice__course_id__sets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/practice/{course_id}/sets/{set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Set
+         * @description Load one saved set's items so it can be retaken or re-entered — the
+         *     read behind the study->test bridge navigation and the retake list. Items
+         *     are returned in their natural order (oldest first, the order they were
+         *     generated/studied in via the set_id grouping).
+         *
+         *     Ownership is verified against institution + course before anything is
+         *     returned; a set id from another course 404s rather than leaking items.
+         */
+        get: operations["get_set_practice__course_id__sets__set_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/practice/{course_id}/submit": {
         parameters: {
             query?: never;
@@ -1023,6 +1110,11 @@ export interface components {
             /** Skill Id */
             skill_id?: string | null;
         };
+        /** FromItemsBody */
+        FromItemsBody: {
+            /** Item Ids */
+            item_ids: string[];
+        };
         /** GradeBody */
         GradeBody: {
             /** User Id */
@@ -1681,6 +1773,112 @@ export interface operations {
             };
             path: {
                 course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_set_from_items_practice__course_id__set_from_items_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FromItemsBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sets_practice__course_id__sets_get: {
+        parameters: {
+            query?: {
+                skill_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_set_practice__course_id__sets__set_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                set_id: string;
             };
             cookie?: never;
         };

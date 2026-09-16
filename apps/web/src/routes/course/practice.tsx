@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -7,8 +7,22 @@ import { PracticePanel } from "@/features/practice";
 import { useTwin, useNextUp } from "@/features/twin";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { ZapIcon } from "@/components/ui/zap";
+import { z } from "zod";
+
+// Test mode. A session can be entered two ways:
+//   - locally, by picking a topic on this page (skillId in local state), or
+//   - from the study deck's "Test me on these" bridge, which navigates here
+//     with ?skillId=&setId= so the panel runs the SAVED set instead of
+//     generating a fresh one.
+// The search params are therefore the bridge's entry contract; local state
+// stays for the in-page picker so picking a topic doesn't rewrite the URL.
+const practiceSearchSchema = z.object({
+  skillId: z.string().optional(),
+  setId: z.string().optional(),
+});
 
 export const Route = createFileRoute("/course/practice")({
+  validateSearch: practiceSearchSchema,
   component: PracticePage,
 });
 
@@ -16,7 +30,22 @@ function PracticePage() {
   const courseId = useSession()?.courseId ?? "";
   const { data: twin, isLoading } = useTwin(courseId);
   const { data: nextUp } = useNextUp(courseId);
+  const { skillId: searchSkillId, setId: searchSetId } = Route.useSearch();
+  const navigate = useNavigate();
   const [skillId, setSkillId] = useState<string | null>(null);
+
+  // A set handed in from the bridge owns the session; leaving it back to the
+  // picker clears the URL so a refresh doesn't re-enter the same set.
+  if (searchSetId && searchSkillId) {
+    return (
+      <PracticePanel
+        courseId={courseId}
+        skillId={searchSkillId}
+        setId={searchSetId}
+        onExit={() => navigate({ to: "/course/practice", search: {} })}
+      />
+    );
+  }
 
   if (skillId) {
     return (

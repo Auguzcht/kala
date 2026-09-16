@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
-import { usePracticeSet, useSubmitPractice } from "@/features/practice/hooks/use-practice";
+import { usePracticeSet, usePracticeSetById, useSubmitPractice } from "@/features/practice/hooks/use-practice";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
@@ -49,13 +49,26 @@ type FollowUpTurn = { question: string; answer: string };
 export function PracticePanel({
   courseId,
   skillId,
+  setId,
   onExit,
 }: {
   courseId: string;
   skillId: string;
+  /** Run a SAVED set instead of generating a fresh one — the study->test
+   * bridge handoff and the retake list both enter test mode this way. The set
+   * is per-skill, so skillId still identifies the topic for the bar/copy. */
+  setId?: string | null;
   onExit: () => void;
 }) {
-  const { data, isLoading, isError, isFetching, refetch } = usePracticeSet(courseId, skillId, SET_SIZE);
+  // Generate a set when none is handed in; otherwise load the saved one. Both
+  // hooks are always called (rules of hooks) but only the active one fetches
+  // — the other is disabled via `enabled`. The generated path passes a real
+  // skillId, the saved path passes null so it never fires.
+  const generatedQuery = usePracticeSet(courseId, skillId, SET_SIZE);
+  const savedQuery = usePracticeSetById(courseId, setId ?? null);
+  const usingSaved = Boolean(setId);
+  const { isLoading, isError, isFetching, refetch } = usingSaved ? savedQuery : generatedQuery;
+  const data = usingSaved ? savedQuery.data : generatedQuery.data;
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
@@ -118,7 +131,12 @@ export function PracticePanel({
   }, [item?.id]);
 
   if (isLoading)
-    return <LoadingPanel label="Generating your practice set…" lines={4} />;
+    return (
+      <LoadingPanel
+        label={usingSaved ? "Loading your set…" : "Generating your practice set…"}
+        lines={4}
+      />
+    );
   if (isError)
     return (
       <EmptyState

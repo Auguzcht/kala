@@ -953,6 +953,212 @@
         }
       }
     },
+    "/practice/{course_id}/set/from-items": {
+      "post": {
+        "tags": [
+          "practice"
+        ],
+        "summary": "Create Set From Items",
+        "description": "Group ALREADY-GENERATED items into a quiz set \u2014 the study -> test\nbridge. \"Test me on these\" from the study deck hands the exact items the\nstudent just studied here, so the quiz tests recognition of what they saw;\nOptionally later, a fresh-items variant can call /set instead. This is\nadditive: it does NOT generate and does NOT grade \u2014 it is a caller of the\nsame quiz machinery, wrapping existing rows in a quiz_sets grouping.\n\nTenant safety: every item id is client-supplied, so each is verified to\nbelong to this institution AND course before it is grouped. Ids from\nanother course/institution are dropped (and the request 404s if none\nsurvive) rather than silently attaching foreign items to a set in this\ncourse.\n\nItems must share one skill \u2014 a set is per-skill (quiz_sets.skill_id is NOT\nNULL). A cross-skill deck (\"review what's due\") therefore can't bridge as\none set; the client sends one skill's items at a time, which is the\nhonest shape for \"test me on this topic.\"",
+        "operationId": "create_set_from_items_practice__course_id__set_from_items_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FromItemsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/practice/{course_id}/sets": {
+      "get": {
+        "tags": [
+          "practice"
+        ],
+        "summary": "List Sets",
+        "description": "Saved quiz sets for this course, newest first, optionally scoped to one\nskill. Read-only: this is what lets a student see and retake a set they\nalready took (the Step 3 hub's Test tab; built here because it is a plain\nread over quiz_sets, which already persists). Returns a count rather than\nthe items \u2014 the retake action re-enters test mode and items come from\n/practice/{course_id}/set/from-items.",
+        "operationId": "list_sets_practice__course_id__sets_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "skill_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/practice/{course_id}/sets/{set_id}": {
+      "get": {
+        "tags": [
+          "practice"
+        ],
+        "summary": "Get Set",
+        "description": "Load one saved set's items so it can be retaken or re-entered \u2014 the\nread behind the study->test bridge navigation and the retake list. Items\nare returned in their natural order (oldest first, the order they were\ngenerated/studied in via the set_id grouping).\n\nOwnership is verified against institution + course before anything is\nreturned; a set id from another course 404s rather than leaking items.",
+        "operationId": "get_set_practice__course_id__sets__set_id__get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/practice/{course_id}/submit": {
       "post": {
         "tags": [
@@ -2998,6 +3204,22 @@
           "course_id"
         ],
         "title": "CreateConversation"
+      },
+      "FromItemsBody": {
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_ids"
+        ],
+        "title": "FromItemsBody"
       },
       "GradeBody": {
         "properties": {

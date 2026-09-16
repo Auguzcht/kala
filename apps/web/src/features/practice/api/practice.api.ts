@@ -1,10 +1,14 @@
 import { api } from "@/lib/api/client";
 import {
   practiceNextSchema,
+  practiceSavedSetSchema,
+  practiceSetListSchema,
   practiceSetSchema,
   practiceSubmitResultSchema,
   type PracticeNext,
+  type PracticeSavedSet,
   type PracticeSet,
+  type PracticeSetList,
   type PracticeSubmitResult,
 } from "@/features/practice/schema/practice.schema";
 
@@ -34,6 +38,42 @@ export async function fetchPracticeSet(
     60_000
   );
   return practiceSetSchema.parse(data);
+}
+
+// The study -> test bridge: group ALREADY-GENERATED items (the ones the
+// student just studied) into a quiz set, without regenerating anything. Same
+// response shape as fetchPracticeSet so the quiz surface consumes it
+// identically. timeoutMs is short — this makes no model calls, it is a
+// grouping write.
+export async function createPracticeSetFromItems(
+  courseId: string,
+  itemIds: string[]
+): Promise<PracticeSet> {
+  const data = await api<unknown>(
+    `/practice/${courseId}/set/from-items`,
+    { method: "POST", body: JSON.stringify({ item_ids: itemIds }) },
+    15_000
+  );
+  return practiceSetSchema.parse(data);
+}
+
+// Load a saved set by id, so test mode can run it instead of generating.
+export async function fetchPracticeSetById(
+  courseId: string,
+  setId: string
+): Promise<PracticeSavedSet> {
+  const data = await api<unknown>(`/practice/${courseId}/sets/${setId}`);
+  return practiceSavedSetSchema.parse(data);
+}
+
+// The retake list for a skill (or the whole course when skillId is omitted).
+export async function fetchPracticeSets(
+  courseId: string,
+  skillId?: string
+): Promise<PracticeSetList> {
+  const query = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
+  const data = await api<unknown>(`/practice/${courseId}/sets${query}`);
+  return practiceSetListSchema.parse(data);
 }
 
 export async function submitPracticeAttempt(

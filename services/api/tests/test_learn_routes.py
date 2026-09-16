@@ -449,3 +449,194 @@ def test_practice_set_404s_an_unknown_skill_id(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+# ---- POST /practice/{course_id}/set/from-items (study -> test bridge) ------
+
+
+def test_set_from_items_groups_existing_items_without_generating(monkeypatch) -> None:
+    """The bridge reuses studied items: it must NOT call generate_question,
+    just wrap the existing rows in a quiz_sets grouping."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    inserted_sets = []
+    updated = []
+    generated = []
+
+    monkeypatch.setattr(
+        practice.db, "select",
+        lambda table, params: [
+            {"id": "item-1", "skill_id": "skill-1", "prompt": "Q1",
+             "choices": [{"id": "a", "label": "A"}], "bloom_level": "apply"},
+            {"id": "item-2", "skill_id": "skill-1", "prompt": "Q2",
+             "choices": [{"id": "b", "label": "B"}], "bloom_level": "apply"},
+        ],
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": inserted_sets.extend(rows)
+        or [{"id": "set-1", **rows[0]}],
+    )
+    monkeypatch.setattr(
+        practice.db, "update",
+        lambda table, filters, values: updated.append((filters, values)) or [],
+    )
+    # Any generation call is a bug for this endpoint.
+    monkeypatch.setattr(
+        practice.item_gen, "generate_question",
+        lambda **kwargs: generated.append(kwargs) or {"id": "nope"},
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/course-1/set/from-items",
+                json={"item_ids": ["item-1", "item-2"]},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["setId"] == "set-1"
+    assert [i["id"] for i in body["items"]] == ["item-1", "item-2"]
+    assert inserted_sets == [{
+        "institution_id": "institution-1", "course_id": "course-1",
+        "skill_id": "skill-1", "kind": "practice", "size": 2,
+    }]
+    # Each studied item is re-pointed at the new set, and nothing was generated.
+    assert updated == [
+        ({"id": "eq.item-1"}, {"set_id": "set-1"}),
+        ({"id": "eq.item-2"}, {"set_id": "set-1"}),
+    ]
+    assert generated == []
+
+
+def test_set_from_items_404s_when_no_items_belong_here(monkeypatch) -> None:
+    """Tenant safety: ids that aren't in this course/institution must not be
+    grouped — the query returns nothing and the request 404s."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", lambda table, params: [])
+
+    def fail_insert(*args, **kwargs):
+        raise AssertionError("must not create a set with no valid items")
+
+    monkeypatch.setattr(practice.db, "insert", fail_insert)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/course-1/set/from-items",
+                json={"item_ids": ["foreign-1"]},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+
+
+def test_set_from_items_rejects_a_cross_skill_batch(monkeypatch) -> None:
+    """A set is scoped to one skill (quiz_sets.skill_id is NOT NULL), so a
+    mixed-skill bridge request is a 422, not a silently mislabeled set."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(
+        practice.db, "select",
+        lambda table, params: [
+            {"id": "item-1", "skill_id": "skill-1", "prompt": "Q1", "choices": [], "bloom_level": None},
+            {"id": "item-2", "skill_id": "skill-2", "prompt": "Q2", "choices": [], "bloom_level": None},
+        ],
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/course-1/set/from-items",
+                json={"item_ids": ["item-1", "item-2"]},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+def test_set_from_items_422s_on_empty_ids(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set/from-items", json={"item_ids": []})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    captured = {}
+
+    def fake_select(table, params):
+        captured.update(params)
+        return [
+            {"id": "set-2", "skill_id": "skill-1", "kind": "practice", "size": 5,
+             "created_at": "2026-02-02T00:00:00Z"},
+            {"id": "set-1", "skill_id": "skill-1", "kind": "practice", "size": 3,
+             "created_at": "2026-02-01T00:00:00Z"},
+        ]
+
+    monkeypatch.setattr(practice.db, "select", fake_select)
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/course-1/sets?skill_id=skill-1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [s["setId"] for s in body["sets"]] == ["set-2", "set-1"]
+    assert body["sets"][0]["size"] == 5
+    assert captured["skill_id"] == "eq.skill-1"
+    assert captured["order"] == "created_at.desc"
+
+
+def test_get_set_returns_its_items_in_order(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+
+    def fake_select(table, params):
+        if table == "quiz_sets":
+            return [{"id": "set-1", "skill_id": "skill-1", "kind": "practice",
+                     "size": 2, "created_at": "2026-02-01T00:00:00Z"}]
+        if table == "generated_items":
+            return [
+                {"id": "item-1", "skill_id": "skill-1", "prompt": "Q1",
+                 "choices": [{"id": "a", "label": "A"}], "bloom_level": "apply"},
+                {"id": "item-2", "skill_id": "skill-1", "prompt": "Q2",
+                 "choices": [{"id": "b", "label": "B"}], "bloom_level": "apply"},
+            ]
+        return []
+
+    monkeypatch.setattr(practice.db, "select", fake_select)
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/course-1/sets/set-1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["setId"] == "set-1"
+    assert [i["id"] for i in body["items"]] == ["item-1", "item-2"]
+
+
+def test_get_set_404s_for_another_course(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    # quiz_sets lookup filtered by course returns nothing -> 404, no items read.
+    monkeypatch.setattr(practice.db, "select", lambda table, params: [])
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/course-2/sets/set-from-course-1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404

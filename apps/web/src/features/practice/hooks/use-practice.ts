@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createPracticeSetFromItems,
   fetchNextPracticeItem,
   fetchPracticeSet,
+  fetchPracticeSetById,
+  fetchPracticeSets,
   submitPracticeAttempt,
 } from "@/features/practice/api/practice.api";
 
@@ -35,6 +38,40 @@ export function usePracticeSet(courseId: string, skillId: string, size = 5) {
     queryFn: () => fetchPracticeSet(courseId, { skillId, size }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+  });
+}
+
+// Load a SAVED set by id — test mode re-entering a set the student already has
+// (the study->test bridge handoff, or a retake). Mirrors usePracticeSet's
+// caching discipline: the set is immutable once loaded.
+export function usePracticeSetById(courseId: string, setId: string | null) {
+  return useQuery({
+    queryKey: ["practice", courseId, "saved-set", setId],
+    queryFn: () => fetchPracticeSetById(courseId, setId as string),
+    enabled: Boolean(setId),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
+// The retake list for a skill. Plain read; refetch on focus is fine here.
+export function usePracticeSets(courseId: string, skillId?: string) {
+  return useQuery({
+    queryKey: ["practice", courseId, "sets", skillId ?? "all"],
+    queryFn: () => fetchPracticeSets(courseId, skillId),
+  });
+}
+
+// The study -> test bridge: group studied items into a set. Not a query — it
+// is a one-shot action the caller then navigates with, so a mutation is the
+// honest shape. Invalidates the retake list so a new set shows up there.
+export function useCreateSetFromItems(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemIds: string[]) => createPracticeSetFromItems(courseId, itemIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["practice", courseId, "sets"] });
+    },
   });
 }
 

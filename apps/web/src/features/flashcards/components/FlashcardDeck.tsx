@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
 import { TransitionPanel } from "@/components/motion/transition-panel";
 import { BrainIcon } from "@/components/ui/brain";
@@ -19,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
+import { useCreateSetFromItems } from "@/features/practice";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
 import type {
@@ -86,8 +88,10 @@ export function FlashcardDeck({
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
   const review = useReviewFlashcard(courseId);
+  const testMe = useCreateSetFromItems(courseId);
   const hint = useTutorAsk(courseId);
   const explain = useTutorAsk(courseId);
   const followUp = useTutorAsk(courseId);
@@ -150,6 +154,7 @@ export function FlashcardDeck({
   const total = data.cards.length;
 
   if (deckDone) {
+    const canTest = Boolean(skillId) && data.cards.length > 0;
     return (
       <StudySurface
         bar={
@@ -162,7 +167,16 @@ export function FlashcardDeck({
         }
         dock={
           <ComposeDock
-            primary={{ label: "Reload deck", onClick: reloadDeck, icon: ArrowRightIcon }}
+            primary={
+              canTest
+                ? {
+                    label: testMe.isPending ? "Building your test…" : "Test me on these",
+                    onClick: testMeOnThese,
+                    disabled: testMe.isPending,
+                    icon: ArrowRightIcon,
+                  }
+                : { label: "Reload deck", onClick: reloadDeck, icon: ArrowRightIcon }
+            }
           />
         }
       >
@@ -179,6 +193,17 @@ export function FlashcardDeck({
               Missed cards resurface sooner, so your next pass is exactly what your schedule says
               you need.
             </p>
+            {canTest ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Ready to prove it? A test on these same cards is graded, and it moves your
+                mastery — studying alone doesn't.
+              </p>
+            ) : null}
+            <div className="mt-4">
+              <Button variant="outline" size="sm" onClick={reloadDeck}>
+                Reload deck
+              </Button>
+            </div>
           </div>
         </StudyStream>
       </StudySurface>
@@ -214,6 +239,26 @@ export function FlashcardDeck({
     setDeckDone(false);
     setIndex(0);
     refetch();
+  }
+
+  // The study -> test bridge. Groups the exact cards just studied into a quiz
+  // set (no regeneration) and enters test mode on it. Only offered for a
+  // single-skill deck: a set is per-skill, so the cross-skill "review what's
+  // due" deck has no one topic to test against.
+  function testMeOnThese() {
+    if (!data || !skillId) return;
+    testMe.mutate(
+      data.cards.map((c) => c.itemId),
+      {
+        onSuccess: (set) => {
+          if (!set.setId) return;
+          navigate({
+            to: "/course/practice",
+            search: { skillId, setId: set.setId },
+          });
+        },
+      }
+    );
   }
 
   function askHint() {
