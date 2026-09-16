@@ -290,6 +290,23 @@ def _attempt_view(row: dict | None) -> dict:
     }
 
 
+def _item_counts_by_set(*, institution_id: str, set_ids: list[str]) -> dict[str, int]:
+    """How many items each set actually holds, keyed by set_id. One query for
+    a whole page of sets, so the list does not make the detail's count a lie.
+    """
+    if not set_ids:
+        return {}
+    rows = db.select("generated_items", {
+        "set_id": f"in.({','.join(set_ids)})",
+        "institution_id": f"eq.{institution_id}",
+        "select": "set_id",
+    })
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["set_id"]] = counts.get(r["set_id"], 0) + 1
+    return counts
+
+
 @router.get("/{course_id}/sets")
 def list_sets(
     course_id: str,
@@ -314,11 +331,21 @@ def list_sets(
         institution_id=user.institution_id, user_id=user.user_id,
         set_ids=[r["id"] for r in rows],
     )
+    # Derive the count from the items that ACTUALLY exist rather than trusting
+    # quiz_sets.size. That column is written at creation and corrected after a
+    # partial batch, but a correction can be missed (a Lambda timing out
+    # mid-request, a crash between generation and the follow-up update), and
+    # when it is the list claims one number while the detail shows another —
+    # "5 questions" opening onto 3. The item count is the truth; the column is
+    # a cache of it. One grouped query for the whole page.
+    counts = _item_counts_by_set(
+        institution_id=user.institution_id, set_ids=[r["id"] for r in rows],
+    )
     return {
         "courseId": course_id,
         "sets": [{
             "setId": r["id"], "skillId": r["skill_id"], "kind": r["kind"],
-            "size": r["size"], "createdAt": r["created_at"],
+            "size": counts.get(r["id"], 0), "createdAt": r["created_at"],
             **_attempt_view(attempts.get(r["id"])),
         } for r in rows],
     }

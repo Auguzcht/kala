@@ -578,6 +578,12 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
             # set-2 attempted once, correct; set-1 never attempted (absent).
             return [{"set_id": "set-2", "attempted_count": 3, "correct_count": 2,
                      "last_attempted_at": "2026-02-03T00:00:00Z"}]
+        if table == "generated_items":
+            # The count is now DERIVED from the items, not read off the
+            # quiz_sets.size column (which can go stale when a partial batch's
+            # correction is missed). set-2 really holds 5, set-1 holds 3.
+            return ({"set_id": s} for s in
+                    ["set-2"] * 5 + ["set-1"] * 3)
         captured.update(params)
         return [
             {"id": "set-2", "skill_id": "skill-1", "kind": "practice", "size": 5,
@@ -598,6 +604,7 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
     body = response.json()
     assert [s["setId"] for s in body["sets"]] == ["set-2", "set-1"]
     assert body["sets"][0]["size"] == 5
+    assert body["sets"][1]["size"] == 3
     # Attempt metadata is per-student and rides along on each set.
     assert body["sets"][0]["attemptedCount"] == 3
     assert body["sets"][0]["correctCount"] == 2
@@ -873,3 +880,31 @@ def test_practice_set_502s_only_when_every_item_fails(monkeypatch) -> None:
 
     assert response.status_code == 502
     assert deleted == [("quiz_sets", {"id": "eq.set-1"})]
+
+
+def test_list_sets_reports_actual_item_count_not_the_stale_size_column(monkeypatch) -> None:
+    """The bug this fixes: quiz_sets.size is written at creation and corrected
+    after a partial batch, but a correction can be missed (a Lambda timing out
+    mid-request), so a set could claim 5 questions while holding 3. The list
+    must report what is actually there."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+
+    def fake_select(table, params):
+        if table == "quiz_set_attempts":
+            return []
+        if table == "generated_items":
+            return [{"set_id": "set-stale"}] * 3  # only 3 items really exist
+        return [{"id": "set-stale", "skill_id": "skill-1", "kind": "practice",
+                 "size": 5, "created_at": "2026-02-02T00:00:00Z",  # column lies
+                 }]
+
+    monkeypatch.setattr(practice.db, "select", fake_select)
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/course-1/sets")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["sets"][0]["size"] == 3  # derived, not the column's 5
