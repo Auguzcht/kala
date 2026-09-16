@@ -63,12 +63,11 @@ class Settings(BaseSettings):
     # surface as a raw 500 from every model-backed endpoint until
     # ai/bedrock.py learned to translate it (see _openrouter_converse).
     #
-    # Fast/default = nex-agi/nex-n2.5-mini (verified live, ~3s answers): an
-    # instruction-tuned model that produces short, grounded tutor prose.
-    # Reasoning/premium = nex-agi/nex-n2.5-pro, the larger sibling, for the
-    # background work already routed through the reasoning role (grading
-    # explanations, misconception + item generation) where latency is
-    # tolerable and quality matters more.
+    # The defaults favour InclusionAI's general-purpose Flash model for
+    # conversational turns. Nex AGI remains out of the primary rotation: it
+    # was listed but served repeated 503s/read timeouts in production on
+    # 2026-09-15. Generated study questions use the dedicated model below:
+    # unlike the free InclusionAI route, it supports JSON Schema output.
     #
     # Deliberately NOT the NVIDIA nemotron free models despite their headline
     # speed: both leak their full chain of thought into the message content
@@ -84,16 +83,27 @@ class Settings(BaseSettings):
         default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL",
     )
     openrouter_model_fast: str = Field(
-        default="nex-agi/nex-n2.5-mini:free", alias="OPENROUTER_MODEL_FAST",
+        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_FAST",
     )
     openrouter_model_default: str = Field(
-        default="nex-agi/nex-n2.5-mini:free", alias="OPENROUTER_MODEL_DEFAULT",
+        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_DEFAULT",
     )
     openrouter_model_reasoning: str = Field(
-        default="nex-agi/nex-n2.5-pro:free", alias="OPENROUTER_MODEL_REASONING",
+        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_REASONING",
     )
     openrouter_model_premium: str = Field(
-        default="nex-agi/nex-n2.5-pro:free", alias="OPENROUTER_MODEL_PREMIUM",
+        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_PREMIUM",
+    )
+    openrouter_model_item: str = Field(
+        default="liquid/lfm-2.5-2.6b:free",
+        alias="OPENROUTER_MODEL_ITEM",
+    )
+    # A different provider, not merely another InclusionAI model. Free
+    # providers can be listed and still be temporarily saturated, so chat
+    # needs one bounded cross-provider retry before surfacing a 502.
+    openrouter_model_fallback: str = Field(
+        default="deepseek/deepseek-v4.1-flash:free",
+        alias="OPENROUTER_MODEL_FALLBACK",
     )
     # Nemotron 3 Embed 1B natively outputs 2048 dims; ai/bedrock.py slices to
     # the first 1024 and re-normalizes (NVIDIA's own documented technique for

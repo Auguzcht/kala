@@ -1,6 +1,7 @@
 import math
 
 from app.ai import bedrock
+from app.ai.errors import ModelUnavailableError
 
 
 def test_truncate_and_renormalize_shrinks_to_target_dims():
@@ -95,6 +96,95 @@ def test_converse_dispatches_to_openrouter_when_configured(monkeypatch):
     result = bedrock.converse(model_id="m", system="s", messages=[{"role": "user", "content": [{"text": "hi"}]}])
     assert result == "ok"
     assert called["hit"] is True
+
+
+def test_openrouter_converse_retries_a_transient_failure_with_fallback(monkeypatch):
+    """A listed free model can still have an unavailable provider. The
+    fallback must be a one-shot retry on a separately configured model, not an
+    unbounded retry loop that runs through Lambda's gateway timeout."""
+    monkeypatch.setattr(bedrock, "get_settings", lambda: type("S", (), {
+        "ai_provider": "openrouter",
+        "openrouter_model_fallback": "fallback-model",
+    })())
+    attempted = []
+
+    def fake_openrouter_converse(*, model_id, system, messages, max_tokens):
+        attempted.append(model_id)
+        if model_id == "primary-model":
+            raise ModelUnavailableError(
+                "provider unavailable", provider="openrouter", model_id=model_id, status_code=503,
+            )
+        return "fallback answer"
+
+    monkeypatch.setattr(bedrock, "_openrouter_converse", fake_openrouter_converse)
+    result = bedrock.converse(
+        model_id="primary-model", system="s", messages=[{"role": "user", "content": [{"text": "hi"}]}],
+    )
+    assert result == "fallback answer"
+    assert attempted == ["primary-model", "fallback-model"]
+
+
+def test_openrouter_converse_sends_structured_output_contract(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "{\"prompt\": \"Q\"}"}}]}
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, path, json):
+            captured["path"] = path
+            captured["body"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(bedrock, "_openrouter_client", lambda: FakeClient())
+    response_format = {"type": "json_schema", "json_schema": {"name": "study_question"}}
+    result = bedrock._openrouter_converse(
+        model_id="model",
+        system="system",
+        messages=[{"role": "user", "content": [{"text": "prompt"}]}],
+        max_tokens=100,
+        response_format=response_format,
+    )
+
+    assert result == '{"prompt": "Q"}'
+    assert captured["path"] == "/chat/completions"
+    assert captured["body"]["response_format"] == response_format
+    assert captured["body"]["provider"] == {"require_parameters": True}
+
+
+def test_openrouter_converse_does_not_retry_a_bad_api_key(monkeypatch):
+    monkeypatch.setattr(bedrock, "get_settings", lambda: type("S", (), {
+        "ai_provider": "openrouter",
+        "openrouter_model_fallback": "fallback-model",
+    })())
+    attempted = []
+
+    def fake_openrouter_converse(*, model_id, system, messages, max_tokens):
+        attempted.append(model_id)
+        raise ModelUnavailableError(
+            "bad key", provider="openrouter", model_id=model_id, status_code=401,
+        )
+
+    monkeypatch.setattr(bedrock, "_openrouter_converse", fake_openrouter_converse)
+    try:
+        bedrock.converse(
+            model_id="primary-model", system="s", messages=[{"role": "user", "content": [{"text": "hi"}]}],
+        )
+    except ModelUnavailableError:
+        pass
+    else:
+        raise AssertionError("the 401 must not be retried")
+    assert attempted == ["primary-model"]
 
 
 def test_converse_dispatches_to_bedrock_by_default(monkeypatch):

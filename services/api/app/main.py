@@ -9,6 +9,7 @@ from mangum import Mangum
 
 from app.ai.errors import ModelUnavailableError
 from app.config import get_settings
+from app.learn.items import ItemGenerationError
 from app.lti.routes import router as lti_router
 from app.routers.courses import router as courses_router
 from app.routers.dashboard import router as dashboard_router
@@ -37,6 +38,15 @@ def _model_unavailable(_request: Request, exc: ModelUnavailableError) -> JSONRes
         status_code=status.HTTP_502_BAD_GATEWAY,
         content={"detail": str(exc)},
     )
+
+
+@app.exception_handler(ItemGenerationError)
+def _item_generation_failed(_request: Request, exc: ItemGenerationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
+
 
 _settings = get_settings()
 app.add_middleware(

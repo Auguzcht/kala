@@ -3,14 +3,21 @@ from app.learn import items as item_gen
 
 def test_generate_question_persists_answer_key_and_returns_sanitized_view(monkeypatch) -> None:
     inserted = []
+    requested_tasks = []
+    request = {}
 
     monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [{"chunk_text": "Photosynthesis converts light to energy."}])
     monkeypatch.setattr(
+        item_gen,
+        "get_model_for",
+        lambda task: requested_tasks.append(task) or "item-model",
+    )
+    monkeypatch.setattr(
         item_gen.bedrock,
         "converse",
-        lambda **kwargs: (
+        lambda **kwargs: request.update(kwargs) or (
             '{"prompt": "What does photosynthesis convert?", '
-            '"choices": [{"id": "a", "label": "Light to energy"}, {"id": "b", "label": "Energy to light"}], '
+            '"choices": [{"id": "a", "label": "Light to chemical energy"}, {"id": "b", "label": "Chemical energy to light"}, {"id": "c", "label": "Heat to glucose"}, {"id": "d", "label": "Water to oxygen"}], '
             '"correct_choice_id": "a", "explanation": "Plants convert light into chemical energy."}'
         ),
     )
@@ -29,27 +36,62 @@ def test_generate_question_persists_answer_key_and_returns_sanitized_view(monkey
         "skillId": "skill-1",
         "bloomLevel": "understand",
         "prompt": "What does photosynthesis convert?",
-        "choices": [{"id": "a", "label": "Light to energy"}, {"id": "b", "label": "Energy to light"}],
+        "choices": [{"id": "a", "label": "Light to chemical energy"}, {"id": "b", "label": "Chemical energy to light"}, {"id": "c", "label": "Heat to glucose"}, {"id": "d", "label": "Water to oxygen"}],
     }
     assert "correct_choice_id" not in result
     assert inserted[0]["correct_choice_id"] == "a"
+    assert requested_tasks == ["item"]
+    assert request["response_format"] == item_gen._MCQ_RESPONSE_FORMAT
 
 
-def test_generate_question_falls_back_when_model_output_is_unusable(monkeypatch) -> None:
+def test_generate_question_rejects_unusable_model_output_without_storing(monkeypatch) -> None:
+    inserted = []
     monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
     monkeypatch.setattr(item_gen.bedrock, "converse", lambda **kwargs: "not json")
     monkeypatch.setattr(
         item_gen.db, "insert",
-        lambda table, rows: [{"id": "item-fallback", **rows[0]}],
+        lambda table, rows: inserted.extend(rows) or [{"id": "should-not-exist", **rows[0]}],
     )
 
     skill = {"id": "skill-2", "name": "Osmosis", "bloom_level": "remember"}
-    result = item_gen.generate_question(
-        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        )
+        assert False, "expected ItemGenerationError"
+    except item_gen.ItemGenerationError:
+        pass
+    assert inserted == []
+
+
+def test_generate_question_rejects_two_choice_output_without_storing(monkeypatch) -> None:
+    inserted = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(
+        item_gen.bedrock,
+        "converse",
+        lambda **kwargs: (
+            '{"prompt": "Which statement best matches osmosis?", '
+            '"choices": [{"id": "a", "label": "Water movement"}, {"id": "b", "label": "None"}], '
+            '"correct_choice_id": "a", "explanation": ""}'
+        ),
+    )
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "should-not-exist", **rows[0]}],
     )
 
-    assert result["id"] == "item-fallback"
-    assert len(result["choices"]) >= 2
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1",
+            course_id="course-1",
+            skill={"id": "skill-2", "name": "Osmosis"},
+            kind="practice",
+        )
+        assert False, "expected ItemGenerationError"
+    except item_gen.ItemGenerationError:
+        pass
+    assert inserted == []
 
 
 def test_grade_compares_against_the_stored_answer_key_not_the_client(monkeypatch) -> None:

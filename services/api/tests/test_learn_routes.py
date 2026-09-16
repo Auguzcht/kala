@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from app.deps import CurrentUser, get_current_user
+from app.learn.items import ItemGenerationError
 from app.main import app
 from app.routers import flashcards, practice
 
@@ -45,6 +46,30 @@ def test_practice_next_generates_an_item_for_the_weakest_skill(monkeypatch) -> N
 
     assert response.status_code == 200
     assert response.json()["item"]["id"] == "item-1"
+
+
+def test_practice_next_returns_safe_502_when_generation_is_invalid(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(
+        practice.item_gen,
+        "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+
+    def raise_invalid(**kwargs):
+        raise ItemGenerationError("Kala could not create a valid question. Please try again.")
+
+    monkeypatch.setattr(practice.item_gen, "generate_question", raise_invalid)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/course-1/next")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "detail": "Kala could not create a valid question. Please try again.",
+    }
 
 
 def test_practice_submit_writes_evidence_and_updates_the_tracer(monkeypatch) -> None:

@@ -16,6 +16,7 @@ def get_model_for(task: str) -> str:
             "fast": s.openrouter_model_fast,
             "tag": s.openrouter_model_fast,
             "default": s.openrouter_model_default,
+            "item": s.openrouter_model_item,
             "reasoning": s.openrouter_model_reasoning,
             "premium": s.openrouter_model_premium,
         }
@@ -24,6 +25,7 @@ def get_model_for(task: str) -> str:
             "fast": s.bedrock_model_fast,
             "tag": s.bedrock_model_fast,
             "default": s.bedrock_model_default,
+            "item": s.bedrock_model_default,
             "reasoning": s.bedrock_model_reasoning,
             "premium": s.bedrock_model_premium,
         }

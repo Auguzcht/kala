@@ -9,10 +9,13 @@ client-supplied "correct" flag.
 from __future__ import annotations
 
 import json
+import logging
 
 from app.ai import bedrock, rag
 from app.ai.router import get_model_for
 from app.db import supabase as db
+
+logger = logging.getLogger(__name__)
 
 _MCQ_SYSTEM = (
     "You write a single multiple-choice question grounded ONLY in the "
@@ -23,6 +26,41 @@ _MCQ_SYSTEM = (
     "facts that are not supported by the excerpt."
 )
 
+_MCQ_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "study_question",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string"},
+                "choices": {
+                    "type": "array",
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string", "enum": ["a", "b", "c", "d"]},
+                            "label": {"type": "string"},
+                        },
+                        "required": ["id", "label"],
+                        "additionalProperties": False,
+                    },
+                },
+                "correct_choice_id": {"type": "string", "enum": ["a", "b", "c", "d"]},
+                "explanation": {"type": "string"},
+            },
+            "required": ["prompt", "choices", "correct_choice_id", "explanation"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+
+class ItemGenerationError(RuntimeError):
+    """Raised when model output cannot form a safe study item."""
 
 
 def _parse_json(raw: str) -> dict:
@@ -30,6 +68,35 @@ def _parse_json(raw: str) -> dict:
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     return json.loads(text)
+
+
+def _validated_mcq(raw: str) -> tuple[str, list[dict[str, str]], str, str]:
+    parsed = _parse_json(raw)
+    prompt = parsed.get("prompt")
+    choices = parsed.get("choices")
+    correct_choice_id = parsed.get("correct_choice_id")
+    explanation = parsed.get("explanation", "")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("generated item is missing a prompt")
+    if not isinstance(choices, list) or len(choices) != 4:
+        raise ValueError("generated item must contain exactly four choices")
+    if not isinstance(correct_choice_id, str) or not isinstance(explanation, str):
+        raise ValueError("generated item has invalid answer metadata")
+
+    expected_ids = {"a", "b", "c", "d"}
+    actual_ids: set[str] = set()
+    validated: list[dict[str, str]] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            raise ValueError("generated choice must be an object")
+        choice_id, label = choice.get("id"), choice.get("label")
+        if not isinstance(choice_id, str) or not isinstance(label, str) or not label.strip():
+            raise ValueError("generated choice is missing an id or label")
+        actual_ids.add(choice_id)
+        validated.append({"id": choice_id, "label": label.strip()})
+    if actual_ids != expected_ids or correct_choice_id not in expected_ids:
+        raise ValueError("generated choices must be a, b, c, and d")
+    return prompt.strip(), validated, correct_choice_id, explanation.strip()
 
 
 def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
@@ -49,31 +116,27 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
     context = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
     try:
         raw = bedrock.converse(
-            model_id=get_model_for("default"),
+            model_id=get_model_for("item"),
             system=_MCQ_SYSTEM,
             messages=[{"role": "user", "content": [{"text": json.dumps({
                 "skill": skill["name"], "bloom_level": skill.get("bloom_level"),
                 "excerpt": context,
             })}]}],
-            max_tokens=512,
+            max_tokens=768,
+            response_format=_MCQ_RESPONSE_FORMAT,
         )
-        parsed = _parse_json(raw)
-        choices = parsed["choices"]
-        if not isinstance(choices, list) or len(choices) < 2:
-            raise ValueError("model returned fewer than 2 choices")
-        prompt = parsed["prompt"]
-        correct_choice_id = parsed["correct_choice_id"]
-        explanation = parsed.get("explanation", "")
-    except Exception:
-        # Deterministic fallback keeps the loop usable if generation fails
-        # (model error, malformed JSON, no Bedrock access in this env).
-        prompt = f"Which statement best matches: {skill['name']}?"
-        choices = [
-            {"id": "a", "label": skill["name"]},
-            {"id": "b", "label": "None of the above"},
-        ]
-        correct_choice_id = "a"
-        explanation = ""
+        prompt, choices, correct_choice_id, explanation = _validated_mcq(raw)
+    except Exception as exc:
+        logger.error(
+            "Refusing to store an invalid generated item (course=%s skill=%s kind=%s): %s",
+            course_id,
+            skill.get("id"),
+            kind,
+            exc,
+        )
+        raise ItemGenerationError(
+            "Kala could not create a valid question. Please try again."
+        ) from exc
 
     rows = db.insert("generated_items", [{
         "institution_id": institution_id,

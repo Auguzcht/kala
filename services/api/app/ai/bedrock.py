@@ -21,11 +21,51 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int = 1024) -> str:
+def converse(
+    *,
+    model_id: str,
+    system: str,
+    messages: list[dict],
+    max_tokens: int = 1024,
+    response_format: dict | None = None,
+) -> str:
     s = get_settings()
     if s.ai_provider == "openrouter":
-        return _openrouter_converse(model_id=model_id, system=system, messages=messages, max_tokens=max_tokens)
+        request = {
+            "model_id": model_id,
+            "system": system,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if response_format is not None:
+            request["response_format"] = response_format
+        try:
+            return _openrouter_converse(**request)
+        except ModelUnavailableError as exc:
+            # A model being present in OpenRouter's catalogue does not mean
+            # its provider has capacity. Give transient provider failures one
+            # chance on a separate provider before exposing the outage to the
+            # student. Do not retry bad credentials or malformed requests.
+            fallback = getattr(s, "openrouter_model_fallback", "")
+            if not fallback or fallback == model_id or not _can_fallback(exc):
+                raise
+            logger.warning(
+                "OpenRouter primary unavailable (model=%s, status=%s); retrying with fallback model=%s",
+                model_id, exc.status_code, fallback,
+            )
+            request["model_id"] = fallback
+            return _openrouter_converse(**request)
     return _bedrock_converse(model_id=model_id, system=system, messages=messages, max_tokens=max_tokens)
+
+
+def _can_fallback(exc: ModelUnavailableError) -> bool:
+    """Only retry provider capacity/transport failures, never bad client config.
+
+    ``None`` is an httpx transport error (including a read timeout). A 404 is
+    included because free model IDs can disappear without warning. 400/401/403
+    are deterministic request/key failures and a second model cannot fix them.
+    """
+    return exc.status_code is None or exc.status_code in {404, 408, 429, 500, 502, 503, 504}
 
 
 def embed(text: str, *, input_type: str = "search_document") -> list[float]:
@@ -99,7 +139,7 @@ def _openrouter_client() -> httpx.Client:
             "HTTP-Referer": "https://kala.mmcm.edu.ph",
             "X-Title": "Kala",
         },
-        # 20s, not 60s: this client is called synchronously inside
+        # 8s, not 20s: this client is called synchronously inside
         # user-facing requests (/lti/launch's skill proposal, /skills/propose,
         # tutor, item generation) that run on a 30s Lambda timeout behind an
         # API Gateway HTTP API integration — which hard-caps the wait at 30s
@@ -108,10 +148,10 @@ def _openrouter_client() -> httpx.Client:
         # the platform killed the whole Lambda first, with no exception for
         # the surrounding try/except (_seed_course_skills) to catch — silent
         # "Service Unavailable" instead of the clean "skipped" behavior that
-        # code already has. 20s leaves headroom for whatever else runs in
-        # the same request (DB calls, other content) while still firing well
-        # before the 30s wall.
-        timeout=20.0,
+        # code already has. Eight seconds leaves headroom for DB work and the
+        # single cross-provider fallback attempt in converse() when a free
+        # provider stalls.
+        timeout=8.0,
     )
 
 
@@ -125,19 +165,32 @@ def _flatten_text(content) -> str:
     return "".join(part.get("text", "") for part in content)
 
 
-def _openrouter_converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int) -> str:
+def _openrouter_converse(
+    *,
+    model_id: str,
+    system: str,
+    messages: list[dict],
+    max_tokens: int,
+    response_format: dict | None = None,
+) -> str:
     oai_messages = [{"role": "system", "content": system}]
     for m in messages:
         oai_messages.append({"role": m["role"], "content": _flatten_text(m["content"])})
 
     try:
         with _openrouter_client() as c:
-            r = c.post("/chat/completions", json={
+            payload = {
                 "model": model_id,
                 "messages": oai_messages,
                 "max_tokens": max_tokens,
                 "temperature": 0.2,
-            })
+            }
+            if response_format is not None:
+                payload["response_format"] = response_format
+                # Do not silently route a structured request to a provider
+                # that ignores its schema contract.
+                payload["provider"] = {"require_parameters": True}
+            r = c.post("/chat/completions", json=payload)
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPStatusError as exc:
