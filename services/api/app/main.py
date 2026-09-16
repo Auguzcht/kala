@@ -13,9 +13,6 @@ from app.learn.items import ItemGenerationError
 from app.lti.routes import router as lti_router
 from app.routers.courses import router as courses_router
 from app.routers.dashboard import router as dashboard_router
-# TEMPORARY — read-only LMS payload probe, delete before the pilot ships.
-# See app/routers/debug_lms.py for why it exists.
-from app.routers.debug_lms import router as debug_lms_router
 from app.routers.diagnostic import router as diagnostic_router
 from app.routers.flashcards import router as flashcards_router
 from app.routers.gamification import router as gamification_router
@@ -71,7 +68,6 @@ app.include_router(tutor_router)
 app.include_router(twin_router)
 app.include_router(dashboard_router)
 app.include_router(gamification_router)
-app.include_router(debug_lms_router)
 
 # Lambda entrypoint (referenced by the Dockerfile CMD: app.main.handler)
 handler = Mangum(app)
