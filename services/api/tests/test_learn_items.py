@@ -201,3 +201,94 @@ def test_generate_question_omits_set_id_when_not_batched(monkeypatch) -> None:
     )
 
     assert "set_id" not in inserted[0]
+
+
+# ---- bounded validation retry --------------------------------------------
+# A model call can succeed at the HTTP level and still return an unusable body
+# (malformed/truncated JSON, or a semantically wrong MCQ). bedrock.converse's
+# own retry only covers transport/capability failures, so this second, narrow
+# retry lives here — without it one bad roll in a 5-way POST /set batch 502s
+# the whole set via map_concurrent's all-or-nothing propagation.
+
+_VALID_MCQ = (
+    '{"prompt": "Q?", "choices": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}, '
+    '{"id": "c", "label": "C"}, {"id": "d", "label": "D"}], '
+    '"correct_choice_id": "a", "explanation": "why"}'
+)
+
+
+def test_generate_question_retries_once_on_invalid_output_then_succeeds(monkeypatch) -> None:
+    inserted = []
+    calls = []
+
+    def fake_converse(**kwargs):
+        calls.append(kwargs)
+        # First roll: unusable. Second roll: good.
+        return "not json" if len(calls) == 1 else _VALID_MCQ
+
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(item_gen.bedrock, "converse", fake_converse)
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "item-1", **rows[0]}],
+    )
+
+    skill = {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}
+    result = item_gen.generate_question(
+        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+    )
+
+    assert result["id"] == "item-1"
+    assert len(calls) == 2  # exactly one retry
+    assert inserted[0]["correct_choice_id"] == "a"
+
+
+def test_generate_question_gives_up_after_one_retry(monkeypatch) -> None:
+    """A model that fails twice is a real signal — do not loop. Exactly two
+    attempts, then ItemGenerationError, and nothing persisted."""
+    inserted = []
+    calls = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock, "converse",
+        lambda **kwargs: calls.append(kwargs) or "not json",
+    )
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "x", **rows[0]}],
+    )
+
+    skill = {"id": "skill-2", "name": "Osmosis", "bloom_level": "remember"}
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        )
+        assert False, "expected ItemGenerationError"
+    except item_gen.ItemGenerationError:
+        pass
+
+    assert len(calls) == 2
+    assert inserted == []
+
+
+def test_generate_question_does_not_retry_a_first_try_success(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock, "converse",
+        lambda **kwargs: calls.append(kwargs) or _VALID_MCQ,
+    )
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: [{"id": "item-1", **rows[0]}],
+    )
+
+    skill = {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}
+    item_gen.generate_question(
+        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+    )
+
+    assert len(calls) == 1  # no wasted second call when the first is good

@@ -110,6 +110,23 @@ def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
     return skill["name"]
 
 
+def _call_and_validate(*, skill: dict, context: str) -> tuple[str, list[dict[str, str]], str, str]:
+    """One model call, parsed and validated. Raises on anything unusable —
+    a transport failure, a malformed/truncated body, or a semantically invalid
+    MCQ. The caller decides whether to try again."""
+    raw = bedrock.converse(
+        model_id=get_model_for("item"),
+        system=_MCQ_SYSTEM,
+        messages=[{"role": "user", "content": [{"text": json.dumps({
+            "skill": skill["name"], "bloom_level": skill.get("bloom_level"),
+            "excerpt": context,
+        })}]}],
+        max_tokens=1536,
+        response_format=_MCQ_RESPONSE_FORMAT,
+    )
+    return _validated_mcq(raw)
+
+
 def generate_question(*, institution_id: str, course_id: str, skill: dict, kind: str,
                       set_id: str | None = None) -> dict:
     """Generate one RAG-grounded MCQ for a skill, persist it with its answer
@@ -119,20 +136,36 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
     see routers/practice.py). Optional and backward-compatible: every existing
     caller omits it and gets an ungrouped item exactly as before. Threaded into
     the insert rather than patched after, so an item is never briefly persisted
-    outside the set it was generated for."""
+    outside the set it was generated for.
+
+    One bounded retry on a VALIDATION failure. This is a distinct failure mode
+    from the transport/capability retry inside bedrock.converse: that one
+    catches a call that could not be delivered (5xx, timeout, structured-output
+    rejection). Here the HTTP call succeeded but the body was unusable —
+    malformed or truncated JSON, or a semantically wrong MCQ — which
+    _validated_mcq rejects. Those are independent events, so they get
+    independent retries; a free-tier model that returns garbage once will very
+    often return a good item on a second roll, and without this the failure
+    propagates straight out of map_concurrent (which is all-or-nothing by
+    design) and 502s an entire batch because ONE of five concurrent rolls was
+    bad. Retried once, never looped: a model that fails twice in a row is a
+    real signal, not something to keep hammering.
+    """
     context = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
     try:
-        raw = bedrock.converse(
-            model_id=get_model_for("item"),
-            system=_MCQ_SYSTEM,
-            messages=[{"role": "user", "content": [{"text": json.dumps({
-                "skill": skill["name"], "bloom_level": skill.get("bloom_level"),
-                "excerpt": context,
-            })}]}],
-            max_tokens=1536,
-            response_format=_MCQ_RESPONSE_FORMAT,
-        )
-        prompt, choices, correct_choice_id, explanation = _validated_mcq(raw)
+        try:
+            prompt, choices, correct_choice_id, explanation = _call_and_validate(
+                skill=skill, context=context,
+            )
+        except Exception as first_exc:
+            logger.warning(
+                "Generated item failed validation, retrying once "
+                "(course=%s skill=%s kind=%s): %s",
+                course_id, skill.get("id"), kind, first_exc,
+            )
+            prompt, choices, correct_choice_id, explanation = _call_and_validate(
+                skill=skill, context=context,
+            )
     except Exception as exc:
         logger.error(
             "Refusing to store an invalid generated item (course=%s skill=%s kind=%s): %s",
