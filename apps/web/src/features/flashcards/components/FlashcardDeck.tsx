@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
-import { TransitionPanel } from "@/components/motion/transition-panel";
 import { BrainIcon } from "@/components/ui/brain";
 import { SparklesIcon } from "@/components/ui/sparkles";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
@@ -355,20 +354,39 @@ export function FlashcardDeck({
         <div className="relative border bg-card">
           <CornerBrackets />
 
-          <TransitionPanel
-            activeIndex={phase === "front" ? 0 : 1}
-            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }}
-            className="px-5 py-6"
-          >
-            {[
-              // front — the prompt, the recall beat. Tapping flips (the dock's
-              // "Show answer" is the same action, so a tap-and-a-button both
-              // work); flipping is free and costs no schedule.
+          {/* A real 3D flip, not a content swap. The wrapper supplies the
+              perspective; the inner element is the thing that rotates and
+              carries preserve-3d so its two faces keep their own 3D space. The
+              faces are stacked in ONE grid cell (grid-area 1/1) so the card
+              sizes to whichever side is taller — absolutely positioning them
+              would collapse the container to zero height. Each face hides its
+              backface and the back is pre-rotated, so only the correct side is
+              ever visible.
+
+              Both entry points (tapping the card, and the dock's "Show
+              answer") set the same phase, so they drive the identical
+              rotation rather than one animating and one snapping.
+
+              Reduced motion: the transform transition is dropped entirely, so
+              the flip degrades to the instant swap it has always been, rather
+              than forcing a rotation on someone who asked for less of it. */}
+          <div className="[perspective:1400px] px-5 py-6">
+            <div
+              className={cn(
+                "grid [transform-style:preserve-3d]",
+                !reduceMotion &&
+                  "transition-transform duration-500 [transition-timing-function:cubic-bezier(0.2,0.8,0.25,1)]"
+              )}
+              style={{ transform: phase === "back" ? "rotateY(180deg)" : "rotateY(0deg)" }}
+            >
+              {/* front — the prompt, the recall beat. Tapping flips; flipping
+                  is free and costs no schedule. */}
               <button
-                key="front"
                 type="button"
                 onClick={() => setPhase("back")}
-                className="block w-full space-y-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-hidden={phase === "back"}
+                tabIndex={phase === "back" ? -1 : 0}
+                className="block w-full space-y-5 text-left [backface-visibility:hidden] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [grid-area:1/1]"
               >
                 <p className="text-lg font-medium leading-relaxed text-foreground">
                   {card.prompt}
@@ -382,11 +400,14 @@ export function FlashcardDeck({
                 {hintText ? (
                   <p className="text-sm italic leading-relaxed text-muted-foreground">{hintText}</p>
                 ) : null}
-              </button>,
+              </button>
 
-              // back — the answer, then the self-mark. This is the study move:
-              // the student decides, and that decision drives the schedule.
-              <div key="back" className="space-y-5">
+              {/* back — the answer, then the self-mark. This is the study move:
+                  the student decides, and that decision drives the schedule. */}
+              <div
+                aria-hidden={phase !== "back"}
+                className="space-y-5 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]"
+              >
                 <p className="text-sm text-muted-foreground">{card.prompt}</p>
                 <div className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-3 py-2.5">
                   <p className="text-xs font-medium uppercase tracking-wide text-brand-green-foreground/70">
@@ -482,9 +503,9 @@ export function FlashcardDeck({
                     {explainText}
                   </p>
                 ) : null}
-              </div>,
-            ]}
-          </TransitionPanel>
+              </div>
+            </div>
+          </div>
         </div>
 
         {result ? (
