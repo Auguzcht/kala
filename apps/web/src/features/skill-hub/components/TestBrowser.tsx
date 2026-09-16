@@ -1,6 +1,5 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
-import { ZapIcon } from "@/components/ui/zap";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +9,7 @@ import {
   usePracticeSetById,
   usePracticeSets,
 } from "@/features/practice";
-import type { PracticeSetSummary } from "@/features/practice";
+import type { PracticeSetAttempt, PracticeSetSummary } from "@/features/practice";
 
 // The Test tab's browser: saved sets for one skill, browse before you commit.
 // Picking a set (or generating a new one) opens its DETAIL view — prompts only
@@ -27,6 +26,19 @@ import type { PracticeSetSummary } from "@/features/practice";
 // to ?tab=test&start=1. This browser is for entering Test deliberately.
 
 const SET_SIZE = 5;
+
+// The card header bar's color, cycled through the existing brand tokens. Keyed
+// by a stable hash of the set id rather than list position: the spec asked for
+// cycling-by-index so a set keeps its color across reloads, and hashing gets
+// exactly that while ALSO giving the SAME color to the same set in the detail
+// view (which has no list index to read). No new tokens introduced.
+const BAR_COLORS = ["bg-brand-orange", "bg-brand-gold", "bg-brand-green", "bg-brand-slate"] as const;
+
+function barColor(setId: string): string {
+  let h = 0;
+  for (let i = 0; i < setId.length; i++) h = (h * 31 + setId.charCodeAt(i)) >>> 0;
+  return BAR_COLORS[h % BAR_COLORS.length];
+}
 
 export function TestBrowser({
   courseId,
@@ -46,34 +58,33 @@ export function TestBrowser({
 }) {
   if (setId) {
     return (
-      <SetDetail courseId={courseId} setId={setId} onStart={onStart} onBack={() => onSelectSet("")} />
+      <SetDetail
+        courseId={courseId}
+        setId={setId}
+        onStart={onStart}
+        onBack={() => onSelectSet("")}
+      />
     );
   }
-  return (
-    <SetList courseId={courseId} skillId={skillId} onSelectSet={onSelectSet} />
-  );
+  return <SetList courseId={courseId} skillId={skillId} onSelectSet={onSelectSet} />;
 }
 
-function attemptBadge(set: PracticeSetSummary) {
-  if (set.attemptedCount === null) {
+/** The attempt state as a small scannable pill: muted when untouched, green
+ * when the student has answers on record. Never red — a score here is
+ * informational, not a verdict (the mastery palette reserves red for the
+ * instructor at-risk axis). */
+function AttemptPill({ attempt }: { attempt: PracticeSetAttempt }) {
+  if (attempt.attemptedCount === null) {
     return (
-      <span className="rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
         Not attempted
       </span>
     );
   }
-  const correct = set.correctCount ?? 0;
-  // A score badge is informational, never a grade — no red for "failed".
-  // Gold when everything right, slate otherwise, matching the mastery palette.
-  const allRight = correct === set.attemptedCount && set.attemptedCount > 0;
+  const correct = attempt.correctCount ?? 0;
   return (
-    <span
-      className={cn(
-        "rounded-sm px-1.5 py-0.5 text-[10.5px] font-semibold",
-        allRight ? "bg-brand-gold/20 text-foreground" : "bg-brand-slate/10 text-foreground"
-      )}
-    >
-      {correct}/{set.attemptedCount} correct
+    <span className="inline-flex items-center rounded-full bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
+      {correct}/{attempt.attemptedCount} correct
     </span>
   );
 }
@@ -84,6 +95,13 @@ function fmtDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+/** The 8px full-width bar at the top of every card. Its color is the set's
+ * identity, carried into the detail view so opening a card feels like opening
+ * the same object rather than navigating somewhere unrelated. */
+function CardBar({ setId }: { setId: string }) {
+  return <div className={cn("h-2 w-full rounded-t-[3px]", barColor(setId))} aria-hidden />;
 }
 
 function SetList({
@@ -101,9 +119,10 @@ function SetList({
 
   if (isLoading) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-28 w-full" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
       </div>
     );
   }
@@ -141,62 +160,66 @@ function SetList({
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* Real sets first. */}
-        {sets.map((set) => (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        {/* Real sets. */}
+        {sets.map((set: PracticeSetSummary) => (
           <button
             key={set.setId}
             type="button"
             onClick={() => onSelectSet(set.setId)}
-            className="group border bg-card p-4 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "group flex flex-col overflow-hidden border bg-card text-left",
+              "transition-[border-color,box-shadow] hover:border-foreground/30 hover:shadow-md",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            )}
           >
-            <div className="flex items-start justify-between gap-3">
+            <CardBar setId={set.setId} />
+            <div className="flex flex-1 flex-col gap-3 p-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground group-hover:underline">
+                <p className="font-display text-base font-semibold text-foreground group-hover:underline">
                   {set.size} {set.size === 1 ? "question" : "questions"}
                 </p>
                 <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                   {fmtDate(set.createdAt)}
                 </p>
               </div>
-              <div className="grid size-8 shrink-0 place-items-center rounded-[4px] bg-brand-slate">
-                <ZapIcon size={16} className="text-background" />
+              <div className="mt-auto flex flex-wrap items-center gap-2">
+                <AttemptPill attempt={set} />
+                {set.lastAttemptedAt ? (
+                  <span className="text-[11px] text-muted-foreground">
+                    last {fmtDate(set.lastAttemptedAt)}
+                  </span>
+                ) : null}
               </div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {attemptBadge(set)}
-              {set.lastAttemptedAt ? (
-                <span className="text-[11px] text-muted-foreground">
-                  last {fmtDate(set.lastAttemptedAt)}
-                </span>
-              ) : null}
             </div>
           </button>
         ))}
 
-        {/* Generate — visually distinct (dashed, muted) so it never reads as
-            an existing set you might have already attempted. */}
+        {/* Generate — SAME footprint as a real set card so it sits in the grid
+            as a peer, but a dashed border and centered icon keep it visually
+            distinct: it is an action, not a saved set you might have taken. */}
         <button
           type="button"
           onClick={onGenerate}
           disabled={generate.isPending}
           className={cn(
-            "group flex flex-col justify-center border border-dashed bg-card/50 p-4 text-left",
-            "transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "group flex flex-col items-center justify-center gap-2 rounded-[3px] border border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
+            "transition-[border-color,background-color] hover:border-foreground/40 hover:bg-accent/40",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             generate.isPending && "opacity-60"
           )}
         >
-          <div className="mb-2 grid size-8 place-items-center rounded-[4px] border border-dashed border-muted-foreground/40">
-            <PlusIcon size={16} className="text-muted-foreground" />
+          <div className="grid size-9 place-items-center rounded-full border border-dashed border-muted-foreground/40">
+            <PlusIcon size={18} className="text-muted-foreground" />
           </div>
           <p className="text-sm font-semibold text-foreground">
             {generate.isPending ? "Writing your questions…" : "Generate new set"}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Fresh questions on this skill, {SET_SIZE} at a time.
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Fresh questions, {SET_SIZE} at a time.
           </p>
           {generate.isError ? (
-            <p className="mt-2 text-xs text-destructive">
+            <p className="text-xs text-destructive">
               Kala could not write questions just now. Try again.
             </p>
           ) : null}
@@ -222,6 +245,7 @@ function SetDetail({
   if (isLoading) {
     return (
       <div className="space-y-3">
+        <Skeleton className="h-20 w-full" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
       </div>
@@ -238,36 +262,50 @@ function SetDetail({
   }
 
   const attempted = data.attemptedCount !== null;
+  const attempt: PracticeSetAttempt = {
+    attemptedCount: data.attemptedCount,
+    correctCount: data.correctCount,
+    lastAttemptedAt: data.lastAttemptedAt,
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 border bg-card px-5 py-4">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">
-            {data.items.length} {data.items.length === 1 ? "question" : "questions"}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            {attemptBadge({
-              setId: data.setId, skillId: data.skillId, kind: data.kind,
-              size: data.items.length, createdAt: "",
-              attemptedCount: data.attemptedCount,
-              correctCount: data.correctCount,
-              lastAttemptedAt: data.lastAttemptedAt,
-            })}
-            {data.lastAttemptedAt ? (
-              <span className="text-[11px] text-muted-foreground">
-                last {fmtDate(data.lastAttemptedAt)}
-              </span>
-            ) : null}
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+      >
+        ← All tests
+      </button>
+
+      {/* Header repeats the card's color bar and size/date, so grid -> detail
+          reads as opening the same object. */}
+      <div className="overflow-hidden border bg-card">
+        <CardBar setId={data.setId} />
+        <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <p className="font-display text-lg font-semibold text-foreground">
+              {data.items.length} {data.items.length === 1 ? "question" : "questions"}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <AttemptPill attempt={attempt} />
+              {data.lastAttemptedAt ? (
+                <span className="text-[11px] text-muted-foreground">
+                  last {fmtDate(data.lastAttemptedAt)}
+                </span>
+              ) : null}
+            </div>
           </div>
+          {/* The single action this whole view exists to lead to — solid and
+              high-contrast, not another card in the stack. */}
+          <Button variant="orange" size="lg" onClick={onStart} className="shrink-0">
+            {attempted ? "Retake test" : "Start test"} <ArrowRightIcon size={16} />
+          </Button>
         </div>
-        <Button variant="orange" onClick={onStart} className="shrink-0">
-          {attempted ? "Retake test" : "Start test"} <ArrowRightIcon size={16} />
-        </Button>
       </div>
 
-      {/* Prompts only — no answer key, by design. Grading is server-side on
-          submit; this is a graded test, not a flashcard browse. */}
+      {/* Prompts only — no choices or answers, by design. Grading is
+          server-side on submit; this is a graded test, not a flashcard browse. */}
       <div className="divide-y divide-border border bg-card">
         {data.items.map((item, i) => (
           <div key={item.id} className="flex gap-3 px-5 py-3">
@@ -276,14 +314,6 @@ function SetDetail({
           </div>
         ))}
       </div>
-
-      <button
-        type="button"
-        onClick={onBack}
-        className="text-xs font-semibold text-muted-foreground hover:text-foreground"
-      >
-        ← All tests
-      </button>
     </div>
   );
 }
