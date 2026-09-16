@@ -93,14 +93,32 @@ function HubTab({
       onFocus={icon.play}
       onBlur={icon.stop}
       className={cn(
-        "relative -mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
+        // A segmented control, not a hairline underline. The old active state
+        // was a 2px orange bottom border plus near-identical text, which was
+        // too subtle to read as "you are here" — especially next to the
+        // bordered header above it. Filled background + border + orange icon
+        // makes the selection unambiguous at a glance.
+        "relative -mb-px flex items-center gap-1.5 rounded-t-[3px] border border-b-0 px-3.5 py-2.5 text-sm font-semibold transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-brand-orange text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground"
+          ? "border-border bg-card text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}
     >
-      <Icon ref={icon.ref} size={15} aria-hidden />
+      {/* The active tab's marker: an orange rule on the tab's own top edge,
+          matching the orange used for the current section in the rail. */}
+      {active ? (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 -top-px h-0.5 rounded-full bg-brand-orange"
+        />
+      ) : null}
+      <Icon
+        ref={icon.ref}
+        size={15}
+        aria-hidden
+        className={active ? "text-brand-orange" : undefined}
+      />
       {label}
     </button>
   );
@@ -267,7 +285,7 @@ function SkillHubFrame({
       <div
         role="tablist"
         aria-label="Study modes"
-        className="mt-4 flex items-center gap-1 border-b"
+        className="mt-4 flex items-end gap-1 border-b"
       >
         {TABS.map(({ id, label, icon }) => (
           <HubTab
