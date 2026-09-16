@@ -1,8 +1,9 @@
 """Worker settings. Deliberately a slim duplicate of services/api/app/config.py,
 not a shared import — see app/handler.py's module docstring for why. Only the
-fields the worker's jobs actually touch are kept here: Supabase access and the
-embedding provider path (twin reconciliation and readiness need Supabase only;
-the embedding backfill job needs the same provider switch the api uses).
+fields the worker's jobs actually touch are kept here: Supabase access, the
+embedding provider path (embed backfill needs the same provider switch the api
+uses), and the tag model (tag backfill classifies chunks against the same
+OpenRouter model the api's tagger uses).
 
 If a setting here drifts from the api's copy, that is a real risk (e.g. an
 embedding model change made in one place and not the other). Grep both files
@@ -45,7 +46,9 @@ class Settings(BaseSettings):
     bedrock_embed_model: str = Field(default="", alias="BEDROCK_EMBED_MODEL")
 
     # Same provider switch as services/api (see that config.py for the full
-    # rationale). The worker only ever calls embed(), never converse().
+    # rationale). The worker calls embed() for the backfill job and the tag
+    # model for the tag-backfill job; it never calls converse() for anything
+    # else.
     ai_provider: str = Field(default="bedrock", alias="AI_PROVIDER")
     embed_provider: str = Field(default="", alias="EMBED_PROVIDER")
 
@@ -55,6 +58,19 @@ class Settings(BaseSettings):
     )
     openrouter_embed_model: str = Field(
         default="nvidia/nemotron-3-embed-1b:free", alias="OPENROUTER_EMBED_MODEL",
+    )
+
+    # The tag model. MUST match services/api/app/config.py's openrouter_model_fast
+    # (the api maps both the "fast" and "tag" roles to that one key). The tag
+    # backfill job classifies chunks against this model, so a change on the api
+    # side that is not mirrored here would tag with a different (possibly
+    # free-tier, rate-limited) model than the request path uses. The default
+    # here is the paid, structured-output-reliable model the api settled on
+    # after a free model's daily allowance kept returning empty tags. Kept
+    # env-overridable (OPENROUTER_MODEL_FAST) so a provider swap stays a config
+    # change, never a code one — same contract as the api.
+    openrouter_model_fast: str = Field(
+        default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_FAST",
     )
 
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
