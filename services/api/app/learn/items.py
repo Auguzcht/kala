@@ -129,7 +129,7 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
                 "skill": skill["name"], "bloom_level": skill.get("bloom_level"),
                 "excerpt": context,
             })}]}],
-            max_tokens=768,
+            max_tokens=1536,
             response_format=_MCQ_RESPONSE_FORMAT,
         )
         prompt, choices, correct_choice_id, explanation = _validated_mcq(raw)

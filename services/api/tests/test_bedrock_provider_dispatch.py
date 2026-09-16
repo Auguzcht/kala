@@ -260,3 +260,137 @@ def test_openai_embed_requests_1024_dimensions_directly(monkeypatch):
     assert len(out) == 1024
     assert captured["body"]["dimensions"] == 1024
     assert captured["body"]["model"] == "text-embedding-3-small"
+
+
+# ---- structured-output capability degradation ----------------------------
+# Reproduced live (2026-09-16): a model whose providers don't advertise
+# json_schema returns 404 {"No endpoints found that can handle the requested
+# parameters"} when response_format + provider.require_parameters are sent.
+# Free-tier models churn, so this must degrade to prompt-enforced JSON instead
+# of failing the request — otherwise every model retirement re-breaks item
+# generation.
+
+
+def _settings(provider="openrouter", model_item="m", fallback=""):
+    return type("S", (), {
+        "ai_provider": provider, "openrouter_model_fallback": fallback,
+        "openrouter_base_url": "https://example.test", "openrouter_api_key": "k",
+    })()
+
+
+def _routes(handler):
+    """Build a fake client whose post() delegates to `handler(payload)`,
+    returning either a json body or raising an httpx.HTTPStatusError."""
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, path, json):
+            return handler(json)
+
+    return FakeClient()
+
+
+def _resp(payload):
+    class R:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return payload
+    return R()
+
+
+def _err(status, body):
+    import httpx
+
+    class R:
+        status_code = status
+        text = body
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError("err", request=None, response=self)
+
+        def json(self):
+            return {}
+    return R()
+
+
+def test_is_provider_parameter_rejection_distinguishes_404_causes():
+    assert bedrock._is_provider_parameter_rejection(
+        '{"error":{"message":"No endpoints found that can handle the requested '
+        'parameters. To learn more about provider routing, visit: ..."}}'
+    )
+    # An unknown/retired model is ALSO a 404 but must NOT be treated as a
+    # degradable capability gap.
+    assert not bedrock._is_provider_parameter_rejection(
+        '{"error":{"message":"No endpoints found for google/x:free."}}'
+    )
+
+
+def test_structured_request_degrades_when_provider_rejects_parameters(monkeypatch):
+    """First attempt (with response_format) 404s on the routing filter; the
+    retry without it must succeed and the content must come back."""
+    attempts = []
+
+    def handler(payload):
+        attempts.append(payload)
+        if "response_format" in payload:
+            return _err(404, '{"error":{"message":"No endpoints found that can '
+                             'handle the requested parameters. To learn more '
+                             'about provider routing, visit: x"}}')
+        return _resp({"choices": [{"message": {"content": '{"prompt":"ok"}'}}]})
+
+    monkeypatch.setattr(bedrock, "get_settings", lambda: _settings())
+    monkeypatch.setattr(bedrock, "_openrouter_client", lambda: _routes(handler))
+
+    out = bedrock._openrouter_converse(
+        model_id="m", system="s", messages=[{"role": "user", "content": [{"text": "u"}]}],
+        max_tokens=100, response_format={"type": "json_schema"},
+    )
+
+    assert out == '{"prompt":"ok"}'
+    assert len(attempts) == 2
+    assert "response_format" in attempts[0]
+    assert "response_format" not in attempts[1]
+    # The degradation retry must also drop require_parameters — that filter is
+    # what produced the 404, and there is no schema to require without a format.
+    assert "provider" not in attempts[1]
+
+
+def test_unknown_model_404_does_not_retry(monkeypatch):
+    """A retired model id is fatal — retrying cannot help, so it must surface
+    as ModelUnavailableError after ONE attempt, not loop."""
+    attempts = []
+
+    def handler(payload):
+        attempts.append(payload)
+        return _err(404, '{"error":{"message":"No endpoints found for x:free."}}')
+
+    monkeypatch.setattr(bedrock, "get_settings", lambda: _settings())
+    monkeypatch.setattr(bedrock, "_openrouter_client", lambda: _routes(handler))
+
+    try:
+        bedrock._openrouter_converse(
+            model_id="x:free", system="s",
+            messages=[{"role": "user", "content": [{"text": "u"}]}],
+            max_tokens=100, response_format={"type": "json_schema"},
+        )
+        assert False, "expected ModelUnavailableError"
+    except ModelUnavailableError as exc:
+        assert exc.model_not_found is True
+
+    assert len(attempts) == 1
+
+
+def test_openrouter_content_tolerates_null_and_empty_choices():
+    """A model that emits only a reasoning field, or no choices at all, must
+    yield '' — not a KeyError that surfaces as an opaque parse failure."""
+    assert bedrock._openrouter_content({"choices": [{"message": {"content": None}}]}) == ""
+    assert bedrock._openrouter_content({"choices": []}) == ""
+    assert bedrock._openrouter_content({}) == ""

@@ -178,23 +178,49 @@ def _openrouter_converse(
         oai_messages.append({"role": m["role"], "content": _flatten_text(m["content"])})
 
     try:
-        with _openrouter_client() as c:
-            payload = {
-                "model": model_id,
-                "messages": oai_messages,
-                "max_tokens": max_tokens,
-                "temperature": 0.2,
-            }
-            if response_format is not None:
-                payload["response_format"] = response_format
-                # Do not silently route a structured request to a provider
-                # that ignores its schema contract.
-                payload["provider"] = {"require_parameters": True}
-            r = c.post("/chat/completions", json=payload)
-            r.raise_for_status()
-            data = r.json()
+        data = _openrouter_post(
+            model_id=model_id, messages=oai_messages,
+            max_tokens=max_tokens, response_format=response_format,
+        )
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code
+        # Structured-output capability gap, not an outage. Our system prompts
+        # already say "return strict JSON and nothing else", so response_format
+        # is an ENHANCEMENT — a hard constraint only when the model's providers
+        # advertise support. Free-tier churn means a model that supported
+        # json_schema last week may 404 ``{"No endpoints found that can handle
+        # the requested parameters"}`` today (response_format + the
+        # require_parameters routing filter). Degrade to prompt-enforced JSON
+        # once and carry on, rather than failing the whole request: this is
+        # what keeps item generation alive across model churn without needing
+        # someone to re-curate OPENROUTER_MODEL_* every time a provider drops
+        # structured output.
+        if (
+            response_format is not None
+            and status_code == 404
+            and _is_provider_parameter_rejection(exc.response.text)
+        ):
+            logger.warning(
+                "OpenRouter model %s cannot route a structured request; "
+                "retrying without response_format and relying on the prompt's "
+                "JSON instruction.", model_id,
+            )
+            try:
+                data = _openrouter_post(
+                    model_id=model_id, messages=oai_messages,
+                    max_tokens=max_tokens, response_format=None,
+                )
+            except httpx.HTTPStatusError as retry_exc:
+                exc = retry_exc
+                status_code = retry_exc.response.status_code
+            except httpx.HTTPError as retry_exc:
+                logger.error("OpenRouter request errored (model=%s): %s", model_id, retry_exc)
+                raise ModelUnavailableError(
+                    "Kala's model provider is unavailable right now. Please try again.",
+                    provider="openrouter", model_id=model_id,
+                ) from retry_exc
+            else:
+                return _openrouter_content(data)
         # 404 from OpenRouter means the MODEL ID DOES NOT EXIST, nearly always
         # because a free-tier model was retired upstream. That is a config
         # problem, not an outage, and it is the failure that used to take
@@ -228,7 +254,69 @@ def _openrouter_converse(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=model_id,
         ) from exc
-    return data["choices"][0]["message"]["content"] or ""
+    return _openrouter_content(data)
+
+
+def _is_provider_parameter_rejection(body: str) -> bool:
+    """True when OpenRouter's 404 is specifically its routing filter rejecting
+    the request's parameters (e.g. response_format unsupported by every
+    endpoint for that model), NOT an unknown model id.
+
+    Both are 404s, so they must be told apart: an unknown model is fatal (a
+    retry can't help and the id needs changing), while a parameter rejection
+    is recoverable by dropping the parameter and relying on the prompt. The
+    distinguishing text is OpenRouter's own routing-funnel message.
+    """
+    text = body.lower()
+    return "no endpoints found" in text and (
+        "requested parameters" in text or "provider routing" in text
+    )
+
+
+def _openrouter_post(
+    *,
+    model_id: str,
+    messages: list[dict],
+    max_tokens: int,
+    response_format: dict | None,
+) -> dict:
+    """One OpenRouter chat completion. Raises httpx.HTTPStatusError on a
+    non-2xx so the caller can classify it (structured-output rejection vs
+    unknown model vs outage).
+
+    ``require_parameters`` is only set WITH a response_format: it is the
+    routing filter that guarantees we never silently land on a provider that
+    ignores the schema, but it is also what turns a capability gap into a hard
+    404. Without a response_format there is no parameter to require, so it is
+    omitted — that is half of what makes the degradation retry succeed.
+    """
+    payload: dict = {
+        "model": model_id,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.2,
+    }
+    if response_format is not None:
+        payload["response_format"] = response_format
+        payload["provider"] = {"require_parameters": True}
+    with _openrouter_client() as c:
+        r = c.post("/chat/completions", json=payload)
+        r.raise_for_status()
+        return r.json()
+
+
+def _openrouter_content(data: dict) -> str:
+    """Extract the assistant text from a chat-completion response, tolerating
+    the two shapes that otherwise blow up as opaque parse errors downstream:
+    a message whose content is null (some models emit only a reasoning field),
+    and an empty choices array. Returns '' in those cases — callers already
+    treat empty content as an invalid item and surface a clean retry message,
+    which is far better than a KeyError/JSONDecodeError with no explanation.
+    """
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    return choices[0].get("message", {}).get("content") or ""
 
 
 def _openrouter_embed(text: str, *, input_type: str) -> list[float]:
