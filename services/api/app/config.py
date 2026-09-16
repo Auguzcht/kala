@@ -80,6 +80,16 @@ class Settings(BaseSettings):
     # provider serves this exact model cheapest — same model, no behaviour
     # change, just a cheaper provider pick.
     #
+    # Cheaper sibling tested 2026-09-16 and REJECTED (recorded so it is not
+    # re-litigated): ~deepseek/deepseek-v4-flash-latest ($0.04/$0.10 per M vs
+    # this model's $0.15/$0.60) passed a single call schema-clean but dropped
+    # 1 item in 25 real concurrent MCQ requests (truncated JSON,
+    # finish_reason=length) and intermittently 400'd under load. Partial
+    # tolerance (ai/concurrency.map_concurrent_partial) means a drop only
+    # shortens a set rather than failing it, so it is not harmful — but at
+    # fractions of a cent per set the saving is not worth a ~4% item-drop rate.
+    # Revisit only if generation volume ever makes the delta material.
+    #
     # Deliberately NOT the NVIDIA nemotron free models despite their headline
     # speed: both leak their full chain of thought into the message content
     # ("Here's a thinking process: …"), which reaches the student, and burns
