@@ -34,17 +34,21 @@ SKILLS = [{"id": "skill-1", "name": "Cloud concepts"},
 
 
 def test_tag_content_allows_a_reasoning_budget_large_enough_to_answer(monkeypatch) -> None:
-    """The bug: a budget smaller than the model's own reasoning length means
-    the answer never gets emitted. The model spends 330-550 tokens thinking
-    about a typical chunk, so 256 guaranteed an empty response."""
+    """The bug, twice over. This model reasons before answering and its thinking
+    is billed against max_tokens. At 256 every response was truncated to empty
+    and read as "no match". At 2048 short chunks worked but long module pages
+    still hit finish_reason=length — a fix that looked complete while silently
+    still failing on the most valuable content. A 3145-char module page needs
+    ~2500-3500 reasoning tokens, so 4096 is the measured floor."""
     captured = _capture_converse(
         monkeypatch, json.dumps({"skill_id": "skill-1", "bloom_level": "understand"})
     )
     model_router.tag_content(text="Cloud computing is...", skills=SKILLS)
 
-    assert captured["max_tokens"] >= 1500, (
-        "tag_content's token budget must exceed the model's reasoning length, "
-        "or the JSON answer is truncated away and the result reads as 'no match'"
+    assert captured["max_tokens"] >= 4096, (
+        "tag_content's token budget must cover the model's reasoning on a LONG "
+        "chunk (~3000 tokens), or the JSON answer is truncated away and the "
+        "result reads as 'no match'"
     )
 
 

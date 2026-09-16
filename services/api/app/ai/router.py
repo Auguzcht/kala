@@ -86,17 +86,21 @@ def tag_content(*, text: str, skills: list[dict]) -> dict:
         messages=[{"role": "user", "content": [{"text": json.dumps({
             "skills": skill_list, "content": text,
         })}]}],
-        # 2048, not the original 256. This model REASONS before answering, and
-        # its thinking is billed against max_tokens: measured 330-550 reasoning
-        # tokens for a typical chunk. At 256 the budget ran out mid-thought and
-        # the response came back EMPTY every time, which json.loads rejected and
-        # this function reported as skill_id=None. That is why tagging matched
-        # almost nothing: a 4000-char module page about cloud concepts returned
-        # null against a skill literally named "Compare and contrast traditional
-        # IT infrastructure with cloud computing models". Verified directly —
-        # the identical request at 1500 tokens returns the correct skill_id and
-        # bloom_level. Same class of bug as generate_question's 768.
-        max_tokens=2048,
+        # 4096, not the original 256 and not the 2048 I first raised it to.
+        # This model REASONS before answering and its thinking is billed against
+        # max_tokens. Measured: ~330-550 reasoning tokens for a short folder
+        # blurb, but ~2500-3500 for a long module page. At 256 EVERY response
+        # came back empty (truncated mid-thought) and was reported as "no
+        # match"; at 2048 short chunks worked but the long, valuable module
+        # pages STILL came back empty with finish_reason=length. Only at 4096
+        # does a 3145-char Cloud Concepts page return its correct skill_id.
+        # The bug therefore looked fixed while silently still failing on
+        # exactly the content that matters most.
+        #
+        # A response_format schema does NOT rescue this — verified: at 2048 a
+        # schema was truncated away too, and at 4096 plain JSON parsed fine. The
+        # budget is the constraint, so the budget is what changed.
+        max_tokens=4096,
     )
     normalized = raw.strip()
     if normalized.startswith("```"):
