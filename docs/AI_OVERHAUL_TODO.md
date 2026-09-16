@@ -160,3 +160,14 @@ wired the UI, just disabled). Real work is backend + one product decision.
   model router doesn't currently surface reasoning traces to students, and
   showing model "thinking" to a learner is a different pedagogical choice
   than showing it to a developer. Don't wire it speculatively.
+- **A skill whose study queue is fully graduated goes permanently empty.**
+  Raised during the Checkpoint 3 hub review, deliberately not solved there.
+  Study cards are a bounded, schedule-driven queue seeded on first open; once
+  every card in it is mastered and graduates out of normal review, the Study
+  tab has nothing to show for that skill and no way to add more (by design —
+  see the StudyBrowser copy). The narrow version of the question is "how do
+  new cards enter a mastered queue without disturbing the schedule of cards
+  still in rotation?" That is a real design question, not a bug: answering it
+  means deciding whether a graduated skill should re-seed on open, on a
+  mastery dip, or never. Separate from, and much smaller than, "let students
+  generate flashcards on demand" (rejected: it makes `due_at` meaningless).
