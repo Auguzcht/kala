@@ -3,10 +3,13 @@ escalate for harder tasks. Keeps model choice in one place."""
 from __future__ import annotations
 
 import json
+import logging
 
 from app.ai import bedrock
 from app.ai.reasoning import strip_reasoning
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_model_for(task: str) -> str:
@@ -83,7 +86,17 @@ def tag_content(*, text: str, skills: list[dict]) -> dict:
         messages=[{"role": "user", "content": [{"text": json.dumps({
             "skills": skill_list, "content": text,
         })}]}],
-        max_tokens=256,
+        # 2048, not the original 256. This model REASONS before answering, and
+        # its thinking is billed against max_tokens: measured 330-550 reasoning
+        # tokens for a typical chunk. At 256 the budget ran out mid-thought and
+        # the response came back EMPTY every time, which json.loads rejected and
+        # this function reported as skill_id=None. That is why tagging matched
+        # almost nothing: a 4000-char module page about cloud concepts returned
+        # null against a skill literally named "Compare and contrast traditional
+        # IT infrastructure with cloud computing models". Verified directly —
+        # the identical request at 1500 tokens returns the correct skill_id and
+        # bloom_level. Same class of bug as generate_question's 768.
+        max_tokens=2048,
     )
     normalized = raw.strip()
     if normalized.startswith("```"):
@@ -91,6 +104,12 @@ def tag_content(*, text: str, skills: list[dict]) -> dict:
     try:
         result = json.loads(normalized)
     except json.JSONDecodeError:
+        # Empty or unparseable. Logged rather than silently returning None:
+        # a truncated response is indistinguishable from "no match" in the
+        # return value, and that ambiguity hid this bug for the whole session.
+        logger.warning(
+            "tag_content got no usable JSON (len(raw)=%d). Treating as no match.", len(raw),
+        )
         return {"skill_id": None, "bloom_level": None}
     skill_ids = {skill["id"] for skill in skills}
     bloom_levels = {"remember", "understand", "apply", "analyze", "evaluate", "create"}
