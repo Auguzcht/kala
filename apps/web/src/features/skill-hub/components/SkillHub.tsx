@@ -145,14 +145,14 @@ function SkillHubFrame({
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-[1040px] px-4 py-8">
         <Skeleton className="h-28 w-full" />
       </div>
     );
   }
   if (!skill) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-[1040px] px-4 py-8">
         <EmptyState
           title="Skill not found"
           description="This skill isn't part of the course's approved map."
@@ -162,7 +162,13 @@ function SkillHubFrame({
   }
 
   return (
-    <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6">
+    // The pane is a card GRID, not prose, so it gets a wider measure than
+    // Lesson's ~800px chat column and is centered — at desktop widths the old
+    // max-w-3xl left a large dead gutter on the right, which read as
+    // unfinished rather than as intentional whitespace. pb-28 clears the
+    // fixed dock (~84px rendered: pt-6 + h-12 + pb-3) so the last row of cards
+    // is never hidden behind it.
+    <div className="mx-auto h-full w-full max-w-[1040px] overflow-y-auto px-4 pb-28 pt-6">
       {/* Skill header — unchanged from the tile version: title, mastery band,
           and the bloom/module/attempts line. The one part that already read
           right, so the tab change is confined to what sits under it. */}

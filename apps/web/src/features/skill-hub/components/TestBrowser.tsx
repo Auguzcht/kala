@@ -101,7 +101,7 @@ function fmtDate(iso: string): string {
  * identity, carried into the detail view so opening a card feels like opening
  * the same object rather than navigating somewhere unrelated. */
 function CardBar({ setId }: { setId: string }) {
-  return <div className={cn("h-2 w-full rounded-t-[3px]", barColor(setId))} aria-hidden />;
+  return <div className={cn("h-2 w-full", barColor(setId))} aria-hidden />;
 }
 
 function SetList({
@@ -203,7 +203,7 @@ function SetList({
           onClick={onGenerate}
           disabled={generate.isPending}
           className={cn(
-            "group flex flex-col items-center justify-center gap-2 rounded-[3px] border border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
+            "group flex flex-col items-center justify-center gap-2 border border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
             "transition-[border-color,background-color] hover:border-foreground/40 hover:bg-accent/40",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             generate.isPending && "opacity-60"
