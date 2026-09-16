@@ -4,6 +4,8 @@ RAG-grounded questions, accept answers, grade server-side, write evidence
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -19,6 +21,8 @@ from app.lms.blackboard import BlackboardConnector
 from app.lms.hierarchy import build_folder_paths, module_ref_for
 from app.twin import summary as twin_summary
 from app.twin import tracer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/courses", tags=["diagnostic"])
 
@@ -101,6 +105,25 @@ def ingest_course(course_id: str,
         "select": "id,name",
     })
     content_items = connector.get_content(course_ref)
+
+    # Diagnostic breadcrumb. The reason this exists: the course silently
+    # ingested FIVE items, all from one folder branch, and nothing reported
+    # that the AWS modules were never walked — it just looked like a small
+    # course. Logging what the connector actually returned (how many items,
+    # which handler types) makes a shallow traversal visible on the very first
+    # run instead of being inferred from bad questions weeks later.
+    handler_counts: dict[str, int] = {}
+    for item in content_items:
+        key = item.get("content_type") or "(none)"
+        handler_counts[key] = handler_counts.get(key, 0) + 1
+    with_body = sum(
+        1 for item in content_items if (item.get("body_or_description") or "").strip()
+    )
+    logger.info(
+        "Ingest pulled %d content items for course=%s (with text: %d, types: %s)",
+        len(content_items), course_id, with_body, handler_counts,
+    )
+
     # Folder/module scoping is resolved once, generically, over whatever tree
     # shape this institution's course actually has (see lms/hierarchy.py).
     # No assumption here about depth or naming, "Module N" vs a school that

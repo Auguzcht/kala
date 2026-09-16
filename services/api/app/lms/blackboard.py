@@ -6,7 +6,10 @@ For roster and grade passback you may also use LTI NRPS and AGS from the launch
 claims; both are valid. REST is the simpler data pipe for the pilot."""
 from __future__ import annotations
 
+import html as _html
+import re
 import time
+from html.parser import HTMLParser
 from urllib.parse import quote
 
 import httpx
@@ -18,6 +21,76 @@ from app.lms.base import LMSConnector
 # preferredDisplayName when the name form is left blank; treat it as
 # missing and fall through to given/family (see get_roster).
 _PLACEHOLDER_NAMES = {"givenname", "given name", "familyname", "family name", "test student"}
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Strip tags from Blackboard's rich-text bodies, keeping the words.
+
+    Blackboard returns page bodies as BBML/HTML — the live course's Vision /
+    Mission page arrives as ~1500 chars of `<div data-bbid=...><span style=...>`
+    wrapper markup around a few sentences of real text. Feeding that raw to the
+    chunker stores markup as "course content", and feeding it to the model as an
+    "excerpt" wastes the context window on attributes. Standard library only:
+    this is a small, well-defined job and does not justify a parser dependency.
+
+    Block-level tags become newlines so words from adjacent paragraphs do not
+    run together into a single nonsense sentence.
+    """
+
+    _BLOCK = {
+        "p", "div", "br", "li", "ul", "ol", "tr", "h1", "h2", "h3",
+        "h4", "h5", "h6", "table", "section", "article", "blockquote",
+    }
+    _SKIP = {"script", "style"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in self._SKIP:
+            self._skip_depth += 1
+        elif tag in self._BLOCK:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP and self._skip_depth:
+            self._skip_depth -= 1
+        elif tag in self._BLOCK:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self._parts.append(data)
+
+    def text(self) -> str:
+        joined = "".join(self._parts)
+        # Collapse the run of blank lines the block tags produce, and normalise
+        # the non-breaking spaces Blackboard emits into ordinary spaces.
+        joined = joined.replace("\xa0", " ")
+        joined = re.sub(r"[ \t]+", " ", joined)
+        joined = re.sub(r"\n\s*\n\s*\n+", "\n\n", joined)
+        return joined.strip()
+
+
+def _to_plain_text(raw: str) -> str:
+    """HTML/BBML body → plain text. Ordinary prose passes through with entity
+    decoding and whitespace normalisation, so this is safe to call
+    unconditionally. Bodies can contain entities without any tags at all
+    ("Excellence&nbsp;and&nbsp;Relevance"), so the no-tag path must still run
+    through the same extraction rather than short-circuiting."""
+    if not raw:
+        return ""
+    parser = _HTMLTextExtractor()
+    try:
+        parser.feed(raw)
+        parser.close()
+    except Exception:
+        # A malformed body must not fail an ingest run; fall back to a crude
+        # tag strip so the words still survive.
+        return re.sub(r"\s+", " ", _html.unescape(re.sub(r"<[^>]+>", " ", raw))).strip()
+    return parser.text()
 
 
 class BlackboardConnector(LMSConnector):
@@ -134,8 +207,32 @@ class BlackboardConnector(LMSConnector):
         return roster
 
     def get_content(self, course_ref: str) -> list[dict]:
+        """The course's content tree, flattened, with each item's text body.
+
+        Two things this used to get wrong, both found by auditing why generated
+        questions were meaningless:
+
+        1. It stored HTML. Blackboard returns page bodies as BBML/HTML, so a
+           real page (the course's Vision/Mission page, say) landed in
+           content_items as ~1500 chars of `<div data-bbid=...><span
+           style=...>` wrapper around a few sentences. chunk_text sliced that
+           markup, and the model was handed markup as its "excerpt". Bodies are
+           now converted to plain text before they leave the connector.
+
+        2. Traversal was shallow in practice. It only recursed when the
+           listing set `hasChildren`, which is not reliable across Blackboard
+           builds: the live course yielded FIVE items, every one of them in the
+           "Course Preliminaries" branch, with the entire AWS module tree
+           missing. A course whose modules never get walked has no content to
+           test on, no matter how good the generator is.
+
+        Recursion now descends whenever an item either claims children OR is a
+        container type (a folder/learning-module), and it de-duplicates by id so
+        a tree that reports children both ways cannot fetch the same node twice.
+        """
         s = get_settings()
         headers = self._headers()
+        visited: set[str] = set()
 
         def fetch_children(parent_id: str | None = None) -> list[dict]:
             path = f"{s.lms_rest_base_url}/courses/{course_ref}/contents"
@@ -150,19 +247,47 @@ class BlackboardConnector(LMSConnector):
             resp.raise_for_status()
             return resp.json().get("results", [])
 
+        # Blackboard's container handlers — the content-type ids that mean
+        # "this node holds other nodes". Matching on handler id keeps this
+        # independent of the display title ("Module 2|Building Blocks").
+        container_markers = ("resource/x-bb-folder", "resource/x-bb-lesson",
+                             "resource/x-bb-learning-module")
+
         def flatten(items: list[dict]) -> list[dict]:
             content = []
             for item in items:
+                item_id = item.get("id")
+                if not item_id or item_id in visited:
+                    continue
+                visited.add(item_id)
+
                 handler = item.get("contentHandler") or {}
+                handler_id = handler.get("id") or ""
+                body = _to_plain_text(item.get("body") or "")
+                description = _to_plain_text(item.get("description") or "")
                 content.append({
-                    "lms_content_id": item["id"],
+                    "lms_content_id": item_id,
                     "title": item.get("title") or "Untitled",
-                    "body_or_description": item.get("body") or item.get("description") or "",
-                    "content_type": handler.get("id"),
+                    # body first (real page text), description only as a
+                    # fallback. Both are now stripped to plain text.
+                    "body_or_description": body or description,
+                    "content_type": handler_id,
                     "parent_id": item.get("parentId"),
                 })
-                if item.get("hasChildren"):
-                    content.extend(flatten(fetch_children(item["id"])))
+
+                is_container = bool(item.get("hasChildren")) or any(
+                    marker in handler_id for marker in container_markers
+                )
+                if is_container:
+                    try:
+                        content.extend(flatten(fetch_children(item_id)))
+                    except httpx.HTTPError:
+                        # One unreadable subtree must not abort the whole
+                        # ingest — the rest of the course is still worth
+                        # storing, and a silent partial tree is what hid this
+                        # bug in the first place, so the caller counts what it
+                        # got (see ingest_course's stored/embedded totals).
+                        continue
             return content
 
         return flatten(fetch_children())
