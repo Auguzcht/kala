@@ -172,9 +172,10 @@ def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeyp
         if table == "skills":
             return [{"id": "skill-1", "name": "Algebra"}]
         if table == "content_items":
-            # The dedupe lookup reports lesson-1 is ALREADY stored.
-            if "lms_ref" in params:
-                return [{"id": "already-there"}]
+            # The dedupe lookup is now ONE query returning every stored
+            # lms_ref, so it reports lesson-1 as already present.
+            if params.get("lms_ref") == "not.is.null":
+                return [{"lms_ref": "lesson-1"}]
             return []
         return []
 
@@ -416,3 +417,59 @@ def test_retag_is_a_noop_when_everything_matched(monkeypatch) -> None:
 
     assert r.json()["reopened"] == 0
     assert r.json()["next"] == "nothing to retag"
+
+
+def test_ingest_dedupes_with_one_query_not_one_per_item(monkeypatch) -> None:
+    """The store phase used to do a db.select PER content item to decide
+    "already stored?". This course has 178 items, so that was 178 sequential
+    round trips inside a 30s Lambda — the store phase alone blew the ceiling
+    before tagging began, which is why /ingest returned 503 at exactly 30.00s
+    with no tagging work done. The dedupe set must be fetched once.
+
+    Pinned by counting: the number of content_items SELECTs must not scale with
+    the number of items."""
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="user-1", institution_id="institution-1", app_role="instructor"
+    )
+
+    class ManyItems:
+        def get_content(self, course_ref):
+            return [
+                {"lms_content_id": f"item-{i}", "title": f"Item {i}",
+                 "body_or_description": "body text", "content_type": "resource/x-bb-document",
+                 "parent_id": None}
+                for i in range(40)
+            ]
+
+    app.dependency_overrides[get_lms_connector] = ManyItems
+
+    selects = {"content_items": 0}
+
+    def fake_select(table, params):
+        if table == "courses":
+            return [{"lms_course_id": "_4_1"}]
+        if table == "skills":
+            return [{"id": "skill-1", "name": "Algebra"}]
+        if table == "content_items":
+            selects["content_items"] += 1
+            return []
+        return []
+
+    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "insert", lambda t, rows: [{"id": "x"}])
+    monkeypatch.setattr(diagnostic.db, "update", lambda t, f, v: [])
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/courses/course-1/ingest")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    # 40 items must not mean 40 dedupe lookups. A handful of phase queries is
+    # expected (dedupe set, pending embeds, pending tags, remaining); what is
+    # forbidden is growth with item count.
+    assert selects["content_items"] < 10, (
+        f"{selects['content_items']} content_items queries for 40 items — "
+        "the dedupe lookup is scaling per item again and will time out"
+    )

@@ -40,7 +40,14 @@ MAX_DIAGNOSTIC_QUESTIONS = 10
 # The Lambda ceiling is 30s and API Gateway caps the request at 30s too, so a
 # phase must finish well inside that and hand back whatever is left for the
 # next call. Sized to leave room for the store phase and the response.
-TAG_SLICE_SECONDS = 12.0
+# How long the NETWORK-work phases may spend before returning.
+#
+# The Lambda ceiling is 30s and API Gateway caps the request at 30s too, and
+# these phases run AFTER the LMS pull and the store step — so this budget is
+# only part of the request. It used to be 12s, which did not leave enough room
+# for the earlier phases and produced repeated 503s at exactly 30.00s. Sized so
+# the whole request lands comfortably inside the wall.
+TAG_SLICE_SECONDS = 6.0
 
 
 def _assert_teaches_course(*, user: CurrentUser, course_id: str) -> None:
@@ -285,24 +292,35 @@ def ingest_course(course_id: str,
     # Tagging and embedding then work from the ROWS THAT EXIST, which makes the
     # rows themselves the progress record: no job table, no cursor to lose, and
     # a killed run is resumable by simply calling again.
+    #
+    # The dedupe set is fetched in ONE query, not one per item. It used to do a
+    # `db.select` per content item to decide "have I stored this already?" — and
+    # this course has 178 items, so that was 178 sequential HTTP round trips to
+    # Supabase inside a request with a 30s wall. The store phase alone could
+    # exhaust the ceiling before tagging ever started, which is exactly why the
+    # endpoint kept returning 503 at 30.00s with no tagging work done at all.
+    existing_refs = {
+        row["lms_ref"]
+        for row in db.select("content_items", {
+            "institution_id": f"eq.{user.institution_id}",
+            "course_id": f"eq.{course_id}",
+            "lms_ref": "not.is.null",
+            "select": "lms_ref",
+        })
+        if row.get("lms_ref")
+    }
+
     stored_rows: list[tuple[str, str]] = []  # (row_id, clean_chunk)
     for item in content_items:
         body = item.get("body_or_description", "")
         if not body:
             continue
-        item_folder_path = folder_paths.get(item.get("lms_content_id"), [])
-        item_module_ref = module_ref_for(item_folder_path)
-
         # Skip an item already ingested for this course: re-running ingest
         # after a timeout must not duplicate every chunk it already stored.
-        existing = db.select("content_items", {
-            "institution_id": f"eq.{user.institution_id}",
-            "course_id": f"eq.{course_id}",
-            "lms_ref": f"eq.{item.get('lms_content_id')}",
-            "select": "id", "limit": "1",
-        })
-        if existing:
+        if item.get("lms_content_id") in existing_refs:
             continue
+        item_folder_path = folder_paths.get(item.get("lms_content_id"), [])
+        item_module_ref = module_ref_for(item_folder_path)
 
         for chunk in chunk_text(body):
             clean_chunk = strip_pii(chunk)
