@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -122,7 +123,10 @@ def _tag_pending(*, institution_id: str, course_id: str, skills: list[dict],
 
     pending = db.select("content_items", {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-        "skill_id": "is.null", "select": "id,chunk_text,module_ref",
+        # tag_attempted_at, NOT skill_id: a chunk the model legitimately cannot
+        # match to any skill must stop being "pending" or `remaining` never
+        # reaches zero and a caller loops forever on untaggable content.
+        "tag_attempted_at": "is.null", "select": "id,chunk_text,module_ref",
     })
     tagged = 0
     skill_module_ref: dict[str, str] = {}
@@ -133,23 +137,29 @@ def _tag_pending(*, institution_id: str, course_id: str, skills: list[dict],
             break
         text = row.get("chunk_text") or ""
         if not text.strip():
+            # Nothing to tag, and nothing will change on a retry. Mark it
+            # attempted so it does not sit in the pending set forever.
+            db.update("content_items", {"id": f"eq.{row['id']}"},
+                      {"tag_attempted_at": datetime.now(timezone.utc).isoformat()})
             continue
         try:
             tag = model_router.tag_content(text=text, skills=skills)
         except Exception as exc:  # noqa: BLE001 — a flaky tag must not kill the run
+            # Deliberately do NOT mark this attempted: a provider failure is
+            # transient, and leaving it pending is what makes a later run
+            # retry it once the tagger is healthy again.
             logger.warning("tagging failed for content %s: %s", row["id"], exc)
             continue
         skill_id = tag.get("skill_id")
-        if not skill_id:
-            # Model found no matching skill. Leave skill_id null so a later
-            # run can retry it, but do not count it as remaining forever:
-            # count only rows we have not yet visited this pass.
-            continue
-        db.update("content_items", {"id": f"eq.{row['id']}"}, {"skill_id": skill_id})
-        tagged += 1
-        module_ref = row.get("module_ref")
-        if module_ref and skill_id not in skill_module_ref:
-            skill_module_ref[skill_id] = module_ref
+        update = {"tag_attempted_at": datetime.now(timezone.utc).isoformat()}
+        if skill_id:
+            update["skill_id"] = skill_id
+        db.update("content_items", {"id": f"eq.{row['id']}"}, update)
+        if skill_id:
+            tagged += 1
+            module_ref = row.get("module_ref")
+            if module_ref and skill_id not in skill_module_ref:
+                skill_module_ref[skill_id] = module_ref
 
     # Best-effort skill -> module inference: the first tagged chunk for a skill
     # decides that skill's module_ref, and a manual override is never touched
@@ -161,7 +171,7 @@ def _tag_pending(*, institution_id: str, course_id: str, skills: list[dict],
 
     remaining = db.select("content_items", {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-        "skill_id": "is.null", "select": "id",
+        "tag_attempted_at": "is.null", "select": "id",
     })
     return tagged, len(remaining)
 

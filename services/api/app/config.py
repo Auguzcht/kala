@@ -104,7 +104,16 @@ class Settings(BaseSettings):
         default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL",
     )
     openrouter_model_fast: str = Field(
-        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_FAST",
+        # fast/tag is the ONLY role tag_content uses, and it is called once per
+        # chunk during ingest — the highest-volume model call in the system.
+        # It pointed at a free model whose daily allowance is routinely
+        # exhausted, which made tagging silently return null for every chunk
+        # (verified live: the model 429'd "free-models-per-day" while the same
+        # request on deepseek-v4.1-flash:floor returned the correct skill_id).
+        # Untagged content never surfaces for a skill, so the failure looked
+        # like "no content" rather than "tagger was down". Same working model
+        # as item/default/fallback.
+        default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_FAST",
     )
     openrouter_model_default: str = Field(
         default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_DEFAULT",

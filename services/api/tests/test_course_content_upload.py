@@ -41,7 +41,7 @@ def _wire(monkeypatch, *, inserted, updates, embedded_text=None):
         if table == "content_items":
             if params.get("embedding") == "is.null":
                 return [{"id": "row-1", "chunk_text": embedded_text or "body"}]
-            if params.get("skill_id") == "is.null":
+            if params.get("tag_attempted_at") == "is.null":
                 if state["tagged"]:
                     return []
                 state["tagged"] = True
@@ -176,7 +176,7 @@ def test_upload_ran_through_tagging_and_embedding(monkeypatch) -> None:
     assert body["tagged"] == 1
     assert body["embedded"] == 1
     skill_updates = [v for (t, v) in updates if "skill_id" in v]
-    assert skill_updates == [{"skill_id": "skill-1"}]
+    assert len(skill_updates) == 1 and skill_updates[0]["skill_id"] == "skill-1"
 
 
 def test_upload_archiving_failure_does_not_fail_the_upload(monkeypatch) -> None:

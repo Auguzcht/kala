@@ -39,7 +39,7 @@ def _phase_select(*, courses, skills, pending_embed=None, pending_tag=None):
                 return []
             if params.get("embedding") == "is.null":
                 return pending_embed or []
-            if params.get("skill_id") == "is.null":
+            if params.get("tag_attempted_at") == "is.null":
                 return pending_tag or []
         return []
     return fake_select
@@ -98,7 +98,9 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
         "module_ref": "Module 1",
         "chunk_text": "[name]\nActual lesson content.",
     }]
-    assert {"skill_id": "skill-1"} in updates
+    assert any(u.get("skill_id") == "skill-1" for u in updates)
+    # Every attempted row is stamped so untaggable content stops being pending.
+    assert all("tag_attempted_at" in u for u in updates if "skill_id" in u)
     assert {"embedding": [0.0] * 1024} in updates
     # The tagged skill's module is backfilled from the content item it was
     # tagged from (skill-1 has no prior module_ref, so this fills the gap).
@@ -148,7 +150,9 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
     assert body["embedded"] == 0
     assert body["embedFailed"] == 1
     assert inserted[0]["lms_ref"] == "lesson-1"
-    assert {"skill_id": "skill-1"} in updates
+    assert any(u.get("skill_id") == "skill-1" for u in updates)
+    # Every attempted row is stamped so untaggable content stops being pending.
+    assert all("tag_attempted_at" in u for u in updates if "skill_id" in u)
     assert not any("embedding" in u for u in updates)
 
 
@@ -277,3 +281,53 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
     assert captured["institution_id"] == "institution-1"
     assert captured["course_id"] == "course-1"
     assert captured["content_items"][1]["lms_content_id"] == "lesson-1"
+
+
+def test_untaggable_content_stops_being_pending(monkeypatch) -> None:
+    """A chunk the model cannot match to any skill must not stay pending
+    forever. Before the tag_attempted_at stamp, `remaining` could never reach
+    zero for such content, so a caller looping until `complete` would re-POST
+    indefinitely against something that will never tag."""
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="user-1", institution_id="institution-1", app_role="instructor"
+    )
+    app.dependency_overrides[get_lms_connector] = IngestConnector
+
+    state = {"attempted": False}
+
+    def fake_select(table, params):
+        if table == "courses":
+            return [{"lms_course_id": "_4_1"}]
+        if table == "skills":
+            return [{"id": "skill-1", "name": "Algebra"}]
+        if table == "content_items":
+            if "lms_ref" in params:
+                return [{"id": "already"}]  # nothing new to store
+            if params.get("tag_attempted_at") == "is.null" and not state["attempted"]:
+                state["attempted"] = True
+                return [{"id": "row-1", "chunk_text": "unrelated text", "module_ref": None}]
+            return []
+        return []
+
+    updates = []
+    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "insert", lambda t, rows: [{"id": "x"}])
+    monkeypatch.setattr(diagnostic.db, "update",
+                        lambda t, f, v: updates.append(v) or [])
+    # The tagger finds no matching skill.
+    monkeypatch.setattr(diagnostic.model_router, "tag_content",
+                        lambda text, skills: {"skill_id": None, "bloom_level": None})
+
+    try:
+        with TestClient(app) as client:
+            r = client.post("/courses/course-1/ingest")
+    finally:
+        app.dependency_overrides.clear()
+
+    body = r.json()
+    assert body["tagged"] == 0
+    # Attempted (so it left the pending set) but not tagged.
+    assert body["complete"] is True
+    assert body["remaining"] == 0
+    assert any("tag_attempted_at" in u for u in updates)
+    assert not any("skill_id" in u for u in updates)
