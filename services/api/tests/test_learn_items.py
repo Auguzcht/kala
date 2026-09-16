@@ -143,3 +143,61 @@ def test_weakest_skill_returns_none_when_course_has_no_skills(monkeypatch) -> No
     monkeypatch.setattr(item_gen.db, "select", lambda table, params: [])
 
     assert item_gen.weakest_skill(institution_id="inst-1", user_id="user-1", course_id="course-1") is None
+
+
+def test_generate_question_threads_set_id_into_the_insert(monkeypatch) -> None:
+    """A batched practice item must be persisted already grouped under its
+    quiz_sets row, not patched afterward — so an item is never briefly
+    persisted outside the set it was generated for."""
+    inserted = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock,
+        "converse",
+        lambda **kwargs: (
+            '{"prompt": "Q?", "choices": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}, '
+            '{"id": "c", "label": "C"}, {"id": "d", "label": "D"}], '
+            '"correct_choice_id": "a", "explanation": "why"}'
+        ),
+    )
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "item-1", **rows[0]}],
+    )
+
+    skill = {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}
+    item_gen.generate_question(
+        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        set_id="set-9",
+    )
+
+    assert inserted[0]["set_id"] == "set-9"
+
+
+def test_generate_question_omits_set_id_when_not_batched(monkeypatch) -> None:
+    """Every pre-batch caller omits set_id and must keep producing exactly the
+    same ungrouped row it always did — no phantom key in the insert."""
+    inserted = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock,
+        "converse",
+        lambda **kwargs: (
+            '{"prompt": "Q?", "choices": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}, '
+            '{"id": "c", "label": "C"}, {"id": "d", "label": "D"}], '
+            '"correct_choice_id": "a", "explanation": "why"}'
+        ),
+    )
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "item-1", **rows[0]}],
+    )
+
+    skill = {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}
+    item_gen.generate_question(
+        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+    )
+
+    assert "set_id" not in inserted[0]

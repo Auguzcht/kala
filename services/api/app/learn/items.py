@@ -110,9 +110,16 @@ def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
     return skill["name"]
 
 
-def generate_question(*, institution_id: str, course_id: str, skill: dict, kind: str) -> dict:
+def generate_question(*, institution_id: str, course_id: str, skill: dict, kind: str,
+                      set_id: str | None = None) -> dict:
     """Generate one RAG-grounded MCQ for a skill, persist it with its answer
-    key, and return only the client-safe view."""
+    key, and return only the client-safe view.
+
+    `set_id` groups the item under a quiz_sets row (batch practice generation,
+    see routers/practice.py). Optional and backward-compatible: every existing
+    caller omits it and gets an ungrouped item exactly as before. Threaded into
+    the insert rather than patched after, so an item is never briefly persisted
+    outside the set it was generated for."""
     context = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
     try:
         raw = bedrock.converse(
@@ -138,7 +145,7 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
             "Kala could not create a valid question. Please try again."
         ) from exc
 
-    rows = db.insert("generated_items", [{
+    item_row = {
         "institution_id": institution_id,
         "course_id": course_id,
         "skill_id": skill["id"],
@@ -148,7 +155,10 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
         "choices": choices,
         "correct_choice_id": correct_choice_id,
         "explanation": explanation,
-    }])
+    }
+    if set_id is not None:
+        item_row["set_id"] = set_id
+    rows = db.insert("generated_items", [item_row])
     item = rows[0]
     return {
         "id": item["id"],

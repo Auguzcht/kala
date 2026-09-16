@@ -1,3 +1,5 @@
+import itertools
+import threading
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -205,3 +207,227 @@ def test_flashcards_review_grades_server_side_and_advances_schedule(monkeypatch)
     assert evidence_rows[0]["correct"] is False
     assert evidence_rows[0]["hints_used"] == 1
     assert tracer_calls[0]["correct"] is False
+
+
+# ---- POST /practice/{course_id}/set (batched practice) --------------------
+
+
+def test_practice_set_returns_a_batch_grouped_under_one_set(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    inserted_sets = []
+    generated = []
+    counter = itertools.count(1)
+    lock = threading.Lock()
+
+    monkeypatch.setattr(
+        practice.item_gen, "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": inserted_sets.extend(rows)
+        or [{"id": "set-1", **rows[0]}],
+    )
+
+    def fake_generate(**kwargs):
+        # map_concurrent runs these on a thread pool, so the counter and the
+        # capture list both need a lock to stay deterministic.
+        with lock:
+            generated.append(kwargs)
+            n = next(counter)
+        return {"id": f"item-{n}", "skillId": "skill-1", "bloomLevel": "apply",
+                "prompt": "...", "choices": []}
+
+    monkeypatch.setattr(practice.item_gen, "generate_question", fake_generate)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?size=3")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["courseId"] == "course-1"
+    assert body["setId"] == "set-1"
+    # map_concurrent preserves INPUT order of results, but these fake items
+    # get their ids from a completion-order counter, so compare as a set.
+    assert sorted(i["id"] for i in body["items"]) == ["item-1", "item-2", "item-3"]
+    assert len(body["items"]) == 3
+    # The set row is created before generation, sized to the request.
+    assert inserted_sets == [{
+        "institution_id": "institution-1", "course_id": "course-1",
+        "skill_id": "skill-1", "kind": "practice", "size": 3,
+    }]
+    # Every generated item is grouped under the set at insert time.
+    assert all(call["set_id"] == "set-1" for call in generated)
+    assert all(call["kind"] == "practice" for call in generated)
+
+
+def test_practice_set_defaults_to_five_items(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    generated = []
+    monkeypatch.setattr(
+        practice.item_gen, "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": [{"id": "set-1", **rows[0]}],
+    )
+    monkeypatch.setattr(
+        practice.item_gen, "generate_question",
+        lambda **kwargs: generated.append(kwargs) or {
+            "id": f"item-{len(generated)}", "skillId": "skill-1",
+            "bloomLevel": "apply", "prompt": "...", "choices": [],
+        },
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 5
+
+
+def test_practice_set_clamps_size_to_the_maximum(monkeypatch) -> None:
+    """An oversized request must not fan out unbounded model calls — capped,
+    not rejected, so a client asking for 50 still gets a usable set."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    generated = []
+    monkeypatch.setattr(
+        practice.item_gen, "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": [{"id": "set-1", **rows[0]}],
+    )
+    monkeypatch.setattr(
+        practice.item_gen, "generate_question",
+        lambda **kwargs: generated.append(kwargs) or {
+            "id": f"item-{len(generated)}", "skillId": "skill-1",
+            "bloomLevel": "apply", "prompt": "...", "choices": [],
+        },
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?size=50")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(generated) == practice.MAX_SET_SIZE
+
+
+def test_practice_set_rejects_a_non_positive_size(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?size=0")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+
+
+def test_practice_set_returns_empty_when_course_has_no_skills(monkeypatch) -> None:
+    """Same guard as /next: no approved skill means nothing to generate
+    against, so return an empty set and never create a set row."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.item_gen, "weakest_skill", lambda **kwargs: None)
+
+    def fail_insert(*args, **kwargs):
+        raise AssertionError("must not create a set row without a skill")
+
+    monkeypatch.setattr(practice.db, "insert", fail_insert)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"courseId": "course-1", "setId": None, "items": []}
+
+
+def test_practice_set_deletes_the_set_when_generation_fails(monkeypatch) -> None:
+    """A failed batch must not leave a dangling set row behind — the grouping
+    is removed, taking any partially-inserted items with it, and the error
+    still surfaces as the same 502 the single-item path produces."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    deleted = []
+
+    monkeypatch.setattr(
+        practice.item_gen, "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": [{"id": "set-1", **rows[0]}],
+    )
+    monkeypatch.setattr(
+        practice.db, "delete",
+        lambda table, filters: deleted.append((table, filters)) or [],
+    )
+
+    def raise_invalid(**kwargs):
+        raise ItemGenerationError("Kala could not create a valid question. Please try again.")
+
+    monkeypatch.setattr(practice.item_gen, "generate_question", raise_invalid)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert deleted == [("quiz_sets", {"id": "eq.set-1"})]
+
+
+def test_practice_set_uses_an_explicit_skill_id_when_given(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(
+        practice.db, "select",
+        lambda table, params: [{"id": "skill-7", "name": "Graphs", "bloom_level": "analyze"}],
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": [{"id": "set-1", **rows[0]}],
+    )
+    generated = []
+    monkeypatch.setattr(
+        practice.item_gen, "generate_question",
+        lambda **kwargs: generated.append(kwargs) or {
+            "id": "item-1", "skillId": "skill-7", "bloomLevel": "analyze",
+            "prompt": "...", "choices": [],
+        },
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?skill_id=skill-7&size=1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert generated[0]["skill"]["id"] == "skill-7"
+
+
+def test_practice_set_404s_an_unknown_skill_id(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", lambda table, params: [])
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?skill_id=nope")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
