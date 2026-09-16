@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { apiErrorReason } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import {
   useGenerateSet,
@@ -273,7 +274,14 @@ function SetList({
           </p>
           {generate.isError ? (
             <p className="text-xs text-destructive">
-              Kala could not write questions just now. Try again.
+              {/* Surface the SERVER's message when it has one. A missing-
+                  content skill must not say "try again" — retrying will never
+                  help, and telling a student to retry a permanently
+                  unconfigured thing is worse than saying nothing. The API
+                  returns a specific, student-facing detail for exactly this
+                  case (NoCourseContentError). */}
+              {apiErrorReason(generate.error) ??
+                "Kala could not write questions just now. Try again."}
             </p>
           ) : null}
         </button>

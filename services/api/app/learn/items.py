@@ -64,6 +64,25 @@ class ItemGenerationError(RuntimeError):
     """Raised when model output cannot form a safe study item."""
 
 
+class NoCourseContentError(ItemGenerationError):
+    """The skill has no grounded course content to build a question from.
+
+    A subclass of ItemGenerationError so every existing caller/handler that
+    already maps that to a clean 502 keeps working, while routers that want to
+    say something more specific ("no material for this skill yet" rather than
+    "could not create a question") can catch this narrower type. The message
+    is student-facing: it names the missing prerequisite rather than blaming
+    the model.
+    """
+
+    def __init__(self, *, skill_name: str):
+        super().__init__(
+            f"Kala has no course material for \"{skill_name}\" yet, so it can't "
+            "write questions for it. Course content needs to be ingested first."
+        )
+        self.skill_name = skill_name
+
+
 def _parse_json(raw: str) -> dict:
     text = raw.strip()
     if text.startswith("```"):
@@ -101,14 +120,37 @@ def _validated_mcq(raw: str) -> tuple[str, list[dict[str, str]], str, str]:
 
 
 def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
+    """Grounded course text for a skill, or raise if there is none.
+
+    This USED to fall back to `skill["name"]` when retrieval came back empty,
+    with a comment about "degrading gracefully rather than hard-failing the
+    learn loop". That was the wrong trade: it turned a loud, visible
+    misconfiguration into SILENT GARBAGE. With no excerpt, the model is asked
+    to write an evaluative MCQ grounded in a single sentence, so it rewords
+    that sentence into a stem, makes the skill's own phrase the correct answer
+    every time ("operational and cost trade-offs"), and invents nonsense
+    distractors ("social media engagement metrics") because it has no facts to
+    draw plausible wrong answers from. Every item passes schema validation, so
+    nothing flagged it — the questions were simply meaningless, which is the
+    worst possible failure for a student studying for board exams.
+
+    A course with skills but no content_items is a setup error (ingest has not
+    run), not a runtime condition to paper over. Fail it here, at the source,
+    so every caller surfaces "no material yet" instead of shipping plausible-
+    looking questions with no substance.
+    """
     chunks = rag.retrieve(
         institution_id=institution_id, course_id=course_id, query=skill["name"], k=3,
     )
-    if chunks:
-        return "\n---\n".join(c.get("chunk_text", "") for c in chunks)
-    # No embedded content for this skill yet (e.g. ingest hasn't run): degrade
-    # gracefully to the skill name rather than hard-failing the learn loop.
-    return skill["name"]
+    # Filter to chunks that actually carry text BEFORE joining. Joining first
+    # and stripping the result is not enough: blank chunks still contribute
+    # separators, so "  " + "" join to "   \n---\n" which survives a strip and
+    # reads as grounded content.
+    texts = [(c.get("chunk_text") or "").strip() for c in chunks]
+    texts = [t for t in texts if t]
+    if not texts:
+        raise NoCourseContentError(skill_name=skill.get("name") or "this skill")
+    return "\n---\n".join(texts)
 
 
 def _call_and_validate(*, skill: dict, context: str) -> tuple[str, list[dict[str, str]], str, str]:

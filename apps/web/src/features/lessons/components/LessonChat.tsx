@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-lessons";
+import { apiErrorReason } from "@/lib/api-error";
 import type { LessonCheckResult } from "@/features/lessons/schema/lessons.schema";
 import { useTutorAsk } from "@/features/tutor";
 import { celebrate } from "@/lib/celebrate";
@@ -36,7 +37,7 @@ export function LessonChat({
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const { data, isLoading, isError, refetch } = useLesson(courseId, skillId);
+  const { data, isLoading, isError, error, refetch } = useLesson(courseId, skillId);
   const submit = useSubmitStepCheck(courseId);
   const checkAsk = useTutorAsk(courseId);
   const checkFollowUp = useTutorAsk(courseId);
@@ -117,7 +118,7 @@ export function LessonChat({
     return (
       <EmptyState
         title="We could not load this lesson"
-        description="Check your connection and try again."
+        description={apiErrorReason(error) ?? "Check your connection and try again."}
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );

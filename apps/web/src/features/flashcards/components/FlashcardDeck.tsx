@@ -20,6 +20,7 @@ import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
 import { useCreateSetFromItems } from "@/features/practice";
+import { apiErrorReason } from "@/lib/api-error";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
 import type {
@@ -88,7 +89,7 @@ export function FlashcardDeck({
 }) {
   const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
+  const { data, isLoading, isError, error, refetch } = useFlashcardDeck(courseId, 10, skillId);
   const review = useReviewFlashcard(courseId);
   const testMe = useCreateSetFromItems(courseId);
   const hint = useTutorAsk(courseId);
@@ -123,7 +124,7 @@ export function FlashcardDeck({
     return (
       <EmptyState
         title="We could not load flashcards"
-        description="Check your connection and try again."
+        description={apiErrorReason(error) ?? "Check your connection and try again."}
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );

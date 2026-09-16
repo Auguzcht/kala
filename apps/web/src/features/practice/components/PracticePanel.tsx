@@ -11,6 +11,7 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { usePracticeSet, usePracticeSetById, useSubmitPractice } from "@/features/practice/hooks/use-practice";
+import { apiErrorReason } from "@/lib/api-error";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
@@ -68,6 +69,7 @@ export function PracticePanel({
   const savedQuery = usePracticeSetById(courseId, setId ?? null);
   const usingSaved = Boolean(setId);
   const { isLoading, isError, isFetching, refetch } = usingSaved ? savedQuery : generatedQuery;
+  const queryError = usingSaved ? savedQuery.error : generatedQuery.error;
   const data = usingSaved ? savedQuery.data : generatedQuery.data;
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
@@ -141,7 +143,10 @@ export function PracticePanel({
     return (
       <EmptyState
         title="We could not load practice"
-        description="Check your connection and try again."
+        description={
+          apiErrorReason(queryError) ??
+          "Check your connection and try again."
+        }
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );

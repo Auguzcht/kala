@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck } from "@/features/flashcards";
+import { apiErrorReason } from "@/lib/api-error";
 import type { FlashcardCard } from "@/features/flashcards";
 
 // The Study tab's browse view — the materials list that sits in front of the
@@ -36,7 +37,7 @@ export function StudyBrowser({
   /** Enter the sequential flip session. */
   onStart: () => void;
 }) {
-  const { data, isLoading, isError, refetch } = useFlashcardDeck(
+  const { data, isLoading, isError, error, refetch } = useFlashcardDeck(
     courseId,
     BROWSE_LIMIT,
     skillId,
@@ -56,7 +57,7 @@ export function StudyBrowser({
     return (
       <EmptyState
         title="We could not load your cards"
-        description="Check your connection and try again."
+        description={apiErrorReason(error) ?? "Check your connection and try again."}
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );

@@ -46,7 +46,8 @@ def test_generate_question_persists_answer_key_and_returns_sanitized_view(monkey
 
 def test_generate_question_rejects_unusable_model_output_without_storing(monkeypatch) -> None:
     inserted = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen.bedrock, "converse", lambda **kwargs: "not json")
     monkeypatch.setattr(
         item_gen.db, "insert",
@@ -66,7 +67,8 @@ def test_generate_question_rejects_unusable_model_output_without_storing(monkeyp
 
 def test_generate_question_rejects_two_choice_output_without_storing(monkeypatch) -> None:
     inserted = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(
         item_gen.bedrock,
         "converse",
@@ -150,7 +152,8 @@ def test_generate_question_threads_set_id_into_the_insert(monkeypatch) -> None:
     quiz_sets row, not patched afterward — so an item is never briefly
     persisted outside the set it was generated for."""
     inserted = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
     monkeypatch.setattr(
         item_gen.bedrock,
@@ -179,7 +182,8 @@ def test_generate_question_omits_set_id_when_not_batched(monkeypatch) -> None:
     """Every pre-batch caller omits set_id and must keep producing exactly the
     same ungrouped row it always did — no phantom key in the insert."""
     inserted = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
     monkeypatch.setattr(
         item_gen.bedrock,
@@ -226,7 +230,8 @@ def test_generate_question_retries_once_on_invalid_output_then_succeeds(monkeypa
         # First roll: unusable. Second roll: good.
         return "not json" if len(calls) == 1 else _VALID_MCQ
 
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
     monkeypatch.setattr(item_gen.bedrock, "converse", fake_converse)
     monkeypatch.setattr(
@@ -249,7 +254,8 @@ def test_generate_question_gives_up_after_one_retry(monkeypatch) -> None:
     attempts, then ItemGenerationError, and nothing persisted."""
     inserted = []
     calls = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
     monkeypatch.setattr(
         item_gen.bedrock, "converse",
@@ -275,7 +281,8 @@ def test_generate_question_gives_up_after_one_retry(monkeypatch) -> None:
 
 def test_generate_question_does_not_retry_a_first_try_success(monkeypatch) -> None:
     calls = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
     monkeypatch.setattr(
         item_gen.bedrock, "converse",
@@ -300,7 +307,8 @@ def test_generate_question_does_not_retry_a_provider_outage(monkeypatch) -> None
     retrying it again here would just hammer the same rate limit. Exactly one
     attempt, then surface."""
     calls = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
 
     def boom(**kwargs):
@@ -327,7 +335,8 @@ def test_generate_question_still_retries_a_validation_failure(monkeypatch) -> No
     """The validation retry is unchanged for the failure it was written for:
     a body that arrived but was unusable."""
     calls = []
-    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Managed AWS services trade higher per-unit cost for reduced operational overhead; self-managed alternatives trade lower cost for more control and operational responsibility."}])
     monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
     monkeypatch.setattr(
         item_gen.bedrock, "converse",
@@ -344,3 +353,57 @@ def test_generate_question_still_retries_a_validation_failure(monkeypatch) -> No
         pass
 
     assert len(calls) == 2  # validation failure DOES get its one retry
+
+
+# ---- the no-content guard -------------------------------------------------
+# This is the fix for the "plausible but meaningless questions" failure. With
+# an empty retrieval the module used to fall back to the skill name as the
+# excerpt, so the model wrote a stem by rewording the skill name, made the
+# skill's own phrase the answer every time, and invented nonsense distractors.
+# Everything passed schema validation, so nothing flagged it. Now it refuses.
+
+
+def test_generate_question_refuses_when_skill_has_no_content(monkeypatch) -> None:
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    # If the guard fails, this would be reached and used to fabricate a question.
+    monkeypatch.setattr(
+        item_gen.bedrock, "converse",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("must not call the model without grounded content")
+        ),
+    )
+
+    skill = {"id": "skill-1", "name": "Compare managed AWS services", "bloom_level": "evaluate"}
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        )
+        assert False, "expected NoCourseContentError"
+    except item_gen.NoCourseContentError as exc:
+        # The message names the missing prerequisite, not the model.
+        assert "no course material" in str(exc).lower()
+        assert exc.skill_name == "Compare managed AWS services"
+
+
+def test_no_content_error_is_an_item_generation_error(monkeypatch) -> None:
+    """It must still map to the existing 502 handler, so routers that do not
+    catch the narrower type keep working."""
+    err = item_gen.NoCourseContentError(skill_name="X")
+    assert isinstance(err, item_gen.ItemGenerationError)
+
+
+def test_generate_question_refuses_when_chunks_are_blank(monkeypatch) -> None:
+    """Retrieval can return rows whose text is empty/whitespace. Those are as
+    ungrounded as no rows at all, so they must not sneak past the guard."""
+    monkeypatch.setattr(
+        item_gen.rag, "retrieve",
+        lambda **kwargs: [{"chunk_text": "   "}, {"chunk_text": ""}],
+    )
+    skill = {"id": "skill-1", "name": "Osmosis", "bloom_level": "remember"}
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        )
+        assert False, "expected NoCourseContentError"
+    except item_gen.NoCourseContentError:
+        pass
