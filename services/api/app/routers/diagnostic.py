@@ -471,6 +471,65 @@ def upload_course_content(
     }
 
 
+@router.post("/{course_id}/content/retag")
+def reset_tagging(
+    course_id: str,
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """Clear the "already attempted" mark on UNMATCHED content so it can be
+    tagged again against a changed skill set.
+
+    WHY THIS IS NEEDED AND WHY IT IS EXPLICIT. Ingest is resumable via
+    `tag_attempted_at`: a chunk that has been through the tagger stops being
+    pending, whether or not it matched a skill. That is what stops untaggable
+    content looping forever — but it also means a plain re-run of /ingest
+    retries NOTHING. Approving new skills and calling /ingest again would skip
+    every chunk that previously found no match, which is precisely the content
+    the new skills were approved to catch.
+
+    So this is the deliberate second half of "approve skills, then retag":
+    reset first, then ingest. Returns how many rows were reopened so the caller
+    knows whether a re-tag is even worth running (0 means nothing to do).
+
+    Only touches skill_id IS NULL rows. A chunk that already matched a skill
+    keeps its tag and is not re-sent to the model — re-tagging matched content
+    would be wasted calls and could reshuffle a correct match to a worse one.
+
+    Staff-gated at both layers, like the upload endpoint: course_id is
+    caller-supplied, so "staff somewhere" is not sufficient.
+    """
+    _assert_teaches_course(user=user, course_id=course_id)
+
+    unmatched = db.select("content_items", {
+        "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}",
+        "skill_id": "is.null",
+        "tag_attempted_at": "not.is.null",
+        "select": "id",
+    })
+    reopened = 0
+    for row in unmatched:
+        db.update("content_items", {"id": f"eq.{row['id']}"}, {"tag_attempted_at": None})
+        reopened += 1
+
+    # Count what a following /ingest would actually pick up, so the caller is
+    # not left guessing whether the two-step dance worked.
+    total_unmatched = db.select("content_items", {
+        "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}",
+        "skill_id": "is.null", "select": "id",
+    })
+    return {
+        "courseId": course_id,
+        "reopened": reopened,
+        "pendingAfterReset": len(total_unmatched),
+        "next": (
+            "POST /courses/{id}/ingest until complete=true" if total_unmatched
+            else "nothing to retag"
+        ),
+    }
+
+
 @router.get("/{course_id}/modules")
 def list_modules(course_id: str, user: CurrentUser = Depends(get_current_user)):
     """Distinct modules detected for this course from the last ingest run,
