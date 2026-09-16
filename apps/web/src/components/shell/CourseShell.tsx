@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TopBar } from "@/components/shell/TopBar";
+import { useTwin } from "@/features/twin";
 import { GamificationSummary } from "@/features/gamification";
 import { useDiagnosticStatus } from "@/features/diagnostic";
 import { TourStepRunner } from "@/components/shell/StudentTour";
@@ -72,6 +73,15 @@ const SECTION_LABELS: Record<string, string> = {
   "/course/twin": "Twin",
 };
 
+// Routes whose FIRST path segment after /course/ is an id, not a section name.
+// These are not in SECTION_LABELS (there is no static label to look up), so
+// without this they fell through to the "/course" default and the breadcrumb
+// read "Workspace" on a skill page. They resolve a section label from the
+// route prefix plus a subsection from the data instead.
+const DYNAMIC_SECTIONS: { prefix: string; section: string }[] = [
+  { prefix: "/course/skill/", section: "Skills" },
+];
+
 const SESSION_ROUTES = [
   "/course/lessons",
   "/course/practice",
@@ -103,7 +113,21 @@ export function CourseShell({
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const session = useSession();
-  const section = SECTION_LABELS[pathname] ?? SECTION_LABELS["/course"];
+  // Resolve a dynamic section (/course/skill/:id) before falling back to the
+  // static map, so a skill page shows "Skills / <skill>" rather than the
+  // Workspace default it used to inherit.
+  const dynamic = DYNAMIC_SECTIONS.find((d) => pathname.startsWith(d.prefix));
+  const section = dynamic
+    ? dynamic.section
+    : SECTION_LABELS[pathname] ?? SECTION_LABELS["/course"];
+  // The skill id from the path, used only to label the crumb. useTwin is
+  // already fetched by the hub itself, so this is a cache read, not a second
+  // request, and it keeps the TopBar free of route-specific hooks.
+  const skillId = dynamic ? pathname.slice(dynamic.prefix.length).split("/")[0] : undefined;
+  const { data: twinForCrumb } = useTwin(courseId);
+  const subsection = skillId
+    ? twinForCrumb?.skills.find((s) => s.skillId === skillId)?.name
+    : undefined;
   const isSessionRoute = SESSION_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
@@ -248,6 +272,7 @@ export function CourseShell({
           <TopBar
             courseId={courseId}
             section={section}
+            subsection={subsection}
             right={
             <div className="flex items-center gap-4">
               <GamificationSummary courseId={courseId} />

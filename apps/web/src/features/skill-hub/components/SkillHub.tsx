@@ -1,5 +1,8 @@
-import type { ReactNode } from "react";
-import { GraduationCapIcon } from "@/components/ui/graduation-cap";
+import type { ComponentType, ReactNode, Ref } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useNavigate } from "@tanstack/react-router";
+import { BookOpenIcon } from "@/components/ui/book-open";
+import { ChevronLeftIcon } from "@/components/ui/chevron-left";
 import { LayersIcon } from "@/components/ui/layers";
 import { ZapIcon } from "@/components/ui/zap";
 import { MasteryBand } from "@/components/kala";
@@ -11,8 +14,18 @@ import { FlashcardDeck } from "@/features/flashcards";
 import { PracticePanel } from "@/features/practice";
 import { StudyBrowser } from "@/features/skill-hub/components/StudyBrowser";
 import { TestBrowser } from "@/features/skill-hub/components/TestBrowser";
+import { useIconHover } from "@/hooks/use-icon-hover";
 import { cn } from "@/lib/utils";
 import type { TwinSkill } from "@/features/twin";
+
+/** Animated icon shape shared by the tab strip (ref-driven imperative
+ * startAnimation/stopAnimation, same as the rail's). */
+type AnimatedIconHandle = { startAnimation: () => void; stopAnimation: () => void };
+type AnimatedIcon = ComponentType<{
+  size?: number;
+  className?: string;
+  ref?: Ref<AnimatedIconHandle>;
+}>;
 
 // The skill hub: ONE skill's page, with the three study modes as tabs over it.
 // This is the "deck materials" move from docs/ai-overhaul-v2/05 (Option 2) —
@@ -43,11 +56,55 @@ import type { TwinSkill } from "@/features/twin";
 
 export type SkillTab = "lesson" | "study" | "test";
 
-const TABS: { id: SkillTab; label: string; icon: typeof GraduationCapIcon }[] = [
-  { id: "lesson", label: "Lesson", icon: GraduationCapIcon },
+const TABS: { id: SkillTab; label: string; icon: AnimatedIcon }[] = [
+  // BookOpen, not GraduationCap: the rail already uses graduation-cap for
+  // Skills, and reusing it here made the Lesson tab read as a duplicate of its
+  // own parent instead of a distinct mode.
+  { id: "lesson", label: "Lesson", icon: BookOpenIcon },
   { id: "study", label: "Study", icon: LayersIcon },
   { id: "test", label: "Test", icon: ZapIcon },
 ];
+
+/** A tab whose icon animates on hover of the WHOLE BUTTON, not the icon's own
+ * few pixels — the same controlled-mode pattern the rail uses. Each tab needs
+ * its own ref, so this has to be a component rather than an inline map. */
+function HubTab({
+  id,
+  label,
+  icon: Icon,
+  active,
+  onSelect,
+}: {
+  id: SkillTab;
+  label: string;
+  icon: AnimatedIcon;
+  active: boolean;
+  onSelect: (tab: SkillTab) => void;
+}) {
+  const icon = useIconHover<AnimatedIconHandle>();
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={() => onSelect(id)}
+      onMouseEnter={icon.play}
+      onMouseLeave={icon.stop}
+      onFocus={icon.play}
+      onBlur={icon.stop}
+      className={cn(
+        "relative -mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "border-brand-orange text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      )}
+    >
+      <Icon ref={icon.ref} size={15} aria-hidden />
+      {label}
+    </button>
+  );
+}
 
 export function SkillHub({
   courseId,
@@ -140,7 +197,9 @@ function SkillHubFrame({
   onSelectTab: (tab: SkillTab) => void;
   children: ReactNode;
 }) {
+  const navigate = useNavigate();
   const { data: twin, isLoading } = useTwin(courseId);
+  const reduceMotion = useReducedMotion();
   const skill: TwinSkill | undefined = twin?.skills.find((s) => s.skillId === skillId);
 
   if (isLoading) {
@@ -162,13 +221,25 @@ function SkillHubFrame({
   }
 
   return (
-    // The pane is a card GRID, not prose, so it gets a wider measure than
-    // Lesson's ~800px chat column and is centered — at desktop widths the old
-    // max-w-3xl left a large dead gutter on the right, which read as
-    // unfinished rather than as intentional whitespace. pb-28 clears the
-    // fixed dock (~84px rendered: pt-6 + h-12 + pb-3) so the last row of cards
-    // is never hidden behind it.
-    <div className="mx-auto h-full w-full max-w-[1040px] overflow-y-auto px-4 pb-28 pt-6">
+    // NOT a scroll container. CourseShell's <main> already owns the scroll for
+    // non-takeover routes (it is `overflow-y-auto` with its own bottom
+    // padding), so making this pane `h-full overflow-y-auto` too created TWO
+    // nested scroll owners: `h-full` resolves against a scrolling parent's
+    // unbounded content height, so the inner box never sized correctly and its
+    // own horizontal overflow surfaced as a stray scrollbar. This pane is a
+    // plain block in main's scroll; pb-24 here clears the fixed dock so the
+    // last row of cards is not hidden behind it.
+    <div className="mx-auto w-full max-w-[1040px] px-4 pb-24 pt-2">
+      {/* Back to the skill picker — the hub is reached FROM Skills, so there
+          has to be a way back that is not the browser button. Sits above the
+          header, quiet, matching the session bar's back affordance. */}
+      <button
+        type="button"
+        onClick={() => navigate({ to: "/course/skills" })}
+        className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ChevronLeftIcon size={14} /> All skills
+      </button>
       {/* Skill header — unchanged from the tile version: title, mastery band,
           and the bloom/module/attempts line. The one part that already read
           right, so the tab change is confined to what sits under it. */}
@@ -198,35 +269,33 @@ function SkillHubFrame({
         aria-label="Study modes"
         className="mt-4 flex items-center gap-1 border-b"
       >
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const active = activeTab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onSelectTab(id)}
-              className={cn(
-                "relative -mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active
-                  ? "border-brand-orange text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Icon
-                size={15}
-                className={active ? "text-brand-orange" : "text-muted-foreground"}
-                aria-hidden
-              />
-              {label}
-            </button>
-          );
-        })}
+        {TABS.map(({ id, label, icon }) => (
+          <HubTab
+            key={id}
+            id={id}
+            label={label}
+            icon={icon}
+            active={activeTab === id}
+            onSelect={onSelectTab}
+          />
+        ))}
       </div>
 
-      <div className="mt-5">{children}</div>
+      {/* Pane transition: a short fade+rise on tab change, so switching modes
+          reads as a content swap rather than a hard cut. Keyed on activeTab so
+          it replays per switch; reduced-motion drops to no animation. */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={activeTab ?? "study"}
+          initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.18, ease: "easeOut" }}
+          className="mt-5"
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   useGenerateSet,
@@ -33,11 +35,38 @@ const SET_SIZE = 5;
 // exactly that while ALSO giving the SAME color to the same set in the detail
 // view (which has no list index to read). No new tokens introduced.
 const BAR_COLORS = ["bg-brand-orange", "bg-brand-gold", "bg-brand-green", "bg-brand-slate"] as const;
+// Border twins of the bar colors, matching the 8px strip exactly so the whole
+// card outline carries the set's color. Kept as a parallel list rather than
+// derived, because Tailwind's compiler needs the literal class names.
+const BORDER_COLORS = [
+  "border-brand-orange/60",
+  "border-brand-gold/60",
+  "border-brand-green/60",
+  "border-brand-slate/60",
+] as const;
 
-function barColor(setId: string): string {
+function colorIndex(setId: string): number {
   let h = 0;
   for (let i = 0; i < setId.length; i++) h = (h * 31 + setId.charCodeAt(i)) >>> 0;
-  return BAR_COLORS[h % BAR_COLORS.length];
+  return h % BAR_COLORS.length;
+}
+
+function barColor(setId: string): string {
+  return BAR_COLORS[colorIndex(setId)];
+}
+
+function borderColor(setId: string): string {
+  return BORDER_COLORS[colorIndex(setId)];
+}
+
+/** A stable, human label for a set. Sets have no user-given name, so this
+ * derives one from position within the skill (oldest is #1) — the count and
+ * date follow on the line below. Numbering by AGE not by list position keeps
+ * a set's number stable as newer sets push it down the list. */
+function setLabel(set: PracticeSetSummary, all: PracticeSetSummary[]): string {
+  const oldestFirst = [...all].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const idx = oldestFirst.findIndex((s) => s.setId === set.setId);
+  return idx >= 0 ? `Practice set ${idx + 1}` : "Practice set";
 }
 
 export function TestBrowser({
@@ -116,13 +145,16 @@ function SetList({
   const { data, isLoading, isError, refetch } = usePracticeSets(courseId, skillId);
   const generate = useGenerateSet(courseId);
   const sets = data?.sets ?? [];
+  const allSets = sets;
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-32 w-full" />
+        {/* Skeletons match a real card's min-height so the grid does not
+            resize when the data lands. */}
+        <Skeleton className="h-[116px] w-full" />
+        <Skeleton className="h-[116px] w-full" />
+        <Skeleton className="h-[116px] w-full" />
       </div>
     );
   }
@@ -161,26 +193,29 @@ function SetList({
       ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        {/* Real sets. */}
+        {/* Real sets. The card's BORDER is tinted to match its own header bar,
+            so the color reads as the set's identity across the whole card
+            outline rather than only on the 8px strip. */}
         {sets.map((set: PracticeSetSummary) => (
           <button
             key={set.setId}
             type="button"
             onClick={() => onSelectSet(set.setId)}
             className={cn(
-              "group flex flex-col overflow-hidden border bg-card text-left",
-              "transition-[border-color,box-shadow] hover:border-foreground/30 hover:shadow-md",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              "group flex flex-col overflow-hidden border-2 bg-card text-left",
+              "transition-[box-shadow,transform] hover:shadow-md hover:-translate-y-0.5",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              borderColor(set.setId)
             )}
           >
             <CardBar setId={set.setId} />
             <div className="flex flex-1 flex-col gap-3 p-4">
               <div className="min-w-0">
                 <p className="font-display text-base font-semibold text-foreground group-hover:underline">
-                  {set.size} {set.size === 1 ? "question" : "questions"}
+                  {setLabel(set, allSets)}
                 </p>
                 <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                  {fmtDate(set.createdAt)}
+                  {set.size} {set.size === 1 ? "question" : "questions"} · {fmtDate(set.createdAt)}
                 </p>
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-2">
@@ -197,24 +232,33 @@ function SetList({
 
         {/* Generate — SAME footprint as a real set card so it sits in the grid
             as a peer, but a dashed border and centered icon keep it visually
-            distinct: it is an action, not a saved set you might have taken. */}
+            distinct: it is an action, not a saved set you might have taken.
+            While generating it shows a shimmer + spinner instead of sitting
+            inert, and its height matches a real card so the grid does not jump
+            when the new set lands. */}
         <button
           type="button"
           onClick={onGenerate}
           disabled={generate.isPending}
           className={cn(
-            "group flex flex-col items-center justify-center gap-2 border border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
+            "group flex min-h-[116px] flex-col items-center justify-center gap-2 border-2 border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
             "transition-[border-color,background-color] hover:border-foreground/40 hover:bg-accent/40",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            generate.isPending && "opacity-60"
+            generate.isPending && "cursor-wait border-brand-orange/40"
           )}
         >
           <div className="grid size-9 place-items-center rounded-full border border-dashed border-muted-foreground/40">
-            <PlusIcon size={18} className="text-muted-foreground" />
+            {generate.isPending ? (
+              <Spinner className="size-4 text-brand-orange" />
+            ) : (
+              <PlusIcon size={18} className="text-muted-foreground" />
+            )}
           </div>
-          <p className="text-sm font-semibold text-foreground">
-            {generate.isPending ? "Writing your questions…" : "Generate new set"}
-          </p>
+          {generate.isPending ? (
+            <Shimmer className="text-sm font-semibold">Writing your questions…</Shimmer>
+          ) : (
+            <p className="text-sm font-semibold text-foreground">Generate new set</p>
+          )}
           <p className="text-xs leading-relaxed text-muted-foreground">
             Fresh questions, {SET_SIZE} at a time.
           </p>
@@ -278,9 +322,9 @@ function SetDetail({
         ← All tests
       </button>
 
-      {/* Header repeats the card's color bar and size/date, so grid -> detail
-          reads as opening the same object. */}
-      <div className="overflow-hidden border bg-card">
+      {/* Header repeats the card's color bar AND its tinted border, so grid ->
+          detail reads as opening the same object rather than a new one. */}
+      <div className={cn("overflow-hidden border-2 bg-card", borderColor(data.setId))}>
         <CardBar setId={data.setId} />
         <div className="flex flex-wrap items-center justify-between gap-3 p-5">
           <div className="min-w-0">

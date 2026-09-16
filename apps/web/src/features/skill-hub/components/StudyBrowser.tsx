@@ -97,6 +97,17 @@ export function StudyBrowser({
           <p className="mt-0.5 text-xs text-muted-foreground">
             Recall each answer, then mark it yourself — Kala brings back what you miss.
           </p>
+          {/* States the design decision out loud. Cards here are a
+              spaced-repetition queue, seeded automatically, NOT a set you
+              generate on demand — so the missing "generate more" button reads
+              as intended rather than as an oversight. Generating cards would
+              also raise a question the schedule can't answer: what due date
+              does a brand-new card get, and should it jump ahead of cards that
+              are actually due? */}
+          <p className="mt-1 text-[11px] text-muted-foreground/80">
+            Cards are added automatically for this skill as you study — this isn't a set you
+            generate.
+          </p>
         </div>
         <Button variant="orange" onClick={onStart} className="shrink-0">
           Study deck <ArrowRightIcon size={16} />

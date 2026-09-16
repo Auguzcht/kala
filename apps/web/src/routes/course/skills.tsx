@@ -23,7 +23,11 @@ function SkillsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Skills" title="Choose a skill" />
+      <PageHeader
+        eyebrow="Skills"
+        title="Choose a skill"
+        description="Every skill has a lesson, a study deck, and a test. Pick one to start."
+      />
       <TopicLanding
         isLoading={isLoading}
         skills={twin?.skills ?? []}
