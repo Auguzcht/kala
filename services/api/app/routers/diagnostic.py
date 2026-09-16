@@ -5,6 +5,7 @@ RAG-grounded questions, accept answers, grade server-side, write evidence
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -33,6 +34,114 @@ router = APIRouter(prefix="/courses", tags=["diagnostic"])
 # the notification is honest about total volume even though one sitting
 # only serves this many.
 MAX_DIAGNOSTIC_QUESTIONS = 10
+
+# How long a single bounded phase may spend on network work before returning.
+# The Lambda ceiling is 30s and API Gateway caps the request at 30s too, so a
+# phase must finish well inside that and hand back whatever is left for the
+# next call. Sized to leave room for the store phase and the response.
+TAG_SLICE_SECONDS = 12.0
+
+
+def _embed_pending(*, institution_id: str, course_id: str,
+                   budget_seconds: float) -> tuple[int, int]:
+    """Embed every chunk of this course that has no embedding yet.
+
+    Embedding is one batched HTTP round trip per chunk (no LLM), so a whole
+    course normally clears in one pass. Bounded anyway, because "normally" is
+    not a guarantee and the failure mode we are fixing is exactly a phase that
+    assumed it would finish.
+
+    Returns (embedded, failed). A failure is counted, not raised: a chunk with
+    no embedding simply will not surface in RAG retrieval, which is a graceful
+    degradation (match_content_items filters on embedding is not null).
+    """
+    pending = db.select("content_items", {
+        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "embedding": "is.null", "select": "id,chunk_text",
+    })
+    embedded = failed = 0
+    deadline = time.monotonic() + budget_seconds
+    for row in pending:
+        if time.monotonic() > deadline:
+            break
+        text = row.get("chunk_text") or ""
+        if not text.strip():
+            continue
+        try:
+            embedding = bedrock.embed(text)
+            if len(embedding) != 1024:
+                raise ValueError(f"embedding dimension was {len(embedding)}, expected 1024")
+        except Exception as exc:  # noqa: BLE001 — degrade, do not fail the run
+            logger.warning("embedding failed for content %s: %s", row["id"], exc)
+            failed += 1
+            continue
+        db.update("content_items", {"id": f"eq.{row['id']}"}, {"embedding": embedding})
+        embedded += 1
+    return embedded, failed
+
+
+def _tag_pending(*, institution_id: str, course_id: str, skills: list[dict],
+                 budget_seconds: float) -> tuple[int, int]:
+    """Tag chunks that have no skill yet, for as long as the budget allows.
+
+    This is the expensive phase — one LLM call per chunk — and the one that
+    used to blow the Lambda's ceiling. It selects chunks still missing a
+    skill_id, works through them until the deadline, and returns how many are
+    left. Calling ingest again resumes exactly here, because the ROWS are the
+    progress record: a chunk with a skill_id is done, one without is not.
+
+    Returns (tagged, remaining).
+    """
+    if not skills:
+        # Nothing to tag against. Reported as 0 remaining rather than looping
+        # forever on chunks that can never be tagged (the course simply has no
+        # approved skills yet — see the skills/propose endpoint).
+        return 0, 0
+
+    pending = db.select("content_items", {
+        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "skill_id": "is.null", "select": "id,chunk_text,module_ref",
+    })
+    tagged = 0
+    skill_module_ref: dict[str, str] = {}
+    deadline = time.monotonic() + budget_seconds
+
+    for row in pending:
+        if time.monotonic() > deadline:
+            break
+        text = row.get("chunk_text") or ""
+        if not text.strip():
+            continue
+        try:
+            tag = model_router.tag_content(text=text, skills=skills)
+        except Exception as exc:  # noqa: BLE001 — a flaky tag must not kill the run
+            logger.warning("tagging failed for content %s: %s", row["id"], exc)
+            continue
+        skill_id = tag.get("skill_id")
+        if not skill_id:
+            # Model found no matching skill. Leave skill_id null so a later
+            # run can retry it, but do not count it as remaining forever:
+            # count only rows we have not yet visited this pass.
+            continue
+        db.update("content_items", {"id": f"eq.{row['id']}"}, {"skill_id": skill_id})
+        tagged += 1
+        module_ref = row.get("module_ref")
+        if module_ref and skill_id not in skill_module_ref:
+            skill_module_ref[skill_id] = module_ref
+
+    # Best-effort skill -> module inference: the first tagged chunk for a skill
+    # decides that skill's module_ref, and a manual override is never touched
+    # (only fills gaps). Same behaviour as before, just applied per slice.
+    for skill_id, module_ref in skill_module_ref.items():
+        db.update("skills",
+                  {"id": f"eq.{skill_id}", "module_ref": "is.null"},
+                  {"module_ref": module_ref})
+
+    remaining = db.select("content_items", {
+        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "skill_id": "is.null", "select": "id",
+    })
+    return tagged, len(remaining)
 
 
 def _course_ref(course_id: str, institution_id: str) -> str:
@@ -129,18 +238,40 @@ def ingest_course(course_id: str,
     # No assumption here about depth or naming, "Module N" vs a school that
     # organizes some other way both fall out of the same parent_id walk.
     folder_paths = build_folder_paths(content_items)
-    skill_module_ref: dict[str, str] = {}  # first-tagged-item wins per skill
-    stored = 0
-    tagged = 0
-    embedded = 0
-    embed_failed = 0
 
+    # ---- Phase 1: store every chunk (cheap, pure DB) ----------------------
+    #
+    # WHY THIS IS SPLIT FROM TAGGING. This endpoint used to store, tag AND
+    # embed each chunk in one serial loop. Tagging is one LLM call per chunk, so
+    # a real course blew through the Lambda's 30s ceiling and was killed
+    # mid-run — observed three times at exactly 30.000s, which is why the
+    # course held 5 chunks while the connector returns 178 items. The run wrote
+    # what it had reached and died, so the partial result looked like a small
+    # course rather than a failed job.
+    #
+    # Storing is fast and idempotent-ish, so it all happens here in one call.
+    # Tagging and embedding then work from the ROWS THAT EXIST, which makes the
+    # rows themselves the progress record: no job table, no cursor to lose, and
+    # a killed run is resumable by simply calling again.
+    stored_rows: list[tuple[str, str]] = []  # (row_id, clean_chunk)
     for item in content_items:
         body = item.get("body_or_description", "")
         if not body:
             continue
         item_folder_path = folder_paths.get(item.get("lms_content_id"), [])
         item_module_ref = module_ref_for(item_folder_path)
+
+        # Skip an item already ingested for this course: re-running ingest
+        # after a timeout must not duplicate every chunk it already stored.
+        existing = db.select("content_items", {
+            "institution_id": f"eq.{user.institution_id}",
+            "course_id": f"eq.{course_id}",
+            "lms_ref": f"eq.{item.get('lms_content_id')}",
+            "select": "id", "limit": "1",
+        })
+        if existing:
+            continue
+
         for chunk in chunk_text(body):
             clean_chunk = strip_pii(chunk)
             rows = db.insert("content_items", [{
@@ -154,52 +285,38 @@ def ingest_course(course_id: str,
             }])
             if not rows:
                 raise HTTPException(status.HTTP_502_BAD_GATEWAY, "content row was not stored")
-            row_id = rows[0]["id"]
-            stored += 1
+            stored_rows.append((rows[0]["id"], clean_chunk))
 
-            tag = model_router.tag_content(text=clean_chunk, skills=skills)
-            values = {}
-            if tag["skill_id"]:
-                values["skill_id"] = tag["skill_id"]
-                tagged += 1
-                # Best-effort skill -> module inference: the first content
-                # item tagged to a skill decides that skill's module_ref.
-                # A manual override (e.g. from the CEA spreadsheet) always
-                # wins over this and is never touched here (only fills gaps).
-                if item_module_ref and tag["skill_id"] not in skill_module_ref:
-                    skill_module_ref[tag["skill_id"]] = item_module_ref
-            if values:
-                db.update("content_items", {"id": f"eq.{row_id}"}, values)
+    # ---- Phase 2: embed what has no embedding yet (network, bounded) ------
+    # Embeddings are the cheap network call (one batched HTTP round trip each,
+    # no LLM), so this clears a whole course in one pass. Still bounded by a
+    # deadline so a very large course cannot reintroduce the timeout.
+    embedded, embed_failed = _embed_pending(
+        institution_id=user.institution_id, course_id=course_id,
+        budget_seconds=TAG_SLICE_SECONDS,
+    )
 
-            # Best-effort: an embedding provider outage or a single flaky
-            # chunk must not fail the whole ingest run (found necessary
-            # live: a broken free embedding endpoint was previously enough
-            # to 502 the entire request after the very first chunk). The
-            # content row and its skill tag are already stored either way;
-            # a chunk with no embedding just won't surface in RAG retrieval
-            # (match_content_items filters on embedding is not null), which
-            # degrades gracefully rather than failing outright.
-            try:
-                embedding = bedrock.embed(clean_chunk)
-                if len(embedding) != 1024:
-                    raise ValueError(f"embedding dimension was {len(embedding)}, expected 1024")
-            except Exception as exc:
-                print(f"embedding failed for a chunk of {item.get('lms_content_id')}: {exc}")
-                embed_failed += 1
-                continue
-            db.update("content_items", {"id": f"eq.{row_id}"}, {"embedding": embedding})
-            embedded += 1
+    # ---- Phase 3: tag a bounded slice (LLM, slow, RESUMABLE) --------------
+    # One LLM call per chunk is the expensive part, so this does as many as fit
+    # in the time budget and stops cleanly. Whatever is left is picked up by the
+    # next call — see _tag_pending, which selects chunks still missing a tag.
+    tagged, remaining = _tag_pending(
+        institution_id=user.institution_id, course_id=course_id,
+        skills=skills, budget_seconds=TAG_SLICE_SECONDS,
+    )
 
-    for skill_id, module_ref in skill_module_ref.items():
-        # Only fill skills that don't already have a module_ref (a prior
-        # manual override, or a prior ingest run, is never overwritten).
-        db.update(
-            "skills",
-            {"id": f"eq.{skill_id}", "module_ref": "is.null"},
-            {"module_ref": module_ref},
-        )
-
-    return {"stored": stored, "tagged": tagged, "embedded": embedded, "embedFailed": embed_failed}
+    return {
+        "stored": len(stored_rows),
+        "tagged": tagged,
+        "embedded": embedded,
+        "embedFailed": embed_failed,
+        # Non-zero means the course is NOT fully ingested yet: call again.
+        # The client (or an operator) loops until this reads 0. A bare 200 on
+        # this endpoint never meant "complete" — that is the lesson from the
+        # 5-chunk course, so the response now says so explicitly.
+        "remaining": remaining,
+        "complete": remaining == 0,
+    }
 
 
 @router.get("/{course_id}/modules")

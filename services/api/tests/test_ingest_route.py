@@ -21,6 +21,30 @@ class IngestConnector:
         ]
 
 
+def _phase_select(*, courses, skills, pending_embed=None, pending_tag=None):
+    """A db.select stub that answers the ingest phases distinctly.
+
+    The new ingest asks three different questions of content_items (which
+    chunks exist for dedupe, which lack an embedding, which lack a skill), so a
+    single catch-all lambda no longer models it. This dispatches on the filter.
+    """
+    def fake_select(table, params):
+        if table == "courses":
+            return courses
+        if table == "skills":
+            return skills
+        if table == "content_items":
+            # Dedupe check: filtered by lms_ref. Nothing present yet.
+            if "lms_ref" in params:
+                return []
+            if params.get("embedding") == "is.null":
+                return pending_embed or []
+            if params.get("skill_id") == "is.null":
+                return pending_tag or []
+        return []
+    return fake_select
+
+
 def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
     inserted = []
     updates = []
@@ -29,18 +53,16 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
         user_id="user-1", institution_id="institution-1", app_role="instructor"
     )
     app.dependency_overrides[get_lms_connector] = IngestConnector
+    monkeypatch.setattr(diagnostic.db, "select", _phase_select(
+        courses=[{"lms_course_id": "_4_1"}],
+        skills=[{"id": "skill-1", "name": "Algebra"}],
+        # Phase 2/3 read back the row the store phase just wrote.
+        pending_embed=[{"id": "content-row-1", "chunk_text": "[name]\nActual lesson content."}],
+        pending_tag=[{"id": "content-row-1", "chunk_text": "[name]\nActual lesson content.",
+                      "module_ref": "Module 1"}],
+    ))
     monkeypatch.setattr(
-        diagnostic.db,
-        "select",
-        lambda table, params: (
-            [{"lms_course_id": "_4_1"}]
-            if table == "courses"
-            else [{"id": "skill-1", "name": "Algebra"}]
-        ),
-    )
-    monkeypatch.setattr(
-        diagnostic.db,
-        "insert",
+        diagnostic.db, "insert",
         lambda table, rows: inserted.extend(rows) or [{"id": "content-row-1"}],
     )
     monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: updates.append(values) or [])
@@ -58,7 +80,15 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"stored": 1, "tagged": 1, "embedded": 1, "embedFailed": 0}
+    body = response.json()
+    assert body["stored"] == 1
+    assert body["tagged"] == 1
+    assert body["embedded"] == 1
+    assert body["embedFailed"] == 0
+    # The response now reports whether the course is fully ingested, because a
+    # bare 200 never meant "complete" (that is what the 5-chunk course taught).
+    assert "remaining" in body and "complete" in body
+
     assert inserted == [{
         "institution_id": "institution-1",
         "course_id": "course-1",
@@ -74,12 +104,11 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
     # tagged from (skill-1 has no prior module_ref, so this fills the gap).
     assert {"module_ref": "Module 1"} in updates
 
+
 def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
     """A broken/timing-out embedding provider must not fail the whole ingest
-    request (found necessary live: OpenRouter's free embedding endpoint was
-    500ing and previously took the entire /ingest call down with it on the
-    very first chunk). The content row and its skill tag are stored either
-    way; only that chunk's embedding is skipped."""
+    request. The content row and its skill tag are stored either way; only that
+    chunk's embedding is skipped."""
     inserted = []
     updates = []
 
@@ -87,13 +116,12 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
         user_id="user-1", institution_id="institution-1", app_role="instructor"
     )
     app.dependency_overrides[get_lms_connector] = IngestConnector
-    monkeypatch.setattr(
-        diagnostic.db, "select",
-        lambda table, params: (
-            [{"lms_course_id": "_4_1"}] if table == "courses"
-            else [{"id": "skill-1", "name": "Algebra"}]
-        ),
-    )
+    monkeypatch.setattr(diagnostic.db, "select", _phase_select(
+        courses=[{"lms_course_id": "_4_1"}],
+        skills=[{"id": "skill-1", "name": "Algebra"}],
+        pending_embed=[{"id": "content-row-1", "chunk_text": "lesson body"}],
+        pending_tag=[{"id": "content-row-1", "chunk_text": "lesson body", "module_ref": "Module 1"}],
+    ))
     monkeypatch.setattr(
         diagnostic.db, "insert",
         lambda table, rows: inserted.extend(rows) or [{"id": "content-row-1"}],
@@ -116,12 +144,87 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200  # not a 502, the request survives
-    assert response.json() == {"stored": 1, "tagged": 1, "embedded": 0, "embedFailed": 1}
-    # The content row and its skill tag were still stored, only the
-    # embedding step for that chunk was skipped.
+    body = response.json()
+    assert body["embedded"] == 0
+    assert body["embedFailed"] == 1
     assert inserted[0]["lms_ref"] == "lesson-1"
     assert {"skill_id": "skill-1"} in updates
     assert not any("embedding" in u for u in updates)
+
+
+def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeypatch) -> None:
+    """Resumability depends on this: re-running ingest after a timeout must
+    pick up where it left off, not store every chunk again."""
+    inserted = []
+
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="user-1", institution_id="institution-1", app_role="instructor"
+    )
+    app.dependency_overrides[get_lms_connector] = IngestConnector
+
+    def fake_select(table, params):
+        if table == "courses":
+            return [{"lms_course_id": "_4_1"}]
+        if table == "skills":
+            return [{"id": "skill-1", "name": "Algebra"}]
+        if table == "content_items":
+            # The dedupe lookup reports lesson-1 is ALREADY stored.
+            if "lms_ref" in params:
+                return [{"id": "already-there"}]
+            return []
+        return []
+
+    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(
+        diagnostic.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "new"}],
+    )
+    monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: [])
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/courses/course-1/ingest")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert inserted == [], "an already-stored item must not be inserted again"
+    assert response.json()["stored"] == 0
+
+
+def test_ingest_reports_remaining_when_tagging_is_incomplete(monkeypatch) -> None:
+    """`complete: false` is how a caller learns to call again. A bare 200 used
+    to be indistinguishable from a finished run — the exact confusion that let
+    a 5-chunk course look ingested."""
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="user-1", institution_id="institution-1", app_role="instructor"
+    )
+    app.dependency_overrides[get_lms_connector] = IngestConnector
+
+    def fake_select(table, params):
+        if table == "courses":
+            return [{"lms_course_id": "_4_1"}]
+        if table == "skills":
+            return [{"id": "skill-1", "name": "Algebra"}]
+        if table == "content_items":
+            if "lms_ref" in params:
+                return [{"id": "done"}]  # nothing new to store
+            return []
+        return []
+
+    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "insert", lambda t, rows: [{"id": "x"}])
+    monkeypatch.setattr(diagnostic.db, "update", lambda t, f, v: [])
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/courses/course-1/ingest")
+    finally:
+        app.dependency_overrides.clear()
+
+    body = response.json()
+    assert body["complete"] is True
+    assert body["remaining"] == 0
 
 
 def test_propose_skills_endpoint_requires_instructor_or_admin(monkeypatch) -> None:
