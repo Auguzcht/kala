@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
-from app.ai import bedrock, documents, router as model_router
+from app.ai import bedrock, documents
 from app.ai.chunking import chunk_text
 from app.ai.concurrency import map_concurrent
 from app.ai.deidentify import strip_pii
@@ -40,14 +39,19 @@ MAX_DIAGNOSTIC_QUESTIONS = 10
 # The Lambda ceiling is 30s and API Gateway caps the request at 30s too, so a
 # phase must finish well inside that and hand back whatever is left for the
 # next call. Sized to leave room for the store phase and the response.
-# How long the NETWORK-work phases may spend before returning.
+# How long the embed phase may spend before returning.
 #
-# The Lambda ceiling is 30s and API Gateway caps the request at 30s too, and
-# these phases run AFTER the LMS pull and the store step — so this budget is
-# only part of the request. It used to be 12s, which did not leave enough room
-# for the earlier phases and produced repeated 503s at exactly 30.00s. Sized so
-# the whole request lands comfortably inside the wall.
-TAG_SLICE_SECONDS = 6.0
+# Embedding is the only network phase left in these request handlers: tagging
+# moved to the worker (see ingest_course's comment), because it is LLM-bound
+# and cannot be made to fit a 30s request. The Lambda ceiling is 30s and API
+# Gateway caps the request at 30s too, and this phase runs AFTER the LMS pull
+# and the store step, so the budget is only part of the request.
+#
+# 12s, renamed from TAG_SLICE_SECONDS now that it no longer governs tagging.
+# Embedding is one fast HTTP call per chunk with no reasoning, so it clears a
+# course well inside this; the deadline is a backstop for a slow provider, not
+# an expected limit.
+EMBED_SLICE_SECONDS = 12.0
 
 
 def _assert_teaches_course(*, user: CurrentUser, course_id: str) -> None:
@@ -108,79 +112,6 @@ def _embed_pending(*, institution_id: str, course_id: str,
         db.update("content_items", {"id": f"eq.{row['id']}"}, {"embedding": embedding})
         embedded += 1
     return embedded, failed
-
-
-def _tag_pending(*, institution_id: str, course_id: str, skills: list[dict],
-                 budget_seconds: float) -> tuple[int, int]:
-    """Tag chunks that have no skill yet, for as long as the budget allows.
-
-    This is the expensive phase — one LLM call per chunk — and the one that
-    used to blow the Lambda's ceiling. It selects chunks still missing a
-    skill_id, works through them until the deadline, and returns how many are
-    left. Calling ingest again resumes exactly here, because the ROWS are the
-    progress record: a chunk with a skill_id is done, one without is not.
-
-    Returns (tagged, remaining).
-    """
-    if not skills:
-        # Nothing to tag against. Reported as 0 remaining rather than looping
-        # forever on chunks that can never be tagged (the course simply has no
-        # approved skills yet — see the skills/propose endpoint).
-        return 0, 0
-
-    pending = db.select("content_items", {
-        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-        # tag_attempted_at, NOT skill_id: a chunk the model legitimately cannot
-        # match to any skill must stop being "pending" or `remaining` never
-        # reaches zero and a caller loops forever on untaggable content.
-        "tag_attempted_at": "is.null", "select": "id,chunk_text,module_ref",
-    })
-    tagged = 0
-    skill_module_ref: dict[str, str] = {}
-    deadline = time.monotonic() + budget_seconds
-
-    for row in pending:
-        if time.monotonic() > deadline:
-            break
-        text = row.get("chunk_text") or ""
-        if not text.strip():
-            # Nothing to tag, and nothing will change on a retry. Mark it
-            # attempted so it does not sit in the pending set forever.
-            db.update("content_items", {"id": f"eq.{row['id']}"},
-                      {"tag_attempted_at": datetime.now(timezone.utc).isoformat()})
-            continue
-        try:
-            tag = model_router.tag_content(text=text, skills=skills)
-        except Exception as exc:  # noqa: BLE001 — a flaky tag must not kill the run
-            # Deliberately do NOT mark this attempted: a provider failure is
-            # transient, and leaving it pending is what makes a later run
-            # retry it once the tagger is healthy again.
-            logger.warning("tagging failed for content %s: %s", row["id"], exc)
-            continue
-        skill_id = tag.get("skill_id")
-        update = {"tag_attempted_at": datetime.now(timezone.utc).isoformat()}
-        if skill_id:
-            update["skill_id"] = skill_id
-        db.update("content_items", {"id": f"eq.{row['id']}"}, update)
-        if skill_id:
-            tagged += 1
-            module_ref = row.get("module_ref")
-            if module_ref and skill_id not in skill_module_ref:
-                skill_module_ref[skill_id] = module_ref
-
-    # Best-effort skill -> module inference: the first tagged chunk for a skill
-    # decides that skill's module_ref, and a manual override is never touched
-    # (only fills gaps). Same behaviour as before, just applied per slice.
-    for skill_id, module_ref in skill_module_ref.items():
-        db.update("skills",
-                  {"id": f"eq.{skill_id}", "module_ref": "is.null"},
-                  {"module_ref": module_ref})
-
-    remaining = db.select("content_items", {
-        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-        "tag_attempted_at": "is.null", "select": "id",
-    })
-    return tagged, len(remaining)
 
 
 def _course_ref(course_id: str, institution_id: str) -> str:
@@ -246,12 +177,9 @@ def ingest_course(course_id: str,
                   user: CurrentUser = Depends(get_current_user),
                   connector: BlackboardConnector = Depends(get_lms_connector)):
     course_ref = _course_ref(course_id, user.institution_id)
-    skills = db.select("skills", {
-        "course_id": f"eq.{course_id}",
-        "institution_id": f"eq.{user.institution_id}",
-        "status": "eq.approved",  # tag content only against reviewed skills
-        "select": "id,name",
-    })
+    # NOTE: the approved-skills lookup that used to live here is gone with
+    # tagging. It was only read to tag chunks against; the worker's tag job
+    # resolves each chunk's own course's approved skills itself.
     content_items = connector.get_content(course_ref)
 
     # Diagnostic breadcrumb. The reason this exists: the course silently
@@ -343,29 +271,40 @@ def ingest_course(course_id: str,
     # deadline so a very large course cannot reintroduce the timeout.
     embedded, embed_failed = _embed_pending(
         institution_id=user.institution_id, course_id=course_id,
-        budget_seconds=TAG_SLICE_SECONDS,
+        budget_seconds=EMBED_SLICE_SECONDS,
     )
 
-    # ---- Phase 3: tag a bounded slice (LLM, slow, RESUMABLE) --------------
-    # One LLM call per chunk is the expensive part, so this does as many as fit
-    # in the time budget and stops cleanly. Whatever is left is picked up by the
-    # next call — see _tag_pending, which selects chunks still missing a tag.
-    tagged, remaining = _tag_pending(
-        institution_id=user.institution_id, course_id=course_id,
-        skills=skills, budget_seconds=TAG_SLICE_SECONDS,
-    )
+    # ---- Tagging is NOT here any more. ------------------------------------
+    # It moved to the worker's tag_backfill job (services/worker). Tagging is
+    # one reasoning-model call per chunk and measured 3-150s per call, with a
+    # single call able to exceed this Lambda's 30s wall on its own — so no
+    # time-slice value could make it safe here, and every symptom this endpoint
+    # had (the 30s timeouts, the repeatedly-tightened slice, the manual
+    # "POST until complete" grind) came from running a background batch job
+    # through a request-response door.
+    #
+    # This endpoint now stores + embeds and returns. The worker sweeps
+    # tag_attempted_at IS NULL on its 120s ceiling, every 15 minutes, so newly
+    # stored chunks tag themselves on a later run with no human at a terminal.
+    # See services/worker/app/jobs/tag_backfill.py for the failure semantics.
+    #
+    # Embedding deliberately STAYS: it is fast, it belongs at store time (the
+    # worker's tag job then finds chunks ready to tag), and only the LLM-bound
+    # phase was the problem.
+    pending_tag_count = len(db.select("content_items", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "tag_attempted_at": "is.null", "select": "id",
+    }))
 
     return {
         "stored": len(stored_rows),
-        "tagged": tagged,
         "embedded": embedded,
         "embedFailed": embed_failed,
-        # Non-zero means the course is NOT fully ingested yet: call again.
-        # The client (or an operator) loops until this reads 0. A bare 200 on
-        # this endpoint never meant "complete" — that is the lesson from the
-        # 5-chunk course, so the response now says so explicitly.
-        "remaining": remaining,
-        "complete": remaining == 0,
+        # Not "remaining": there is no client-side loop left to drive. This is
+        # how many chunks the WORKER will pick up on its next scheduled run,
+        # surfaced for observability rather than as something to poll on.
+        "pendingTagging": pending_tag_count,
+        "tagging": "queued for the worker's tag_backfill job",
     }
 
 
@@ -441,10 +380,12 @@ def upload_course_content(
         logger.warning("could not archive %s for course %s: %s", filename, course_id, exc)
         stored_original = False
 
-    # Store the chunks, then run the SAME bounded phases ingest uses. Reusing
-    # _embed_pending/_tag_pending (rather than tagging inline here) means an
-    # upload is subject to exactly the same budget discipline — a large PDF
-    # cannot time out the request, it just leaves work for the next call.
+    # Store the chunks and embed them here — both fast and bound to the
+    # request. Tagging is NOT run here: it moved to the worker's tag_backfill
+    # job (see ingest_course's comment for why). A large PDF therefore cannot
+    # time out this request; its chunks simply queue for the next worker run.
+    # The same _embed_pending the ingest path uses is reused so the two
+    # surfaces stay identical in how they store and embed.
     clean = strip_pii(text)
     rows = []
     for chunk in chunk_text(clean):
@@ -463,29 +404,27 @@ def upload_course_content(
         if inserted:
             rows.append(inserted[0]["id"])
 
-    skills = db.select("skills", {
-        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
-        "status": "eq.approved", "select": "id,name",
-    })
     embedded, embed_failed = _embed_pending(
         institution_id=user.institution_id, course_id=course_id,
-        budget_seconds=TAG_SLICE_SECONDS,
+        budget_seconds=EMBED_SLICE_SECONDS,
     )
-    tagged, remaining = _tag_pending(
-        institution_id=user.institution_id, course_id=course_id,
-        skills=skills, budget_seconds=TAG_SLICE_SECONDS,
-    )
+
+    pending_tag_count = len(db.select("content_items", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "tag_attempted_at": "is.null", "select": "id",
+    }))
 
     return {
         "filename": filename,
         "mimeType": mime_type,
         "stored": len(rows),
-        "tagged": tagged,
         "embedded": embedded,
         "embedFailed": embed_failed,
         "originalArchived": stored_original,
-        "remaining": remaining,
-        "complete": remaining == 0,
+        # Chunks the worker will tag on its next scheduled run. Reported for
+        # observability, not as something to poll on.
+        "pendingTagging": pending_tag_count,
+        "tagging": "queued for the worker's tag_backfill job",
     }
 
 

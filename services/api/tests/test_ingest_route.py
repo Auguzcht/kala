@@ -66,11 +66,6 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
         lambda table, rows: inserted.extend(rows) or [{"id": "content-row-1"}],
     )
     monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: updates.append(values) or [])
-    monkeypatch.setattr(
-        diagnostic.model_router,
-        "tag_content",
-        lambda text, skills: {"skill_id": "skill-1", "bloom_level": "apply"},
-    )
     monkeypatch.setattr(diagnostic.bedrock, "embed", lambda text: [0.0] * 1024)
 
     try:
@@ -82,12 +77,16 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["stored"] == 1
-    assert body["tagged"] == 1
     assert body["embedded"] == 1
     assert body["embedFailed"] == 0
-    # The response now reports whether the course is fully ingested, because a
-    # bare 200 never meant "complete" (that is what the 5-chunk course taught).
-    assert "remaining" in body and "complete" in body
+    # Tagging left this endpoint for the worker's tag_backfill job, so the
+    # response no longer reports tagged/remaining/complete. It reports how many
+    # chunks the worker will pick up, which is observability, not a loop to
+    # drive.
+    assert body["tagging"] == "queued for the worker's tag_backfill job"
+    assert "pendingTagging" in body
+    assert "tagged" not in body
+    assert "remaining" not in body
 
     assert inserted == [{
         "institution_id": "institution-1",
@@ -98,13 +97,13 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
         "module_ref": "Module 1",
         "chunk_text": "[name]\nActual lesson content.",
     }]
-    assert any(u.get("skill_id") == "skill-1" for u in updates)
-    # Every attempted row is stamped so untaggable content stops being pending.
-    assert all("tag_attempted_at" in u for u in updates if "skill_id" in u)
-    assert {"embedding": [0.0] * 1024} in updates
-    # The tagged skill's module is backfilled from the content item it was
-    # tagged from (skill-1 has no prior module_ref, so this fills the gap).
-    assert {"module_ref": "Module 1"} in updates
+    assert any("embedding" in u for u in updates)
+    # No skill_id / tag_attempted_at / module_ref writes: tagging (and its
+    # skill->module inference) runs in the worker's tag_backfill job now, not
+    # on this request path.
+    assert not any("skill_id" in u for u in updates)
+    assert not any("tag_attempted_at" in u for u in updates)
+    assert not any("module_ref" in u for u in updates)
 
 
 def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
@@ -129,11 +128,6 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
         lambda table, rows: inserted.extend(rows) or [{"id": "content-row-1"}],
     )
     monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: updates.append(values) or [])
-    monkeypatch.setattr(
-        diagnostic.model_router, "tag_content",
-        lambda text, skills: {"skill_id": "skill-1", "bloom_level": "apply"},
-    )
-
     def flaky_embed(text):
         raise TimeoutError("The read operation timed out")
 
@@ -150,10 +144,9 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
     assert body["embedded"] == 0
     assert body["embedFailed"] == 1
     assert inserted[0]["lms_ref"] == "lesson-1"
-    assert any(u.get("skill_id") == "skill-1" for u in updates)
-    # Every attempted row is stamped so untaggable content stops being pending.
-    assert all("tag_attempted_at" in u for u in updates if "skill_id" in u)
     assert not any("embedding" in u for u in updates)
+    # Tagging is the worker's now, so this path writes no skill_id either way.
+    assert not any("skill_id" in u for u in updates)
 
 
 def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeypatch) -> None:
@@ -195,41 +188,6 @@ def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeyp
     assert response.status_code == 200
     assert inserted == [], "an already-stored item must not be inserted again"
     assert response.json()["stored"] == 0
-
-
-def test_ingest_reports_remaining_when_tagging_is_incomplete(monkeypatch) -> None:
-    """`complete: false` is how a caller learns to call again. A bare 200 used
-    to be indistinguishable from a finished run — the exact confusion that let
-    a 5-chunk course look ingested."""
-    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
-    )
-    app.dependency_overrides[get_lms_connector] = IngestConnector
-
-    def fake_select(table, params):
-        if table == "courses":
-            return [{"lms_course_id": "_4_1"}]
-        if table == "skills":
-            return [{"id": "skill-1", "name": "Algebra"}]
-        if table == "content_items":
-            if "lms_ref" in params:
-                return [{"id": "done"}]  # nothing new to store
-            return []
-        return []
-
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(diagnostic.db, "insert", lambda t, rows: [{"id": "x"}])
-    monkeypatch.setattr(diagnostic.db, "update", lambda t, f, v: [])
-
-    try:
-        with TestClient(app) as client:
-            response = client.post("/courses/course-1/ingest")
-    finally:
-        app.dependency_overrides.clear()
-
-    body = response.json()
-    assert body["complete"] is True
-    assert body["remaining"] == 0
 
 
 def test_propose_skills_endpoint_requires_instructor_or_admin(monkeypatch) -> None:
@@ -282,63 +240,6 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
     assert captured["institution_id"] == "institution-1"
     assert captured["course_id"] == "course-1"
     assert captured["content_items"][1]["lms_content_id"] == "lesson-1"
-
-
-def test_untaggable_content_stops_being_pending(monkeypatch) -> None:
-    """A chunk the model cannot match to any skill must not stay pending
-    forever. Before the tag_attempted_at stamp, `remaining` could never reach
-    zero for such content, so a caller looping until `complete` would re-POST
-    indefinitely against something that will never tag."""
-    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
-    )
-    app.dependency_overrides[get_lms_connector] = IngestConnector
-
-    state = {"attempted": False}
-
-    def fake_select(table, params):
-        if table == "courses":
-            return [{"lms_course_id": "_4_1"}]
-        if table == "skills":
-            return [{"id": "skill-1", "name": "Algebra"}]
-        if table == "content_items":
-            if "lms_ref" in params:
-                return [{"id": "already"}]  # nothing new to store
-            if params.get("tag_attempted_at") == "is.null" and not state["attempted"]:
-                state["attempted"] = True
-                return [{"id": "row-1", "chunk_text": "unrelated text", "module_ref": None}]
-            return []
-        return []
-
-    updates = []
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(diagnostic.db, "insert", lambda t, rows: [{"id": "x"}])
-    monkeypatch.setattr(diagnostic.db, "update",
-                        lambda t, f, v: updates.append(v) or [])
-    # The tagger finds no matching skill.
-    monkeypatch.setattr(diagnostic.model_router, "tag_content",
-                        lambda text, skills: {"skill_id": None, "bloom_level": None})
-
-    try:
-        with TestClient(app) as client:
-            r = client.post("/courses/course-1/ingest")
-    finally:
-        app.dependency_overrides.clear()
-
-    body = r.json()
-    assert body["tagged"] == 0
-    # Attempted (so it left the pending set) but not tagged.
-    assert body["complete"] is True
-    assert body["remaining"] == 0
-    assert any("tag_attempted_at" in u for u in updates)
-    assert not any("skill_id" in u for u in updates)
-
-
-# ---- the retag reset -------------------------------------------------------
-# Approving new skills and re-running ingest does NOTHING on its own: an
-# already-attempted chunk is excluded from the pending query whether or not it
-# matched, which is the mechanism that stops untaggable content looping. So the
-# reset is the deliberate first half of "approve, then retag".
 
 
 def test_retag_reopens_only_unmatched_content(monkeypatch) -> None:

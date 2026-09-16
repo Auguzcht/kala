@@ -52,10 +52,6 @@ def _wire(monkeypatch, *, inserted, updates, embedded_text=None):
     monkeypatch.setattr(diagnostic.db, "select", fake_select)
     monkeypatch.setattr(diagnostic.storage, "upload", lambda *a, **k: None)
     monkeypatch.setattr(diagnostic.bedrock, "embed", lambda text: [0.0] * 1024)
-    monkeypatch.setattr(
-        diagnostic.model_router, "tag_content",
-        lambda text, skills: {"skill_id": "skill-1", "bloom_level": "apply"},
-    )
 
 
 def test_upload_rejects_a_student(monkeypatch) -> None:
@@ -144,7 +140,7 @@ def test_upload_stores_extracted_text_as_course_content(monkeypatch) -> None:
     body = r.json()
     assert body["stored"] == 1
     assert body["filename"] == "deck.pdf"
-    assert body["complete"] is True
+    assert body["tagging"] == "queued for the worker's tag_backfill job"
 
     # Written to content_items with the course's tenant and the module the
     # uploader named, and lms_ref null because it has no LMS counterpart.
@@ -155,9 +151,10 @@ def test_upload_stores_extracted_text_as_course_content(monkeypatch) -> None:
     assert "Managed services" in inserted[0]["chunk_text"]
 
 
-def test_upload_ran_through_tagging_and_embedding(monkeypatch) -> None:
-    """Uploads take the SAME path as ingest, so uploaded material is
-    skill-tagged and embedded and therefore reachable by RAG + generation."""
+def test_upload_embeds_and_queues_tagging_for_the_worker(monkeypatch) -> None:
+    """Uploads take the SAME store+embed path as ingest and then QUEUE tagging
+    for the worker. Tagging used to run here; it is LLM-bound and moved off the
+    request path (see the worker's tag_backfill job)."""
     app.dependency_overrides[get_current_user] = lambda: _staff()
     inserted, updates = [], []
     _wire(monkeypatch, inserted=inserted, updates=updates)
@@ -173,10 +170,11 @@ def test_upload_ran_through_tagging_and_embedding(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     body = r.json()
-    assert body["tagged"] == 1
     assert body["embedded"] == 1
-    skill_updates = [v for (t, v) in updates if "skill_id" in v]
-    assert len(skill_updates) == 1 and skill_updates[0]["skill_id"] == "skill-1"
+    assert body["tagging"] == "queued for the worker's tag_backfill job"
+    assert "pendingTagging" in body
+    # No tag write happened on this request path.
+    assert not any("skill_id" in v for (_, v) in updates)
 
 
 def test_upload_archiving_failure_does_not_fail_the_upload(monkeypatch) -> None:
