@@ -228,6 +228,30 @@ export interface paths {
         patch: operations["post_grade_courses__course_id__assessments__column_id__grade_patch"];
         trace?: never;
     };
+    "/courses/{course_id}/diagnostic/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Diagnostic Status
+         * @description Lightweight due-check for a notification badge. No generation
+         *     happens here, just skill + evidence reads, so this is safe to poll from
+         *     the workspace home or the sidebar without generating anything. The
+         *     diagnostic should not sit open as a permanent default tab; it should
+         *     surface only when there is something new for THIS student to baseline.
+         */
+        get: operations["get_diagnostic_status_courses__course_id__diagnostic_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/diagnostic": {
         parameters: {
             query?: never;
@@ -279,6 +303,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/practice/{course_id}/set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Set
+         * @description Generate a batch of practice items for ONE skill and group them under a
+         *     quiz_sets row. This is the batch replacement for calling /next N times.
+         *
+         *     The set row is created FIRST (status-free — it's just a grouping) so each
+         *     generate_question call can write its set_id at insert time; an item is
+         *     therefore never briefly persisted outside the set it belongs to. If every
+         *     generation call fails, the empty set row is cleaned up rather than left as
+         *     a dangling grouping with no items.
+         *
+         *     A POST, not a GET: this has a side effect (persists N items), so it must
+         *     not be cached or prefetched like the read-shaped /next is.
+         */
+        post: operations["create_set_practice__course_id__set_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/practice/{course_id}/submit": {
         parameters: {
             query?: never;
@@ -307,6 +361,9 @@ export interface paths {
          * Deck
          * @description The review queue: due scheduled cards first, topped up with fresh cards
          *     for skills the student hasn't started. Answer keys never leave the server.
+         *     `skill_id` is the topic picker's explicit override — when set, the whole
+         *     deck (due cards AND fresh top-up) scopes to that one skill instead of the
+         *     course-wide due-first mix, same "auto vs chosen" pattern as practice.
          */
         get: operations["deck_flashcards__course_id__deck_get"];
         put?: never;
@@ -328,44 +385,24 @@ export interface paths {
         put?: never;
         /**
          * Review
-         * @description Grade one recall attempt server-side, write evidence, move the tracer,
-         *     and advance the spaced-repetition schedule. Returns the graded result plus
-         *     the schedule outcome and the twin-grounded reward view.
+         * @description Self-mark one study card and advance its spaced-repetition schedule.
+         *
+         *     Study mode is memorization, not assessment: the student flips the card,
+         *     sees the answer, and marks "Got it" or "Review again" themselves. There is
+         *     no server grading here — `remembered` is the student's own call, by design.
+         *
+         *     What that means for the twin: this writes an evidence_event (type
+         *     'flashcard', correct=remembered) but does NOT call tracer.apply_evidence,
+         *     so mastery_state never moves on self-report. That row is still written on
+         *     purpose — the research export (0003_research.sql) aggregates flashcard
+         *     evidence into research_evidence_anon / research_cohort_daily, and dropping
+         *     it would make every self-paced study session invisible to that pipeline.
+         *     Mastery is fed by diagnostic, quiz (test mode), and tutor checks only; the
+         *     study -> test bridge is what routes studying into a real mastery signal.
+         *     XP still moves off study because xp.summary reads evidence_events, which is
+         *     the intended behavior (reward the work, don't inflate mastery).
          */
         post: operations["review_flashcards__course_id__review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/flashcards/{course_id}/reveal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Reveal
-         * @description Pre-commit Show Answer, matching the target design's separate Reveal
-         *     action (distinct from picking a choice). Seeing the answer without
-         *     recalling it is treated as a lapse and committed BEFORE the answer is
-         *     returned, exactly like a real spaced-repetition tool: there is no free
-         *     peek. Evidence is written with correct=False and the SRS schedule drops
-         *     the card back to its most-frequent box, so a revealed card resurfaces
-         *     sooner, same as a missed one.
-         *
-         *     Client contract: once a card has been revealed, treat it as terminal —
-         *     do NOT also call POST /review for that item_id afterward. This endpoint
-         *     already recorded the lapse; a follow-up review call would double-write
-         *     evidence and could let a correct guess after the reveal quietly overwrite
-         *     the lapse it just cost. The deck's next card comes from GET /deck as
-         *     normal; there is no "undo" on a reveal, again matching a real SRS tool.
-         */
-        post: operations["reveal_flashcards__course_id__reveal_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -428,6 +465,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tutor/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Conversations */
+        get: operations["list_conversations_tutor_conversations_get"];
+        put?: never;
+        /** Create Conversation */
+        post: operations["create_conversation_tutor_conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tutor/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation */
+        get: operations["get_conversation_tutor_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Conversation */
+        delete: operations["delete_conversation_tutor_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tutor/conversations/{conversation_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Attachment */
+        post: operations["upload_attachment_tutor_conversations__conversation_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tutor/conversations/{conversation_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Attachment */
+        delete: operations["delete_attachment_tutor_conversations__conversation_id__attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tutor/ask": {
         parameters: {
             query?: never;
@@ -476,6 +583,44 @@ export interface paths {
          *     not generate an item (that happens when they actually start).
          */
         get: operations["next_up_courses__course_id__next_up_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Learning Plan
+         * @description What this learner's instructor has actually assigned them.
+         *
+         *     The closing half of the human-in-the-loop loop. The instructor surface
+         *     generates AI recommendations and decides on them; this endpoint is the
+         *     only way a decided action reaches the learner. It filters on
+         *     status in ('approved','modified') by design:
+         *
+         *       suggested  -> the teacher has not looked yet. Invisible here. If a
+         *                     learner could see un-decided AI output, the gate would
+         *                     be decorative.
+         *       rejected   -> the teacher declined it. Invisible here, kept in the
+         *                     audit trail.
+         *       completed  -> done, shown greyed so the learner can see their history.
+         *
+         *     The learner sees the action and the instructor's note, never the
+         *     model's confidence score or the raw evidence panel — those are
+         *     instructor-facing framing about the learner, and handing a student
+         *     "the model is 84% confident you are weak at IAM" is the exact thing
+         *     the design brief rules out.
+         */
+        get: operations["learning_plan_courses__course_id__plan_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -639,6 +784,173 @@ export interface paths {
         patch: operations["detach_auto_matched_skill_dashboard__course_id__skills__skill_id__detach_patch"];
         trace?: never;
     };
+    "/dashboard/{course_id}/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Course Roster
+         * @description One row per enrolled STUDENT, with real names.
+         *
+         *     Two things worth stating because both were bugs:
+         *
+         *     Students only. cohort.student_ids requires role='student' on BOTH the
+         *     enrollment and the user, so a co-teacher or an admin who launched the
+         *     course never lands in the roster as a learner with 0% mastery.
+         *
+         *     Real names. The instructor is the teacher of record and already holds
+         *     this roster in their gradebook; a class list of 'anon-8f2c1b' is not a
+         *     privacy win, it is an unusable screen that gets worked around. The
+         *     de-identification rule (CLAUDE.md 4) governs what leaves for a model or
+         *     a researcher, and it still holds: every row carries its pseudonym, the
+         *     UI can flip to pseudonyms for screen-sharing, and ai/prescriber.py is
+         *     handed the pseudonym and never the name.
+         */
+        get: operations["course_roster_dashboard__course_id__roster_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/{course_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Course Stats
+         * @description Cohort KPI strip plus the series behind every chart on the overview:
+         *     readiness trend (from the worker's snapshots, real history), daily
+         *     evidence volume, mastery band distribution, Bloom's coverage, per-skill
+         *     breakdown weakest-first, and the human-in-the-loop decision counts.
+         */
+        get: operations["course_stats_dashboard__course_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/{course_id}/students/{user_id}/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Student Record
+         * @description The teacher-facing read of one learner.
+         *
+         *     Deliberately not the student's twin payload. The twin answers "how am I
+         *     doing"; this answers "what does this learner need next, and what will I
+         *     do about it" — so it adds identity, standing against the cohort,
+         *     momentum (last 10 graded vs the 10 before), engagement pattern, and the
+         *     readiness history the trend line is drawn from.
+         */
+        get: operations["student_record_dashboard__course_id__students__user_id__record_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/{course_id}/students/{user_id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recommendations
+         * @description Every recommendation for this learner, decided or not. Rejected rows
+         *     stay in the list rather than disappearing: the decision history IS the
+         *     human-in-the-loop record, and a teacher should be able to see they
+         *     already turned something down.
+         */
+        get: operations["list_recommendations_dashboard__course_id__students__user_id__recommendations_get"];
+        put?: never;
+        /**
+         * Generate Recommendations
+         * @description Ask Kala for next actions for this learner.
+         *
+         *     De-identified before the call (the prescriber receives the pseudonym and
+         *     numbers, never a name), persisted as status='suggested', and invisible
+         *     to the learner until a teacher decides. Any pending suggestions from a
+         *     previous run are superseded so the queue does not accumulate stale
+         *     duplicates every time the teacher hits refresh — decided rows are never
+         *     touched, because they are the audit trail.
+         */
+        post: operations["generate_recommendations_dashboard__course_id__students__user_id__recommendations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/{course_id}/recommendations/{rec_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Decide Recommendation
+         * @description Approve, modify, or reject one recommendation. This is the gate.
+         *
+         *     'modified' is kept distinct from 'approved' rather than folded into it:
+         *     "how often does a teacher edit the AI instead of taking it as written"
+         *     is one of the study's actual research questions, and it is only
+         *     answerable if the two decisions are different values in the column.
+         */
+        patch: operations["decide_recommendation_dashboard__course_id__recommendations__rec_id__patch"];
+        trace?: never;
+    };
+    "/dashboard/{course_id}/students/{user_id}/interventions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Intervention
+         * @description The teacher's own move. Lands in the learner's plan immediately with
+         *     status='approved' and source='instructor' — a human wrote it, so there
+         *     is nothing to gate. The symmetry matters: the same object carries both
+         *     an AI proposal a teacher accepted and an action a teacher authored, so
+         *     the learner's plan is one list and the audit trail shows which is
+         *     which.
+         */
+        post: operations["create_intervention_dashboard__course_id__students__user_id__interventions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/gamification/{course_id}/summary": {
         parameters: {
             query?: never;
@@ -672,6 +984,8 @@ export interface components {
              * @enum {string}
              */
             style: "default" | "eli5" | "detail";
+            /** Conversation Id */
+            conversation_id?: string | null;
         };
         /** Body_launch_lti_launch_post */
         Body_launch_lti_launch_post: {
@@ -679,6 +993,11 @@ export interface components {
             id_token: string;
             /** State */
             state: string;
+        };
+        /** Body_upload_attachment_tutor_conversations__conversation_id__attachments_post */
+        Body_upload_attachment_tutor_conversations__conversation_id__attachments_post: {
+            /** File */
+            file: string;
         };
         /** CheckBody */
         CheckBody: {
@@ -697,6 +1016,13 @@ export interface components {
              */
             hints_used: number;
         };
+        /** CreateConversation */
+        CreateConversation: {
+            /** Course Id */
+            course_id: string;
+            /** Skill Id */
+            skill_id?: string | null;
+        };
         /** GradeBody */
         GradeBody: {
             /** User Id */
@@ -709,32 +1035,54 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** RevealBody */
-        RevealBody: {
-            /** Item Id */
-            item_id: string;
+        /**
+         * InterventionCreate
+         * @description A teacher writing their own action, not editing one Kala proposed.
+         */
+        InterventionCreate: {
+            /** Title */
+            title: string;
             /**
-             * Latency Ms
-             * @default 0
+             * Kind
+             * @default practice
              */
-            latency_ms: number;
+            kind: string;
+            /**
+             * Priority
+             * @default medium
+             */
+            priority: string;
+            /** Skill Id */
+            skill_id?: string | null;
+            /** Instructor Note */
+            instructor_note?: string | null;
+        };
+        /** RecommendationDecision */
+        RecommendationDecision: {
+            /** Status */
+            status: string;
+            /** Title */
+            title?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Priority */
+            priority?: string | null;
+            /** Decision Note */
+            decision_note?: string | null;
+            /** Instructor Note */
+            instructor_note?: string | null;
         };
         /** ReviewBody */
         ReviewBody: {
             /** Item Id */
             item_id: string;
-            /** Choice Id */
-            choice_id: string;
+            /** Remembered */
+            remembered: boolean;
             /**
              * Latency Ms
              * @default 0
              */
             latency_ms: number;
-            /**
-             * Hints Used
-             * @default 0
-             */
-            hints_used: number;
         };
         /** ReviewDecision */
         ReviewDecision: {
@@ -1180,6 +1528,41 @@ export interface operations {
             };
         };
     };
+    get_diagnostic_status_courses__course_id__diagnostic_status_get: {
+        parameters: {
+            query?: {
+                module_ref?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_diagnostic_courses__course_id__diagnostic_get: {
         parameters: {
             query?: {
@@ -1254,7 +1637,45 @@ export interface operations {
     };
     next_item_practice__course_id__next_get: {
         parameters: {
-            query?: never;
+            query?: {
+                skill_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_set_practice__course_id__set_post: {
+        parameters: {
+            query?: {
+                skill_id?: string | null;
+                size?: number;
+            };
             header?: {
                 authorization?: string | null;
             };
@@ -1327,6 +1748,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 module_ref?: string | null;
+                skill_id?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -1372,43 +1794,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ReviewBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reveal_flashcards__course_id__reveal_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RevealBody"];
             };
         };
         responses: {
@@ -1504,6 +1889,211 @@ export interface operations {
             };
         };
     };
+    list_conversations_tutor_conversations_get: {
+        parameters: {
+            query: {
+                course_id: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_conversation_tutor_conversations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConversation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_tutor_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_conversation_tutor_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_tutor_conversations__conversation_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_tutor_conversations__conversation_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_attachment_tutor_conversations__conversation_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ask_tutor_ask_post: {
         parameters: {
             query?: never;
@@ -1573,6 +2163,39 @@ export interface operations {
         };
     };
     next_up_courses__course_id__next_up_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    learning_plan_courses__course_id__plan_get: {
         parameters: {
             query?: never;
             header?: {
@@ -1824,6 +2447,250 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    course_roster_dashboard__course_id__roster_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    course_stats_dashboard__course_id__stats_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    student_record_dashboard__course_id__students__user_id__record_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_recommendations_dashboard__course_id__students__user_id__recommendations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_recommendations_dashboard__course_id__students__user_id__recommendations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_recommendation_dashboard__course_id__recommendations__rec_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                rec_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendationDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_intervention_dashboard__course_id__students__user_id__interventions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterventionCreate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -587,6 +587,79 @@
         }
       }
     },
+    "/courses/{course_id}/diagnostic/status": {
+      "get": {
+        "tags": [
+          "diagnostic"
+        ],
+        "summary": "Get Diagnostic Status",
+        "description": "Lightweight due-check for a notification badge. No generation\nhappens here, just skill + evidence reads, so this is safe to poll from\nthe workspace home or the sidebar without generating anything. The\ndiagnostic should not sit open as a permanent default tab; it should\nsurface only when there is something new for THIS student to baseline.",
+        "operationId": "get_diagnostic_status_courses__course_id__diagnostic_status_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "module_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Module Ref"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/courses/{course_id}/diagnostic": {
       "get": {
         "tags": [
@@ -743,6 +816,105 @@
             }
           },
           {
+            "name": "skill_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/practice/{course_id}/set": {
+      "post": {
+        "tags": [
+          "practice"
+        ],
+        "summary": "Create Set",
+        "description": "Generate a batch of practice items for ONE skill and group them under a\nquiz_sets row. This is the batch replacement for calling /next N times.\n\nThe set row is created FIRST (status-free \u2014 it's just a grouping) so each\ngenerate_question call can write its set_id at insert time; an item is\ntherefore never briefly persisted outside the set it belongs to. If every\ngeneration call fails, the empty set row is cleaned up rather than left as\na dangling grouping with no items.\n\nA POST, not a GET: this has a side effect (persists N items), so it must\nnot be cached or prefetched like the read-shaped /next is.",
+        "operationId": "create_set_practice__course_id__set_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "skill_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill Id"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 5,
+              "title": "Size"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -853,7 +1025,7 @@
           "flashcards"
         ],
         "summary": "Deck",
-        "description": "The review queue: due scheduled cards first, topped up with fresh cards\nfor skills the student hasn't started. Answer keys never leave the server.",
+        "description": "The review queue: due scheduled cards first, topped up with fresh cards\nfor skills the student hasn't started. Answer keys never leave the server.\n`skill_id` is the topic picker's explicit override \u2014 when set, the whole\ndeck (due cards AND fresh top-up) scopes to that one skill instead of the\ncourse-wide due-first mix, same \"auto vs chosen\" pattern as practice.",
         "operationId": "deck_flashcards__course_id__deck_get",
         "parameters": [
           {
@@ -889,6 +1061,22 @@
                 }
               ],
               "title": "Module Ref"
+            }
+          },
+          {
+            "name": "skill_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill Id"
             }
           },
           {
@@ -936,7 +1124,7 @@
           "flashcards"
         ],
         "summary": "Review",
-        "description": "Grade one recall attempt server-side, write evidence, move the tracer,\nand advance the spaced-repetition schedule. Returns the graded result plus\nthe schedule outcome and the twin-grounded reward view.",
+        "description": "Self-mark one study card and advance its spaced-repetition schedule.\n\nStudy mode is memorization, not assessment: the student flips the card,\nsees the answer, and marks \"Got it\" or \"Review again\" themselves. There is\nno server grading here \u2014 `remembered` is the student's own call, by design.\n\nWhat that means for the twin: this writes an evidence_event (type\n'flashcard', correct=remembered) but does NOT call tracer.apply_evidence,\nso mastery_state never moves on self-report. That row is still written on\npurpose \u2014 the research export (0003_research.sql) aggregates flashcard\nevidence into research_evidence_anon / research_cohort_daily, and dropping\nit would make every self-paced study session invisible to that pipeline.\nMastery is fed by diagnostic, quiz (test mode), and tutor checks only; the\nstudy -> test bridge is what routes studying into a real mastery signal.\nXP still moves off study because xp.summary reads evidence_events, which is\nthe intended behavior (reward the work, don't inflate mastery).",
         "operationId": "review_flashcards__course_id__review_post",
         "parameters": [
           {
@@ -971,73 +1159,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ReviewBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/flashcards/{course_id}/reveal": {
-      "post": {
-        "tags": [
-          "flashcards"
-        ],
-        "summary": "Reveal",
-        "description": "Pre-commit Show Answer, matching the target design's separate Reveal\naction (distinct from picking a choice). Seeing the answer without\nrecalling it is treated as a lapse and committed BEFORE the answer is\nreturned, exactly like a real spaced-repetition tool: there is no free\npeek. Evidence is written with correct=False and the SRS schedule drops\nthe card back to its most-frequent box, so a revealed card resurfaces\nsooner, same as a missed one.\n\nClient contract: once a card has been revealed, treat it as terminal \u2014\ndo NOT also call POST /review for that item_id afterward. This endpoint\nalready recorded the lapse; a follow-up review call would double-write\nevidence and could let a correct guess after the reveal quietly overwrite\nthe lapse it just cost. The deck's next card comes from GET /deck as\nnormal; there is no \"undo\" on a reveal, again matching a real SRS tool.",
-        "operationId": "reveal_flashcards__course_id__reveal_post",
-        "parameters": [
-          {
-            "name": "course_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RevealBody"
               }
             }
           }
@@ -1206,6 +1327,358 @@
         }
       }
     },
+    "/tutor/conversations": {
+      "post": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "Create Conversation",
+        "operationId": "create_conversation_tutor_conversations_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConversation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "List Conversations",
+        "operationId": "list_conversations_tutor_conversations_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tutor/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "Get Conversation",
+        "operationId": "get_conversation_tutor_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "Delete Conversation",
+        "operationId": "delete_conversation_tutor_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tutor/conversations/{conversation_id}/attachments": {
+      "post": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "Upload Attachment",
+        "operationId": "upload_attachment_tutor_conversations__conversation_id__attachments_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_attachment_tutor_conversations__conversation_id__attachments_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tutor/conversations/{conversation_id}/attachments/{attachment_id}": {
+      "delete": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "Delete Attachment",
+        "operationId": "delete_attachment_tutor_conversations__conversation_id__attachments__attachment_id__delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tutor/ask": {
       "post": {
         "tags": [
@@ -1327,6 +1800,63 @@
         "summary": "Next Up",
         "description": "One recommendation: the skill this student should practice next.\nLightweight \u2014 reuses the same weakest-skill picker as practice but does\nnot generate an item (that happens when they actually start).",
         "operationId": "next_up_courses__course_id__next_up_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/courses/{course_id}/plan": {
+      "get": {
+        "tags": [
+          "twin"
+        ],
+        "summary": "Learning Plan",
+        "description": "What this learner's instructor has actually assigned them.\n\nThe closing half of the human-in-the-loop loop. The instructor surface\ngenerates AI recommendations and decides on them; this endpoint is the\nonly way a decided action reaches the learner. It filters on\nstatus in ('approved','modified') by design:\n\n  suggested  -> the teacher has not looked yet. Invisible here. If a\n                learner could see un-decided AI output, the gate would\n                be decorative.\n  rejected   -> the teacher declined it. Invisible here, kept in the\n                audit trail.\n  completed  -> done, shown greyed so the learner can see their history.\n\nThe learner sees the action and the instructor's note, never the\nmodel's confidence score or the raw evidence panel \u2014 those are\ninstructor-facing framing about the learner, and handing a student\n\"the model is 84% confident you are weak at IAM\" is the exact thing\nthe design brief rules out.",
+        "operationId": "learning_plan_courses__course_id__plan_get",
         "parameters": [
           {
             "name": "course_id",
@@ -1825,6 +2355,468 @@
         }
       }
     },
+    "/dashboard/{course_id}/roster": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Course Roster",
+        "description": "One row per enrolled STUDENT, with real names.\n\nTwo things worth stating because both were bugs:\n\nStudents only. cohort.student_ids requires role='student' on BOTH the\nenrollment and the user, so a co-teacher or an admin who launched the\ncourse never lands in the roster as a learner with 0% mastery.\n\nReal names. The instructor is the teacher of record and already holds\nthis roster in their gradebook; a class list of 'anon-8f2c1b' is not a\nprivacy win, it is an unusable screen that gets worked around. The\nde-identification rule (CLAUDE.md 4) governs what leaves for a model or\na researcher, and it still holds: every row carries its pseudonym, the\nUI can flip to pseudonyms for screen-sharing, and ai/prescriber.py is\nhanded the pseudonym and never the name.",
+        "operationId": "course_roster_dashboard__course_id__roster_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/{course_id}/stats": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Course Stats",
+        "description": "Cohort KPI strip plus the series behind every chart on the overview:\nreadiness trend (from the worker's snapshots, real history), daily\nevidence volume, mastery band distribution, Bloom's coverage, per-skill\nbreakdown weakest-first, and the human-in-the-loop decision counts.",
+        "operationId": "course_stats_dashboard__course_id__stats_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/{course_id}/students/{user_id}/record": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Student Record",
+        "description": "The teacher-facing read of one learner.\n\nDeliberately not the student's twin payload. The twin answers \"how am I\ndoing\"; this answers \"what does this learner need next, and what will I\ndo about it\" \u2014 so it adds identity, standing against the cohort,\nmomentum (last 10 graded vs the 10 before), engagement pattern, and the\nreadiness history the trend line is drawn from.",
+        "operationId": "student_record_dashboard__course_id__students__user_id__record_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/{course_id}/students/{user_id}/recommendations": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "List Recommendations",
+        "description": "Every recommendation for this learner, decided or not. Rejected rows\nstay in the list rather than disappearing: the decision history IS the\nhuman-in-the-loop record, and a teacher should be able to see they\nalready turned something down.",
+        "operationId": "list_recommendations_dashboard__course_id__students__user_id__recommendations_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Generate Recommendations",
+        "description": "Ask Kala for next actions for this learner.\n\nDe-identified before the call (the prescriber receives the pseudonym and\nnumbers, never a name), persisted as status='suggested', and invisible\nto the learner until a teacher decides. Any pending suggestions from a\nprevious run are superseded so the queue does not accumulate stale\nduplicates every time the teacher hits refresh \u2014 decided rows are never\ntouched, because they are the audit trail.",
+        "operationId": "generate_recommendations_dashboard__course_id__students__user_id__recommendations_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/{course_id}/recommendations/{rec_id}": {
+      "patch": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Decide Recommendation",
+        "description": "Approve, modify, or reject one recommendation. This is the gate.\n\n'modified' is kept distinct from 'approved' rather than folded into it:\n\"how often does a teacher edit the AI instead of taking it as written\"\nis one of the study's actual research questions, and it is only\nanswerable if the two decisions are different values in the column.",
+        "operationId": "decide_recommendation_dashboard__course_id__recommendations__rec_id__patch",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "rec_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rec Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/{course_id}/students/{user_id}/interventions": {
+      "post": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Create Intervention",
+        "description": "The teacher's own move. Lands in the learner's plan immediately with\nstatus='approved' and source='instructor' \u2014 a human wrote it, so there\nis nothing to gate. The symmetry matters: the same object carries both\nan AI proposal a teacher accepted and an action a teacher authored, so\nthe learner's plan is one list and the audit trail shows which is\nwhich.",
+        "operationId": "create_intervention_dashboard__course_id__students__user_id__interventions_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterventionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/gamification/{course_id}/summary": {
       "get": {
         "tags": [
@@ -1903,6 +2895,17 @@
             ],
             "title": "Style",
             "default": "default"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
           }
         },
         "type": "object",
@@ -1929,6 +2932,20 @@
           "state"
         ],
         "title": "Body_launch_lti_launch_post"
+      },
+      "Body_upload_attachment_tutor_conversations__conversation_id__attachments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_attachment_tutor_conversations__conversation_id__attachments_post"
       },
       "CheckBody": {
         "properties": {
@@ -1957,6 +2974,30 @@
           "choice_id"
         ],
         "title": "CheckBody"
+      },
+      "CreateConversation": {
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_id"
+        ],
+        "title": "CreateConversation"
       },
       "GradeBody": {
         "properties": {
@@ -1989,23 +3030,119 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "RevealBody": {
+      "InterventionCreate": {
         "properties": {
-          "item_id": {
+          "title": {
             "type": "string",
-            "title": "Item Id"
+            "title": "Title"
           },
-          "latency_ms": {
-            "type": "integer",
-            "title": "Latency Ms",
-            "default": 0
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "practice"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority",
+            "default": "medium"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          },
+          "instructor_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructor Note"
           }
         },
         "type": "object",
         "required": [
-          "item_id"
+          "title"
         ],
-        "title": "RevealBody"
+        "title": "InterventionCreate",
+        "description": "A teacher writing their own action, not editing one Kala proposed."
+      },
+      "RecommendationDecision": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "instructor_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructor Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "RecommendationDecision"
       },
       "ReviewBody": {
         "properties": {
@@ -2013,25 +3150,20 @@
             "type": "string",
             "title": "Item Id"
           },
-          "choice_id": {
-            "type": "string",
-            "title": "Choice Id"
+          "remembered": {
+            "type": "boolean",
+            "title": "Remembered"
           },
           "latency_ms": {
             "type": "integer",
             "title": "Latency Ms",
-            "default": 0
-          },
-          "hints_used": {
-            "type": "integer",
-            "title": "Hints Used",
             "default": 0
           }
         },
         "type": "object",
         "required": [
           "item_id",
-          "choice_id"
+          "remembered"
         ],
         "title": "ReviewBody"
       },

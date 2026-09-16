@@ -1,34 +1,29 @@
-"""Flashcard endpoints, spaced-repetition edition.
+"""Flashcard endpoints — STUDY MODE.
 
-This is the active-recall surface from the target design (prompt first, then
-options, with Hint / Reveal / Explain). Two things changed from the first cut:
+A flashcard is a flip: front shows the prompt, you tap, the back reveals the
+answer and explanation, and you mark it yourself ("Got it" / "Review again").
+This is memorization, not assessment, so there is no server grading here and
+no multiple-choice UI. The same generated item can still be taken as a graded
+quiz (test mode) through /practice/{course_id}/set — that is the bridge from
+studying to a mastery signal.
 
-  1. Selection is scheduled, not a flat top-N. The deck is driven by
-     srs_state: cards that are DUE come back first, and a card you missed
-     resurfaces sooner and more often (box 0) until you recall it several
-     times running, at which point it graduates out of normal review. New
-     skills with no card yet get one generated to seed the schedule.
+Two consequences of the split, both deliberate:
 
-  2. Cards are graded server-side. A flashcard is a real MCQ generated_item
-     with its answer key kept on the server (same pattern as practice), so
-     "knew it" is not a self-report the client could fake — the student picks
-     an option and the server decides correctness, feeds the tracer, writes a
-     flashcard evidence_event, and advances the schedule.
+  1. Gating and slicing still happen here. A card you mark "Review again"
+     reschedules to box 0 and resurfaces sooner; a card recalled several times
+     running graduates out of normal review. Scheduling is srs_state, and
+     srs.review already takes a plain `correct: bool` — self-mark is passed
+     straight through, so the schedule logic is unchanged.
 
-Three actions on a card, three different contracts:
-  - Hint  is NOT this router — it's a grounded /tutor/ask call before the
-    student answers, counted client-side into hints_used and sent along with
-    whichever of review/reveal ends the card.
-  - Reveal is /reveal below: a pre-commit Show Answer. Because the server
-    never lets a client see an answer key for free, revealing forces an
-    immediate lapse (correct=False, schedule drops to the most-frequent box)
-    BEFORE the answer is returned — there is no free peek, same as any real
-    spaced-repetition tool.
-  - Explain is a post-answer /tutor/ask call with style=detail on the
-    grounded content, same mechanism as Hint, different timing.
+  2. Self-mark does NOT feed the twin. review() writes an evidence_event
+     (type 'flashcard') so study behavior still reaches the research export,
+     but never calls tracer.apply_evidence, so mastery_state stays put.
+     Mastery is fed by diagnostic, quiz (test mode), and tutor checks. A
+     student who wants a mastery signal from what they studied takes the
+     test on the far side of the bridge.
 
-Review returns the reward view (XP/streak) so the gamified header has real,
-twin-grounded numbers to show.
+Hint and Explain are plain /tutor/ask calls with grounded content; they
+inform, they do not grade, and they do not touch the schedule.
 """
 from __future__ import annotations
 
@@ -40,7 +35,6 @@ from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user
 from app.learn import items as item_gen
 from app.learn import srs, xp
-from app.twin import tracer
 
 router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 
@@ -117,7 +111,6 @@ def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
             "skillId": d["skill_id"],
             "skillName": skill.get("name"),
             "prompt": it["prompt"],
-            "choices": it["choices"],
             "state": "due",
             "box": d["box"],
         })
@@ -155,10 +148,34 @@ def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
                 "skillId": skill["id"],
                 "skillName": skill.get("name"),
                 "prompt": card["prompt"],
-                "choices": card["choices"],
                 "state": "new",
                 "box": 0,
             })
+
+    # 3) Derive the study back (answer label + explanation) for every card in
+    # ONE query. Study mode shows a flip, so it needs the answer the MCQ
+    # hides — but only as a plain label, and only through this endpoint (the
+    # quiz surface never receives a back; it grades server-side). Deriving it
+    # here rather than widening generate_question's return keeps the answer
+    # out of every other caller's payload: diagnostic appends the generator's
+    # dict straight into its response, so an answer field on that return would
+    # have leaked.
+    item_ids = [c["itemId"] for c in cards]
+    if item_ids:
+        back_rows = db.select("generated_items", {
+            "id": f"in.({','.join(item_ids)})",
+            "institution_id": f"eq.{user.institution_id}",
+            "select": "id,correct_choice_id,explanation,choices",
+        })
+        backs = {
+            r["id"]: {
+                "label": item_gen.correct_label(r),
+                "explanation": r.get("explanation") or "",
+            }
+            for r in back_rows
+        }
+        for card in cards:
+            card["back"] = backs.get(card["itemId"], {"label": None, "explanation": ""})
 
     return {
         "courseId": course_id,
@@ -172,107 +189,58 @@ def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
 
 class ReviewBody(BaseModel):
     item_id: str
-    choice_id: str
+    remembered: bool
     latency_ms: int = 0
-    hints_used: int = 0
 
 
 @router.post("/{course_id}/review")
 def review(course_id: str, body: ReviewBody, user: CurrentUser = Depends(get_current_user)):
-    """Grade one recall attempt server-side, write evidence, move the tracer,
-    and advance the spaced-repetition schedule. Returns the graded result plus
-    the schedule outcome and the twin-grounded reward view."""
-    try:
-        graded = item_gen.grade(
-            institution_id=user.institution_id, item_id=body.item_id, choice_id=body.choice_id,
-        )
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "card not found")
+    """Self-mark one study card and advance its spaced-repetition schedule.
 
-    skill_id = graded["skillId"]
+    Study mode is memorization, not assessment: the student flips the card,
+    sees the answer, and marks "Got it" or "Review again" themselves. There is
+    no server grading here — `remembered` is the student's own call, by design.
+
+    What that means for the twin: this writes an evidence_event (type
+    'flashcard', correct=remembered) but does NOT call tracer.apply_evidence,
+    so mastery_state never moves on self-report. That row is still written on
+    purpose — the research export (0003_research.sql) aggregates flashcard
+    evidence into research_evidence_anon / research_cohort_daily, and dropping
+    it would make every self-paced study session invisible to that pipeline.
+    Mastery is fed by diagnostic, quiz (test mode), and tutor checks only; the
+    study -> test bridge is what routes studying into a real mastery signal.
+    XP still moves off study because xp.summary reads evidence_events, which is
+    the intended behavior (reward the work, don't inflate mastery).
+    """
+    rows = db.select("generated_items", {
+        "id": f"eq.{body.item_id}", "institution_id": f"eq.{user.institution_id}",
+        "select": "id,skill_id", "limit": "1",
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "card not found")
+    skill_id = rows[0].get("skill_id")
+
     db.insert_evidence([{
         "institution_id": user.institution_id, "user_id": user.user_id,
         "course_id": course_id, "skill_id": skill_id, "type": "flashcard",
-        "correct": graded["correct"], "latency_ms": body.latency_ms,
-        "hints_used": body.hints_used,
+        "correct": body.remembered, "latency_ms": body.latency_ms,
+        "hints_used": 0,
     }])
-    state = tracer.apply_evidence(
-        institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, skill_id=skill_id, correct=graded["correct"],
-    )
+    # Deliberately NO tracer.apply_evidence here — see the docstring. Self-mark
+    # is not assessment; mastery moves on graded evidence only.
     sched = srs.review(
         institution_id=user.institution_id, user_id=user.user_id,
         course_id=course_id, item_id=body.item_id, skill_id=skill_id,
-        correct=graded["correct"],
+        correct=body.remembered,
     )
 
     return {
-        "correct": graded["correct"],
-        "explanation": graded["explanation"],
+        "remembered": body.remembered,
         "graduated": sched.graduated,
         "dueInHours": round(sched.interval_hours, 1),
         "box": sched.box,
-        "mastery": state.get("estimate"),
         "reward": xp.summary(
             institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
         ),
     }
 
-
-class RevealBody(BaseModel):
-    item_id: str
-    latency_ms: int = 0
-
-
-@router.post("/{course_id}/reveal")
-def reveal(course_id: str, body: RevealBody, user: CurrentUser = Depends(get_current_user)):
-    """Pre-commit Show Answer, matching the target design's separate Reveal
-    action (distinct from picking a choice). Seeing the answer without
-    recalling it is treated as a lapse and committed BEFORE the answer is
-    returned, exactly like a real spaced-repetition tool: there is no free
-    peek. Evidence is written with correct=False and the SRS schedule drops
-    the card back to its most-frequent box, so a revealed card resurfaces
-    sooner, same as a missed one.
-
-    Client contract: once a card has been revealed, treat it as terminal —
-    do NOT also call POST /review for that item_id afterward. This endpoint
-    already recorded the lapse; a follow-up review call would double-write
-    evidence and could let a correct guess after the reveal quietly overwrite
-    the lapse it just cost. The deck's next card comes from GET /deck as
-    normal; there is no "undo" on a reveal, again matching a real SRS tool.
-    """
-    try:
-        revealed = item_gen.reveal(
-            institution_id=user.institution_id, item_id=body.item_id,
-        )
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "card not found")
-
-    skill_id = revealed["skillId"]
-    db.insert_evidence([{
-        "institution_id": user.institution_id, "user_id": user.user_id,
-        "course_id": course_id, "skill_id": skill_id, "type": "flashcard",
-        "correct": False, "latency_ms": body.latency_ms, "hints_used": 0,
-    }])
-    state = tracer.apply_evidence(
-        institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, skill_id=skill_id, correct=False,
-    )
-    sched = srs.review(
-        institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, item_id=body.item_id, skill_id=skill_id,
-        correct=False,
-    )
-
-    return {
-        "revealed": True,
-        "correctChoiceId": revealed["correctChoiceId"],
-        "correctLabel": revealed["correctLabel"],
-        "explanation": revealed["explanation"],
-        "dueInHours": round(sched.interval_hours, 1),
-        "box": sched.box,
-        "mastery": state.get("estimate"),
-        "reward": xp.summary(
-            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
-        ),
-    }

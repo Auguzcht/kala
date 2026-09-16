@@ -2,37 +2,42 @@ import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { TransitionPanel } from "@/components/motion/transition-panel";
 import { BrainIcon } from "@/components/ui/brain";
-import { EyeIcon } from "@/components/ui/eye";
 import { SparklesIcon } from "@/components/ui/sparkles";
-import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { ComposeDock } from "@/components/study/ComposeDock";
 import { SessionBar } from "@/components/study/SessionBar";
 import { StudyStream } from "@/components/study/StudyStream";
 import { StudySurface } from "@/components/study/StudySurface";
 import { UserBlock } from "@/components/study/UserBlock";
-import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
+import { CornerBrackets, MasteryBand } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { CheckIcon } from "@/components/ui/check";
+import { RotateCCWIcon } from "@/components/ui/rotate-ccw";
 import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
-import { useFlashcardDeck, useRevealFlashcard, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
+import { useFlashcardDeck, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
 import type {
   FlashcardCard,
   FlashcardReviewResult,
-  FlashcardRevealResult,
 } from "@/features/flashcards/schema/flashcards.schema";
 
-// Spaced-repetition recall quiz: prompt first (a think beat), then options,
-// then Hint / Reveal / Explain as separate actions — matching the target
-// design (Flashcards.dc.html). Grading is server-side; Reveal is a committed
-// lapse, so a revealed card is terminal for this render (no follow-up review
-// call — see routers/flashcards.py). Session chrome comes from StudySurface;
-// question + grading stays in AnswerableCard.
+// Study mode: a flip card, not a quiz. Front shows the prompt, tapping flips
+// to the back (answer label + explanation), and the student marks it "Got it"
+// or "Review again" themselves. That self-mark advances the spaced-repetition
+// schedule so weak cards resurface sooner, but it does NOT feed the twin —
+// self-report is not assessment (see routers/flashcards.py). To turn what you
+// studied into a mastery signal, "Test me on these" hands the same skill to
+// the graded quiz surface.
+//
+// The contrast with PracticePanel is the whole point of the split: practice is
+// a graded MCQ (server decides correctness, moves mastery), study is a flip
+// (student decides, moves only the schedule). Same generated item underneath,
+// two honest modes.
 //
 // One topic choice per session (Stage 3 of the AI overhaul,
 // docs/AI_OVERHAUL_TODO.md), but NOT one required skill — `skillId` stays
@@ -49,7 +54,7 @@ import type {
 // as PracticePanel, that's a route-level action now (the "Choose another
 // topic" back button), not something this component offers.
 
-type Phase = "think" | "choose" | "answered" | "revealed";
+type Phase = "front" | "back";
 type FollowUpTurn = { question: string; answer: string };
 
 function StateBadge({ state }: { state: "due" | "new" }) {
@@ -83,36 +88,29 @@ export function FlashcardDeck({
   const reduceMotion = useReducedMotion();
   const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
   const review = useReviewFlashcard(courseId);
-  const reveal = useRevealFlashcard(courseId);
   const hint = useTutorAsk(courseId);
   const explain = useTutorAsk(courseId);
   const followUp = useTutorAsk(courseId);
   const { data: twin } = useTwin(courseId);
 
   const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<Phase>("think");
+  const [phase, setPhase] = useState<Phase>("front");
   const [deckDone, setDeckDone] = useState(false);
-  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [result, setResult] = useState<FlashcardReviewResult | null>(null);
-  const [revealResult, setRevealResult] = useState<FlashcardRevealResult | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
   const [explainText, setExplainText] = useState<string | null>(null);
   const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
-  const hintsUsedRef = useRef(0);
   const startedAtRef = useRef(Date.now());
 
   useEffect(() => {
-    setPhase("think");
+    setPhase("front");
     setDeckDone(false);
-    setSelectedChoice(null);
     setResult(null);
-    setRevealResult(null);
     setHintText(null);
     setExplainText(null);
     setFollowUpTurns([]);
     setPendingFollowUp(null);
-    hintsUsedRef.current = 0;
     startedAtRef.current = Date.now();
   }, [index, data?.courseId]);
 
@@ -156,7 +154,7 @@ export function FlashcardDeck({
       <StudySurface
         bar={
           <SessionBar
-            title="Flashcards"
+            title="Study"
             progress={{ current: total, total, label: "cards" }}
             onBack={onExit}
             backLabel="Choose another topic"
@@ -190,25 +188,14 @@ export function FlashcardDeck({
   const card: FlashcardCard = data.cards[index];
   const band = twin?.skills.find((s) => s.skillId === card.skillId)?.band;
 
-  const phaseIndex = phase === "think" ? 0 : phase === "choose" ? 1 : phase === "answered" ? 2 : 3;
-
-  function answer(choiceId: string) {
-    setSelectedChoice(choiceId);
+  function mark(remembered: boolean) {
     review.mutate(
       {
         itemId: card.itemId,
-        choiceId,
+        remembered,
         latencyMs: Date.now() - startedAtRef.current,
-        hintsUsed: hintsUsedRef.current,
       },
-      { onSuccess: (r) => { setResult(r); setPhase("answered"); } }
-    );
-  }
-
-  function doReveal() {
-    reveal.mutate(
-      { itemId: card.itemId, latencyMs: Date.now() - startedAtRef.current },
-      { onSuccess: (r) => { setRevealResult(r); setPhase("revealed"); } }
+      { onSuccess: (r) => setResult(r) }
     );
   }
 
@@ -236,7 +223,7 @@ export function FlashcardDeck({
         question: `Give me a hint for this recall card without revealing the answer: "${card.prompt}"`,
         style: "eli5",
       },
-      { onSuccess: (r) => { setHintText(r.answer); hintsUsedRef.current += 1; } }
+      { onSuccess: (r) => setHintText(r.answer) }
     );
   }
 
@@ -254,10 +241,10 @@ export function FlashcardDeck({
       {
         question: [
           "You are Kala helping a student study one flashcard.",
-          "Before they answer or reveal it, guide recall without stating the answer. After the card is resolved, explain the concept clearly if asked.",
+          "The card is a term/prompt with a definition/answer on the back. Guide recall without simply stating the back while they are still on the front; explain the concept clearly once they have flipped.",
           `Card prompt: ${card.prompt}`,
-          `Options: ${card.choices.map((choice) => `${choice.id}: ${choice.label}`).join(" | ")}`,
-          `Card state: ${phase}.`,
+          `Card back: ${card.back.label ?? "—"}`,
+          `Side shown: ${phase}.`,
           `Student question: ${question}`,
         ].join("\n\n"),
       },
@@ -271,32 +258,26 @@ export function FlashcardDeck({
     );
   }
 
-  const reward = result?.reward ?? revealResult?.reward;
-  const canAdvance = phase === "answered" || phase === "revealed";
-  const dockPrimary = phase === "think"
+  const marked = result !== null;
+  const atEnd = index + 1 >= total;
+  const dockPrimary = !marked
     ? {
-        label: "Reveal options",
-        onClick: () => setPhase("choose" as const),
+        label: phase === "front" ? "Show answer" : "Mark it to continue",
+        onClick: phase === "front" ? () => setPhase("back") : () => {},
+        disabled: phase === "back",
         icon: ArrowRightIcon,
       }
-    : canAdvance
-      ? {
-          label: index + 1 >= total ? "See recap" : "Next card",
-          onClick: nextCard,
-          icon: ArrowRightIcon,
-        }
-      : {
-          label: "Choose an answer to continue",
-          onClick: () => {},
-          disabled: true,
-          icon: ArrowRightIcon,
-        };
+    : {
+        label: atEnd ? "See recap" : "Next card",
+        onClick: nextCard,
+        icon: ArrowRightIcon,
+      };
 
   return (
     <StudySurface
       bar={
         <SessionBar
-          title="Flashcards"
+          title="Study"
           progress={{ current: index + 1, total, label: "card" }}
           onBack={onExit}
           backLabel="Choose another topic"
@@ -305,7 +286,7 @@ export function FlashcardDeck({
       dock={
         <ComposeDock
           primary={dockPrimary}
-          onAsk={canAdvance ? askAboutCard : undefined}
+          onAsk={phase === "back" ? askAboutCard : undefined}
           askPending={followUp.isPending}
           placeholder="Ask Kala about this card…"
         />
@@ -329,31 +310,106 @@ export function FlashcardDeck({
         <div className="relative border bg-card">
           <CornerBrackets />
 
-        <TransitionPanel
-          activeIndex={phaseIndex}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }}
-          className="px-5 py-6"
-        >
-          {[
-            // think — prompt alone, the recall beat
-            <div key="think" className="space-y-5">
-              <p className="text-lg font-medium leading-relaxed text-foreground">{card.prompt}</p>
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-xs text-muted-foreground">
-                  Think of the answer first — then check yourself.
+          <TransitionPanel
+            activeIndex={phase === "front" ? 0 : 1}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: "easeOut" }}
+            className="px-5 py-6"
+          >
+            {[
+              // front — the prompt, the recall beat. Tapping flips (the dock's
+              // "Show answer" is the same action, so a tap-and-a-button both
+              // work); flipping is free and costs no schedule.
+              <button
+                key="front"
+                type="button"
+                onClick={() => setPhase("back")}
+                className="block w-full space-y-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <p className="text-lg font-medium leading-relaxed text-foreground">
+                  {card.prompt}
                 </p>
-              </div>
-            </div>,
-            // choose — AnswerableCard + Hint / Reveal actions
-            <AnswerableCard
-              key="choose"
-              prompt={card.prompt}
-              choices={card.choices}
-              selectedId={selectedChoice}
-              onSelect={answer}
-              isPending={review.isPending || reveal.isPending}
-              actions={
-                <>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs text-muted-foreground">
+                    Recall the answer, then flip to check yourself.
+                  </p>
+                  <span className="font-mono text-xs text-muted-foreground">tap to flip</span>
+                </div>
+                {hintText ? (
+                  <p className="text-sm italic leading-relaxed text-muted-foreground">{hintText}</p>
+                ) : null}
+              </button>,
+
+              // back — the answer, then the self-mark. This is the study move:
+              // the student decides, and that decision drives the schedule.
+              <div key="back" className="space-y-5">
+                <p className="text-sm text-muted-foreground">{card.prompt}</p>
+                <div className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-3 py-2.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-brand-green-foreground/70">
+                    Answer
+                  </p>
+                  <p className="mt-0.5 text-base font-semibold text-foreground">
+                    {card.back.label ?? "—"}
+                  </p>
+                </div>
+                {card.back.explanation ? (
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {card.back.explanation}
+                  </p>
+                ) : null}
+
+                {!marked ? (
+                  <div className="flex flex-wrap gap-2.5 border-t pt-4">
+                    <Button
+                      variant="orange"
+                      size="sm"
+                      onClick={() => mark(true)}
+                      disabled={review.isPending}
+                    >
+                      {review.isPending ? (
+                        <Spinner className="size-3.5" />
+                      ) : (
+                        <CheckIcon size={15} aria-hidden />
+                      )}
+                      Got it
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => mark(false)}
+                      disabled={review.isPending}
+                    >
+                      <RotateCCWIcon size={15} aria-hidden />
+                      Review again
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <p
+                      className={cn(
+                        "border-t pt-4 text-sm font-semibold",
+                        result?.remembered ? "text-brand-green" : "text-brand-orange"
+                      )}
+                    >
+                      {result?.remembered
+                        ? "Marked as remembered."
+                        : "Marked for review — this card comes back sooner."}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-xs text-muted-foreground">
+                      <span>
+                        next review in{" "}
+                        {result && result.dueInHours < 24
+                          ? `${result.dueInHours}h`
+                          : `${Math.round((result?.dueInHours ?? 0) / 24)}d`}
+                      </span>
+                      <span>box {result?.box}</span>
+                      {result?.graduated ? (
+                        <span className="text-brand-green">graduated ✓</span>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+
+                <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={askHint} disabled={hint.isPending}>
                     {hint.isPending ? (
                       <Spinner className="size-3.5" />
@@ -362,53 +418,12 @@ export function FlashcardDeck({
                     )}
                     {hint.isPending ? "Thinking…" : "Hint"}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={doReveal} disabled={reveal.isPending}>
-                    {reveal.isPending ? (
-                      <Spinner className="size-3.5" />
-                    ) : (
-                      <EyeIcon size={15} className="text-muted-foreground" aria-hidden />
-                    )}
-                    {reveal.isPending ? "Committing…" : "Reveal · counts as missed"}
-                  </Button>
-                  {hintText ? (
-                    <p className="w-full text-sm italic leading-relaxed text-muted-foreground">
-                      {hintText}
-                    </p>
-                  ) : null}
-                </>
-              }
-            />,
-            // answered — graded result via AnswerableCard + Explain
-            <AnswerableCard
-              key="answered"
-              prompt={card.prompt}
-              choices={card.choices}
-              selectedId={selectedChoice}
-              onSelect={() => {}}
-              result={
-                result
-                  ? {
-                      correct: result.correct,
-                      explanation: result.explanation,
-                      mastery: result.mastery,
-                    }
-                  : null
-              }
-              meta={
-                <>
-                  <span>
-                    next review in{" "}
-                    {result?.dueInHours != null && result.dueInHours < 24
-                      ? `${result.dueInHours}h`
-                      : `${Math.round((result?.dueInHours ?? 0) / 24)}d`}
-                  </span>
-                  <span>box {result?.box}</span>
-                  {result?.graduated ? <span className="text-brand-green">graduated ✓</span> : null}
-                </>
-              }
-              actions={
-                <>
-                  <Button variant="outline" size="sm" onClick={askExplain} disabled={explain.isPending}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={askExplain}
+                    disabled={explain.isPending}
+                  >
                     {explain.isPending ? (
                       <Spinner className="size-3.5" />
                     ) : (
@@ -416,54 +431,20 @@ export function FlashcardDeck({
                     )}
                     {explain.isPending ? "Thinking…" : "Explain more"}
                   </Button>
-                  {explainText ? (
-                    <p className="w-full text-sm italic leading-relaxed text-muted-foreground">
-                      {explainText}
-                    </p>
-                  ) : null}
-                </>
-              }
-            />,
-            // revealed — committed lapse, answer shown (terminal for this card)
-            <div key="revealed" className="space-y-4">
-              <p className="text-sm font-semibold text-destructive">
-                Revealed — counted as missed, so this card resurfaces sooner.
-              </p>
-              <div className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-3 py-2.5">
-                <p className="text-xs font-medium uppercase tracking-wide text-brand-green-foreground/70">
-                  Answer
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-foreground">
-                  {revealResult?.correctLabel ?? "—"}
-                </p>
-              </div>
-              {revealResult?.explanation ? (
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {revealResult.explanation}
-                </p>
-              ) : null}
-              <div className="flex items-center gap-x-4 gap-y-1.5 border-t pt-2.5 font-mono text-xs text-muted-foreground">
-                <span>
-                  next review in{" "}
-                  {revealResult && revealResult.dueInHours < 24
-                    ? `${revealResult.dueInHours}h`
-                    : `${Math.round((revealResult?.dueInHours ?? 0) / 24)}d`}
-                </span>
-                <span>box {revealResult?.box}</span>
-                {revealResult?.mastery != null ? (
-                  <span className="flex items-center gap-1.5">
-                    mastery <MasteryBand band={bandFor(revealResult.mastery).band} />
-                  </span>
+                </div>
+                {explainText ? (
+                  <p className="text-sm italic leading-relaxed text-muted-foreground">
+                    {explainText}
+                  </p>
                 ) : null}
-              </div>
-            </div>,
-          ]}
-        </TransitionPanel>
+              </div>,
+            ]}
+          </TransitionPanel>
         </div>
 
-        {reward ? (
+        {result ? (
           <p className="text-right font-mono text-xs text-muted-foreground">
-            {reward.streakDays}-day streak · {reward.xp} XP
+            {result.reward.streakDays}-day streak · {result.reward.xp} XP
           </p>
         ) : null}
 

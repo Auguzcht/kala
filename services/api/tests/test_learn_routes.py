@@ -120,9 +120,10 @@ def test_practice_submit_404s_on_unknown_item(monkeypatch) -> None:
 
 
 def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> None:
-    """With no due cards yet, the deck tops up with a fresh MCQ card per
-    untracked skill, marks it 'new', and returns the schedule stats. Answer
-    keys never appear in the response."""
+    """With no due cards yet, the deck tops up with a fresh card per
+    untracked skill, marks it 'new', and returns the flip back (answer label
+    + explanation). Study mode is a flip, not an MCQ: `choices` is NOT part of
+    the payload, and the raw answer key never appears."""
     app.dependency_overrides[get_current_user] = authenticated_user
 
     def fake_select(table, params):
@@ -131,6 +132,10 @@ def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> Non
                      "module_ref": "Module 1"}]
         if table == "srs_state":  # nothing tracked yet
             return []
+        if table == "generated_items":  # the back-derivation query
+            return [{"id": "card-1", "correct_choice_id": "a", "explanation": "a function calling itself",
+                     "choices": [{"id": "a", "label": "self-reference"},
+                                 {"id": "b", "label": "a loop"}]}]
         return []
 
     monkeypatch.setattr(flashcards.db, "select", fake_select)
@@ -159,29 +164,36 @@ def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> Non
     card = body["cards"][0]
     assert card["itemId"] == "card-1"
     assert card["state"] == "new"
-    assert card["choices"] and "correct_choice_id" not in card
+    assert card["back"] == {"label": "self-reference", "explanation": "a function calling itself"}
+    # Study mode is a flip: no choices, and never the raw answer key.
+    assert "choices" not in card
+    assert "correct_choice_id" not in card
     assert body["stats"]["due"] == 0
 
 
-def test_flashcards_review_grades_server_side_and_advances_schedule(monkeypatch) -> None:
-    """Review grades against the stored key (not a client 'knew it'), writes a
-    flashcard evidence_event with hint usage, moves the tracer, and advances
-    the spaced-repetition schedule."""
+def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch) -> None:
+    """Study mode is not assessment. Review writes a flashcard evidence_event
+    (correct=remembered, so the research export still sees study behavior) and
+    advances the spaced-repetition schedule, but NEVER calls the tracer —
+    mastery must not move on a self-report."""
     app.dependency_overrides[get_current_user] = authenticated_user
     evidence_rows = []
-    tracer_calls = []
+    srs_calls = []
 
     monkeypatch.setattr(
-        flashcards.item_gen, "grade",
-        lambda **kwargs: {"skillId": "skill-1", "courseId": "course-1",
-                          "correct": False, "explanation": "not quite"},
+        flashcards.db, "select",
+        lambda table, params: [{"id": "card-1", "skill_id": "skill-1"}],
     )
     monkeypatch.setattr(flashcards.db, "insert_evidence", lambda rows: evidence_rows.extend(rows) or rows)
-    monkeypatch.setattr(flashcards.tracer, "apply_evidence",
-                        lambda **kwargs: tracer_calls.append(kwargs) or {"estimate": 0.3})
+    # The module must not even import the tracer any more — that is the
+    # strongest form of "study never moves mastery": there is no code path
+    # that could call it, not merely a path that happens not to.
+    assert not hasattr(flashcards, "tracer")
     monkeypatch.setattr(
         flashcards.srs, "review",
-        lambda **kwargs: SimpleNamespace(graduated=False, interval_hours=4.0, box=0),
+        lambda **kwargs: srs_calls.append(kwargs) or SimpleNamespace(
+            graduated=False, interval_hours=4.0, box=0,
+        ),
     )
     monkeypatch.setattr(
         flashcards.xp, "summary",
@@ -192,21 +204,27 @@ def test_flashcards_review_grades_server_side_and_advances_schedule(monkeypatch)
         with TestClient(app) as client:
             response = client.post(
                 "/flashcards/course-1/review",
-                json={"item_id": "card-1", "choice_id": "b", "hints_used": 1},
+                json={"item_id": "card-1", "remembered": False, "latency_ms": 900},
             )
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
     body = response.json()
-    assert body["correct"] is False
+    assert body["remembered"] is False
     assert body["graduated"] is False
     assert body["dueInHours"] == 4.0
     assert body["reward"]["xp"] == 12
+    # No `correct`/`mastery` in the response — study does not grade.
+    assert "correct" not in body
+    assert "mastery" not in body
+    # The research-visible evidence row is written with the self-mark...
     assert evidence_rows[0]["type"] == "flashcard"
     assert evidence_rows[0]["correct"] is False
-    assert evidence_rows[0]["hints_used"] == 1
-    assert tracer_calls[0]["correct"] is False
+    assert evidence_rows[0]["latency_ms"] == 900
+    # ...the schedule advances on the self-mark...
+    assert srs_calls[0]["correct"] is False
+    # ...and the twin is never touched (no tracer import exists to call).
 
 
 # ---- POST /practice/{course_id}/set (batched practice) --------------------

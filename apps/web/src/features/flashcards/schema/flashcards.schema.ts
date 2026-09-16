@@ -1,13 +1,17 @@
 import { z } from "zod";
 
-// Flashcard contract (Learn Loop v2): the deck is SRS-scheduled MCQs, not
-// self-reported Q&A flips. Answer keys never leave the server — grading and
-// reveal both happen through the API, never by trusting the client.
-// Source of truth: services/api/app/routers/flashcards.py.
+// Flashcard contract (study mode): a card is a FLIP, not an MCQ. The front
+// shows the prompt, tapping reveals the back (answer label + explanation), and
+// the student marks it themselves. There is no server grading and no choices
+// in the payload — study is memorization, not assessment, and it does not
+// move mastery (see services/api/app/routers/flashcards.py).
+//
+// The same generated item can be taken as a graded quiz separately; that is
+// the /practice/{id}/set path (test mode), which is what feeds the twin.
 
-export const flashcardChoiceSchema = z.object({
-  id: z.string(),
-  label: z.string(),
+export const flashcardBackSchema = z.object({
+  label: z.string().nullable(),
+  explanation: z.string(),
 });
 
 export const flashcardCardSchema = z.object({
@@ -15,7 +19,7 @@ export const flashcardCardSchema = z.object({
   skillId: z.string(),
   skillName: z.string().nullable().optional(),
   prompt: z.string(),
-  choices: z.array(flashcardChoiceSchema),
+  back: flashcardBackSchema,
   state: z.enum(["due", "new"]),
   box: z.number(),
 });
@@ -43,35 +47,20 @@ export const flashcardDeckSchema = z.object({
   stats: srsStatsSchema,
 });
 
-// POST /flashcards/{course_id}/review — grading a committed choice.
+// POST /flashcards/{course_id}/review — self-marking one studied card.
+// `remembered` is the student's own call; the server advances the schedule
+// from it but does NOT grade and does NOT move mastery.
 export const flashcardReviewResultSchema = z.object({
-  correct: z.boolean(),
-  explanation: z.string(),
+  remembered: z.boolean(),
   graduated: z.boolean(),
   dueInHours: z.number(),
   box: z.number(),
-  mastery: z.number().nullable(),
   reward: rewardSchema,
 });
 
-// POST /flashcards/{course_id}/reveal — pre-commit Show Answer. The reveal is
-// committed as a lapse server-side BEFORE the answer returns, so the client
-// treats a revealed card as terminal: never call review for the same item.
-export const flashcardRevealResultSchema = z.object({
-  revealed: z.literal(true),
-  correctChoiceId: z.string(),
-  correctLabel: z.string().nullable(),
-  explanation: z.string(),
-  dueInHours: z.number(),
-  box: z.number(),
-  mastery: z.number().nullable(),
-  reward: rewardSchema,
-});
-
-export type FlashcardChoice = z.infer<typeof flashcardChoiceSchema>;
+export type FlashcardBack = z.infer<typeof flashcardBackSchema>;
 export type FlashcardCard = z.infer<typeof flashcardCardSchema>;
 export type SrsStats = z.infer<typeof srsStatsSchema>;
 export type Reward = z.infer<typeof rewardSchema>;
 export type FlashcardDeck = z.infer<typeof flashcardDeckSchema>;
 export type FlashcardReviewResult = z.infer<typeof flashcardReviewResultSchema>;
-export type FlashcardRevealResult = z.infer<typeof flashcardRevealResultSchema>;

@@ -187,33 +187,22 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
     }
 
 
-def reveal(*, institution_id: str, item_id: str) -> dict:
-    """Look up an item's answer key WITHOUT a client choice — the pre-commit
-    Show Answer path. This is deliberately a separate function from grade(),
-    not grade() called with some sentinel choice_id: the caller (the reveal
-    endpoint) always treats a reveal as a lapse regardless of what this
-    returns, so the two must stay distinguishable in the code, not just in
-    intent. Still never trusts the client with anything beyond the single
-    correct label — choices/prompt aren't needed here, the client already has
-    them from the deck response."""
-    rows = db.select("generated_items", {
-        "id": f"eq.{item_id}", "institution_id": f"eq.{institution_id}",
-        "select": "id,skill_id,course_id,correct_choice_id,explanation,choices", "limit": "1",
-    })
-    if not rows:
-        raise ValueError(f"item {item_id} not found")
-    item = rows[0]
+def correct_label(item: dict) -> str | None:
+    """The label of an item's correct choice, or None if choices/answer are
+    missing (defensive — bad data degrades to a null label, never a crash).
+
+    This is the one place that resolves an answer key to a human-readable
+    label. Study mode's flip-back uses it (see routers/flashcards.py), so the
+    flashcard deck never has to re-implement the lookup. It does NOT leak a
+    full answer key: it returns a single label string, which the study
+    endpoint is allowed to show; grading still happens server-side against
+    correct_choice_id, never against this label.
+    """
     choices = item.get("choices") or []
-    correct_label = next(
-        (c["label"] for c in choices if c.get("id") == item["correct_choice_id"]), None,
+    return next(
+        (c.get("label") for c in choices if c.get("id") == item.get("correct_choice_id")),
+        None,
     )
-    return {
-        "skillId": item["skill_id"],
-        "courseId": item["course_id"],
-        "correctChoiceId": item["correct_choice_id"],
-        "correctLabel": correct_label,
-        "explanation": item.get("explanation") or "",
-    }
 
 
 def weakest_skill(*, institution_id: str, user_id: str, course_id: str) -> dict | None:
