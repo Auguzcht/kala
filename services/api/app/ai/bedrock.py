@@ -25,16 +25,66 @@ logger = logging.getLogger(__name__)
 # fallback model. See converse().
 _FALLBACK_BACKOFF_SECONDS = 1.5
 
+# ---------------------------------------------------------------------------
+# READ THIS BEFORE PASSING max_tokens.
+#
+# Reasoning models (the DeepSeek v4.1 family we route to, and most current
+# frontier models) THINK BEFORE THEY ANSWER, and the thinking is billed against
+# max_tokens exactly like the answer is. If the budget runs out mid-thought, the
+# call returns finish_reason="length" with EMPTY content -- the answer was never
+# written. That is an absence, not an error, so it does not raise: it lands in
+# the caller as a parse failure or a null, and gets misread as "the model found
+# nothing" rather than "the model never got to reply".
+#
+# This has already cost three debugging rounds in this codebase:
+#   generate_question  768  -> 1536   (truncated MCQs)
+#   tag_content        256  -> 2048   (EVERY tag came back null)
+#   tag_content       2048  -> 4096   (still failed, but only on LONG inputs,
+#                                      so it looked fixed while silently
+#                                      failing on the most valuable content)
+#
+# The rule, stated generally so the next call site does not repeat it:
+#
+#   SIZE FOR THE LONGEST REALISTIC INPUT, NOT THE TYPICAL ONE.
+#   Reasoning length scales with input length and task difficulty.
+#   A budget that passes your test fixture can still truncate in production,
+#   because your fixture is short and easy. Measure the worst case (a long
+#   document, a hard extraction) and size for that.
+#
+# Practical guidance: treat ~1024 as the absolute floor for anything with real
+# input, and reach for 4096 when the input can be a whole document (tagging,
+# extraction, question generation from a long chunk). A too-small budget does
+# NOT fail loudly, so it will not be caught by happy-path testing.
+#
+# When adding a caller: measure, do not estimate. Send the longest realistic
+# input and check finish_reason is "stop", not "length".
+# ---------------------------------------------------------------------------
+_MAX_TOKENS_FLOOR = 1024
+
 
 def converse(
     *,
     model_id: str,
     system: str,
     messages: list[dict],
-    max_tokens: int = 1024,
+    # Raised from 1024 to the documented floor. A caller that omits max_tokens
+    # should not silently inherit a budget that reasoning will eat -- but note
+    # this is still only a FLOOR: document-sized inputs need 4096. See above.
+    max_tokens: int = _MAX_TOKENS_FLOOR,
     response_format: dict | None = None,
 ) -> str:
     s = get_settings()
+    # A budget this small cannot survive a reasoning preamble, so the call will
+    # return empty content and the caller will misread it as a model that found
+    # nothing. Warn once per call site instead of failing, since a deliberately
+    # tiny budget is legal for a one-word classification task.
+    if max_tokens < _MAX_TOKENS_FLOOR:
+        logger.warning(
+            "converse called with max_tokens=%d < %d floor (model=%s). If this "
+            "model reasons, the response may be truncated to empty and read as "
+            "a null result rather than an error. See the max_tokens note above.",
+            max_tokens, _MAX_TOKENS_FLOOR, model_id,
+        )
     if s.ai_provider == "openrouter":
         request = {
             "model_id": model_id,
