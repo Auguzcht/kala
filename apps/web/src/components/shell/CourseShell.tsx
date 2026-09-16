@@ -12,10 +12,8 @@ import { useSession } from "@/lib/auth/AuthProvider";
 import { ActivityIcon } from "@/components/ui/activity";
 import { FileTextIcon } from "@/components/ui/file-text";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
-import { LayersIcon } from "@/components/ui/layers";
 import { LayoutGridIcon } from "@/components/ui/layout-grid";
 import { MessageSquareIcon } from "@/components/ui/message-square";
-import { ZapIcon } from "@/components/ui/zap";
 import {
   Tooltip,
   TooltipContent,
@@ -57,9 +55,11 @@ type NavIcon = ComponentType<{ size?: number; className?: string } & { ref?: Ref
 const NAV: { to: string; label: string; icon: NavIcon; end?: boolean; anchorId: string }[] = [
   { to: "/course", label: "Workspace", icon: LayoutGridIcon, end: true, anchorId: "nav-workspace" },
   { to: "/course/diagnostic", label: "Diagnostic", icon: FileTextIcon, anchorId: "nav-diagnostic" },
-  { to: "/course/lessons", label: "Lessons", icon: GraduationCapIcon, anchorId: "nav-lessons" },
-  { to: "/course/practice", label: "Practice", icon: ZapIcon, anchorId: "nav-practice" },
-  { to: "/course/flashcards", label: "Flashcards", icon: LayersIcon, anchorId: "nav-flashcards" },
+  // Lessons / Practice / Flashcards collapsed into one entry (Checkpoint 3,
+  // Step 3). They are three modes over one skill, not three destinations —
+  // /course/lessons (Skills) is the skill picker that opens the hub, and the
+  // hub's tabs launch each mode from there.
+  { to: "/course/skills", label: "Skills", icon: GraduationCapIcon, anchorId: "nav-skills" },
   { to: "/course/tutor", label: "Tutor", icon: MessageSquareIcon, anchorId: "nav-tutor" },
   { to: "/course/twin", label: "Twin", icon: ActivityIcon, anchorId: "nav-twin" },
 ];
@@ -67,9 +67,7 @@ const NAV: { to: string; label: string; icon: NavIcon; end?: boolean; anchorId: 
 const SECTION_LABELS: Record<string, string> = {
   "/course": "Workspace",
   "/course/diagnostic": "Diagnostic",
-  "/course/lessons": "Lessons",
-  "/course/practice": "Practice",
-  "/course/flashcards": "Flashcards",
+  "/course/skills": "Skills",
   "/course/tutor": "Tutor",
   "/course/twin": "Twin",
 };
@@ -78,6 +76,7 @@ const SESSION_ROUTES = [
   "/course/lessons",
   "/course/practice",
   "/course/flashcards",
+  "/course/skill",
   "/course/diagnostic",
   "/course/tutor",
 ];

@@ -2,9 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { FileTextIcon } from "@/components/ui/file-text";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
-import { LayersIcon } from "@/components/ui/layers";
 import { MessageSquareIcon } from "@/components/ui/message-square";
-import { ZapIcon } from "@/components/ui/zap";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useCourse } from "@/features/courses";
@@ -20,11 +18,13 @@ export const Route = createFileRoute("/course/")({
 });
 
 type QuickIcon = typeof FileTextIcon;
+// Lessons / Practice / Flashcards collapsed into one "Skills" entry
+// (Checkpoint 3, Step 3): they are three modes over one skill, reached through
+// the skill hub, not three separate destinations. Diagnostic, Tutor, and Twin
+// stay separate — they are genuinely different surfaces, not modes over a skill.
 const QUICK_LINKS: { label: string; copy: string; icon: QuickIcon; iconBg: string; to: string }[] = [
   { label: "Diagnostic", copy: "Build your baseline for this course.", icon: FileTextIcon, iconBg: "bg-brand-slate", to: "/course/diagnostic" },
-  { label: "Lessons", copy: "Step-by-step walkthroughs with checks.", icon: GraduationCapIcon, iconBg: "bg-brand-gold", to: "/course/lessons" },
-  { label: "Practice", copy: "Quick sets tuned to your twin.", icon: ZapIcon, iconBg: "bg-brand-orange", to: "/course/practice" },
-  { label: "Flashcards", copy: "Spaced review of key terms.", icon: LayersIcon, iconBg: "bg-brand-green", to: "/course/flashcards" },
+  { label: "Skills", copy: "Lesson, study, and test — one skill at a time.", icon: GraduationCapIcon, iconBg: "bg-brand-gold", to: "/course/skills" },
   { label: "Tutor", copy: "Ask Kala to work through it with you.", icon: MessageSquareIcon, iconBg: "bg-brand-gold", to: "/course/tutor" },
 ];
 
@@ -132,7 +132,17 @@ function WorkspaceHome() {
         ) : next ? (
           <Button
             variant="orange"
-            onClick={() => navigate({ to: "/course/practice" })}
+            onClick={() =>
+              // Straight into Test for the recommended skill: the card already
+              // did the deciding ("Practice: {skill}"), its promise is to act
+              // now, not to browse. Lesson/Study stay one tap away on the
+              // hub's tab strip once landed (Checkpoint 3, Step 3).
+              navigate({
+                to: "/course/skill/$skillId",
+                params: { skillId: next.skillId },
+                search: { tab: "test" },
+              })
+            }
             className="shrink-0"
           >
             Start practice <ArrowRightIcon size={16} />
@@ -147,7 +157,7 @@ function WorkspaceHome() {
       <InstructorPlan courseId={courseId} />
 
       {/* Quick links */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {QUICK_LINKS.map(({ label, copy, icon: Icon, iconBg, to }) => (
           <button
             key={label}

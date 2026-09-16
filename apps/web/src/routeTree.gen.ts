@@ -21,9 +21,11 @@ import { Route as CourseDiagnosticRouteImport } from './routes/course/diagnostic
 import { Route as CourseFlashcardsRouteImport } from './routes/course/flashcards';
 import { Route as CourseLessonsRouteImport } from './routes/course/lessons';
 import { Route as CoursePracticeRouteImport } from './routes/course/practice';
+import { Route as CourseSkillsRouteImport } from './routes/course/skills';
 import { Route as CourseTutorRouteImport } from './routes/course/tutor';
 import { Route as CourseTwinRouteImport } from './routes/course/twin';
 import { Route as ClassStudentUidRouteImport } from './routes/class/student.$uid';
+import { Route as CourseSkillSkillIdRouteImport } from './routes/course/skill.$skillId';
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -85,6 +87,11 @@ const CoursePracticeRoute = CoursePracticeRouteImport.update({
   path: '/practice',
   getParentRoute: () => CourseRoute,
 } as any);
+const CourseSkillsRoute = CourseSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => CourseRoute,
+} as any);
 const CourseTutorRoute = CourseTutorRouteImport.update({
   id: '/tutor',
   path: '/tutor',
@@ -100,6 +107,11 @@ const ClassStudentUidRoute = ClassStudentUidRouteImport.update({
   path: '/student/$uid',
   getParentRoute: () => ClassRoute,
 } as any);
+const CourseSkillSkillIdRoute = CourseSkillSkillIdRouteImport.update({
+  id: '/skill/$skillId',
+  path: '/skill/$skillId',
+  getParentRoute: () => CourseRoute,
+} as any);
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute;
@@ -112,11 +124,13 @@ export interface FileRoutesByFullPath {
   '/course/flashcards': typeof CourseFlashcardsRoute;
   '/course/lessons': typeof CourseLessonsRoute;
   '/course/practice': typeof CoursePracticeRoute;
+  '/course/skills': typeof CourseSkillsRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
   '/class/': typeof ClassIndexRoute;
   '/course/': typeof CourseIndexRoute;
   '/class/student/$uid': typeof ClassStudentUidRoute;
+  '/course/skill/$skillId': typeof CourseSkillSkillIdRoute;
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute;
@@ -127,11 +141,13 @@ export interface FileRoutesByTo {
   '/course/flashcards': typeof CourseFlashcardsRoute;
   '/course/lessons': typeof CourseLessonsRoute;
   '/course/practice': typeof CoursePracticeRoute;
+  '/course/skills': typeof CourseSkillsRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
   '/class': typeof ClassIndexRoute;
   '/course': typeof CourseIndexRoute;
   '/class/student/$uid': typeof ClassStudentUidRoute;
+  '/course/skill/$skillId': typeof CourseSkillSkillIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -145,11 +161,13 @@ export interface FileRoutesById {
   '/course/flashcards': typeof CourseFlashcardsRoute;
   '/course/lessons': typeof CourseLessonsRoute;
   '/course/practice': typeof CoursePracticeRoute;
+  '/course/skills': typeof CourseSkillsRoute;
   '/course/tutor': typeof CourseTutorRoute;
   '/course/twin': typeof CourseTwinRoute;
   '/class/': typeof ClassIndexRoute;
   '/course/': typeof CourseIndexRoute;
   '/class/student/$uid': typeof ClassStudentUidRoute;
+  '/course/skill/$skillId': typeof CourseSkillSkillIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -164,11 +182,13 @@ export interface FileRouteTypes {
     | '/course/flashcards'
     | '/course/lessons'
     | '/course/practice'
+    | '/course/skills'
     | '/course/tutor'
     | '/course/twin'
     | '/class/'
     | '/course/'
-    | '/class/student/$uid';
+    | '/class/student/$uid'
+    | '/course/skill/$skillId';
   fileRoutesByTo: FileRoutesByTo;
   to:
     | '/'
@@ -179,11 +199,13 @@ export interface FileRouteTypes {
     | '/course/flashcards'
     | '/course/lessons'
     | '/course/practice'
+    | '/course/skills'
     | '/course/tutor'
     | '/course/twin'
     | '/class'
     | '/course'
-    | '/class/student/$uid';
+    | '/class/student/$uid'
+    | '/course/skill/$skillId';
   id:
     | '__root__'
     | '/'
@@ -196,11 +218,13 @@ export interface FileRouteTypes {
     | '/course/flashcards'
     | '/course/lessons'
     | '/course/practice'
+    | '/course/skills'
     | '/course/tutor'
     | '/course/twin'
     | '/class/'
     | '/course/'
-    | '/class/student/$uid';
+    | '/class/student/$uid'
+    | '/course/skill/$skillId';
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -298,6 +322,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursePracticeRouteImport;
       parentRoute: typeof CourseRoute;
     };
+    '/course/skills': {
+      id: '/course/skills';
+      path: '/skills';
+      fullPath: '/course/skills';
+      preLoaderRoute: typeof CourseSkillsRouteImport;
+      parentRoute: typeof CourseRoute;
+    };
     '/course/tutor': {
       id: '/course/tutor';
       path: '/tutor';
@@ -319,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClassStudentUidRouteImport;
       parentRoute: typeof ClassRoute;
     };
+    '/course/skill/$skillId': {
+      id: '/course/skill/$skillId';
+      path: '/skill/$skillId';
+      fullPath: '/course/skill/$skillId';
+      preLoaderRoute: typeof CourseSkillSkillIdRouteImport;
+      parentRoute: typeof CourseRoute;
+    };
   }
 }
 
@@ -339,9 +377,11 @@ interface CourseRouteChildren {
   CourseFlashcardsRoute: typeof CourseFlashcardsRoute;
   CourseLessonsRoute: typeof CourseLessonsRoute;
   CoursePracticeRoute: typeof CoursePracticeRoute;
+  CourseSkillsRoute: typeof CourseSkillsRoute;
   CourseTutorRoute: typeof CourseTutorRoute;
   CourseTwinRoute: typeof CourseTwinRoute;
   CourseIndexRoute: typeof CourseIndexRoute;
+  CourseSkillSkillIdRoute: typeof CourseSkillSkillIdRoute;
 }
 
 const CourseRouteChildren: CourseRouteChildren = {
@@ -349,9 +389,11 @@ const CourseRouteChildren: CourseRouteChildren = {
   CourseFlashcardsRoute: CourseFlashcardsRoute,
   CourseLessonsRoute: CourseLessonsRoute,
   CoursePracticeRoute: CoursePracticeRoute,
+  CourseSkillsRoute: CourseSkillsRoute,
   CourseTutorRoute: CourseTutorRoute,
   CourseTwinRoute: CourseTwinRoute,
   CourseIndexRoute: CourseIndexRoute,
+  CourseSkillSkillIdRoute: CourseSkillSkillIdRoute,
 };
 
 const CourseRouteWithChildren =
