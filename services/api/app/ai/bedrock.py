@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 import httpx
 
@@ -19,6 +20,10 @@ from app.ai.errors import ModelUnavailableError
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# How long to wait before retrying a rate-limited/overloaded primary on the
+# fallback model. See converse().
+_FALLBACK_BACKOFF_SECONDS = 1.5
 
 
 def converse(
@@ -49,6 +54,14 @@ def converse(
             fallback = getattr(s, "openrouter_model_fallback", "")
             if not fallback or fallback == model_id or not _can_fallback(exc):
                 raise
+            # Back off before retrying a rate limit or a transient 5xx. An
+            # immediate retry is what turns one 429 into two, and the whole
+            # point of the fallback is to reach a DIFFERENT model that has
+            # capacity -- hammering the same instant defeats that. Short and
+            # bounded (the Lambda runs on a 30s wall; the client already has
+            # an 8s timeout), so it never eats the request budget.
+            if exc.status_code in {429, 503}:
+                time.sleep(_FALLBACK_BACKOFF_SECONDS)
             logger.warning(
                 "OpenRouter primary unavailable (model=%s, status=%s); retrying with fallback model=%s",
                 model_id, exc.status_code, fallback,
@@ -284,11 +297,8 @@ def _openrouter_post(
     non-2xx so the caller can classify it (structured-output rejection vs
     unknown model vs outage).
 
-    ``require_parameters`` is only set WITH a response_format: it is the
-    routing filter that guarantees we never silently land on a provider that
-    ignores the schema, but it is also what turns a capability gap into a hard
-    404. Without a response_format there is no parameter to require, so it is
-    omitted — that is half of what makes the degradation retry succeed.
+    Deliberately does NOT send provider.require_parameters — see the comment
+    at the call site for why (it blocks capable models).
     """
     payload: dict = {
         "model": model_id,
@@ -297,8 +307,19 @@ def _openrouter_post(
         "temperature": 0.2,
     }
     if response_format is not None:
+        # response_format WITHOUT provider.require_parameters.
+        #
+        # require_parameters guarantees we never land on a provider that
+        # ignores the schema -- but it also hard-404s any model whose endpoints
+        # don't advertise the parameter, even when that model CAN answer. Live
+        # test: cohere/north-mini-code:free 404s with require_parameters, and
+        # answers fine without it; inclusionai/* 404s the same way. So the
+        # filter was rejecting capable models to defend against a failure we
+        # already catch downstream: a model that ignores the schema returns
+        # JSON that _validated_mcq rejects, which now retries (items.py) and
+        # ultimately surfaces a clean error. Prefer "try it and validate" over
+        # "refuse to try".
         payload["response_format"] = response_format
-        payload["provider"] = {"require_parameters": True}
     with _openrouter_client() as c:
         r = c.post("/chat/completions", json=payload)
         r.raise_for_status()

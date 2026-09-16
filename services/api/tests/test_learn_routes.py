@@ -792,3 +792,84 @@ def test_get_set_includes_this_students_attempt_row(monkeypatch) -> None:
     assert body["attemptedCount"] == 5
     assert body["correctCount"] == 4
     assert body["lastAttemptedAt"] == "2026-02-03T09:00:00Z"
+
+
+def test_practice_set_returns_a_short_set_when_some_items_fail(monkeypatch) -> None:
+    """Partial-tolerant generation: 3 of 5 rolls succeeding yields a 3-question
+    set, not a 502. The set row is resized to what actually generated so the
+    count the UI shows is honest."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    updates = []
+    counter = itertools.count(1)
+    lock = threading.Lock()
+
+    monkeypatch.setattr(
+        practice.item_gen, "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": [{"id": "set-1", **rows[0]}],
+    )
+    monkeypatch.setattr(
+        practice.db, "update",
+        lambda table, filters, values: updates.append((filters, values)) or [],
+    )
+
+    def flaky(**kwargs):
+        with lock:
+            n = next(counter)
+        # Two of the five rolls fail (validation), the rest succeed.
+        if n in (2, 4):
+            raise ItemGenerationError("bad roll")
+        return {"id": f"item-{n}", "skillId": "skill-1", "bloomLevel": "apply",
+                "prompt": "...", "choices": []}
+
+    monkeypatch.setattr(practice.item_gen, "generate_question", flaky)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?size=5")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["setId"] == "set-1"
+    assert len(body["items"]) == 3
+    # Set row corrected to the real count.
+    assert updates == [({"id": "eq.set-1"}, {"size": 3})]
+
+
+def test_practice_set_502s_only_when_every_item_fails(monkeypatch) -> None:
+    """If nothing generated, this is a real outage, not a short set: delete the
+    empty grouping and surface the same 502 the single-item path produces."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    deleted = []
+
+    monkeypatch.setattr(
+        practice.item_gen, "weakest_skill",
+        lambda **kwargs: {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
+    )
+    monkeypatch.setattr(
+        practice.db, "insert",
+        lambda table, rows, prefer="return=representation": [{"id": "set-1", **rows[0]}],
+    )
+    monkeypatch.setattr(
+        practice.db, "delete",
+        lambda table, filters: deleted.append((table, filters)) or [],
+    )
+
+    def all_fail(**kwargs):
+        raise ItemGenerationError("bad roll")
+
+    monkeypatch.setattr(practice.item_gen, "generate_question", all_fail)
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/course-1/set?size=3")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert deleted == [("quiz_sets", {"id": "eq.set-1"})]

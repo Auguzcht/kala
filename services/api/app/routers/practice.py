@@ -16,16 +16,20 @@ Two ways to get practice content:
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.ai.concurrency import map_concurrent
+from app.ai.concurrency import map_concurrent_partial
 from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user
 from app.learn import items as item_gen
+from app.learn.items import ItemGenerationError
 from app.twin import tracer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/practice", tags=["practice"])
 
@@ -128,26 +132,41 @@ def create_set(
     }])
     set_id = set_rows[0]["id"]
 
-    try:
-        # N independent model calls for the SAME skill, run concurrently —
-        # mirrors flashcards.py's deck top-up, just fanning out over items for
-        # one skill instead of over distinct skills. Order is preserved by
-        # map_concurrent, and each result comes back already persisted.
-        items = map_concurrent(
-            lambda _: item_gen.generate_question(
-                institution_id=user.institution_id, course_id=course_id,
-                skill=skill, kind="practice", set_id=set_id,
-            ),
-            list(range(size)),
+    # N independent model calls for the SAME skill, run concurrently — mirrors
+    # flashcards.py's deck top-up, just fanning out over items for one skill
+    # instead of over distinct skills. PARTIAL-tolerant: a model that fails one
+    # roll (validation or a provider hiccup) yields a slightly shorter set
+    # rather than 502-ing the whole thing. Free-tier churn made all-or-nothing
+    # generation too brittle for a surface where 4 of 5 questions is still a
+    # perfectly usable test.
+    items, errors = map_concurrent_partial(
+        lambda _: item_gen.generate_question(
+            institution_id=user.institution_id, course_id=course_id,
+            skill=skill, kind="practice", set_id=set_id,
+        ),
+        list(range(size)),
+    )
+    if errors:
+        logger.warning(
+            "Quiz set generation dropped %d/%d items (course=%s set=%s): %s",
+            len(errors), size, course_id, set_id, errors[0],
         )
-    except Exception:
-        # Any failure (a model outage surfacing as ItemGenerationError, or a
-        # DB error) leaves a set with fewer items than promised. Delete the
-        # grouping so it doesn't linger as an empty/partial set; the items
-        # already inserted cascade away with it. Re-raise so the error maps
-        # to the same 502 the single-item path produces.
+
+    if not items:
+        # EVERY roll failed — nothing to serve, so this is a real outage, not a
+        # partial set. Delete the empty grouping (its items, if any were
+        # half-inserted, cascade away) and surface the same 502 the single-item
+        # path produces, rather than handing the client a set with no questions.
         db.delete("quiz_sets", {"id": f"eq.{set_id}"})
-        raise
+        raise ItemGenerationError(
+            "Kala could not write questions just now. Please try again."
+        ) from (errors[0] if errors else None)
+
+    # The set row was created with the REQUESTED size before generation; if the
+    # batch came back short, correct it so the count the UI shows matches what
+    # the set actually contains.
+    if len(items) != size:
+        db.update("quiz_sets", {"id": f"eq.{set_id}"}, {"size": len(items)})
 
     return {"courseId": course_id, "setId": set_id, "items": items}
 

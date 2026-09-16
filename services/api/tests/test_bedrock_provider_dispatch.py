@@ -159,7 +159,12 @@ def test_openrouter_converse_sends_structured_output_contract(monkeypatch):
     assert result == '{"prompt": "Q"}'
     assert captured["path"] == "/chat/completions"
     assert captured["body"]["response_format"] == response_format
-    assert captured["body"]["provider"] == {"require_parameters": True}
+    # Deliberately NO provider.require_parameters: it hard-404s models whose
+    # endpoints don't advertise the parameter even when they can answer (live:
+    # cohere/north-mini-code:free, inclusionai/*). A model that ignores the
+    # schema instead returns JSON that _validated_mcq rejects and retries, so
+    # "try it and validate" beats "refuse to try".
+    assert "provider" not in captured["body"]
 
 
 def test_openrouter_converse_does_not_retry_a_bad_api_key(monkeypatch):

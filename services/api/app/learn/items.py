@@ -12,6 +12,7 @@ import json
 import logging
 
 from app.ai import bedrock, rag
+from app.ai.errors import ModelUnavailableError
 from app.ai.router import get_model_for
 from app.db import supabase as db
 
@@ -157,6 +158,12 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
             prompt, choices, correct_choice_id, explanation = _call_and_validate(
                 skill=skill, context=context,
             )
+        except ModelUnavailableError:
+            # A provider-side failure (429, 5xx, timeout, retired model). This
+            # is NOT a validation failure: bedrock.converse already gave it one
+            # cross-provider fallback attempt, and retrying it here would just
+            # hammer the same rate limit a second time. Surface it as-is.
+            raise
         except Exception as first_exc:
             logger.warning(
                 "Generated item failed validation, retrying once "

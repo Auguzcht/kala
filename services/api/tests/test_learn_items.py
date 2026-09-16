@@ -292,3 +292,55 @@ def test_generate_question_does_not_retry_a_first_try_success(monkeypatch) -> No
     )
 
     assert len(calls) == 1  # no wasted second call when the first is good
+
+
+def test_generate_question_does_not_retry_a_provider_outage(monkeypatch) -> None:
+    """A provider failure (429/5xx/retired model) is NOT a validation failure:
+    bedrock.converse already gave it one cross-provider fallback attempt, so
+    retrying it again here would just hammer the same rate limit. Exactly one
+    attempt, then surface."""
+    calls = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+
+    def boom(**kwargs):
+        calls.append(kwargs)
+        raise item_gen.ModelUnavailableError(
+            "provider busy", provider="openrouter", model_id="m", status_code=429,
+        )
+
+    monkeypatch.setattr(item_gen.bedrock, "converse", boom)
+
+    skill = {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        )
+        assert False, "expected ItemGenerationError"
+    except item_gen.ItemGenerationError:
+        pass
+
+    assert len(calls) == 1  # no second roll on a provider outage
+
+
+def test_generate_question_still_retries_a_validation_failure(monkeypatch) -> None:
+    """The validation retry is unchanged for the failure it was written for:
+    a body that arrived but was unusable."""
+    calls = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock, "converse",
+        lambda **kwargs: calls.append(kwargs) or "not json",
+    )
+
+    skill = {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}
+    try:
+        item_gen.generate_question(
+            institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+        )
+        assert False, "expected ItemGenerationError"
+    except item_gen.ItemGenerationError:
+        pass
+
+    assert len(calls) == 2  # validation failure DOES get its one retry

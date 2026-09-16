@@ -60,3 +60,32 @@ def test_respects_max_workers_ceiling():
     correctness (order, completion) must still hold."""
     out = map_concurrent(lambda i: i + 1, list(range(10)), max_workers=2)
     assert out == list(range(1, 11))
+
+
+from app.ai.concurrency import map_concurrent_partial
+
+
+def test_map_concurrent_partial_collects_successes_and_errors() -> None:
+    def fn(i):
+        if i == 3:
+            raise ValueError("bad roll")
+        return i * 2
+
+    results, errors = map_concurrent_partial(fn, [1, 2, 3, 4])
+
+    # Successes come back in input order, missing only the failed one.
+    assert results == [2, 4, 8]
+    assert len(errors) == 1 and isinstance(errors[0], ValueError)
+
+
+def test_map_concurrent_partial_all_fail_returns_no_results() -> None:
+    def fn(_):
+        raise RuntimeError("nope")
+
+    results, errors = map_concurrent_partial(fn, [1, 2])
+    assert results == []
+    assert len(errors) == 2
+
+
+def test_map_concurrent_partial_empty_input() -> None:
+    assert map_concurrent_partial(lambda x: x, []) == ([], [])

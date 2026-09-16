@@ -66,8 +66,19 @@ class Settings(BaseSettings):
     # The defaults favour InclusionAI's general-purpose Flash model for
     # conversational turns. Nex AGI remains out of the primary rotation: it
     # was listed but served repeated 503s/read timeouts in production on
-    # 2026-09-15. Generated study questions use the dedicated model below:
-    # unlike the free InclusionAI route, it supports JSON Schema output.
+    # 2026-09-15.
+    #
+    # ITEM + DEFAULT + FALLBACK are deepseek/deepseek-v4.1-flash:floor
+    # (2026-09-16). This is the model that survived live testing where every
+    # free-tier candidate did not: liquid/lfm-2.5-2.6b:free answered once then
+    # 429'd on even a 10-token call (account-level rate limit, exhausted),
+    # inclusionai/* 404'd on any structured request, cohere/north-mini-code
+    # accepted response_format but returned its own JSON shape, and the
+    # previous fallback slug (deepseek/deepseek-v4.1-flash:free) was RETIRED by
+    # OpenRouter. deepseek-v4.1-flash:floor measured 5/5 then 10/10 on the real
+    # MCQ request under concurrency. The `:floor` suffix routes to whichever
+    # provider serves this exact model cheapest — same model, no behaviour
+    # change, just a cheaper provider pick.
     #
     # Deliberately NOT the NVIDIA nemotron free models despite their headline
     # speed: both leak their full chain of thought into the message content
@@ -76,8 +87,8 @@ class Settings(BaseSettings):
     # ai/reasoning.py strips a leaked preamble defensively, but the right fix
     # is not to pick a model that needs stripping in the first place.
     #
-    # All four stay env-overridable (OPENROUTER_MODEL_*) so swapping the
-    # interim provider for Bedrock later is a config change, never a code one.
+    # All stay env-overridable (OPENROUTER_MODEL_*) so swapping the interim
+    # provider for Bedrock later is a config change, never a code one.
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL",
@@ -86,7 +97,7 @@ class Settings(BaseSettings):
         default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_FAST",
     )
     openrouter_model_default: str = Field(
-        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_DEFAULT",
+        default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_DEFAULT",
     )
     openrouter_model_reasoning: str = Field(
         default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_REASONING",
@@ -95,14 +106,14 @@ class Settings(BaseSettings):
         default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_PREMIUM",
     )
     openrouter_model_item: str = Field(
-        default="liquid/lfm-2.5-2.6b:free",
+        default="deepseek/deepseek-v4.1-flash:floor",
         alias="OPENROUTER_MODEL_ITEM",
     )
-    # A different provider, not merely another InclusionAI model. Free
-    # providers can be listed and still be temporarily saturated, so chat
-    # needs one bounded cross-provider retry before surfacing a 502.
+    # Same model as the primary. Kept as its own knob so a future primary can
+    # still name an explicit different-provider escape hatch; today both point
+    # at the one model that measurably works.
     openrouter_model_fallback: str = Field(
-        default="deepseek/deepseek-v4.1-flash:free",
+        default="deepseek/deepseek-v4.1-flash:floor",
         alias="OPENROUTER_MODEL_FALLBACK",
     )
     # Nemotron 3 Embed 1B natively outputs 2048 dims; ai/bedrock.py slices to

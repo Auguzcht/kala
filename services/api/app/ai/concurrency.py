@@ -39,3 +39,37 @@ def map_concurrent(fn: Callable[[T], R], items: list[T], *, max_workers: int = 8
     with ThreadPoolExecutor(max_workers=min(max_workers, len(items))) as pool:
         futures = [pool.submit(fn, item) for item in items]
         return [f.result() for f in futures]
+
+
+def map_concurrent_partial(
+    fn: Callable[[T], R], items: list[T], *, max_workers: int = 8,
+) -> tuple[list[R], list[Exception]]:
+    """Like map_concurrent, but a failed call does not sink the batch: returns
+    (successful_results_in_order, errors). Use this where a PARTIAL result is
+    still useful to the caller.
+
+    The counterpart to map_concurrent, not a replacement. map_concurrent's
+    all-or-nothing contract is right where a short batch is meaningless (a
+    diagnostic missing skills, a lesson missing steps). It is wrong for quiz
+    set generation, where 4 good questions out of 5 is a perfectly usable set
+    and 502-ing the whole thing because one roll of a flaky free-tier model
+    failed is a worse outcome than a slightly shorter set. Callers that want
+    the partial behaviour must also be the ones to decide what a partial set
+    means (see routers/practice.py's create_set, which sizes the set row to
+    what actually generated).
+
+    Errors are returned rather than raised so the caller can log them with
+    its own context and still serve the successes.
+    """
+    if not items:
+        return [], []
+    results: list[R] = []
+    errors: list[Exception] = []
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(items))) as pool:
+        futures = [pool.submit(fn, item) for item in items]
+        for f in futures:
+            try:
+                results.append(f.result())
+            except Exception as exc:  # noqa: BLE001 — deliberately collected
+                errors.append(exc)
+    return results, errors
