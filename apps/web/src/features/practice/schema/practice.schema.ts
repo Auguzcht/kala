@@ -22,16 +22,30 @@ export const practiceSetSchema = z.object({
   items: z.array(practiceItemSchema),
 });
 
+// Per-student attempt metadata, shared by the set list and the set detail.
+// Nulls (not missing) for a set this student has never attempted, so the UI
+// branches on `attemptedCount === null`. Written only by the API's submit().
+// `.nullable().default(null)` also tolerates an older API that predates the
+// field entirely — an absent attempt count means the same thing to the UI as
+// a null one (never attempted), so a deployment-order gap can't hard-fail the
+// whole set list on a Zod parse.
+export const practiceSetAttemptSchema = z.object({
+  attemptedCount: z.number().nullable().default(null),
+  correctCount: z.number().nullable().default(null),
+  lastAttemptedAt: z.string().nullable().default(null),
+});
+
 // A saved set loaded by id (GET /practice/{id}/sets/{set_id}) — used to
 // re-enter test mode on a set the student already has (the bridge handoff and
-// the retake list).
+// the retake list). Carries prompts + choices only; the answer key stays
+// server-side (it is a graded test, not a flashcard browse).
 export const practiceSavedSetSchema = z.object({
   courseId: z.string(),
   setId: z.string(),
   skillId: z.string(),
   kind: z.string(),
   items: z.array(practiceItemSchema),
-});
+}).merge(practiceSetAttemptSchema);
 
 // The retake list (GET /practice/{id}/sets), newest first.
 export const practiceSetSummarySchema = z.object({
@@ -40,7 +54,7 @@ export const practiceSetSummarySchema = z.object({
   kind: z.string(),
   size: z.number(),
   createdAt: z.string(),
-});
+}).merge(practiceSetAttemptSchema);
 
 export const practiceSetListSchema = z.object({
   courseId: z.string(),
@@ -59,4 +73,5 @@ export type PracticeSet = z.infer<typeof practiceSetSchema>;
 export type PracticeSavedSet = z.infer<typeof practiceSavedSetSchema>;
 export type PracticeSetSummary = z.infer<typeof practiceSetSummarySchema>;
 export type PracticeSetList = z.infer<typeof practiceSetListSchema>;
+export type PracticeSetAttempt = z.infer<typeof practiceSetAttemptSchema>;
 export type PracticeSubmitResult = z.infer<typeof practiceSubmitResultSchema>;

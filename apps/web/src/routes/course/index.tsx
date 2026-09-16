@@ -140,7 +140,11 @@ function WorkspaceHome() {
               navigate({
                 to: "/course/skill/$skillId",
                 params: { skillId: next.skillId },
-                search: { tab: "test" },
+                // Express lane: this card is a direct recommendation, not a
+                // browse entry, so it skips the Test tab's set browser and
+                // goes straight into the graded run (start: true). The hub's
+                // own Test tab, entered deliberately, is where browsing lives.
+                search: { tab: "test", start: true },
               })
             }
             className="shrink-0"

@@ -1,6 +1,7 @@
 export { PracticePanel } from "@/features/practice/components/PracticePanel";
 export {
   useCreateSetFromItems,
+  useGenerateSet,
   useNextPracticeItem,
   usePracticeSet,
   usePracticeSetById,
@@ -12,6 +13,7 @@ export type {
   PracticeNext,
   PracticeSavedSet,
   PracticeSet,
+  PracticeSetAttempt,
   PracticeSetList,
   PracticeSetSummary,
   PracticeSubmitResult,

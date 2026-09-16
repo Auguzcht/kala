@@ -75,6 +75,22 @@ export function useCreateSetFromItems(courseId: string) {
   });
 }
 
+// "Generate new set" from the Test tab browser: a one-shot generation the
+// caller then navigates from (to the new set's detail view), not a query — so
+// a mutation, and it invalidates the set list so the new set appears there.
+// This is the same POST /set the session path uses; the only difference is
+// who consumes the result (browse-then-start vs. jump-straight-in).
+export function useGenerateSet(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { skillId: string; size?: number }) =>
+      fetchPracticeSet(courseId, { skillId: args.skillId, size: args.size }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["practice", courseId, "sets"] });
+    },
+  });
+}
+
 export function useSubmitPractice(courseId: string) {
   const queryClient = useQueryClient();
   return useMutation({

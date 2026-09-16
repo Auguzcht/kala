@@ -5,12 +5,12 @@ import { LayersIcon } from "@/components/ui/layers";
 import { ZapIcon } from "@/components/ui/zap";
 import { MasteryBand } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTwin } from "@/features/twin";
 import { LessonChat } from "@/features/lessons";
 import { FlashcardDeck } from "@/features/flashcards";
-import { PracticePanel, usePracticeSets } from "@/features/practice";
+import { PracticePanel } from "@/features/practice";
+import { TestBrowser } from "@/features/skill-hub/components/TestBrowser";
 import { cn } from "@/lib/utils";
 import type { TwinSkill } from "@/features/twin";
 
@@ -44,6 +44,9 @@ export function SkillHub({
   skillId,
   tab,
   setId,
+  start,
+  onSelectSet,
+  onStart,
   onExitSession,
 }: {
   courseId: string;
@@ -52,9 +55,15 @@ export function SkillHub({
    * route's search param so the hub is linkable and the "Next up" card can
    * deep-link straight to Test. */
   tab?: SkillTab;
-  /** A specific saved set to run when entering Test (retake, or a bridge
-   * handoff). Undefined means generate a fresh set. */
+  /** The set open in the Test tab's detail view (retake, bridge handoff, or
+   * a freshly generated set). Empty string = back to the set list. */
   setId?: string;
+  /** Test tab only: true once the student has committed to a graded run on
+   * the open set, which is when PracticePanel takes over. Keeps "browse the
+   * set" and "take the test" as two distinct steps. */
+  start?: boolean;
+  onSelectSet: (setId: string) => void;
+  onStart: () => void;
   /** Leave the running session back to the hub landing (clears the tab in
    * the URL so a refresh doesn't re-enter it). */
   onExitSession: () => void;
@@ -66,13 +75,33 @@ export function SkillHub({
     return <FlashcardDeck courseId={courseId} skillId={skillId} onExit={onExitSession} />;
   }
   if (tab === "test") {
+    // Started -> the graded run. setId present = run that saved set; absent
+    // = generate a fresh one (PracticePanel handles both, and the express
+    // lane from "Next up" arrives here with no setId). Otherwise the browser:
+    // a list of saved sets, or one set's detail.
+    if (start) {
+      return (
+        <PracticePanel
+          courseId={courseId}
+          skillId={skillId}
+          setId={setId || null}
+          onExit={onExitSession}
+        />
+      );
+    }
     return (
-      <PracticePanel
-        courseId={courseId}
-        skillId={skillId}
-        setId={setId}
-        onExit={onExitSession}
-      />
+      <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-8">
+        <h1 className="font-display text-xl font-semibold text-foreground">Test</h1>
+        <div className="mt-4">
+          <TestBrowser
+            courseId={courseId}
+            skillId={skillId}
+            setId={setId || null}
+            onSelectSet={onSelectSet}
+            onStart={onStart}
+          />
+        </div>
+      </div>
     );
   }
   return <SkillHubLanding courseId={courseId} skillId={skillId} />;
@@ -153,72 +182,6 @@ function SkillHubLanding({ courseId, skillId }: { courseId: string; skillId: str
         ))}
       </div>
 
-      {/* Past tests for this skill — the retake list. quiz_sets already
-          persists; this is a plain read (routers/practice.py's /sets). */}
-      <SavedSets courseId={courseId} skillId={skillId} />
     </div>
-  );
-}
-
-function SavedSets({ courseId, skillId }: { courseId: string; skillId: string }) {
-  const { data, isLoading } = usePracticeSets(courseId, skillId);
-  const sets = data?.sets ?? [];
-
-  if (isLoading) {
-    return <Skeleton className="mt-5 h-16 w-full" />;
-  }
-  if (sets.length === 0) {
-    return (
-      <div className="mt-5 border border-dashed bg-card px-5 py-4">
-        <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Take a test, or study these cards and hit "Test me on these" — saved sets land here to
-          retake.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-5">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.06em] text-brand-slate">
-        Saved tests
-      </p>
-      <ul className="divide-y divide-border border bg-card">
-        {sets.map((s) => (
-          <li key={s.setId} className="flex items-center justify-between gap-4 px-5 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">
-                {s.size} {s.size === 1 ? "question" : "questions"}
-              </p>
-              <p className="font-mono text-[11px] text-muted-foreground">
-                {new Date(s.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-            <RetakeButton skillId={skillId} setId={s.setId} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function RetakeButton({ skillId, setId }: { skillId: string; setId: string }) {
-  const navigate = useNavigate();
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="shrink-0"
-      onClick={() =>
-        navigate({
-          to: "/course/skill/$skillId",
-          params: { skillId },
-          search: { tab: "test", setId },
-        })
-      }
-    >
-      Retake
-    </Button>
   );
 }
