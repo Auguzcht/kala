@@ -379,11 +379,9 @@ export interface paths {
         /**
          * List Sets
          * @description Saved quiz sets for this course, newest first, optionally scoped to one
-         *     skill. Read-only: this is what lets a student see and retake a set they
-         *     already took (the Step 3 hub's Test tab; built here because it is a plain
-         *     read over quiz_sets, which already persists). Returns a count rather than
-         *     the items — the retake action re-enters test mode and items come from
-         *     /practice/{course_id}/set/from-items.
+         *     skill. Read-only: this is the Test tab's set browser. Each set carries
+         *     THIS student's attempt metadata (or nulls for never-attempted) so the
+         *     badge renders from one round trip.
          */
         get: operations["list_sets_practice__course_id__sets_get"];
         put?: never;
@@ -410,6 +408,11 @@ export interface paths {
          *
          *     Ownership is verified against institution + course before anything is
          *     returned; a set id from another course 404s rather than leaking items.
+         *
+         *     Item select is deliberately unchanged: prompts and choices only, never the
+         *     answer key (correct_choice_id/explanation). This is a graded test, not a
+         *     flashcard browse — the client must not be able to see the answers before
+         *     submitting. Only SET-LEVEL metadata gains the attempt fields.
          */
         get: operations["get_set_practice__course_id__sets__set_id__get"];
         put?: never;

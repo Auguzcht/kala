@@ -16,6 +16,8 @@ Two ways to get practice content:
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -236,6 +238,39 @@ class SubmitBody(BaseModel):
     latency_ms: int = 0
 
 
+def _attempts_by_set(*, institution_id: str, user_id: str, set_ids: list[str]) -> dict[str, dict]:
+    """This student's attempt row per set, keyed by set_id. One query for a
+    whole list rather than N — the Test tab renders many sets at once.
+
+    quiz_sets itself is shared course content (no user_id); the personal half
+    lives in quiz_set_attempts, written only by submit(). A set with no row
+    simply means "never attempted by this student" and is absent from the
+    map, which callers translate to null.
+    """
+    if not set_ids:
+        return {}
+    rows = db.select("quiz_set_attempts", {
+        "institution_id": f"eq.{institution_id}",
+        "user_id": f"eq.{user_id}",
+        "set_id": f"in.({','.join(set_ids)})",
+        "select": "set_id,attempted_count,correct_count,last_attempted_at",
+    })
+    return {r["set_id"]: r for r in rows}
+
+
+def _attempt_view(row: dict | None) -> dict:
+    """The set-level attempt metadata the UI badge reads. Null fields (not a
+    missing key) for a set the student has never attempted, so the client can
+    branch on `attemptedCount == null` without a separate existence flag."""
+    if not row:
+        return {"attemptedCount": None, "correctCount": None, "lastAttemptedAt": None}
+    return {
+        "attemptedCount": row["attempted_count"],
+        "correctCount": row["correct_count"],
+        "lastAttemptedAt": row.get("last_attempted_at"),
+    }
+
+
 @router.get("/{course_id}/sets")
 def list_sets(
     course_id: str,
@@ -243,11 +278,9 @@ def list_sets(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Saved quiz sets for this course, newest first, optionally scoped to one
-    skill. Read-only: this is what lets a student see and retake a set they
-    already took (the Step 3 hub's Test tab; built here because it is a plain
-    read over quiz_sets, which already persists). Returns a count rather than
-    the items — the retake action re-enters test mode and items come from
-    /practice/{course_id}/set/from-items.
+    skill. Read-only: this is the Test tab's set browser. Each set carries
+    THIS student's attempt metadata (or nulls for never-attempted) so the
+    badge renders from one round trip.
     """
     params = {
         "institution_id": f"eq.{user.institution_id}",
@@ -258,11 +291,16 @@ def list_sets(
     if skill_id:
         params["skill_id"] = f"eq.{skill_id}"
     rows = db.select("quiz_sets", params)
+    attempts = _attempts_by_set(
+        institution_id=user.institution_id, user_id=user.user_id,
+        set_ids=[r["id"] for r in rows],
+    )
     return {
         "courseId": course_id,
         "sets": [{
             "setId": r["id"], "skillId": r["skill_id"], "kind": r["kind"],
             "size": r["size"], "createdAt": r["created_at"],
+            **_attempt_view(attempts.get(r["id"])),
         } for r in rows],
     }
 
@@ -276,6 +314,11 @@ def get_set(course_id: str, set_id: str, user: CurrentUser = Depends(get_current
 
     Ownership is verified against institution + course before anything is
     returned; a set id from another course 404s rather than leaking items.
+
+    Item select is deliberately unchanged: prompts and choices only, never the
+    answer key (correct_choice_id/explanation). This is a graded test, not a
+    flashcard browse — the client must not be able to see the answers before
+    submitting. Only SET-LEVEL metadata gains the attempt fields.
     """
     sets = db.select("quiz_sets", {
         "id": f"eq.{set_id}",
@@ -293,17 +336,51 @@ def get_set(course_id: str, set_id: str, user: CurrentUser = Depends(get_current
         "order": "created_at.asc",
     })
     s = sets[0]
+    attempts = _attempts_by_set(
+        institution_id=user.institution_id, user_id=user.user_id, set_ids=[s["id"]],
+    )
     return {
         "courseId": course_id,
         "setId": s["id"],
         "skillId": s["skill_id"],
         "kind": s["kind"],
+        **_attempt_view(attempts.get(s["id"])),
         "items": [{
             "id": r["id"], "skillId": r["skill_id"],
             "bloomLevel": r.get("bloom_level"),
             "prompt": r["prompt"], "choices": r.get("choices") or [],
         } for r in items],
     }
+
+
+def _record_set_attempt(*, institution_id: str, user_id: str, course_id: str,
+                        set_id: str, correct: bool) -> None:
+    """Increment this student's counters for a set they just answered in.
+
+    Read-then-upsert rather than a single atomic increment: PostgREST has no
+    increment operator, so the new totals are computed here against the
+    current row and written back on the (user_id, set_id) conflict target. A
+    single student answers a set one question at a time, so there is no
+    meaningful concurrent-writer race in practice; if that ever changes, this
+    is the function that becomes an RPC.
+
+    This is intentionally separate from the evidence/tracer writes in
+    submit() — those are the mastery signal, this is just "did you take this
+    set and how did you do", and neither depends on the other.
+    """
+    existing = db.select("quiz_set_attempts", {
+        "institution_id": f"eq.{institution_id}", "user_id": f"eq.{user_id}",
+        "set_id": f"eq.{set_id}",
+        "select": "attempted_count,correct_count", "limit": "1",
+    })
+    attempted = (int(existing[0]["attempted_count"]) if existing else 0) + 1
+    correct_count = (int(existing[0]["correct_count"]) if existing else 0) + (1 if correct else 0)
+    db.upsert("quiz_set_attempts", [{
+        "institution_id": institution_id, "user_id": user_id,
+        "course_id": course_id, "set_id": set_id,
+        "attempted_count": attempted, "correct_count": correct_count,
+        "last_attempted_at": datetime.now(timezone.utc).isoformat(),
+    }], on_conflict="user_id,set_id")
 
 
 @router.post("/{course_id}/submit")
@@ -324,6 +401,16 @@ def submit(course_id: str, body: SubmitBody, user: CurrentUser = Depends(get_cur
         institution_id=user.institution_id, user_id=user.user_id,
         course_id=course_id, skill_id=graded["skillId"], correct=graded["correct"],
     )
+    # Attempt bookkeeping for a grouped item. An ungrouped item (/next, no
+    # set) has setId null and touches nothing here — same as it touches
+    # nothing in quiz_sets. Grading, evidence, and mastery above are all
+    # unchanged; this is purely the per-student "have I taken this set"
+    # counter the Test tab badge reads.
+    if graded.get("setId"):
+        _record_set_attempt(
+            institution_id=user.institution_id, user_id=user.user_id,
+            course_id=course_id, set_id=graded["setId"], correct=graded["correct"],
+        )
     return {
         "correct": graded["correct"],
         "explanation": graded["explanation"],

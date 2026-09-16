@@ -574,6 +574,10 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
     captured = {}
 
     def fake_select(table, params):
+        if table == "quiz_set_attempts":
+            # set-2 attempted once, correct; set-1 never attempted (absent).
+            return [{"set_id": "set-2", "attempted_count": 3, "correct_count": 2,
+                     "last_attempted_at": "2026-02-03T00:00:00Z"}]
         captured.update(params)
         return [
             {"id": "set-2", "skill_id": "skill-1", "kind": "practice", "size": 5,
@@ -594,6 +598,13 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
     body = response.json()
     assert [s["setId"] for s in body["sets"]] == ["set-2", "set-1"]
     assert body["sets"][0]["size"] == 5
+    # Attempt metadata is per-student and rides along on each set.
+    assert body["sets"][0]["attemptedCount"] == 3
+    assert body["sets"][0]["correctCount"] == 2
+    assert body["sets"][0]["lastAttemptedAt"] == "2026-02-03T00:00:00Z"
+    # Never attempted -> explicit nulls, not missing keys.
+    assert body["sets"][1]["attemptedCount"] is None
+    assert body["sets"][1]["correctCount"] is None
     assert captured["skill_id"] == "eq.skill-1"
     assert captured["order"] == "created_at.desc"
 
@@ -626,6 +637,15 @@ def test_get_set_returns_its_items_in_order(monkeypatch) -> None:
     body = response.json()
     assert body["setId"] == "set-1"
     assert [i["id"] for i in body["items"]] == ["item-1", "item-2"]
+    # Never attempted in this fixture -> explicit nulls on the set metadata.
+    assert body["attemptedCount"] is None
+    assert body["correctCount"] is None
+    assert body["lastAttemptedAt"] is None
+    # The item payload must NEVER carry the answer key (graded test, not a
+    # flashcard browse).
+    for item in body["items"]:
+        assert "correct_choice_id" not in item
+        assert "explanation" not in item
 
 
 def test_get_set_404s_for_another_course(monkeypatch) -> None:
@@ -640,3 +660,135 @@ def test_get_set_404s_for_another_course(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+# ---- quiz_set_attempts bookkeeping ----------------------------------------
+
+
+def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) -> None:
+    """A graded item grouped under a set must bump this student's attempt
+    counters, while grading/evidence/tracer stay exactly as they were."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    upserted = []
+
+    monkeypatch.setattr(
+        practice.item_gen, "grade",
+        lambda **kwargs: {"skillId": "skill-1", "courseId": "course-1",
+                          "correct": True, "explanation": "ok", "setId": "set-1"},
+    )
+    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
+    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.5})
+    # Existing row: 3 attempts / 1 correct before this answer.
+    monkeypatch.setattr(
+        practice.db, "select",
+        lambda table, params: [{"attempted_count": 3, "correct_count": 1}],
+    )
+    monkeypatch.setattr(
+        practice.db, "upsert",
+        lambda table, rows, on_conflict: upserted.extend(rows) or rows,
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/course-1/submit",
+                json={"item_id": "item-1", "choice_id": "a", "latency_ms": 100},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert upserted[0]["attempted_count"] == 4
+    assert upserted[0]["correct_count"] == 2
+    assert upserted[0]["set_id"] == "set-1"
+    assert "last_attempted_at" in upserted[0]
+
+
+def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    upserted = []
+    monkeypatch.setattr(
+        practice.item_gen, "grade",
+        lambda **kwargs: {"skillId": "skill-1", "courseId": "course-1",
+                          "correct": False, "explanation": "no", "setId": "set-9"},
+    )
+    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
+    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.2})
+    monkeypatch.setattr(practice.db, "select", lambda table, params: [])  # no row yet
+    monkeypatch.setattr(
+        practice.db, "upsert",
+        lambda table, rows, on_conflict: upserted.extend(rows) or rows,
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/course-1/submit",
+                json={"item_id": "item-1", "choice_id": "b"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert upserted[0]["attempted_count"] == 1
+    assert upserted[0]["correct_count"] == 0  # wrong answer still counts an attempt
+
+
+def test_submit_of_an_ungrouped_item_touches_no_attempt_row(monkeypatch) -> None:
+    """/next items have set_id null — submit must not create attempt rows for
+    them (there is no set to attribute them to)."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    touched = []
+    monkeypatch.setattr(
+        practice.item_gen, "grade",
+        lambda **kwargs: {"skillId": "skill-1", "courseId": "course-1",
+                          "correct": True, "explanation": "ok", "setId": None},
+    )
+    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
+    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.5})
+    monkeypatch.setattr(
+        practice.db, "upsert",
+        lambda *a, **k: touched.append(a) or [],
+    )
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/course-1/submit",
+                json={"item_id": "item-1", "choice_id": "a"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert touched == []
+
+
+def test_get_set_includes_this_students_attempt_row(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+
+    def fake_select(table, params):
+        if table == "quiz_sets":
+            return [{"id": "set-1", "skill_id": "skill-1", "kind": "practice",
+                     "size": 2, "created_at": "2026-02-01T00:00:00Z"}]
+        if table == "generated_items":
+            return [{"id": "item-1", "skill_id": "skill-1", "prompt": "Q1",
+                     "choices": [], "bloom_level": "apply"}]
+        if table == "quiz_set_attempts":
+            return [{"set_id": "set-1", "attempted_count": 5, "correct_count": 4,
+                     "last_attempted_at": "2026-02-03T09:00:00Z"}]
+        return []
+
+    monkeypatch.setattr(practice.db, "select", fake_select)
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/course-1/sets/set-1")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["attemptedCount"] == 5
+    assert body["correctCount"] == 4
+    assert body["lastAttemptedAt"] == "2026-02-03T09:00:00Z"

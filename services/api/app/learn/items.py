@@ -173,7 +173,7 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
     """Look up the stored answer key and grade server-side."""
     rows = db.select("generated_items", {
         "id": f"eq.{item_id}", "institution_id": f"eq.{institution_id}",
-        "select": "id,skill_id,course_id,correct_choice_id,explanation", "limit": "1",
+        "select": "id,skill_id,course_id,correct_choice_id,explanation,set_id", "limit": "1",
     })
     if not rows:
         raise ValueError(f"item {item_id} not found")
@@ -184,6 +184,10 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
         "courseId": item["course_id"],
         "correct": correct,
         "explanation": item.get("explanation") or "",
+        # Which quiz set this item belonged to, if any. Ungrouped items
+        # (/next, flashcards, tutor checks) have set_id null and the caller
+        # (practice.submit) simply skips the attempt bookkeeping for them.
+        "setId": item.get("set_id"),
     }
 
 

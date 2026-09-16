@@ -1026,7 +1026,7 @@
           "practice"
         ],
         "summary": "List Sets",
-        "description": "Saved quiz sets for this course, newest first, optionally scoped to one\nskill. Read-only: this is what lets a student see and retake a set they\nalready took (the Step 3 hub's Test tab; built here because it is a plain\nread over quiz_sets, which already persists). Returns a count rather than\nthe items \u2014 the retake action re-enters test mode and items come from\n/practice/{course_id}/set/from-items.",
+        "description": "Saved quiz sets for this course, newest first, optionally scoped to one\nskill. Read-only: this is the Test tab's set browser. Each set carries\nTHIS student's attempt metadata (or nulls for never-attempted) so the\nbadge renders from one round trip.",
         "operationId": "list_sets_practice__course_id__sets_get",
         "parameters": [
           {
@@ -1099,7 +1099,7 @@
           "practice"
         ],
         "summary": "Get Set",
-        "description": "Load one saved set's items so it can be retaken or re-entered \u2014 the\nread behind the study->test bridge navigation and the retake list. Items\nare returned in their natural order (oldest first, the order they were\ngenerated/studied in via the set_id grouping).\n\nOwnership is verified against institution + course before anything is\nreturned; a set id from another course 404s rather than leaking items.",
+        "description": "Load one saved set's items so it can be retaken or re-entered \u2014 the\nread behind the study->test bridge navigation and the retake list. Items\nare returned in their natural order (oldest first, the order they were\ngenerated/studied in via the set_id grouping).\n\nOwnership is verified against institution + course before anything is\nreturned; a set id from another course 404s rather than leaking items.\n\nItem select is deliberately unchanged: prompts and choices only, never the\nanswer key (correct_choice_id/explanation). This is a graded test, not a\nflashcard browse \u2014 the client must not be able to see the answers before\nsubmitting. Only SET-LEVEL metadata gains the attempt fields.",
         "operationId": "get_set_practice__course_id__sets__set_id__get",
         "parameters": [
           {
