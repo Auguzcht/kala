@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AssistantBlock } from "@/components/study/AssistantBlock";
+import { ComposeDock } from "@/components/study/ComposeDock";
+import { SessionBar } from "@/components/study/SessionBar";
+import { StudyStream } from "@/components/study/StudyStream";
+import { StudySurface } from "@/components/study/StudySurface";
+import { UserBlock } from "@/components/study/UserBlock";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
+import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { useNextPracticeItem, useSubmitPractice } from "@/features/practice/hooks/use-practice";
 import { useGamification } from "@/features/gamification";
+import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
 // Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
@@ -29,10 +35,21 @@ import type { PracticeSubmitResult } from "@/features/practice/schema/practice.s
 // AnswerableCard (hover/selected states, disabled-during-pending fix,
 // live mastery band + XP delta all live there, not in this file).
 
-export function PracticePanel({ courseId, skillId }: { courseId: string; skillId: string }) {
-  const { data, isLoading, isError, refetch } = useNextPracticeItem(courseId, skillId);
+type FollowUpTurn = { question: string; answer: string };
+
+export function PracticePanel({
+  courseId,
+  skillId,
+  onExit,
+}: {
+  courseId: string;
+  skillId: string;
+  onExit: () => void;
+}) {
+  const { data, isLoading, isError, isFetching, refetch } = useNextPracticeItem(courseId, skillId);
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
+  const followUp = useTutorAsk(courseId);
 
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
@@ -41,6 +58,8 @@ export function PracticePanel({ courseId, skillId }: { courseId: string; skillId
   const [streak, setStreak] = useState(0);
   const [gain, setGain] = useState<{ xp: number } | null>(null);
   const [bandTransition, setBandTransition] = useState<{ from: string; to: string } | null>(null);
+  const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
+  const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
 
   const lastXpRef = useRef<number | null>(null);
   const prevEstimateRef = useRef<number | null>(null);
@@ -63,6 +82,8 @@ export function PracticePanel({ courseId, skillId }: { courseId: string; skillId
     setLastResult(null);
     setGain(null);
     setBandTransition(null);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
     setStartedAt(Date.now());
   }, [data?.item?.id]);
 
@@ -108,15 +129,65 @@ export function PracticePanel({ courseId, skillId }: { courseId: string; skillId
     );
   }
 
+  function askAboutItem(question: string) {
+    setPendingFollowUp(question);
+    followUp.mutate(
+      {
+        question: [
+          "You are Kala helping a student with one practice question.",
+          "Before the question is graded, guide their reasoning without stating which option is correct. After grading, explain clearly if asked.",
+          `Question: ${item.prompt}`,
+          `Options: ${item.choices.map((choice) => `${choice.id}: ${choice.label}`).join(" | ")}`,
+          lastResult ? `The student was ${lastResult.correct ? "correct" : "incorrect"}.` : "The student has not submitted an answer yet.",
+          `Student question: ${question}`,
+        ].join("\n\n"),
+      },
+      {
+        onSuccess: (answer) => {
+          setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
+          setPendingFollowUp(null);
+        },
+        onError: () => setPendingFollowUp(null),
+      }
+    );
+  }
+
   return (
-    <StudySessionShell
-      progress={{ current: sessionAnswers, total: 0, label: "answered" }}
+    <StudySurface
+      bar={
+        <SessionBar
+          title="Quick practice"
+          progress={{ current: sessionAnswers, total: 0, label: "answered" }}
+          onBack={onExit}
+          backLabel="Choose another topic"
+        />
+      }
+      dock={
+        <ComposeDock
+          // Match the Lessons contract: the dock is a visible, locked
+          // advance action until server-side grading succeeds. Compose before
+          // an answer would make it both look like a tutor and offer an easy
+          // path around the practice beat.
+          primary={{
+            label: !lastResult
+              ? "Choose an answer to continue"
+              : isFetching
+                ? "Finding your next question…"
+                : "Next item",
+            onClick: () => {
+              if (lastResult && !isFetching) refetch();
+            },
+            disabled: !lastResult || isFetching,
+            icon: ArrowRightIcon,
+          }}
+          onAsk={lastResult ? askAboutItem : undefined}
+          askPending={followUp.isPending}
+          placeholder="Ask Kala about this question…"
+        />
+      }
     >
-      <Card id="tour-practice-card">
-        <CardHeader>
-          <CardTitle>Quick practice</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <StudyStream>
+        <div id="tour-practice-card" className="border bg-card px-5 py-6 sm:px-6">
           <AnswerableCard
             prompt={item.prompt}
             choices={item.choices}
@@ -146,17 +217,22 @@ export function PracticePanel({ courseId, skillId }: { courseId: string; skillId
               </>
             }
           />
+        </div>
 
-          {lastResult ? (
-            <div className="mt-4">
-              <Button variant="orange" onClick={() => refetch()}>
-                Next item
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </StudySessionShell>
+        {followUpTurns.map((turn, index) => (
+          <div key={`${turn.question}-${index}`} className="space-y-3">
+            <UserBlock text={turn.question} />
+            <AssistantBlock text={turn.answer} />
+          </div>
+        ))}
+        {pendingFollowUp ? (
+          <div className="space-y-3">
+            <UserBlock text={pendingFollowUp} />
+            <AssistantBlock pending pendingLabel="Kala is thinking…" />
+          </div>
+        ) : null}
+      </StudyStream>
+    </StudySurface>
   );
 }
 

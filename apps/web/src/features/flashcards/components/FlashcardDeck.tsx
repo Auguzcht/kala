@@ -4,13 +4,19 @@ import { TransitionPanel } from "@/components/motion/transition-panel";
 import { BrainIcon } from "@/components/ui/brain";
 import { EyeIcon } from "@/components/ui/eye";
 import { SparklesIcon } from "@/components/ui/sparkles";
-import { StudySessionShell } from "@/components/study/StudySessionShell";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
+import { AssistantBlock } from "@/components/study/AssistantBlock";
+import { ComposeDock } from "@/components/study/ComposeDock";
+import { SessionBar } from "@/components/study/SessionBar";
+import { StudyStream } from "@/components/study/StudyStream";
+import { StudySurface } from "@/components/study/StudySurface";
+import { UserBlock } from "@/components/study/UserBlock";
 import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck, useRevealFlashcard, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
 import { useTwin } from "@/features/twin";
@@ -25,8 +31,8 @@ import type {
 // then Hint / Reveal / Explain as separate actions — matching the target
 // design (Flashcards.dc.html). Grading is server-side; Reveal is a committed
 // lapse, so a revealed card is terminal for this render (no follow-up review
-// call — see routers/flashcards.py). Shared chrome via StudySessionShell,
-// question + grading via AnswerableCard.
+// call — see routers/flashcards.py). Session chrome comes from StudySurface;
+// question + grading stays in AnswerableCard.
 //
 // One topic choice per session (Stage 3 of the AI overhaul,
 // docs/AI_OVERHAUL_TODO.md), but NOT one required skill — `skillId` stays
@@ -44,6 +50,7 @@ import type {
 // topic" back button), not something this component offers.
 
 type Phase = "think" | "choose" | "answered" | "revealed";
+type FollowUpTurn = { question: string; answer: string };
 
 function StateBadge({ state }: { state: "due" | "new" }) {
   return (
@@ -64,13 +71,22 @@ function StateBadge({ state }: { state: "due" | "new" }) {
   );
 }
 
-export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId?: string }) {
+export function FlashcardDeck({
+  courseId,
+  skillId,
+  onExit,
+}: {
+  courseId: string;
+  skillId?: string;
+  onExit: () => void;
+}) {
   const reduceMotion = useReducedMotion();
   const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
   const review = useReviewFlashcard(courseId);
   const reveal = useRevealFlashcard(courseId);
   const hint = useTutorAsk(courseId);
   const explain = useTutorAsk(courseId);
+  const followUp = useTutorAsk(courseId);
   const { data: twin } = useTwin(courseId);
 
   const [index, setIndex] = useState(0);
@@ -81,6 +97,8 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
   const [revealResult, setRevealResult] = useState<FlashcardRevealResult | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
   const [explainText, setExplainText] = useState<string | null>(null);
+  const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
+  const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
   const hintsUsedRef = useRef(0);
   const startedAtRef = useRef(Date.now());
 
@@ -92,6 +110,8 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
     setRevealResult(null);
     setHintText(null);
     setExplainText(null);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
     hintsUsedRef.current = 0;
     startedAtRef.current = Date.now();
   }, [index, data?.courseId]);
@@ -133,28 +153,37 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
 
   if (deckDone) {
     return (
-      <StudySessionShell
-        progress={{ current: data.stats.due, total: 0, label: "due for review" }}
+      <StudySurface
+        bar={
+          <SessionBar
+            title="Flashcards"
+            progress={{ current: total, total, label: "cards" }}
+            onBack={onExit}
+            backLabel="Choose another topic"
+          />
+        }
+        dock={
+          <ComposeDock
+            primary={{ label: "Reload deck", onClick: reloadDeck, icon: ArrowRightIcon }}
+          />
+        }
       >
-        <div className="relative border bg-card p-6">
-          <CornerBrackets />
-          <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
-            Deck complete
-          </p>
-          <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-            Nice work on {total} cards
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Missed cards resurface sooner, so your next pass is exactly what your schedule says
-            you need.
-          </p>
-          <div className="mt-4">
-            <Button variant="orange" onClick={reloadDeck}>
-              Reload deck
-            </Button>
+        <StudyStream>
+          <div className="relative border bg-card p-6">
+            <CornerBrackets />
+            <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
+              Deck complete
+            </p>
+            <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
+              Nice work on {total} cards
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Missed cards resurface sooner, so your next pass is exactly what your schedule says
+              you need.
+            </p>
           </div>
-        </div>
-      </StudySessionShell>
+        </StudyStream>
+      </StudySurface>
     );
   }
 
@@ -193,6 +222,9 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
   }
 
   function reloadDeck() {
+    // A one-card deck already sits at index 0, so changing only the index
+    // would not rerun the reset effect. Clear the terminal state explicitly.
+    setDeckDone(false);
     setIndex(0);
     refetch();
   }
@@ -216,32 +248,72 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
     );
   }
 
+  function askAboutCard(question: string) {
+    setPendingFollowUp(question);
+    followUp.mutate(
+      {
+        question: [
+          "You are Kala helping a student study one flashcard.",
+          "Before they answer or reveal it, guide recall without stating the answer. After the card is resolved, explain the concept clearly if asked.",
+          `Card prompt: ${card.prompt}`,
+          `Options: ${card.choices.map((choice) => `${choice.id}: ${choice.label}`).join(" | ")}`,
+          `Card state: ${phase}.`,
+          `Student question: ${question}`,
+        ].join("\n\n"),
+      },
+      {
+        onSuccess: (answer) => {
+          setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
+          setPendingFollowUp(null);
+        },
+        onError: () => setPendingFollowUp(null),
+      }
+    );
+  }
+
   const reward = result?.reward ?? revealResult?.reward;
+  const canAdvance = phase === "answered" || phase === "revealed";
+  const dockPrimary = phase === "think"
+    ? {
+        label: "Reveal options",
+        onClick: () => setPhase("choose" as const),
+        icon: ArrowRightIcon,
+      }
+    : canAdvance
+      ? {
+          label: index + 1 >= total ? "See recap" : "Next card",
+          onClick: nextCard,
+          icon: ArrowRightIcon,
+        }
+      : {
+          label: "Choose an answer to continue",
+          onClick: () => {},
+          disabled: true,
+          icon: ArrowRightIcon,
+        };
 
   return (
-    <StudySessionShell
-      progress={{ current: index + 1, total, label: "card" }}
+    <StudySurface
+      bar={
+        <SessionBar
+          title="Flashcards"
+          progress={{ current: index + 1, total, label: "card" }}
+          onBack={onExit}
+          backLabel="Choose another topic"
+        />
+      }
+      dock={
+        <ComposeDock
+          primary={dockPrimary}
+          onAsk={canAdvance ? askAboutCard : undefined}
+          askPending={followUp.isPending}
+          placeholder="Ask Kala about this card…"
+        />
+      }
     >
-      {/* The one number that drives the next action: due for review. */}
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-        <div>
-          <p className="font-display text-3xl font-semibold leading-none text-foreground">
-            {data.stats.due}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {data.stats.due === 1 ? "card" : "cards"} due for review now
-          </p>
-        </div>
-        <div className="flex gap-4 pb-0.5 font-mono text-xs text-muted-foreground">
-          <span>{data.stats.learning} learning</span>
-          <span>{data.stats.mastered} mastered</span>
-          <span>{data.stats.tracked} tracked</span>
-        </div>
-      </div>
-
-      <div className="relative border bg-card">
-        <CornerBrackets />
-        <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
+      <StudyStream>
+        {/* Deck state is session context, not a second panel header. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-xs text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="truncate text-sm font-semibold text-foreground">
               {card.skillName ?? "Card"}
@@ -253,6 +325,9 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
             box {card.box}
           </span>
         </div>
+
+        <div className="relative border bg-card">
+          <CornerBrackets />
 
         <TransitionPanel
           activeIndex={phaseIndex}
@@ -267,9 +342,6 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
                 <p className="text-xs text-muted-foreground">
                   Think of the answer first — then check yourself.
                 </p>
-                <Button variant="orange" onClick={() => setPhase("choose")}>
-                  Reveal options
-                </Button>
               </div>
             </div>,
             // choose — AnswerableCard + Hint / Reveal actions
@@ -349,9 +421,6 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
                       {explainText}
                     </p>
                   ) : null}
-                  <Button variant="orange" onClick={nextCard}>
-                    {index + 1 >= total ? "See recap" : "Next card"}
-                  </Button>
                 </>
               }
             />,
@@ -387,19 +456,30 @@ export function FlashcardDeck({ courseId, skillId }: { courseId: string; skillId
                   </span>
                 ) : null}
               </div>
-              <Button variant="orange" onClick={nextCard}>
-                {index + 1 >= total ? "See recap" : "Next card"}
-              </Button>
             </div>,
           ]}
         </TransitionPanel>
-      </div>
+        </div>
 
-      {reward ? (
-        <p className="text-right font-mono text-xs text-muted-foreground">
-          {reward.streakDays}-day streak · {reward.xp} XP
-        </p>
-      ) : null}
-    </StudySessionShell>
+        {reward ? (
+          <p className="text-right font-mono text-xs text-muted-foreground">
+            {reward.streakDays}-day streak · {reward.xp} XP
+          </p>
+        ) : null}
+
+        {followUpTurns.map((turn, turnIndex) => (
+          <div key={`${turn.question}-${turnIndex}`} className="space-y-3">
+            <UserBlock text={turn.question} />
+            <AssistantBlock text={turn.answer} />
+          </div>
+        ))}
+        {pendingFollowUp ? (
+          <div className="space-y-3">
+            <UserBlock text={pendingFollowUp} />
+            <AssistantBlock pending pendingLabel="Kala is thinking…" />
+          </div>
+        ) : null}
+      </StudyStream>
+    </StudySurface>
   );
 }
