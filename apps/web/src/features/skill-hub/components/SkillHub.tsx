@@ -1,5 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
-import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import type { ReactNode } from "react";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
 import { LayersIcon } from "@/components/ui/layers";
 import { ZapIcon } from "@/components/ui/zap";
@@ -10,6 +9,7 @@ import { useTwin } from "@/features/twin";
 import { LessonChat } from "@/features/lessons";
 import { FlashcardDeck } from "@/features/flashcards";
 import { PracticePanel } from "@/features/practice";
+import { StudyBrowser } from "@/features/skill-hub/components/StudyBrowser";
 import { TestBrowser } from "@/features/skill-hub/components/TestBrowser";
 import { cn } from "@/lib/utils";
 import type { TwinSkill } from "@/features/twin";
@@ -28,15 +28,25 @@ import type { TwinSkill } from "@/features/twin";
 // to switch between them.
 //
 // Grain: a skill (skillId), not a module. TopicLanding groups by moduleRef for
-// browsing, but every mode is keyed by skillId (lessons are per-skill, a quiz
-// set is per-skill, the SRS deck is per-skill), so the hub has to be a skill.
+// browsing, but every mode is keyed by skillId (lessons are per-skill, quiz
+// sets are per-skill, the SRS deck is per-skill), so the hub has to be a skill.
+//
+// Structure: header + tab strip are the hub frame, and the pane below swaps
+// with the tab. Study and Test have a BROWSE pane (which cards, which set /
+// generate one) that lives under that frame; starting a session replaces the
+// whole hub with the mode's own StudySurface takeover, which owns the viewport
+// and therefore has no header or tabs. Lesson has no browse step by design —
+// there is one guided walkthrough per skill, not several to choose among — so
+// selecting Lesson goes straight into the takeover, collapsing "select the
+// tab" and "enter the session" into the same click. The asymmetry is
+// deliberate: the tab bar appears where browsing means something.
 
 export type SkillTab = "lesson" | "study" | "test";
 
-const TABS: { id: SkillTab; label: string; icon: typeof GraduationCapIcon; blurb: string }[] = [
-  { id: "lesson", label: "Lesson", icon: GraduationCapIcon, blurb: "Step-by-step walkthrough with checks." },
-  { id: "study", label: "Study", icon: LayersIcon, blurb: "Flip cards. Self-paced, spaced repetition." },
-  { id: "test", label: "Test", icon: ZapIcon, blurb: "Graded quiz that moves your mastery." },
+const TABS: { id: SkillTab; label: string; icon: typeof GraduationCapIcon }[] = [
+  { id: "lesson", label: "Lesson", icon: GraduationCapIcon },
+  { id: "study", label: "Study", icon: LayersIcon },
+  { id: "test", label: "Test", icon: ZapIcon },
 ];
 
 export function SkillHub({
@@ -45,74 +55,92 @@ export function SkillHub({
   tab,
   setId,
   start,
+  onSelectTab,
   onSelectSet,
   onStart,
   onExitSession,
 }: {
   courseId: string;
   skillId: string;
-  /** Active mode, or undefined while browsing the hub landing. Owned by the
-   * route's search param so the hub is linkable and the "Next up" card can
-   * deep-link straight to Test. */
+  /** Active mode. Owned by the route's search param so the hub is linkable and
+   * the "Next up" card can deep-link straight to Test. */
   tab?: SkillTab;
   /** The set open in the Test tab's detail view (retake, bridge handoff, or
    * a freshly generated set). Empty string = back to the set list. */
   setId?: string;
-  /** Test tab only: true once the student has committed to a graded run on
-   * the open set, which is when PracticePanel takes over. Keeps "browse the
-   * set" and "take the test" as two distinct steps. */
+  /** True once a session is running (Study's flip deck, Test's graded run).
+   * Replaces the hub frame with the mode's own takeover. */
   start?: boolean;
+  onSelectTab: (tab: SkillTab) => void;
   onSelectSet: (setId: string) => void;
   onStart: () => void;
-  /** Leave the running session back to the hub landing (clears the tab in
-   * the URL so a refresh doesn't re-enter it). */
+  /** Leave a running session back to the hub pane (clears `start` in the URL
+   * so a refresh doesn't re-enter it). */
   onExitSession: () => void;
 }) {
+  // Lesson has nothing to browse: entering the tab IS entering the session.
+  // Its exit returns to the hub with the Study pane active (see the route),
+  // because a bare `tab=lesson` would immediately re-enter the session.
   if (tab === "lesson") {
     return <LessonChat courseId={courseId} skillId={skillId} onExit={onExitSession} />;
   }
-  if (tab === "study") {
+
+  // A running session owns the viewport (no header, no tabs) — the same
+  // takeover contract every mode already has.
+  if (tab === "study" && start) {
     return <FlashcardDeck courseId={courseId} skillId={skillId} onExit={onExitSession} />;
   }
-  if (tab === "test") {
-    // Started -> the graded run. setId present = run that saved set; absent
-    // = generate a fresh one (PracticePanel handles both, and the express
-    // lane from "Next up" arrives here with no setId). Otherwise the browser:
-    // a list of saved sets, or one set's detail.
-    if (start) {
-      return (
-        <PracticePanel
+  if (tab === "test" && start) {
+    return (
+      <PracticePanel
+        courseId={courseId}
+        skillId={skillId}
+        setId={setId || null}
+        onExit={onExitSession}
+      />
+    );
+  }
+
+  return (
+    <SkillHubFrame
+      courseId={courseId}
+      skillId={skillId}
+      // No tab in the URL (a bare hub visit, or Lesson's exit) lands on Study:
+      // the first tab that has a browse pane to actually show.
+      activeTab={tab ?? "study"}
+      onSelectTab={onSelectTab}
+    >
+      {tab === "test" ? (
+        <TestBrowser
           courseId={courseId}
           skillId={skillId}
           setId={setId || null}
-          onExit={onExitSession}
+          onSelectSet={onSelectSet}
+          onStart={onStart}
         />
-      );
-    }
-    return (
-      <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-8">
-        <h1 className="font-display text-xl font-semibold text-foreground">Test</h1>
-        <div className="mt-4">
-          <TestBrowser
-            courseId={courseId}
-            skillId={skillId}
-            setId={setId || null}
-            onSelectSet={onSelectSet}
-            onStart={onStart}
-          />
-        </div>
-      </div>
-    );
-  }
-  return <SkillHubLanding courseId={courseId} skillId={skillId} />;
+      ) : (
+        <StudyBrowser courseId={courseId} skillId={skillId} onStart={onStart} />
+      )}
+    </SkillHubFrame>
+  );
 }
 
-// The hub's chrome: which skill, its mastery, and the mode launch cards.
-// Rendered only when no mode is active — a mode owns the viewport through its
-// own StudySurface/SessionBar takeover.
-function SkillHubLanding({ courseId, skillId }: { courseId: string; skillId: string }) {
+/** The hub frame: skill header, tab strip, and whichever pane is active.
+ * Shown only while browsing (see the module comment on why Lesson skips it). */
+function SkillHubFrame({
+  courseId,
+  skillId,
+  activeTab,
+  onSelectTab,
+  children,
+}: {
+  courseId: string;
+  skillId: string;
+  activeTab?: SkillTab;
+  onSelectTab: (tab: SkillTab) => void;
+  children: ReactNode;
+}) {
   const { data: twin, isLoading } = useTwin(courseId);
-  const navigate = useNavigate();
   const skill: TwinSkill | undefined = twin?.skills.find((s) => s.skillId === skillId);
 
   if (isLoading) {
@@ -133,13 +161,11 @@ function SkillHubLanding({ courseId, skillId }: { courseId: string; skillId: str
     );
   }
 
-  const go = (tab: SkillTab) =>
-    navigate({ to: "/course/skill/$skillId", params: { skillId }, search: { tab } });
-
   return (
-    <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-8">
-      {/* Skill header — the detail view TopicLanding's card promised, same
-          data (name, Bloom level, mastery band), just not in a grid. */}
+    <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6">
+      {/* Skill header — unchanged from the tile version: title, mastery band,
+          and the bloom/module/attempts line. The one part that already read
+          right, so the tab change is confined to what sits under it. */}
       <div className="border bg-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-xl font-semibold text-foreground">{skill.name}</h1>
@@ -158,30 +184,43 @@ function SkillHubLanding({ courseId, skillId }: { courseId: string; skillId: str
         </div>
       </div>
 
-      {/* Mode launch cards. Each opens the existing session takeover. */}
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        {TABS.map(({ id, label, icon: Icon, blurb }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => go(id)}
-            className={cn(
-              "group border bg-card p-4 text-left transition-colors hover:bg-accent/60",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            )}
-          >
-            <div className="mb-3 grid size-8 place-items-center rounded-[4px] bg-brand-slate">
-              <Icon size={16} className="text-background" />
-            </div>
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground group-hover:underline">
+      {/* Tab strip. A content switch, not three navigation targets, so it reads
+          as tabs (underline on the active item) rather than a second row of
+          cards competing with the header above it. */}
+      <div
+        role="tablist"
+        aria-label="Study modes"
+        className="mt-4 flex items-center gap-1 border-b"
+      >
+        {TABS.map(({ id, label, icon: Icon }) => {
+          const active = activeTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onSelectTab(id)}
+              className={cn(
+                "relative -mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active
+                  ? "border-brand-orange text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Icon
+                size={15}
+                className={active ? "text-brand-orange" : "text-muted-foreground"}
+                aria-hidden
+              />
               {label}
-              <ArrowRightIcon size={14} />
-            </div>
-            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{blurb}</div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
+      <div className="mt-5">{children}</div>
     </div>
   );
 }

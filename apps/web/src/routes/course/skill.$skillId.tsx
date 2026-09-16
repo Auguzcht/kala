@@ -7,12 +7,12 @@ import { SkillHub, type SkillTab } from "@/features/skill-hub";
 // the page is linkable and the Workspace "Next up" card can deep-link straight
 // to ?tab=test&start=1.
 //
-// Test tab has two beats: `setId` opens a set's detail view (browse), and
-// `start=1` commits to the graded run. That split is deliberate — a graded
-// test moves mastery, so it is an explicit choice rather than the accidental
-// consequence of tapping a card in a list. `setId` also carries a study→test
-// bridge handoff, which lands on the detail view so the student still sees
-// what they're about to be tested on.
+// Browse-then-commit, same shape for Study and Test: `tab` alone is the browse
+// pane (which cards / which set), and `start=1` begins the session takeover.
+// `setId` additionally opens one set's detail view (a retake, or a study→test
+// bridge handoff) so the student sees what they're about to be tested on.
+// Lesson has no browse step — there is one guided walkthrough per skill, not a
+// choice — so `tab=lesson` goes straight into the lesson session.
 const skillSearchSchema = z.object({
   tab: z.enum(["lesson", "study", "test"]).optional(),
   setId: z.string().optional(),
@@ -38,6 +38,11 @@ function SkillHubPage() {
       tab={tab as SkillTab | undefined}
       setId={setId}
       start={start}
+      // Switch panes in place. Dropping `start`/`setId` means switching tabs
+      // always lands on the new tab's browse pane, never mid-session.
+      onSelectTab={(nextTab) =>
+        navigate({ to, params: { skillId }, search: { tab: nextTab } })
+      }
       // Open a set's detail view (or clear back to the list with "").
       onSelectSet={(nextSetId) =>
         navigate({
@@ -46,13 +51,21 @@ function SkillHubPage() {
           search: nextSetId ? { tab: "test", setId: nextSetId } : { tab: "test" },
         })
       }
-      // Commit to the graded run on the open set.
+      // Commit to the running session for the active tab. Study and Test share
+      // this switch; each reads `start` only for its own tab.
       onStart={() =>
-        navigate({ to, params: { skillId }, search: { tab: "test", setId, start: true } })
+        navigate({ to, params: { skillId }, search: { tab, setId, start: true } })
       }
-      // Leaving a session returns to the hub landing (no tab in the URL), so
-      // a refresh doesn't drop the student back into a session they exited.
-      onExitSession={() => navigate({ to, params: { skillId }, search: {} })}
+      // Leaving a session returns to that tab's browse pane (keeps `tab`,
+      // drops `start`). Lesson has no browse pane, so it exits to Study —
+      // leaving `tab=lesson` in the URL would immediately re-enter the lesson.
+      onExitSession={() =>
+        navigate({
+          to,
+          params: { skillId },
+          search: { tab: tab === "lesson" || !tab ? "study" : tab },
+        })
+      }
     />
   );
 }
