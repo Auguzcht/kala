@@ -7,15 +7,15 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
-from app.ai import bedrock, router as model_router
+from app.ai import bedrock, documents, router as model_router
 from app.ai.chunking import chunk_text
 from app.ai.concurrency import map_concurrent
 from app.ai.deidentify import strip_pii
 from app.ai.skill_proposer import seed_course_skills
-from app.db import supabase as db
+from app.db import storage, supabase as db
 from app.deps import CurrentUser, get_current_user, get_lms_connector, require_role
 from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
@@ -40,6 +40,28 @@ MAX_DIAGNOSTIC_QUESTIONS = 10
 # phase must finish well inside that and hand back whatever is left for the
 # next call. Sized to leave room for the store phase and the response.
 TAG_SLICE_SECONDS = 12.0
+
+
+def _assert_teaches_course(*, user: CurrentUser, course_id: str) -> None:
+    """The caller must be staff of THIS course, not merely staff somewhere.
+
+    course_id comes from the path, so require_role alone is not enough — it
+    only proves the caller holds a staff role in the institution. Mirrors the
+    instructor dashboard's per-student check, at course scope. 404 rather than
+    403 so an unauthorized staff member cannot distinguish a real course id
+    from a fabricated one.
+    """
+    if user.app_role == "admin":
+        return  # admins are institution-wide by definition
+    rows = db.select("enrollments", {
+        "institution_id": f"eq.{user.institution_id}",
+        "user_id": f"eq.{user.user_id}",
+        "course_id": f"eq.{course_id}",
+        "role": "eq.instructor",
+        "select": "course_id", "limit": "1",
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "course not found")
 
 
 def _embed_pending(*, institution_id: str, course_id: str,
@@ -314,6 +336,126 @@ def ingest_course(course_id: str,
         # The client (or an operator) loops until this reads 0. A bare 200 on
         # this endpoint never meant "complete" — that is the lesson from the
         # 5-chunk course, so the response now says so explicitly.
+        "remaining": remaining,
+        "complete": remaining == 0,
+    }
+
+
+@router.post("/{course_id}/content/upload")
+def upload_course_content(
+    course_id: str,
+    file: UploadFile = File(...),
+    module_ref: str | None = Form(None),
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """Staff upload of course material the LMS connector cannot reach.
+
+    WHY THIS EXISTS. Blackboard's Learn REST API exposes `resource/x-bb-file`
+    items as METADATA ONLY — fileName and mimeType, no download reference
+    (verified live: /download and /file 404, the sole link is a browser-session
+    Ultra redirect). So for a course whose real material is a shelf of PDFs
+    (the AWS Academy module decks, the syllabus, the review sheets), ingest has
+    nothing to read and the generator ends up writing questions from the skill
+    name alone. This is the escape hatch: a human with the files uploads them
+    directly, they land in content_items, and they go through the SAME tagging
+    and embedding path ingest uses — so they behave exactly like scraped
+    content downstream, including feeding RAG retrieval and generation.
+
+    Deliberately NOT the tutor_attachments path. That table is a student's own
+    private material for one conversation: not shared, not skill-tagged, not
+    part of the course corpus. Reusing it would have looked like a shortcut and
+    produced a file that no generation surface could ever see.
+
+    Gate: two layers, because course_id is caller-supplied. require_role proves
+    the caller is staff somewhere; _assert_teaches_course proves it is THIS
+    course. Same shape as the instructor dashboard's checks.
+    """
+    _assert_teaches_course(user=user, course_id=course_id)
+
+    filename = documents.safe_filename(file.filename)
+    try:
+        mime_type = documents.resolve_mime_type(filename, file.content_type)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
+
+    content = file.file.read()
+    if len(content) > documents.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"file exceeds {documents.MAX_UPLOAD_BYTES // (1024 * 1024)}MB limit",
+        )
+
+    try:
+        text = documents.extract_text(content, mime_type)
+    except Exception as exc:
+        # A PDF that will not parse is the caller's problem to fix (wrong file,
+        # corrupt export), and they are staff who can act on it — so say so
+        # rather than silently storing a file that contributes nothing.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"could not read text from {filename}: {exc}",
+        ) from exc
+    if not text.strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"{filename} contained no extractable text (a scanned/image PDF needs OCR first)",
+        )
+
+    # Provenance: keep the original bytes so the corpus can be audited and a
+    # re-parse (better OCR, a different extractor) is possible without asking
+    # staff for the file again. Failure to store is not fatal to the ingest —
+    # the extracted text is what actually feeds generation.
+    upload_ref = f"course-content/{course_id}/{filename}"
+    stored_original = True
+    try:
+        storage.upload(upload_ref, content, mime_type)
+    except Exception as exc:  # noqa: BLE001 — provenance is nice-to-have
+        logger.warning("could not archive %s for course %s: %s", filename, course_id, exc)
+        stored_original = False
+
+    # Store the chunks, then run the SAME bounded phases ingest uses. Reusing
+    # _embed_pending/_tag_pending (rather than tagging inline here) means an
+    # upload is subject to exactly the same budget discipline — a large PDF
+    # cannot time out the request, it just leaves work for the next call.
+    clean = strip_pii(text)
+    rows = []
+    for chunk in chunk_text(clean):
+        inserted = db.insert("content_items", [{
+            "institution_id": user.institution_id,
+            "course_id": course_id,
+            # lms_ref is null: this content has no LMS counterpart, which is
+            # the whole reason it was uploaded. Kept distinct from scraped
+            # rows so a future re-ingest does not treat it as one.
+            "lms_ref": None,
+            "parent_lms_ref": None,
+            "folder_path": [],
+            "module_ref": module_ref,
+            "chunk_text": chunk,
+        }])
+        if inserted:
+            rows.append(inserted[0]["id"])
+
+    skills = db.select("skills", {
+        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
+        "status": "eq.approved", "select": "id,name",
+    })
+    embedded, embed_failed = _embed_pending(
+        institution_id=user.institution_id, course_id=course_id,
+        budget_seconds=TAG_SLICE_SECONDS,
+    )
+    tagged, remaining = _tag_pending(
+        institution_id=user.institution_id, course_id=course_id,
+        skills=skills, budget_seconds=TAG_SLICE_SECONDS,
+    )
+
+    return {
+        "filename": filename,
+        "mimeType": mime_type,
+        "stored": len(rows),
+        "tagged": tagged,
+        "embedded": embedded,
+        "embedFailed": embed_failed,
+        "originalArchived": stored_original,
         "remaining": remaining,
         "complete": remaining == 0,
     }

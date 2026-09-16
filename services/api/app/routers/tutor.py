@@ -27,7 +27,6 @@ re-serving someone else's upload).
 """
 from __future__ import annotations
 
-import io
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -35,7 +34,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
-from app.ai import rag, router as model_router
+from app.ai import documents, rag, router as model_router
 from app.ai.deidentify import safe_context
 from app.db import storage
 from app.db import supabase as db
@@ -94,15 +93,11 @@ _MAX_TOTAL_ATTACHMENT_CONTEXT_CHARS = 16000
 
 
 def _extract_text(content: bytes, mime_type: str) -> str:
-    """Best-effort text extraction for the two supported non-plain-text
-    shapes uploads can arrive in. Anything that fails to parse raises —
-    the caller marks the attachment 'failed' rather than crashing the
-    request, the file is kept either way, it just contributes no context."""
-    if mime_type == "application/pdf":
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(content))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-    return content.decode("utf-8", errors="replace")
+    """Delegates to the shared extractor (app.ai.documents). Kept as a thin
+    wrapper so this module's call sites and tests are unchanged; the actual
+    logic lives in one place now that institution course-content uploads need
+    the same PDF handling."""
+    return documents.extract_text(content, mime_type)
 
 
 def _safe_filename(name: str | None) -> str:
