@@ -2,8 +2,11 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
 import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
-import { StudySessionShell } from "@/components/study/StudySessionShell";
+import { ComposeDock } from "@/components/study/ComposeDock";
+import { SessionBar } from "@/components/study/SessionBar";
+import { StudySurface } from "@/components/study/StudySurface";
 import { StudyStream } from "@/components/study/StudyStream";
+import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,7 +22,6 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { MasteryDelta, CornerBrackets } from "@/components/kala";
 import { TransitionPanel } from "@/components/motion/transition-panel";
-import { Spinner } from "@/components/ui/spinner";
 import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 
 // The diagnostic establishes a baseline, it does not grade a quiz. Two
@@ -45,6 +47,12 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 // closing-dialog mechanics below are UNCHANGED on purpose: they're tuned
 // and working, there was no bug driving this migration, only the shared
 // question-rendering primitive changed.
+//
+// Shell migration: Diagnostic was the last STUDENT-LOOP surface still on the
+// retired StudySessionShell. It now uses the same StudySurface + SessionBar +
+// ComposeDock shell as Practice, Flashcards, and Lessons, with submit living
+// in the dock. StudySessionShell is NOT deleted — TutorChat still imports it;
+// Tutor's migration is separate work and this file must not strand it.
 //
 // Diagnostic is the one surface that puts more than one AnswerableCard on
 // screen at once (every other surface shows a single question/card at a
@@ -139,8 +147,48 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
 
   return (
     <>
-      <StudySessionShell
-        progress={{ current: answeredCount, total: data.questions.length, label: "answered" }}
+      <StudySurface
+        bar={
+          <SessionBar
+            title="Course diagnostic"
+            progress={{
+              current: answeredCount,
+              total: data.questions.length,
+              label: "answered",
+            }}
+            onBack={() => navigate({ to: "/course" })}
+            backLabel="Back to workspace"
+          />
+        }
+        dock={
+          // Submit lives in the dock, matching every other quiz surface. Once
+          // the sitting is submitted the dock offers the exit (the closing
+          // dialog offers the same one), rather than a second submit.
+          <ComposeDock
+            primary={
+              submitted
+                ? {
+                    label: "Back to workspace",
+                    onClick: () => navigate({ to: "/course" }),
+                    icon: ArrowRightIcon,
+                  }
+                : {
+                    // Same tour anchor id as the old inline button, so the
+                    // student tour's #tour-diagnostic-submit step still
+                    // resolves — the anchor moved, it did not disappear.
+                    id: "tour-diagnostic-submit",
+                    label: submit.isPending
+                      ? "Building your baseline…"
+                      : allAnswered
+                        ? "Submit diagnostic"
+                        : "Answer every question to continue",
+                    onClick: handleSubmit,
+                    disabled: !allAnswered || submit.isPending,
+                    icon: ArrowRightIcon,
+                  }
+            }
+          />
+        }
       >
         <TransitionPanel
           activeIndex={submitted ? 1 : 0}
@@ -150,9 +198,6 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         {[
           <div key="answering" id="tour-diagnostic-card" className="relative border bg-card">
             <CornerBrackets />
-            <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
-              <span className="text-sm font-semibold text-foreground">Course diagnostic</span>
-            </div>
 
             <StudyStream height="h-[55vh]">
               {data.questions.map((q, qi) => (
@@ -170,23 +215,6 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
                 </div>
               ))}
             </StudyStream>
-
-            <div className="border-t p-4">
-              <Button
-                id="tour-diagnostic-submit"
-                variant="orange"
-                disabled={!allAnswered || submit.isPending}
-                onClick={handleSubmit}
-              >
-                {submit.isPending ? (
-                  <>
-                    <Spinner className="size-3.5" /> Building your baseline…
-                  </>
-                ) : (
-                  "Submit diagnostic"
-                )}
-              </Button>
-            </div>
           </div>,
 
           <Card key="reveal">
@@ -210,7 +238,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
           </Card>,
         ]}
       </TransitionPanel>
-      </StudySessionShell>
+      </StudySurface>
 
       <Dialog open={closingDialogOpen} onOpenChange={setClosingDialogOpen}>
         <DialogContent>
