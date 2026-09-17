@@ -151,6 +151,63 @@ wired the UI, just disabled). Real work is backend + one product decision.
 
 ---
 
+## Question-quality pass (post-Stage 3)
+
+Three fixes landed after Stage 3, driven by a 50-question sample across 10
+skills. Recorded here so the reasoning is not lost and the remaining lever is
+named rather than re-diagnosed next session.
+
+### Meta-referential stems — fixed
+
+~23 of 50 sampled stems opened with "According to the excerpt" and resolved to
+citation questions ("what does the Overview explain differences between?") — the
+student had to LOCATE a sentence, not know a concept. Scenario-framed stems on
+`apply` skills rarely did this, which located the cause in the framing, not the
+model.
+
+Three changes in `services/api/app/learn/items.py`:
+
+- `_MCQ_SYSTEM` now names the banned framings explicitly (excerpt, passage,
+  text, reading, overview, document, module, chapter, "according to", "the
+  reading states", "as mentioned", "the author", "the material", "this
+  section") and instructs the model to write the question as if the student
+  must already know the fact. Grounding rule and strict-JSON contract unchanged.
+- The model payload key was literally `"excerpt"` — the exact token that leaked
+  into stems. Renamed to `"source_material"`.
+- `_validated_mcq` rejects a banned phrase in the stem or any choice, so a
+  meta-referential item gets one reroll via `generate_question`'s existing
+  single validation retry instead of shipping. No extra loop added.
+
+### Batch repetition — reduced where depth allows, floor is CONTENT
+
+Repetition tracks corpus DEPTH, not size. Two levers applied:
+
+- `_context_for` widened retrieval from `k=3` to `k=5` (`_RETRIEVAL_K`).
+- `_rotated_context` gives each batch roll a different LEADING chunk. Batch
+  rolls run independently (`map_concurrent_partial` over `range(size)`) and
+  cannot see each other's stems, so with identical input they converged on the
+  same top-ranked fact. `generate_question` now takes `context_offset`, and
+  `routers/practice.py` passes the roll index. All chunks stay present in every
+  slice; only the order changes, so no roll is ever grounded in less material.
+- Token budget sized for the worst case per the `max_tokens` rule: context
+  capped at `_MAX_CONTEXT_CHARS` (12000) and `max_tokens` raised 1536 -> 2048.
+- No post-generation near-duplicate filter. Steps 1-2 cover the depth-limited
+  case; a filter adds cost and a regeneration path for marginal gain.
+
+**The remaining lever is content, not code.** A skill with 1-2 chunks still
+produces near-synonym questions, and no prompt or rotation can fix that — there
+are not two facts to ask about. The real fix is staff uploading the AWS teaching
+PDFs (see the Blackboard bulk-export item). On a skill with 4+ chunks a 5-item
+batch now draws on distinct facts rather than rewording one.
+
+**Verification status: needs a live sample at real scale.** The unit tests pin
+the mechanics (banned-phrase rejection, rotation order, offset threading, token
+bounds) and the suite is green, but the claim "near-zero meta-referential stems
+on real generation" requires deploying and sampling >=30 questions across skills
+of varying depth. One good call proves nothing for an intermittent failure.
+
+---
+
 ## Parking lot (raised, not decided, don't build until resolved)
 
 - `ConversationDownload` for tutor sessions — see Stage 2.

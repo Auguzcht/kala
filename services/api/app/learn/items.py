@@ -18,14 +18,85 @@ from app.db import supabase as db
 
 logger = logging.getLogger(__name__)
 
+# Why this prompt is shaped the way it is (measured, not guessed):
+#
+# The generator used to open with "grounded ONLY in the supplied course
+# excerpt", and the payload key was literally "excerpt". The model did what
+# that framing invited: it treated the material as a TEXT TO LOCATE A FACT IN
+# rather than A FACT THE STUDENT MUST KNOW. Roughly 23 of 50 sampled stems came
+# back as "According to the excerpt, ...", which is a citation exercise, not a
+# comprehension check — the student only has to find the sentence, not know the
+# thing. Scenario-framed stems (mostly on `apply` skills) almost never did this,
+# which is the tell that the framing causes it rather than the model's ability.
+#
+# Two levers here, both deliberate:
+#   1. Name the banned framings explicitly. Vague instructions ("write a good
+#      question") do not move this; naming the exact token that leaks does.
+#   2. Frame the task as writing a question a student answers from KNOWLEDGE,
+#      with the material as the ground truth the question must agree with —
+#      never as the thing the student is being asked to read.
+#
+# The grounding rule and the strict-JSON contract are unchanged: this rewrites
+# the framing, not the safety. The banned-phrase check in _validated_mcq is the
+# enforcement backstop, because a prompt is a request and a validator is a rule.
 _MCQ_SYSTEM = (
-    "You write a single multiple-choice question grounded ONLY in the "
-    "supplied course excerpt. Return strict JSON and nothing else: "
+    "You write a single multiple-choice question that tests whether a student "
+    "KNOWS a course concept. The supplied source_material is the ground truth "
+    "your question must agree with — it is NOT something the student is "
+    "reading. Write the question as if the student must already know the fact, "
+    "not look it up.\n\n"
+    "Return strict JSON and nothing else: "
     '{"prompt": str, "choices": [{"id": "a".."d", "label": str}], '
     '"correct_choice_id": str, "explanation": str}. '
-    "Write exactly four choices with exactly one correct. Do not invent "
-    "facts that are not supported by the excerpt."
+    "Write exactly four choices with exactly one correct.\n\n"
+    "FORBIDDEN in the prompt and in every choice — never refer to the "
+    "material itself or to a source. Do not write the words or phrases "
+    "\"excerpt\", \"passage\", \"text\", \"reading\", \"overview\", "
+    "\"document\", \"module\", \"chapter\", \"according to\", \"the "
+    "reading states\", \"as mentioned\", \"the author\", \"the material\", "
+    "or \"this section\", and do not otherwise frame the question as "
+    "\"what does X say/explain/list\". A question that only works if the "
+    "student can see the source is a bad question.\n\n"
+    "Match the requested bloom_level: at remember/understand levels ask "
+    "directly about the concept; at apply/analyze/evaluate levels, when the "
+    "material supports it, frame a short concrete scenario the student must "
+    "reason about. Distractors must be plausible to someone who does NOT "
+    "know the concept — common misconceptions, not obviously-wrong filler.\n\n"
+    "Ground every fact in the source_material: do not invent facts, numbers, "
+    "or terminology that are not supported by it."
 )
+
+# Meta-referential framings that turn a comprehension question into a citation
+# exercise. Checked against the stem (and choices) AFTER parsing; a hit is a
+# validation failure, which generate_question already retries exactly once. See
+# _MCQ_SYSTEM for why these are treated as a hard failure rather than a nudge.
+_BANNED_STEM_PHRASES = (
+    "according to",
+    "excerpt",
+    "passage",
+    "the reading",
+    "as mentioned",
+    "the author",
+    "the material",
+    "this section",
+    "the document",
+    "the module",
+)
+
+
+def _find_banned_phrase(text: str) -> str | None:
+    """The first banned meta-reference in `text`, or None.
+
+    Word-boundary-ish matching via substring is enough: these phrases are long
+    and specific, and a false positive costs one bounded reroll, never a
+    dropped item. Case-insensitive because the model does not reliably
+    capitalize consistently ("According to" vs "according to").
+    """
+    lowered = text.lower()
+    for phrase in _BANNED_STEM_PHRASES:
+        if phrase in lowered:
+            return phrase
+    return None
 
 _MCQ_RESPONSE_FORMAT = {
     "type": "json_schema",
@@ -98,6 +169,15 @@ def _validated_mcq(raw: str) -> tuple[str, list[dict[str, str]], str, str]:
     explanation = parsed.get("explanation", "")
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("generated item is missing a prompt")
+    # The stem must test knowledge, not point at a source. "According to the
+    # excerpt, what does X explain?" is a citation exercise: the student finds
+    # the sentence instead of recalling the concept. generate_question retries
+    # a validation failure exactly once, so a meta-referential stem gets one
+    # reroll rather than shipping — that is the intended behavior here, not a
+    # reason to soften the check.
+    banned = _find_banned_phrase(prompt)
+    if banned:
+        raise ValueError(f"generated prompt is meta-referential (contains {banned!r})")
     if not isinstance(choices, list) or len(choices) != 4:
         raise ValueError("generated item must contain exactly four choices")
     if not isinstance(correct_choice_id, str) or not isinstance(explanation, str):
@@ -112,6 +192,11 @@ def _validated_mcq(raw: str) -> tuple[str, list[dict[str, str]], str, str]:
         choice_id, label = choice.get("id"), choice.get("label")
         if not isinstance(choice_id, str) or not isinstance(label, str) or not label.strip():
             raise ValueError("generated choice is missing an id or label")
+        # Same meta-reference ban on choices: "The excerpt says ..." as an
+        # option is the same failure one level down.
+        banned_choice = _find_banned_phrase(label)
+        if banned_choice:
+            raise ValueError(f"generated choice is meta-referential (contains {banned_choice!r})")
         actual_ids.add(choice_id)
         validated.append({"id": choice_id, "label": label.strip()})
     if actual_ids != expected_ids or correct_choice_id not in expected_ids:
@@ -119,9 +204,34 @@ def _validated_mcq(raw: str) -> tuple[str, list[dict[str, str]], str, str]:
     return prompt.strip(), validated, correct_choice_id, explanation.strip()
 
 
-def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
+# How many chunks RAG pulls per skill. Widened from 3 to 5 (retrieve's own
+# default) so a skill with real depth hands the model more DISTINCT facts to
+# draw on. Measured effect: repetition tracks corpus DEPTH, not size — a 1-2
+# chunk skill still repeats, and no prompt fixes that (it is a content problem;
+# the real fix is staff uploading the AWS PDFs). But on skills with 4+ chunks
+# the wider window plus the round-robin in _context_for is what actually
+# spreads a batch across facts. Token budget checked: 5 chunks at the corpus's
+# observed chunk size stays far under _MAX_CONTEXT_CHARS, and max_tokens in
+# _call_and_validate is sized for the worst case per the max_tokens rule.
+_RETRIEVAL_K = 5
+
+# Ceiling on the joined context handed to the model. The max_tokens rule says
+# size for the LONGEST realistic input, not the typical one: a reasoning model
+# bills its thinking against max_tokens, and an undersized budget returns EMPTY
+# content rather than an error, which reads as "the model found nothing". This
+# bound plus the 2048-token response budget in _call_and_validate is the pair
+# that has to stay comfortable, so the context is trimmed here, visibly, rather
+# than silently truncated by the provider.
+_MAX_CONTEXT_CHARS = 12000
+
+
+def _context_for(*, institution_id: str, course_id: str, skill: dict) -> list[str]:
     """Grounded course text for a skill, or raise if there is none.
 
+    Returns a LIST of individual chunk texts, not one joined blob, so the
+    caller can hand each batch roll a different slice (see _rotated_context).
+    Joining here and re-splitting downstream would be fragile — a chunk can
+    itself contain "---".
     This USED to fall back to `skill["name"]` when retrieval came back empty,
     with a comment about "degrading gracefully rather than hard-failing the
     learn loop". That was the wrong trade: it turned a loud, visible
@@ -140,7 +250,8 @@ def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
     looking questions with no substance.
     """
     chunks = rag.retrieve(
-        institution_id=institution_id, course_id=course_id, query=skill["name"], k=3,
+        institution_id=institution_id, course_id=course_id, query=skill["name"],
+        k=_RETRIEVAL_K,
     )
     # Filter to chunks that actually carry text BEFORE joining. Joining first
     # and stripping the result is not enough: blank chunks still contribute
@@ -150,7 +261,38 @@ def _context_for(*, institution_id: str, course_id: str, skill: dict) -> str:
     texts = [t for t in texts if t]
     if not texts:
         raise NoCourseContentError(skill_name=skill.get("name") or "this skill")
-    return "\n---\n".join(texts)
+    return texts
+
+
+def _rotated_context(chunks: list[str], offset: int) -> str:
+    """The grounding text for ONE batch roll: the chunk list rotated so a
+    different chunk leads each time, then joined.
+
+    Why rotation rather than the identical joined excerpt for every roll:
+    batch generation runs N INDEPENDENT calls (map_concurrent_partial over
+    range(size) — see routers/practice.py). They cannot see each other's stems,
+    so with an identical prompt and identical context they tend to reach for
+    the same top-ranked chunk and produce "4 of 5 questions rephrase one fact"
+    on skills that DO have depth. Rotating the lead chunk changes which fact is
+    most salient to each roll, which is the cheapest available lever: no extra
+    model calls, no regeneration path, no new filtering stage.
+
+    All chunks stay present in every slice — only the order changes — so this
+    can never ground a question in less material than before, it just changes
+    what the model attends to first. On a 1-2 chunk skill there is nothing to
+    rotate and every roll matches, which is expected and is a content
+    limitation, not a bug.
+    """
+    if not chunks:
+        raise ValueError("_rotated_context requires at least one chunk")
+    start = offset % len(chunks)
+    ordered = chunks[start:] + chunks[:start]
+    joined = "\n---\n".join(ordered)
+    if len(joined) > _MAX_CONTEXT_CHARS:
+        # Trim on a chunk boundary where possible so the model never sees a
+        # half-sentence that reads as a complete fact.
+        joined = joined[:_MAX_CONTEXT_CHARS].rsplit("\n---\n", 1)[0] or joined[:_MAX_CONTEXT_CHARS]
+    return joined
 
 
 def _call_and_validate(*, skill: dict, context: str) -> tuple[str, list[dict[str, str]], str, str]:
@@ -162,16 +304,25 @@ def _call_and_validate(*, skill: dict, context: str) -> tuple[str, list[dict[str
         system=_MCQ_SYSTEM,
         messages=[{"role": "user", "content": [{"text": json.dumps({
             "skill": skill["name"], "bloom_level": skill.get("bloom_level"),
-            "excerpt": context,
+            # Deliberately NOT "excerpt". That key primed the model to write
+            # "According to the excerpt, ..." stems — the exact token leaked
+            # from the payload key into the question. A neutral name removes
+            # the invitation. See _MCQ_SYSTEM.
+            "source_material": context,
         })}]}],
-        max_tokens=1536,
+        # Sized for the LONGEST realistic input, not the typical one: the
+        # system prompt is long, the context now spans up to 5 chunks, and a
+        # reasoning model bills its thinking against THIS budget. Too small
+        # returns empty content, not an error. Was 1536, raised to 2048 to keep
+        # headroom over the wider context rather than sit at the edge of it.
+        max_tokens=2048,
         response_format=_MCQ_RESPONSE_FORMAT,
     )
     return _validated_mcq(raw)
 
 
 def generate_question(*, institution_id: str, course_id: str, skill: dict, kind: str,
-                      set_id: str | None = None) -> dict:
+                      set_id: str | None = None, context_offset: int = 0) -> dict:
     """Generate one RAG-grounded MCQ for a skill, persist it with its answer
     key, and return only the client-safe view.
 
@@ -180,6 +331,12 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
     caller omits it and gets an ungrouped item exactly as before. Threaded into
     the insert rather than patched after, so an item is never briefly persisted
     outside the set it was generated for.
+
+    `context_offset` selects which retrieved chunk LEADS the grounding text for
+    this roll (see _rotated_context). Batch callers pass each roll a different
+    offset so independent rolls do not all fixate on the same top chunk. The
+    single-item path omits it and gets offset 0, i.e. the plain ranked order —
+    unchanged behavior for every existing caller.
 
     One bounded retry on a VALIDATION failure. This is a distinct failure mode
     from the transport/capability retry inside bedrock.converse: that one
@@ -194,7 +351,10 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
     bad. Retried once, never looped: a model that fails twice in a row is a
     real signal, not something to keep hammering.
     """
-    context = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
+    context = _rotated_context(
+        _context_for(institution_id=institution_id, course_id=course_id, skill=skill),
+        context_offset,
+    )
     try:
         try:
             prompt, choices, correct_choice_id, explanation = _call_and_validate(

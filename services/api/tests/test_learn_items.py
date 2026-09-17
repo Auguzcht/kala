@@ -407,3 +407,222 @@ def test_generate_question_refuses_when_chunks_are_blank(monkeypatch) -> None:
         assert False, "expected NoCourseContentError"
     except item_gen.NoCourseContentError:
         pass
+
+
+# --- Meta-referential stem rejection (Task 1) -------------------------------
+#
+# "According to the excerpt, what does the Overview explain differences
+# between?" is a citation exercise: the student locates a sentence instead of
+# recalling a concept. Roughly 23 of 50 sampled stems did this. The fix is a
+# hard validation failure, not a nudge — generate_question's existing single
+# retry then gives the stem one reroll, which is the intended behavior.
+
+
+def _mcq(prompt: str, choice_label: str = "A plausible answer") -> str:
+    import json
+
+    return json.dumps({
+        "prompt": prompt,
+        "choices": [
+            {"id": "a", "label": choice_label},
+            {"id": "b", "label": "Another option"},
+            {"id": "c", "label": "A third option"},
+            {"id": "d", "label": "A fourth option"},
+        ],
+        "correct_choice_id": "a",
+        "explanation": "Because the source says so.",
+    })
+
+
+def test_validated_mcq_rejects_according_to_the_excerpt() -> None:
+    """The exact phrasing that dominated the sample must be rejected."""
+    try:
+        item_gen._validated_mcq(_mcq("According to the excerpt, what happens next?"))
+        assert False, "expected ValueError for a meta-referential stem"
+    except ValueError as exc:
+        assert "meta-referential" in str(exc)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("stem", [
+    "According to the excerpt, what does the Overview explain?",
+    "What does the passage state about trade-offs?",       # passage
+    "As mentioned in the text, which service is cheaper?",
+    "The reading states that cost scales with usage. What follows?",
+    "What does the document say about latency?",
+    "Which option does the module list first?",
+    "According to the author, why does this matter?",
+])
+def test_validated_mcq_rejects_every_banned_framing(stem: str) -> None:
+    """Every framing named in _MCQ_SYSTEM is enforced, not just the headline one."""
+    with pytest.raises(ValueError):
+        item_gen._validated_mcq(_mcq(stem))
+
+
+def test_validated_mcq_rejects_a_banned_phrase_in_a_choice() -> None:
+    """The same failure one level down: an option that points at the source."""
+    with pytest.raises(ValueError):
+        item_gen._validated_mcq(
+            _mcq("What does Kala recommend?", choice_label="The excerpt says to cache")
+        )
+
+
+def test_validated_mcq_accepts_a_clean_comprehension_stem() -> None:
+    """The guard must not reject ordinary questions — over-blocking would
+    trade one bad batch for another, with a wasted reroll each time."""
+    prompt = "A team wants lower per-unit cost and accepts more operational work. Which choice fits?"
+    result = item_gen._validated_mcq(_mcq(prompt))
+    assert result[0] == prompt
+
+
+def test_generate_question_retries_a_meta_referential_stem(monkeypatch) -> None:
+    """End to end: a citation-style first roll is treated as a validation
+    failure and rerolled once, exactly like malformed JSON."""
+    inserted = []
+    calls = []
+
+    def fake_converse(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return _mcq("According to the excerpt, what does the Overview explain?")
+        return _mcq("Why does a distributed cache reduce database load?")
+
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "A cache absorbs repeated reads."}])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(item_gen.bedrock, "converse", fake_converse)
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: inserted.extend(rows) or [{"id": "item-1", **rows[0]}],
+    )
+
+    skill = {"id": "skill-1", "name": "Caching", "bloom_level": "understand"}
+    result = item_gen.generate_question(
+        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+    )
+
+    assert result["prompt"] == "Why does a distributed cache reduce database load?"
+    assert len(calls) == 2  # exactly one reroll, never a loop
+
+
+def test_generate_question_sends_source_material_not_excerpt(monkeypatch) -> None:
+    """The payload key itself was the leak: 'excerpt' primed the model to
+    write 'According to the excerpt, ...'. Assert the neutral key is used and
+    the priming token is gone from the request body."""
+    import json as _json
+
+    request = {}
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: [{"chunk_text": "Grounded text."}])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock, "converse",
+        lambda **kwargs: request.update(kwargs) or _mcq("What does caching reduce?"),
+    )
+    monkeypatch.setattr(
+        item_gen.db, "insert",
+        lambda table, rows: [{"id": "item-1", **rows[0]}],
+    )
+
+    skill = {"id": "skill-1", "name": "Caching", "bloom_level": "understand"}
+    item_gen.generate_question(
+        institution_id="inst-1", course_id="course-1", skill=skill, kind="practice",
+    )
+
+    body = _json.loads(request["messages"][0]["content"][0]["text"])
+    assert body["source_material"] == "Grounded text."
+    assert "excerpt" not in body
+    # The system prompt must name the banned framings so the model knows the rules.
+    assert "excerpt" in request["system"]
+    assert "according to" in request["system"].lower()
+
+
+# --- Batch context variety (Task 2) ----------------------------------------
+
+
+def test_context_for_returns_individual_chunks(monkeypatch) -> None:
+    """A list, not a joined blob, so batch rolls can be handed different
+    slices. Joining here and re-splitting downstream would be fragile."""
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [
+        {"chunk_text": "Chunk A"}, {"chunk_text": "  "}, {"chunk_text": "Chunk B"},
+    ])
+    skill = {"id": "s", "name": "S", "bloom_level": "apply"}
+    chunks = item_gen._context_for(institution_id="i", course_id="c", skill=skill)
+    assert chunks == ["Chunk A", "Chunk B"]  # blank dropped
+
+
+def test_context_for_widens_retrieval_to_five(monkeypatch) -> None:
+    """k was 3; the wider window is what gives the model more distinct facts
+    to draw on. Pin it so it cannot silently narrow again."""
+    seen = {}
+    monkeypatch.setattr(item_gen.rag, "retrieve",
+                    lambda **kwargs: seen.update(kwargs) or [{"chunk_text": "x"}])
+    skill = {"id": "s", "name": "S", "bloom_level": "apply"}
+    item_gen._context_for(institution_id="i", course_id="c", skill=skill)
+    assert seen["k"] == 5
+
+
+def test_rotated_context_leads_with_a_different_chunk_per_offset() -> None:
+    """The core of the repetition fix: independent batch rolls must not all
+    lead with the same chunk."""
+    chunks = ["A", "B", "C", "D"]
+    assert item_gen._rotated_context(chunks, 0).split("\n---\n")[0] == "A"
+    assert item_gen._rotated_context(chunks, 1).split("\n---\n")[0] == "B"
+    assert item_gen._rotated_context(chunks, 2).split("\n---\n")[0] == "C"
+    # Wraps rather than running out.
+    assert item_gen._rotated_context(chunks, 6).split("\n---\n")[0] == "C"
+
+
+def test_rotated_context_keeps_every_chunk() -> None:
+    """Rotation changes ORDER only. A roll must never be grounded in less
+    material than the plain concatenation gave it."""
+    chunks = ["A", "B", "C"]
+    for offset in range(4):
+        joined = item_gen._rotated_context(chunks, offset)
+        for chunk in chunks:
+            assert chunk in joined
+
+
+def test_rotated_context_is_a_no_op_on_a_single_chunk_skill() -> None:
+    """1-2 chunk skills cannot be rotated meaningfully — that floor is a
+    content problem, documented, not fixed here."""
+    assert item_gen._rotated_context(["only"], 3) == "only"
+
+
+def test_rotated_context_trims_within_the_context_ceiling() -> None:
+    """max_tokens rule: size for the worst case. A huge retrieval must be
+    bounded here, visibly, not silently truncated by the provider."""
+    big = ["x" * 5000, "y" * 5000, "z" * 5000]
+    joined = item_gen._rotated_context(big, 0)
+    assert len(joined) <= item_gen._MAX_CONTEXT_CHARS
+
+
+def test_generate_question_threads_context_offset_into_the_prompt(monkeypatch) -> None:
+    """The offset reaches the model call — two rolls in one batch see
+    different leading chunks. This is the batch-variety contract."""
+    import json as _json
+
+    seen = []
+    monkeypatch.setattr(item_gen.rag, "retrieve", lambda **kwargs: [
+        {"chunk_text": "First fact."}, {"chunk_text": "Second fact."},
+    ])
+    monkeypatch.setattr(item_gen, "get_model_for", lambda task: "item-model")
+    monkeypatch.setattr(
+        item_gen.bedrock, "converse",
+        lambda **kwargs: seen.append(
+            _json.loads(kwargs["messages"][0]["content"][0]["text"])["source_material"]
+        ) or _mcq("Which fact applies?"),
+    )
+    monkeypatch.setattr(item_gen.db, "insert", lambda table, rows: [{"id": "i", **rows[0]}])
+
+    skill = {"id": "s", "name": "S", "bloom_level": "apply"}
+    for offset in (0, 1):
+        item_gen.generate_question(
+            institution_id="i", course_id="c", skill=skill, kind="practice",
+            context_offset=offset,
+        )
+
+    assert seen[0].split("\n---\n")[0] == "First fact."
+    assert seen[1].split("\n---\n")[0] == "Second fact."

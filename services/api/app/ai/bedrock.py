@@ -38,6 +38,8 @@ _FALLBACK_BACKOFF_SECONDS = 1.5
 #
 # This has already cost three debugging rounds in this codebase:
 #   generate_question  768  -> 1536   (truncated MCQs)
+#   generate_question 1536  -> 2048   (context widened to 5 chunks; the wider
+#                                      grounding text lengthens the thinking)
 #   tag_content        256  -> 2048   (EVERY tag came back null)
 #   tag_content       2048  -> 4096   (still failed, but only on LONG inputs,
 #                                      so it looked fixed while silently

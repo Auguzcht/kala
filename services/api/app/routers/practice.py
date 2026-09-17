@@ -140,9 +140,14 @@ def create_set(
     # generation too brittle for a surface where 4 of 5 questions is still a
     # perfectly usable test.
     items, errors = map_concurrent_partial(
-        lambda _: item_gen.generate_question(
+        lambda index: item_gen.generate_question(
             institution_id=user.institution_id, course_id=course_id,
             skill=skill, kind="practice", set_id=set_id,
+            # Each roll leads with a different retrieved chunk, so independent
+            # rolls stop converging on the same top-ranked fact. See
+            # items._rotated_context — on a 1-2 chunk skill this is a no-op and
+            # repetition remains, which is a content-depth limit, not a bug.
+            context_offset=index,
         ),
         list(range(size)),
     )
