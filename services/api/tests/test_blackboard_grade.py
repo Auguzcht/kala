@@ -1,10 +1,24 @@
 from unittest.mock import patch
 
+import httpx
+
 from app.config import Settings
 from app.lms.blackboard import BlackboardConnector
 
 
 class Response:
+    """Minimal httpx.Response stand-in.
+
+    Carries status_code/headers/request because _check_rate_limit reads all
+    three on every connector call. Without them the connector would raise
+    AttributeError, which cannot happen against a real HTTP response and would
+    make this test fail for a fictional reason.
+    """
+
+    status_code = 200
+    headers: dict = {}
+    request = httpx.Request("PATCH", "https://learn.example/learn/api/public/v1/test")
+
     def raise_for_status(self):
         pass
 

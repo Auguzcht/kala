@@ -4,11 +4,15 @@ Uses the PostgREST HTTP API via httpx. For heavier tracer math you may prefer
 a direct psycopg connection; the interface here stays small on purpose."""
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _client() -> httpx.Client:
@@ -281,13 +285,108 @@ def upsert_user(*, institution_id: str, lms_user_id: str, role: str,
     return user
 
 
-def get_or_create_course(*, institution_id: str, lms_course_id: str, title: str) -> dict:
-    rows = upsert("courses", [{
+def get_or_create_course(*, institution_id: str, lms_course_id: str, title: str,
+                         lms_course_external_id: str | None = None) -> dict:
+    """Upsert the course, recording the LMS external id it was resolved FROM.
+
+    `lms_course_external_id` is what the LTI launch carries and what
+    `resolve_course_ref` costs a Blackboard REST call to turn into
+    `lms_course_id`. Persisting it here — on the same row that already holds the
+    resolved id — is what lets a later launch skip that call entirely
+    (course_by_lms_external_id below).
+
+    Only written when the caller actually resolved it. A caller that passed an
+    already-known course straight through (having found it locally) has no need
+    to re-resolve, but re-sending the same value is harmless and keeps this a
+    single upsert path.
+    """
+    row = {
         "institution_id": institution_id,
         "lms_course_id": lms_course_id,
         "title": title,
-    }], on_conflict="institution_id,lms_course_id")
+    }
+    if lms_course_external_id is not None:
+        row["lms_course_external_id"] = lms_course_external_id
+    rows = upsert("courses", [row], on_conflict="institution_id,lms_course_id")
     return rows[0]
+
+
+def course_by_lms_external_id(*, institution_id: str, lms_course_external_id: str) -> dict | None:
+    """The course Kala already resolved for this LMS external id, or None.
+
+    This is the whole of Fix 1's read path: one indexed local lookup that
+    replaces a Blackboard REST call on every launch after the first.
+
+    Defensive about the column existing at all. Migration 0016 adds
+    `lms_course_external_id`, and until the user confirms it is applied the
+    column is absent — PostgREST answers a select naming an unknown column with
+    a 400, which would turn a missing migration into a BROKEN LAUNCH rather
+    than a slow one. A failure here degrades to "not found" (the pre-fix
+    behavior: resolve over REST), never to an exception that blocks the launch.
+    """
+    try:
+        rows = select("courses", {
+            "institution_id": f"eq.{institution_id}",
+            "lms_course_external_id": f"eq.{lms_course_external_id}",
+            "select": "id,institution_id,lms_course_id,title",
+            "limit": "1",
+        })
+    except Exception:
+        # Column not migrated yet, or a transient read failure. Either way the
+        # caller falls back to the REST resolution path, which still works.
+        return None
+    return rows[0] if rows else None
+
+
+def touch_course_sync_timestamp(*, course_id: str, column: str) -> None:
+    """Stamp a successful roster sync / skill seed on the course row.
+
+    `column` is validated against an allow-list rather than interpolated
+    freely: it reaches PostgREST as a payload KEY, and a caller-supplied key
+    from anywhere less trusted would be a write primitive. The two callers are
+    both server-side constants, but the allow-list is what keeps that true if a
+    third caller ever appears.
+
+    Best-effort by contract: this is bookkeeping for a cooldown, and failing to
+    record a timestamp must never surface as a failed sync — the sync itself
+    already succeeded. Fails open (logs) so the next launch simply re-runs.
+    """
+    if column not in ("last_roster_sync_at", "last_skill_seed_at"):
+        raise ValueError(f"refusing to stamp unknown column {column!r}")
+    try:
+        update("courses", {"id": f"eq.{course_id}"}, {
+            column: datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        # Migration 0016 not applied yet, or a transient write failure. The
+        # cooldown degrades to "never stamps" = always syncs, i.e. the
+        # pre-fix behavior. Not an error worth failing a launch over.
+        logger.warning("could not stamp %s on course %s; cooldown stays open", column, course_id)
+
+
+def course_synced_within(*, course: dict, column: str, cooldown_seconds: int) -> bool:
+    """True if `column` on this course is inside the cooldown window.
+
+    Reads the timestamp straight off the course row the launch already
+    fetched — no extra query. A null/absent timestamp means never synced, which
+    is always "not within cooldown" (sync now), so the first launch after this
+    migration always does the full work exactly as before.
+
+    An unparseable or absent value also returns False, for the same fail-open
+    reason as touch_course_sync_timestamp: the safe direction is to re-sync.
+    """
+    if column not in ("last_roster_sync_at", "last_skill_seed_at"):
+        raise ValueError(f"refusing to read unknown column {column!r}")
+    raw = (course or {}).get(column)
+    if not raw:
+        return False
+    try:
+        stamped = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if stamped.tzinfo is None:
+        stamped = stamped.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - stamped).total_seconds() < cooldown_seconds
 
 
 def upsert_enrollment(*, institution_id: str, user_id: str, course_id: str, role: str) -> None:

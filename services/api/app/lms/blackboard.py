@@ -7,6 +7,7 @@ claims; both are valid. REST is the simpler data pipe for the pilot."""
 from __future__ import annotations
 
 import html as _html
+import logging
 import re
 import time
 from html.parser import HTMLParser
@@ -16,6 +17,94 @@ import httpx
 
 from app.config import get_settings
 from app.lms.base import LMSConnector
+
+logger = logging.getLogger(__name__)
+
+# Warn below this many remaining requests. Blackboard's quota is 10,000 for the
+# window; a 500 floor leaves room to notice and stop hammering rather than
+# discovering exhaustion when launches start failing. This is the cheap
+# early-warning signal whose absence let a full-quota outage arrive unannounced.
+_RATE_LIMIT_WARN_BELOW = 500
+
+
+class BlackboardRateLimitedError(RuntimeError):
+    """Blackboard answered 429. Carries the retry-after seconds when present.
+
+    A distinct type, not a wrapped HTTPStatusError, because the correct
+    response is different from every other transport failure: retrying
+    immediately is GUARANTEED to fail again and costs another request against a
+    quota already at zero. So callers must not treat this as retryable — they
+    should fail once, cleanly, and say when to come back (see lti/routes.py).
+    """
+
+    def __init__(self, *, retry_after: int | None, path: str):
+        self.retry_after = retry_after
+        self.path = path
+        detail = (
+            f"retry after roughly {retry_after} seconds"
+            if retry_after is not None
+            else "retry after the current quota window resets"
+        )
+        super().__init__(f"Blackboard rate limited {path}; {detail}")
+
+
+def _retry_after_seconds(resp: httpx.Response) -> int | None:
+    """Retry-After in seconds, or None.
+
+    The header is specified as either delta-seconds or an HTTP-date, but the
+    live Blackboard instance (verified against a real 429 on 2026-09-17) sends
+    NEITHER of the bare forms — it sends `Retry-After: 20807s`, with a trailing
+    unit letter. A plain int(float(...)) parse therefore fails on the exact
+    response this function exists to read, silently downgrading a precise
+    "retry after 20807 seconds" to a vague "when the window resets". Parse the
+    digits and tolerate a trailing unit.
+
+    An unparseable value still degrades to None rather than raising: a
+    confusing header must not turn a rate-limit into a crash.
+    """
+    raw = resp.headers.get("Retry-After")
+    if not raw:
+        return None
+    # Strip a trailing unit if present ("s", "sec", "seconds"). Leading digits
+    # are what matter; the live instance appends "s" and the spec does not.
+    match = re.match(r"^\s*(\d+(?:\.\d+)?)", str(raw))
+    if not match:
+        return None
+    try:
+        return int(float(match.group(1)))
+    except ValueError:
+        return None
+
+
+def _check_rate_limit(resp: httpx.Response) -> None:
+    """Raise BlackboardRateLimitedError on 429; warn when remaining is low.
+
+    Called BEFORE raise_for_status so a 429 becomes the specific type above
+    rather than a generic HTTPStatusError. On success this logs the remaining
+    quota: the header is only present on some responses, so its absence is not
+    an error, just nothing to report.
+    """
+    if resp.status_code == 429:
+        raise BlackboardRateLimitedError(
+            retry_after=_retry_after_seconds(resp), path=str(resp.request.url),
+        )
+
+    remaining = resp.headers.get("X-Rate-Limit-Remaining")
+    if remaining is None:
+        return
+    try:
+        left = int(remaining)
+    except (TypeError, ValueError):
+        return
+    if left < _RATE_LIMIT_WARN_BELOW:
+        logger.warning(
+            "Blackboard quota is low: %s requests remaining (limit %s) after %s",
+            left, resp.headers.get("X-Rate-Limit-Limit", "?"), resp.request.url,
+        )
+    else:
+        logger.debug(
+            "Blackboard quota: %s remaining after %s", left, resp.request.url,
+        )
 
 # Blackboard's LTI test tool writes a literal placeholder into
 # preferredDisplayName when the name form is left blank; treat it as
@@ -110,6 +199,7 @@ class BlackboardConnector(LMSConnector):
             verify=s.lms_verify_tls,
             timeout=15.0,
         )
+        _check_rate_limit(resp)
         resp.raise_for_status()
         body = resp.json()
         self._token = body["access_token"]
@@ -127,6 +217,7 @@ class BlackboardConnector(LMSConnector):
             verify=s.lms_verify_tls,
             timeout=15.0,
         )
+        _check_rate_limit(resp)
         resp.raise_for_status()
         return resp.json()["id"]
 
@@ -163,6 +254,7 @@ class BlackboardConnector(LMSConnector):
                 verify=s.lms_verify_tls,
                 timeout=15.0,
             )
+            _check_rate_limit(resp)
             resp.raise_for_status()
             body = resp.json()
             results.extend(body.get("results", []))
@@ -244,6 +336,7 @@ class BlackboardConnector(LMSConnector):
                 verify=s.lms_verify_tls,
                 timeout=15.0,
             )
+            _check_rate_limit(resp)
             resp.raise_for_status()
             return resp.json().get("results", [])
 
@@ -303,6 +396,7 @@ class BlackboardConnector(LMSConnector):
             verify=s.lms_verify_tls,
             timeout=15.0,
         )
+        _check_rate_limit(resp)
         resp.raise_for_status()
 
         return [{
@@ -321,4 +415,5 @@ class BlackboardConnector(LMSConnector):
             verify=s.lms_verify_tls,
             timeout=15.0,
         )
+        _check_rate_limit(resp)
         resp.raise_for_status()

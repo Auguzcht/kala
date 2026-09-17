@@ -25,7 +25,7 @@ from app.deps import get_lms_connector
 from app.ai.skill_proposer import seed_course_skills
 from app.lti import claims as C
 from app.lti.security import build_tool_jwks, sign_state, verify_id_token, verify_state
-from app.lms.blackboard import BlackboardConnector
+from app.lms.blackboard import BlackboardConnector, BlackboardRateLimitedError
 from app.security.jwt import mint_session_token
 
 router = APIRouter(prefix="/lti", tags=["lti"])
@@ -33,6 +33,17 @@ router = APIRouter(prefix="/lti", tags=["lti"])
 logger = logging.getLogger(__name__)
 
 _STATE_COOKIE = "kala_lti_state"
+
+# How long a successful roster sync / skill seed suppresses the next attempt.
+#
+# Both functions are documented as self-healing "on a timescale of minutes, not
+# migrations" — these windows keep exactly that promise while stopping them
+# from re-firing on every single relaunch during a dev or demo burst, where one
+# instructor reloading to test something repays a full paginated roster pull and
+# a content walk each time. Ten minutes still self-heals within a class period;
+# it does not gut the feature, it just stops a reload costing what a day costs.
+_ROSTER_SYNC_COOLDOWN_SECONDS = 600
+_SKILL_SEED_COOLDOWN_SECONDS = 600
 
 
 def _roster_role(course_role: str | None) -> str:
@@ -244,17 +255,43 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
     ctx = C.extract_context(payload)
     course = None
     if ctx["lms_course_external_id"]:
-        try:
-            lms_course_id = connector.resolve_course_ref(ctx["lms_course_external_id"])
-        except Exception as exc:
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY,
-                f"could not resolve Blackboard course: {exc}",
-            ) from exc
+        external_id = ctx["lms_course_external_id"]
+        # Fix 1: resolve the course LOCALLY first. resolve_course_ref is a
+        # Blackboard REST call that used to run on every single launch,
+        # because the courses table stored only the resolved internal id and
+        # had no way to look the course up by the external id the launch
+        # carries. Now it does. This is the difference between a launch
+        # costing one request and costing one request EVERY time.
+        local = db.course_by_lms_external_id(
+            institution_id=institution["id"], lms_course_external_id=external_id,
+        )
+        if local:
+            # Known course: use the stored internal id and never call
+            # Blackboard for resolution again for this course.
+            lms_course_id = local["lms_course_id"]
+        else:
+            try:
+                lms_course_id = connector.resolve_course_ref(external_id)
+            except BlackboardRateLimitedError as exc:
+                # A useful message beats a stack-trace-shaped string for
+                # whoever hits this next. 502 is unchanged; only the body is.
+                raise HTTPException(
+                    status.HTTP_502_BAD_GATEWAY,
+                    "Blackboard is rate limiting this application; retry after "
+                    f"roughly {exc.retry_after} seconds.",
+                ) from exc
+            except Exception as exc:
+                raise HTTPException(
+                    status.HTTP_502_BAD_GATEWAY,
+                    f"could not resolve Blackboard course: {exc}",
+                ) from exc
         course = db.get_or_create_course(
             institution_id=institution["id"],
             lms_course_id=lms_course_id,
             title=ctx["title"],
+            # Persist the external id so the NEXT launch takes the local path
+            # above. This is the write that makes Fix 1 stick.
+            lms_course_external_id=external_id,
         )
         db.upsert_enrollment(
             institution_id=institution["id"], user_id=user["id"],
@@ -267,18 +304,52 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
         # Kala. Students launching do not trigger this (avoid hammering the
         # LMS on every student launch); best-effort, never blocks the launch.
         if app_role in ("instructor", "admin"):
-            _sync_roster(
-                institution_id=institution["id"], course_id=course["id"],
-                course_ref=lms_course_id, connector=connector,
-            )
+            # Fix 2: cooldown gate. The self-healing intent is preserved (a
+            # real change still reconciles within minutes), but a relaunch
+            # burst no longer repays the full paginated cost each time. The
+            # timestamp is only written on SUCCESS, so a skip or a failure
+            # never blocks a genuine retry later.
+            if db.course_synced_within(
+                course=course, column="last_roster_sync_at",
+                cooldown_seconds=_ROSTER_SYNC_COOLDOWN_SECONDS,
+            ):
+                logger.info(
+                    "skipping roster sync for course %s: synced within the %ds cooldown",
+                    course["id"], _ROSTER_SYNC_COOLDOWN_SECONDS,
+                )
+            else:
+                result = _sync_roster(
+                    institution_id=institution["id"], course_id=course["id"],
+                    course_ref=lms_course_id, connector=connector,
+                )
+                if not result.get("skipped"):
+                    db.touch_course_sync_timestamp(
+                        course_id=course["id"], column="last_roster_sync_at",
+                    )
             # AI skill proposal (docs/SKILL_PIPELINE.md): seed the skill
             # graph from the course's own content on first launch. Same
             # best-effort contract — a proposal failure never blocks the
             # 302. By the time students launch, proposals/matches are staged.
-            _seed_course_skills(
-                institution_id=institution["id"], course_id=course["id"],
-                course_ref=lms_course_id, connector=connector,
-            )
+            # Same cooldown reasoning as the roster above: propose_skills is
+            # incremental by module, so re-running is not WRONG, it is just a
+            # content walk nobody needs on a relaunch.
+            if db.course_synced_within(
+                course=course, column="last_skill_seed_at",
+                cooldown_seconds=_SKILL_SEED_COOLDOWN_SECONDS,
+            ):
+                logger.info(
+                    "skipping skill seeding for course %s: seeded within the %ds cooldown",
+                    course["id"], _SKILL_SEED_COOLDOWN_SECONDS,
+                )
+            else:
+                result = _seed_course_skills(
+                    institution_id=institution["id"], course_id=course["id"],
+                    course_ref=lms_course_id, connector=connector,
+                )
+                if not result.get("skipped"):
+                    db.touch_course_sync_timestamp(
+                        course_id=course["id"], column="last_skill_seed_at",
+                    )
 
     # 4. mint the session token and hand off to the SPA (fragment is not logged)
     token = mint_session_token(

@@ -4,11 +4,22 @@ the LMS and enrolled — so the cohort exists before each student has
 individually opened Kala. A student launch never triggers the pull."""
 from fastapi.testclient import TestClient
 
+import pytest
+
 from app.config import get_settings
 from app.deps import get_lms_connector
 from app.lti import claims as C
 from app.lti import routes as lti_routes
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _clear_connector_overrides():
+    """Drop the fake connector AFTER every test, so one test's override cannot
+    leak into the next. _launch deliberately does not clear it (multi-launch
+    tests need it to survive between calls), so the cleanup lives here."""
+    yield
+    app.dependency_overrides.clear()
 
 
 def _launch_payload(role_uris: list[str], *, sub: str = "lms-teacher-1",
@@ -33,11 +44,15 @@ def _fake_connector(roster: list[dict], content: list[dict] | None = None):
         def __init__(self) -> None:
             self.roster_calls = 0
             self.content_calls = 0
+            self.resolve_calls = 0
+            self.resolve_args: list[str] = []
             self.content = content or [
                 {"lms_content_id": "lesson-1", "body_or_description": "Module 1 content here."},
             ]
 
         def resolve_course_ref(self, external_id: str) -> str:
+            self.resolve_calls += 1
+            self.resolve_args.append(external_id)
             return f"ref-{external_id}"
 
         def get_roster(self, course_ref: str) -> list[dict]:
@@ -87,6 +102,50 @@ def _patch_launch(monkeypatch, payload: dict, connector,
                         lambda **kw: aliases.append(kw))
     monkeypatch.setattr(lti_routes.db, "get_or_create_course", lambda **kw: {"id": "course-1"})
 
+    # Fix 1 + Fix 2 collaborators. These MUST be mocked in every launch test,
+    # not left to fall through: course_by_lms_external_id fails OPEN by design
+    # (an unmigrated column degrades to "resolve over REST" rather than
+    # breaking the launch), so an unmocked call would silently succeed here by
+    # swallowing a real network attempt — and every test below would be
+    # exercising the pre-fix path while appearing to pass. Default: no local
+    # course (the first-launch case) and nothing inside a cooldown, so existing
+    # tests keep their original semantics.
+    local_courses: dict[str, dict] = {}
+    monkeypatch.setattr(
+        lti_routes.db, "course_by_lms_external_id",
+        lambda **kw: local_courses.get(kw.get("lms_course_external_id")),
+    )
+    stamped: list[dict] = []
+    monkeypatch.setattr(
+        lti_routes.db, "touch_course_sync_timestamp",
+        lambda **kw: stamped.append(kw),
+    )
+    # Models the REAL cooldown contract rather than a hand-set flag: a stamp
+    # written by a successful sync puts that (course, column) inside the
+    # window, and nothing else does. That is what makes a two-launch test
+    # meaningful — the first launch earns the window, the second rides it.
+    cooldowns: set[tuple[str, str]] = set()
+
+    def fake_touch(**kw) -> None:
+        stamped.append(kw)
+        cooldowns.add((kw["course_id"], kw["column"]))
+
+    monkeypatch.setattr(lti_routes.db, "touch_course_sync_timestamp", fake_touch)
+    monkeypatch.setattr(
+        lti_routes.db, "course_synced_within",
+        lambda **kw: (kw.get("course", {}).get("id"), kw.get("column")) in cooldowns,
+    )
+    # _seed_course_skills calls the real proposer, which reaches Supabase. Left
+    # unmocked it makes a live HTTP attempt from the test suite. Returns a
+    # non-skipped result so the cooldown timestamp is stamped, which is what
+    # the Fix 2 tests assert on. Tests that care about the proposer's ARGS
+    # re-patch this themselves (see test_instructor_launch_seeds_skills_...).
+    seed_calls: list[dict] = []
+    monkeypatch.setattr(
+        lti_routes, "seed_course_skills",
+        lambda **kw: seed_calls.append(kw) or {"skipped": False, "proposed": 1},
+    )
+
     def fake_upsert_enrollment(*, user_id: str, course_id: str, role: str, **kw) -> None:
         enrollments.append({"user_id": user_id, "role": role})
 
@@ -107,10 +166,20 @@ def _patch_launch(monkeypatch, payload: dict, connector,
     monkeypatch.setattr(lti_routes.db, "remove_stale_student_enrollments", fake_remove_stale)
     app.dependency_overrides[get_lms_connector] = lambda: connector
     return {"enrollments": enrollments, "users": users, "removals": removals,
-            "aliases": aliases}
+            "aliases": aliases, "local_courses": local_courses, "stamped": stamped,
+            "cooldowns": cooldowns, "seed_calls": seed_calls}
 
 
 def _launch(connector) -> TestClient:
+    """POST a launch through the app.
+
+    Deliberately does NOT clear dependency_overrides: several tests launch
+    twice to prove a cooldown skips the second one, and clearing here would
+    drop the fake connector between the two calls and send the second launch at
+    the real Blackboard. Tests that leave an override installed are cleaned up
+    by _patch_launch's own monkeypatch teardown, and each _patch_launch call
+    re-installs the override anyway.
+    """
     with TestClient(app) as client:
         return client.post(
             "/lti/launch",
@@ -422,3 +491,180 @@ def test_launch_with_no_matching_email_creates_a_user(monkeypatch) -> None:
     _launch(connector)
 
     assert recorded["enrollments"][0]["user_id"] == "user-fresh-sub"
+
+
+# ===========================================================================
+# Blackboard REST quota exhaustion — three fixes
+#
+# A 10,000-request quota was burned during ordinary dev testing and the dev
+# instance is launch-blocked until the window resets. Three compounding causes:
+# uncached course resolution, roster/content re-pulled on every instructor
+# relaunch, and no 429 handling. Each fix is pinned below.
+# ===========================================================================
+
+
+def test_first_launch_resolves_over_rest_and_persists_the_external_id(monkeypatch) -> None:
+    """Fix 1, write half. With no local row, the launch MUST resolve over REST
+    (unchanged behavior) and persist the external id so the next launch can
+    skip it. Without the persist, the lookup below can never hit."""
+    connector = _fake_connector([])
+    recorded = _patch_launch(monkeypatch, _launch_payload([C._ROLE_LEARNER]), connector)
+    _launch(connector)
+
+    assert connector.resolve_calls == 1
+    assert connector.resolve_args == ["ME301"]
+
+
+def test_second_launch_for_the_same_course_never_calls_resolve_course_ref(monkeypatch) -> None:
+    """Fix 1, the whole point: after the first launch the course is known
+    locally, so Blackboard is never asked again for this course's id. This is
+    the request that used to be spent on EVERY launch."""
+    connector = _fake_connector([])
+    payload = _launch_payload([C._ROLE_LEARNER])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+
+    # Simulate the row the first launch would have created.
+    recorded["local_courses"]["ME301"] = {
+        "id": "course-1", "institution_id": "inst-1",
+        "lms_course_id": "ref-ME301", "title": "Thermo I",
+    }
+
+    _launch(connector)
+
+    assert connector.resolve_calls == 0, "a known course must not be re-resolved over REST"
+
+
+def test_course_lookup_by_external_id_fails_open_when_the_column_is_absent(monkeypatch) -> None:
+    """Migration 0016 must be applied for Fix 1 to take effect, and it has not
+    been at write time. Until it is, the lookup names a column PostgREST does
+    not know and answers 400 — that must degrade to the pre-fix REST path, NOT
+    raise and break every launch. A missing migration is a slow launch, never a
+    dead one."""
+    from app.db import supabase as db
+
+    def exploding_select(table: str, params: dict) -> list[dict]:
+        raise RuntimeError("column courses.lms_course_external_id does not exist")
+
+    monkeypatch.setattr(db, "select", exploding_select)
+
+    assert db.course_by_lms_external_id(
+        institution_id="inst-1", lms_course_external_id="ME301",
+    ) is None
+
+
+def test_instructor_relaunch_inside_the_cooldown_skips_roster_and_content(monkeypatch) -> None:
+    """Fix 2. Two instructor launches inside the window must cost ONE roster
+    pull and ONE content walk combined, not two of each. This is exactly the
+    dev-testing burst that burned the quota."""
+    connector = _fake_connector([
+        {"lms_user_id": "stu-1", "role": "Student", "name": "Mica V.", "email": "m@mmcm.edu"},
+    ])
+    payload = _launch_payload([C._ROLE_INSTRUCTOR])
+    recorded = _patch_launch(monkeypatch, payload, connector)
+    # First launch of a fresh course: nothing stamped yet, so it does the work
+    # and earns the cooldown window.
+    _launch(connector)
+    assert connector.roster_calls == 1
+    assert connector.content_calls == 1
+
+    # The relaunch rides the window the first launch opened.
+    _launch(connector)
+    assert connector.roster_calls == 1, "a relaunch inside the cooldown must not re-pull the roster"
+    assert connector.content_calls == 1, "a relaunch inside the cooldown must not re-walk content"
+
+
+def test_instructor_launch_outside_the_cooldown_renews_both_syncs(monkeypatch) -> None:
+    """Fix 2 must not gut the self-healing contract: past the window, the work
+    runs again, so a real roster change still reconciles within minutes.
+
+    Expressed against the real contract by expiring the stamp between launches
+    rather than by hand-setting a flag — the point is that `course_synced_within`
+    going false is what re-runs the work."""
+    connector = _fake_connector([
+        {"lms_user_id": "stu-1", "role": "Student", "name": "Mica V.", "email": "m@mmcm.edu"},
+    ])
+    recorded = _patch_launch(monkeypatch, _launch_payload([C._ROLE_INSTRUCTOR]), connector)
+    _launch(connector)
+    assert connector.roster_calls == 1
+
+    # The window elapses (course_synced_within now reports false for both).
+    recorded["cooldowns"].clear()
+
+    _launch(connector)
+    assert connector.roster_calls == 2, "past the cooldown the roster must be pulled again"
+    assert connector.content_calls == 2
+
+
+def test_a_successful_roster_sync_stamps_the_timestamp(monkeypatch) -> None:
+    """Fix 2's cooldown is only meaningful if success writes the timestamp.
+    Nothing else starts the window."""
+    connector = _fake_connector([
+        {"lms_user_id": "stu-1", "role": "Student", "name": "Mica V.", "email": "m@mmcm.edu"},
+    ])
+    recorded = _patch_launch(monkeypatch, _launch_payload([C._ROLE_INSTRUCTOR]), connector)
+    _launch(connector)
+
+    stamped = {s["column"] for s in recorded["stamped"]}
+    assert "last_roster_sync_at" in stamped
+    assert "last_skill_seed_at" in stamped
+
+
+def test_a_failed_roster_sync_does_not_stamp_the_cooldown(monkeypatch) -> None:
+    """A failed pull must not open a cooldown window, or a transient hiccup
+    would suppress the retry that fixes it for the next ten minutes."""
+    class FailingConnector:
+        def resolve_course_ref(self, external_id: str) -> str:
+            return f"ref-{external_id}"
+
+        def get_roster(self, course_ref: str) -> list[dict]:
+            raise RuntimeError("blackboard unavailable")
+
+        def get_content(self, course_ref: str) -> list[dict]:
+            return [{"lms_content_id": "lesson-1", "body_or_description": "Module 1."}]
+
+    connector = FailingConnector()
+    recorded = _patch_launch(monkeypatch, _launch_payload([C._ROLE_INSTRUCTOR]), connector)
+    resp = _launch(connector)
+
+    # Contract preserved: best-effort never blocks the launch.
+    assert resp.status_code == 302
+    assert "last_roster_sync_at" not in {s["column"] for s in recorded["stamped"]}
+    # The skill seed, which did NOT fail, still stamps its own window — the two
+    # cooldowns are independent, so one failing must not suppress the other.
+    assert "last_skill_seed_at" in {s["column"] for s in recorded["stamped"]}
+
+
+def test_student_launch_still_skips_roster_and_seeding(monkeypatch) -> None:
+    """Regression guard: the cooldown gate must not accidentally run these for
+    students, who never triggered them and must not start now."""
+    connector = _fake_connector([])
+    _patch_launch(monkeypatch, _launch_payload([C._ROLE_LEARNER]), connector)
+    _launch(connector)
+
+    assert connector.roster_calls == 0
+    assert connector.content_calls == 0
+
+
+def test_launch_reports_a_useful_message_when_blackboard_rate_limits(monkeypatch) -> None:
+    """Fix 3 at the boundary: a 429 becomes a clear, actionable body with the
+    retry-after in it, not a stack-trace-shaped string. Status stays 502."""
+    from app.lms.blackboard import BlackboardRateLimitedError
+
+    class RateLimitedConnector:
+        def resolve_course_ref(self, external_id: str) -> str:
+            raise BlackboardRateLimitedError(retry_after=20807, path="/courses/externalId:ME301")
+
+        def get_roster(self, course_ref: str) -> list[dict]:
+            raise AssertionError("must not be reached")
+
+        def get_content(self, course_ref: str) -> list[dict]:
+            raise AssertionError("must not be reached")
+
+    connector = RateLimitedConnector()
+    _patch_launch(monkeypatch, _launch_payload([C._ROLE_LEARNER]), connector)
+    resp = _launch(connector)
+
+    assert resp.status_code == 502
+    body = resp.json()["detail"]
+    assert "rate limiting" in body.lower()
+    assert "20807" in body
