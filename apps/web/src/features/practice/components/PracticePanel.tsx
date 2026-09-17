@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { ComposeDock } from "@/components/study/ComposeDock";
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { usePracticeSet, usePracticeSetById, useSubmitPractice } from "@/features/practice/hooks/use-practice";
 import { apiErrorReason } from "@/lib/api-error";
+import { celebrate } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
@@ -90,6 +92,17 @@ export function PracticePanel({
   const lastXpRef = useRef<number | null>(null);
   const prevEstimateRef = useRef<number | null>(null);
 
+  // Reduced-motion is respected at the CALL SITE (celebrate() itself is a
+  // plain side effect with no React dependency — see lib/celebrate.ts).
+  const reduceMotion = useReducedMotion();
+  // Guards the celebration to fire EXACTLY ONCE per set. A ref, not state:
+  // setting state here would re-render, and an effect-driven fire needs a
+  // latch the re-render cannot clear. Keyed by set id so a fresh set (the
+  // "Generate another set" path) re-arms it, while a re-render or a refetch
+  // of the SAME set does not re-fire — a refetch after the last answer lands
+  // still resolves to the same done state.
+  const celebratedSetRef = useRef<string | null>(null);
+
   // The gamification summary is derived from immutable evidence; when the
   // submit invalidates it, the refetched delta IS the real +XP for that
   // answer. Compare against the last known snapshot (null until the first
@@ -131,6 +144,24 @@ export function PracticePanel({
     setPendingFollowUp(null);
     setStartedAt(Date.now());
   }, [item?.id]);
+
+  // The completion moment. Derived from `total`/`setIndex` rather than the
+  // `atSetEnd` local below, because this effect MUST sit above the early
+  // returns — hooks cannot be called conditionally, and the loading/error/empty
+  // branches return before that local is defined. `lastResult` truthy plus the
+  // final index IS the set's done state: the student is on the last item and it
+  // has been graded.
+  //
+  // An effect, not a call inside handleAnswer's onSuccess, so the saved-set
+  // path is covered too — a set entered via the study->test bridge can already
+  // be showing a graded final item when the panel mounts.
+  useEffect(() => {
+    if (total === 0 || setIndex + 1 < total || !lastResult) return;
+    const key = data?.setId ?? null;
+    if (!key || celebratedSetRef.current === key) return;
+    celebratedSetRef.current = key;
+    if (!reduceMotion) celebrate();
+  }, [total, setIndex, lastResult, data?.setId, reduceMotion]);
 
   if (isLoading)
     return (
