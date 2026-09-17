@@ -110,7 +110,12 @@ def _sync_roster(*, institution_id: str, course_id: str, course_ref: str,
         if not lms_user_id:
             continue
         try:
-            user = db.upsert_user(
+            # resolve_user, same as the launch path. This direction matters too:
+            # if a student LAUNCHED first (creating a `sub`-keyed row) and then
+            # appears in a roster pull, upsert_user would key on `userId` and
+            # mint a SECOND row — the same twin, from the other side. The
+            # alias map means whichever path runs second finds the first's row.
+            user = db.resolve_user(
                 institution_id=institution_id,
                 lms_user_id=lms_user_id,
                 role=_roster_role(member.get("role")),
@@ -222,7 +227,14 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
         name="Institution", lms_type=lms_type,
     )
     app_role = C.map_role(payload.get(C.ROLES, []))
-    user = db.upsert_user(
+    # resolve_user, NOT upsert_user. The launch's identifier is Blackboard's LTI
+    # `sub`, but the roster sync writes the connector's REST `userId` — two
+    # different values for the same person. upsert_user would key on `sub` and
+    # mint a twin for a student who already exists (and is already enrolled)
+    # under `userId`, stranding their evidence on an account no instructor can
+    # see. resolve_user checks the alias map, then email, so a launch finds the
+    # existing person. See migration 0015 and db/supabase.py:resolve_user.
+    user = db.resolve_user(
         institution_id=institution["id"],
         lms_user_id=payload["sub"],
         role=app_role,

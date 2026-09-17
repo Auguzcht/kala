@@ -11,7 +11,8 @@ from app.lti import routes as lti_routes
 from app.main import app
 
 
-def _launch_payload(role_uris: list[str], *, sub: str = "lms-teacher-1") -> dict:
+def _launch_payload(role_uris: list[str], *, sub: str = "lms-teacher-1",
+                    email: str | None = "prof@mmcm.edu") -> dict:
     s = get_settings()
     deployment_id = (s.deployment_id_list or [""])[0]
     return {
@@ -22,6 +23,7 @@ def _launch_payload(role_uris: list[str], *, sub: str = "lms-teacher-1") -> dict
         C.ROLES: role_uris,
         "nonce": "nonce-1",
         "name": "Prof. Ada",
+        **({"email": email} if email else {}),
         C.CONTEXT: {"id": "ctx-1", "label": "ME301", "title": "Thermo I"},
     }
 
@@ -49,21 +51,40 @@ def _fake_connector(roster: list[dict], content: list[dict] | None = None):
     return FakeConnector()
 
 
-def _patch_launch(monkeypatch, payload: dict, connector) -> dict:
+def _patch_launch(monkeypatch, payload: dict, connector,
+                  resolved_ids: dict[str, str] | None = None) -> dict:
     """Wire the launch handler to a crafted id_token + fake connector, and
     record db writes. Returns the recorded enrollments."""
     enrollments: list[dict] = []
     users: list[dict] = []
     removals: list[dict] = []
+    aliases: list[dict] = []
+    # email -> existing user id. Empty by default; a test that wants to prove
+    # the launch RESOLVES instead of duplicating seeds this.
+    resolved_ids = resolved_ids or {}
     monkeypatch.setattr(lti_routes, "verify_state", lambda cookie: {"state": "state-1", "nonce": "nonce-1"})
     monkeypatch.setattr(lti_routes, "verify_id_token", lambda token: payload)
     monkeypatch.setattr(lti_routes.db, "get_or_create_institution", lambda **kw: {"id": "inst-1"})
 
-    def fake_upsert_user(*, lms_user_id: str, role: str, **kw) -> dict:
-        users.append({"lms_user_id": lms_user_id, "role": role})
-        return {"id": f"user-{lms_user_id}"}
+    def fake_resolve_user(*, institution_id: str, lms_user_id: str, role: str,
+                          email: str | None = None,
+                          display_name: str | None = None, **kw) -> dict:
+        # Mirrors db.resolve_user's real contract in BOTH respects the fix
+        # depends on: it returns the resolved user, and it records the
+        # identifier->user alias on EVERY resolution (not only new users).
+        users.append({"lms_user_id": lms_user_id, "role": role, "email": email})
+        existing = resolved_ids.get(email) if email else None
+        user_id = existing or f"user-{lms_user_id}"
+        aliases.append({
+            "institution_id": institution_id, "lms_user_id": lms_user_id,
+            "user_id": user_id,
+            "source": "email_match" if existing else "launch",
+        })
+        return {"id": user_id}
 
-    monkeypatch.setattr(lti_routes.db, "upsert_user", fake_upsert_user)
+    monkeypatch.setattr(lti_routes.db, "resolve_user", fake_resolve_user)
+    monkeypatch.setattr(lti_routes.db, "record_identity_alias",
+                        lambda **kw: aliases.append(kw))
     monkeypatch.setattr(lti_routes.db, "get_or_create_course", lambda **kw: {"id": "course-1"})
 
     def fake_upsert_enrollment(*, user_id: str, course_id: str, role: str, **kw) -> None:
@@ -85,7 +106,8 @@ def _patch_launch(monkeypatch, payload: dict, connector) -> dict:
 
     monkeypatch.setattr(lti_routes.db, "remove_stale_student_enrollments", fake_remove_stale)
     app.dependency_overrides[get_lms_connector] = lambda: connector
-    return {"enrollments": enrollments, "users": users, "removals": removals}
+    return {"enrollments": enrollments, "users": users, "removals": removals,
+            "aliases": aliases}
 
 
 def _launch(connector) -> TestClient:
@@ -119,13 +141,15 @@ def test_instructor_launch_enrolls_students_who_have_never_launched(monkeypatch)
     assert {"user_id": "user-lms-teacher-1", "role": "instructor"} in recorded["enrollments"]
     # Every roster member was upserted + enrolled, students as students,
     # non-students coerced to instructor — none of them ever launched.
-    assert recorded["users"][0] == {"lms_user_id": "lms-teacher-1", "role": "instructor"}
-    for expected in [
-        {"lms_user_id": "stu-1", "role": "student"},
-        {"lms_user_id": "stu-2", "role": "student"},
-        {"lms_user_id": "ta-1", "role": "instructor"},
-    ]:
-        assert expected in recorded["users"]
+    assert recorded["users"][0]["lms_user_id"] == "lms-teacher-1"
+    assert recorded["users"][0]["role"] == "instructor"
+    # Compare on the fields under test; resolve_user also records the email it
+    # saw, which is what lets a later launch resolve instead of duplicating.
+    for lms_id, role in [("stu-1", "student"), ("stu-2", "student"), ("ta-1", "instructor")]:
+        assert any(
+            u["lms_user_id"] == lms_id and u["role"] == role
+            for u in recorded["users"]
+        ), f"{lms_id} not resolved as {role}"
     assert {"user_id": "user-stu-1", "role": "student"} in recorded["enrollments"]
     assert {"user_id": "user-stu-2", "role": "student"} in recorded["enrollments"]
     assert {"user_id": "user-ta-1", "role": "instructor"} in recorded["enrollments"]
@@ -321,3 +345,80 @@ def test_skill_seed_failure_does_not_block_the_launch(monkeypatch) -> None:
 
     assert response.status_code == 302
     assert {"user_id": "user-lms-teacher-1", "role": "instructor"} in recorded["enrollments"]
+
+
+# ---- duplicate-account regression (migration 0015) ------------------------
+# The bug: `users.lms_user_id` is written from the LTI `sub` on launch and from
+# the connector's REST `userId` on roster sync — two different values for the
+# same person. upsert_user keyed on lms_user_id, so a student who was BOTH
+# rostered and launched got TWO rows: the roster row held the enrollment (so
+# the instructor saw them), the launch row held all the evidence (so their work
+# was invisible). Confirmed live: 4 such pairs, one with 149 stranded events.
+#
+# These tests pin the two hard requirements: the lms_user_id fallback STAYS,
+# and the alias is recorded on EVERY resolution (not just new users).
+
+
+def test_launch_resolves_to_the_rostered_account_by_email(monkeypatch) -> None:
+    """THE bug. A launch whose `sub` is unseen, but whose email matches an
+    existing (rostered) profile, must resolve to that account instead of
+    minting a twin. Before the fix this created a second user row and split the
+    student's progress in half."""
+    connector = _fake_connector([])
+    payload = _launch_payload(
+        [C._ROLE_LEARNER], sub="2aca8e5459054620993530550b5f0a93",
+        email="kala.student1@example.com",
+    )
+    recorded = _patch_launch(
+        monkeypatch, payload, connector,
+        # The rostered account already exists under Blackboard's userId form.
+        resolved_ids={"kala.student1@example.com": "rostered-user-id"},
+    )
+    _launch(connector)
+
+    # Resolved to the EXISTING account, not a new `user-<sub>` row.
+    assert recorded["users"][0]["lms_user_id"] == "2aca8e5459054620993530550b5f0a93"
+    assert recorded["enrollments"][0]["user_id"] == "rostered-user-id"
+
+
+def test_launch_records_the_alias_on_every_resolution(monkeypatch) -> None:
+    """Requirement 2: the alias write is NOT conditional on the user being new.
+    Recording the identifier pair the first time it is OBSERVED is what makes
+    the next launch an exact lookup instead of another email guess."""
+    connector = _fake_connector([])
+    payload = _launch_payload(
+        [C._ROLE_LEARNER], sub="sub-hash-abc", email="kala.student5@example.com",
+    )
+    recorded = _patch_launch(
+        monkeypatch, payload, connector,
+        resolved_ids={"kala.student5@example.com": "existing-user-id"},
+    )
+    _launch(connector)
+
+    assert recorded["aliases"], "an alias must be written on an email resolution"
+    alias = recorded["aliases"][0]
+    assert alias["lms_user_id"] == "sub-hash-abc"
+    assert alias["user_id"] == "existing-user-id"
+
+
+def test_launch_without_email_still_creates_a_user(monkeypatch) -> None:
+    """Requirement 1: the lms_user_id fallback STAYS. Email is not guaranteed
+    present on an LTI launch, and resolution must not depend on it."""
+    connector = _fake_connector([])
+    payload = _launch_payload([C._ROLE_LEARNER], sub="no-email-sub", email=None)
+    recorded = _patch_launch(monkeypatch, payload, connector)
+    _launch(connector)
+
+    assert recorded["users"][0]["lms_user_id"] == "no-email-sub"
+    # And it still records the alias, so the NEXT launch is an exact lookup.
+    assert recorded["aliases"][0]["lms_user_id"] == "no-email-sub"
+
+
+def test_launch_with_no_matching_email_creates_a_user(monkeypatch) -> None:
+    """An email that matches nobody is a genuinely new person, not a failure."""
+    connector = _fake_connector([])
+    payload = _launch_payload([C._ROLE_LEARNER], sub="fresh-sub", email="nobody@example.com")
+    recorded = _patch_launch(monkeypatch, payload, connector, resolved_ids={})
+    _launch(connector)
+
+    assert recorded["enrollments"][0]["user_id"] == "user-fresh-sub"
