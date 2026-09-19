@@ -59,9 +59,9 @@ def _fake_connector(roster: list[dict], content: list[dict] | None = None):
             self.roster_calls += 1
             return roster
 
-        def get_content(self, course_ref: str) -> list[dict]:
+        def get_content(self, course_ref: str, *, include_attachments: bool = False, max_attachments: int = 3):
             self.content_calls += 1
-            return self.content
+            return self.content, {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
 
     return FakeConnector()
 
@@ -619,8 +619,8 @@ def test_a_failed_roster_sync_does_not_stamp_the_cooldown(monkeypatch) -> None:
         def get_roster(self, course_ref: str) -> list[dict]:
             raise RuntimeError("blackboard unavailable")
 
-        def get_content(self, course_ref: str) -> list[dict]:
-            return [{"lms_content_id": "lesson-1", "body_or_description": "Module 1."}]
+        def get_content(self, course_ref: str, *, include_attachments: bool = False, max_attachments: int = 3):
+            return [{"lms_content_id": "lesson-1", "body_or_description": "Module 1."}], {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
 
     connector = FailingConnector()
     recorded = _patch_launch(monkeypatch, _launch_payload([C._ROLE_INSTRUCTOR]), connector)
@@ -657,7 +657,7 @@ def test_launch_reports_a_useful_message_when_blackboard_rate_limits(monkeypatch
         def get_roster(self, course_ref: str) -> list[dict]:
             raise AssertionError("must not be reached")
 
-        def get_content(self, course_ref: str) -> list[dict]:
+        def get_content(self, course_ref: str, *, include_attachments: bool = False, max_attachments: int = 3):
             raise AssertionError("must not be reached")
 
     connector = RateLimitedConnector()

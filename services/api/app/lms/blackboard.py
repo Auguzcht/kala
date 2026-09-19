@@ -7,6 +7,7 @@ claims; both are valid. REST is the simpler data pipe for the pilot."""
 from __future__ import annotations
 
 import html as _html
+import json
 import logging
 import re
 import time
@@ -163,6 +164,84 @@ class _HTMLTextExtractor(HTMLParser):
         return joined.strip()
 
 
+# Attachment anchors in an Ultra document body look like:
+#   <a href="...bbcswebdav/pid-N-dt-content-rid-M/xid-M?Kq3...&VxJw..."
+#      data-bbtype="attachment"
+#      data-bbfile="{&quot;fileName&quot;:&quot;...pdf&quot;,&quot;fileSize&quot;:819568,
+#                    &quot;mimeType&quot;:&quot;application/pdf&quot;,&quot;resourceUrl&quot;:&quot;...&quot;}">
+#      Link text</a>
+#
+# `data-bbfile` is HTML-escaped JSON. The sibling `href` is the real file and
+# is SELF-AUTHENTICATING — verified live 2026-09-19: a plain unauthenticated
+# GET follows a 302 to the actual bytes, no bearer token and no JSESSIONID
+# required. `resourceUrl` also appears in the JSON but is a DIFFERENT signed
+# URL (the inline-render variant) and returns 404; always use the href.
+#
+# ATTRIBUTE ORDER IS NOT STABLE. Some anchors put data-bbfile before href, some
+# after, and some have no inner text at all. An early probe regex assumed
+# `href` first and silently missed most of the course's PDFs — so this parses
+# each whole anchor tag and pulls the attributes out of it, rather than
+# pattern-matching a fixed order.
+_ANCHOR_RE = re.compile(r"<a\b[^>]*>", re.IGNORECASE)
+_BBFILE_RE = re.compile(r'data-bbfile="(.*?)"', re.DOTALL)
+_HREF_RE = re.compile(r'href="([^"]+)"')
+
+
+def _attachment_links(raw_body: str) -> list[dict]:
+    """Attachments embedded in a document body, parsed from the anchors.
+
+    Returns one dict per anchor that carries a `data-bbfile` JSON blob AND a
+    usable href: {mime_type, file_name, file_size, href}. Anchors without a
+    href are skipped — they are metadata for something the body renders
+    inline, not a fetchable file.
+
+    Pure parsing, NO network. The caller decides which of these to download;
+    this is deliberately cheap so it can run inside `get_content` for every
+    caller without turning a tree-walk into a download.
+    """
+    links: list[dict] = []
+    for tag in _ANCHOR_RE.findall(raw_body or ""):
+        blob = _BBFILE_RE.search(tag)
+        if not blob:
+            continue
+        href = _HREF_RE.search(tag)
+        if not href:
+            continue
+        try:
+            meta = json.loads(_html.unescape(blob.group(1)))
+        except (ValueError, TypeError):
+            # Malformed JSON in one anchor must not lose the whole body's
+            # attachments — skip it, same spirit as the per-subtree catch in
+            # get_content.
+            continue
+        if not isinstance(meta, dict):
+            continue
+        links.append({
+            "mime_type": meta.get("mimeType"),
+            "file_name": meta.get("fileName") or meta.get("linkName"),
+            "file_size": meta.get("fileSize"),
+            "href": _html.unescape(href.group(1)),
+        })
+    return links
+
+
+def fetch_attachment(href: str) -> bytes:
+    """Download an attachment's bytes from its body href.
+
+    Deliberately contains NO Authorization header: the bbcswebdav URL carries
+    its own short-lived signature (the `VxJw3wfC56` query param is a unix
+    timestamp), and sending a bearer token alongside it adds nothing while
+    risking the host rejecting a request it did not expect to be authenticated.
+
+    The signature EXPIRES, so an href must be fetched close to when it was
+    read out of a body. Caching one for a later run guarantees a 404.
+    """
+    s = get_settings()
+    resp = httpx.get(href, follow_redirects=True, verify=s.lms_verify_tls, timeout=30.0)
+    resp.raise_for_status()
+    return resp.content
+
+
 def _to_plain_text(raw: str) -> str:
     """HTML/BBML body → plain text. Ordinary prose passes through with entity
     decoding and whitespace normalisation, so this is safe to call
@@ -298,29 +377,51 @@ class BlackboardConnector(LMSConnector):
             })
         return roster
 
-    def get_content(self, course_ref: str) -> list[dict]:
+    def get_content(self, course_ref: str, *, include_attachments: bool = False,
+                    max_attachments: int = 3) -> tuple[list[dict], dict]:
         """The course's content tree, flattened, with each item's text body.
 
-        Two things this used to get wrong, both found by auditing why generated
-        questions were meaningless:
+        Returns (items, attachment_stats). The stats dict reports what the PDF
+        fetch actually did this call — `fetched`, `skipped_unsupported`,
+        `failed`, `capped`, `remaining` — so "call /ingest until remaining is
+        0" is an observable fact in the response rather than tribal knowledge
+        in a comment.
 
-        1. It stored HTML. Blackboard returns page bodies as BBML/HTML, so a
-           real page (the course's Vision/Mission page, say) landed in
-           content_items as ~1500 chars of `<div data-bbid=...><span
-           style=...>` wrapper around a few sentences. chunk_text sliced that
-           markup, and the model was handed markup as its "excerpt". Bodies are
-           now converted to plain text before they leave the connector.
+        `include_attachments=False` (the DEFAULT) returns the cheap
+        metadata-only walk. Only the ingest path opts in:
 
-        2. Traversal was shallow in practice. It only recursed when the
-           listing set `hasChildren`, which is not reliable across Blackboard
-           builds: the live course yielded FIVE items, every one of them in the
-           "Course Preliminaries" branch, with the entire AWS module tree
-           missing. A course whose modules never get walked has no content to
-           test on, no matter how good the generator is.
+          - GET /courses/{id}/content (the debug preview) asks for a quick look
+            at the tree; downloading and parsing every PDF there would be
+            surprising and slow.
+          - propose_skills and _seed_course_skills read bodies to propose
+            skills from. _seed_course_skills in particular runs on EVERY
+            instructor launch under an explicit "never blocks the 302"
+            contract — the exact flow that burned this instance's 10,000
+            request quota on 2026-09-17. It must stay cheap.
 
-        Recursion now descends whenever an item either claims children OR is a
-        container type (a folder/learning-module), and it de-duplicates by id so
-        a tree that reports children both ways cannot fetch the same node twice.
+        Defaulting to False is the safe direction: a future caller gets the
+        cheap path unless it deliberately asks for the expensive one.
+
+        TWO THINGS THIS GETS WRONG ON PURPOSE, both named here rather than
+        discovered later:
+
+        1. THE CAP IS NOT A RESUMPTION CURSOR. At most `max_attachments` PDFs
+           are downloaded per call, so ONE call will not ingest every PDF in a
+           course. Completion means calling until `attachment_stats["remaining"]`
+           is 0. The cap exists because fetch is network-bound (~2s per file
+           measured, 16s for this course's 8 PDFs) and the Lambda wall is 30s.
+           An uncapped walk is exactly the failure mode that killed the old
+           tagging loop.
+
+        2. A PERMANENTLY BROKEN HREF OCCUPIES A CAP SLOT FOREVER. If a fetch
+           raises (expired signature, malformed URL, 404), nothing is stored,
+           so the existing_refs dedupe downstream never marks it done and it
+           will be retried — and consume one of the 3 slots — on every future
+           call. That is an accepted limitation of this first pass, not an
+           oversight: the observed failure mode is a small number of stale
+           external-host links, and the alternative (a per-attachment failure
+           ledger) is a new table for a problem that does not yet justify one.
+           If a course ever shows a permanently stuck `remaining`, this is why.
         """
         s = get_settings()
         headers = self._headers()
@@ -346,6 +447,65 @@ class BlackboardConnector(LMSConnector):
         container_markers = ("resource/x-bb-folder", "resource/x-bb-lesson",
                              "resource/x-bb-learning-module")
 
+        # What the attachment pass did this call. Mutated by flatten().
+        stats = {
+            "fetched": 0,
+            "skipped_unsupported": 0,
+            "failed": 0,
+            "capped": 0,
+            "remaining": 0,
+            "chunks": 0,
+        }
+
+        # Imported here, not at module scope: services/api's documents module
+        # pulls in pypdf lazily, and the connector is imported by the worker's
+        # LTI path where PDF parsing is irrelevant. Keeps the import graph
+        # honest about what the connector itself needs.
+        from app.ai.documents import ALLOWED_MIME_TYPES, extract_text
+        from app.ai.chunking import chunk_text as _chunk_text
+
+        def attachments_for(item: dict) -> list[dict]:
+            """The item's PDF (and other allowed-type) attachments, fetched and
+            turned into text, bounded by the per-call cap and the MIME filter."""
+            if not include_attachments:
+                return []
+            out: list[dict] = []
+            for link in _attachment_links(item.get("body") or ""):
+                mime = (link.get("mime_type") or "").strip()
+                if mime not in ALLOWED_MIME_TYPES:
+                    # Screenshots and external-host links live in the same
+                    # markup; only parseable document types are worth a fetch.
+                    stats["skipped_unsupported"] += 1
+                    continue
+                if stats["fetched"] >= max_attachments:
+                    # Over the per-call cap. Counted, NOT fetched, and reported
+                    # to the caller so it knows to call again.
+                    stats["capped"] += 1
+                    continue
+                try:
+                    data = fetch_attachment(link["href"])
+                    text = extract_text(data, mime)
+                except Exception as exc:  # noqa: BLE001 — one bad file must not kill the walk
+                    # Same contract as the per-subtree catch below: one
+                    # unreadable attachment is skipped, the rest of the course
+                    # is still worth storing. Note this leaves the href
+                    # un-stored, so it will be retried next call — see point 2
+                    # in the docstring.
+                    logger.warning(
+                        "attachment fetch failed for %s (%s): %s",
+                        item.get("title"), link.get("file_name"), exc,
+                    )
+                    stats["failed"] += 1
+                    continue
+                stats["fetched"] += 1
+                out.append({
+                    "file_name": link.get("file_name") or item.get("title") or "attachment",
+                    "text": text,
+                    "chunks": _chunk_text(text),
+                })
+                stats["chunks"] += len(out[-1]["chunks"])
+            return out
+
         def flatten(items: list[dict]) -> list[dict]:
             content = []
             for item in items:
@@ -366,6 +526,12 @@ class BlackboardConnector(LMSConnector):
                     "body_or_description": body or description,
                     "content_type": handler_id,
                     "parent_id": item.get("parentId"),
+                    # Extracted attachment text, or [] on the cheap path. Each
+                    # entry carries its own chunks so the ingest route can store
+                    # them as separate content_items under the same parent —
+                    # a PDF is content in its own right, not a suffix on the
+                    # page that linked it.
+                    "attachments": attachments_for(item),
                 })
 
                 is_container = bool(item.get("hasChildren")) or any(
@@ -383,7 +549,14 @@ class BlackboardConnector(LMSConnector):
                         continue
             return content
 
-        return flatten(fetch_children())
+        items = flatten(fetch_children())
+        # `remaining` is what the caller needs to decide whether to call again:
+        # everything it did not fetch because of the cap. Failures are NOT
+        # counted here — a failed fetch is retried next call by construction,
+        # but counting failed hrefs as "remaining" would make the number never
+        # reach 0 and turn the completion signal into a lie.
+        stats["remaining"] = stats["capped"]
+        return items, stats
 
     def get_assessments(self, course_ref: str) -> list[dict]:
         s = get_settings()

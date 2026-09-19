@@ -12,8 +12,8 @@ class FakeConnector:
     def get_roster(self, course_ref: str) -> list[dict]:
         return [{"lms_user_id": "00000000-0000-4000-8000-000000000040", "role": "Student"}]
 
-    def get_content(self, course_ref: str) -> list[dict]:
-        return [{"lms_content_id": "content-1", "title": "Lesson"}]
+    def get_content(self, course_ref: str, *, include_attachments: bool = False, max_attachments: int = 3):
+        return [{"lms_content_id": "content-1", "title": "Lesson"}], {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
 
     def get_assessments(self, course_ref: str) -> list[dict]:
         return [{"lms_column_id": "column-1", "name": "Quiz"}]

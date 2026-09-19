@@ -6,7 +6,7 @@ from app.routers import diagnostic
 
 
 class IngestConnector:
-    def get_content(self, course_ref: str) -> list[dict]:
+    def get_content(self, course_ref: str, *, include_attachments: bool = False, max_attachments: int = 3):
         return [
             {
                 "lms_content_id": "folder-1", "title": "Module 1",
@@ -18,7 +18,7 @@ class IngestConnector:
                 "body_or_description": "name: Jane\nActual lesson content.",
                 "parent_id": "folder-1",
             },
-        ]
+        ], {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
 
 
 def _phase_select(*, courses, skills, pending_embed=None, pending_tag=None):
@@ -334,13 +334,13 @@ def test_ingest_dedupes_with_one_query_not_one_per_item(monkeypatch) -> None:
     )
 
     class ManyItems:
-        def get_content(self, course_ref):
+        def get_content(self, course_ref, *, include_attachments=False, max_attachments=3):
             return [
                 {"lms_content_id": f"item-{i}", "title": f"Item {i}",
                  "body_or_description": "body text", "content_type": "resource/x-bb-document",
                  "parent_id": None}
                 for i in range(40)
-            ]
+            ], {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
 
     app.dependency_overrides[get_lms_connector] = ManyItems
 

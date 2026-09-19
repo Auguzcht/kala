@@ -64,7 +64,11 @@ def _seed_course_skills(*, institution_id: str, course_id: str, course_ref: str,
     all-or-nothing "course already has skills" pre-check is deliberately
     gone, it would have blocked a partial result from ever being topped up."""
     try:
-        items = connector.get_content(course_ref)
+        # Cheap path, and it MUST stay that way: this runs on every instructor
+        # launch under a "never blocks the 302" contract, and that flow is what
+        # burned this instance's request quota on 2026-09-17. include_attachments
+        # defaults False, so no PDFs are fetched here.
+        items, _stats = connector.get_content(course_ref)
         if not items:
             return {"skipped": True, "reason": "course has no content"}
         # Pass the raw items through: the proposer groups by module itself

@@ -141,7 +141,11 @@ def get_content(
     user: CurrentUser = Depends(get_current_user),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    return connector.get_content(_course_ref(course_id, user.institution_id))
+    # Cheap path on purpose: this is a debug/preview route for looking at the
+    # content tree. It must NOT download and parse every PDF in the course.
+    # include_attachments defaults False, so this stays a metadata walk.
+    items, _stats = connector.get_content(_course_ref(course_id, user.institution_id))
+    return items
 
 
 @router.get("/{course_id}/assessments")
@@ -171,7 +175,9 @@ def propose_course_skills(
     content.
     """
     course_ref = _course_ref(course_id, user.institution_id)
-    content_items = connector.get_content(course_ref)
+    # Cheap path: proposal reads bodies to suggest skills. Attachments add
+    # nothing to a skill proposal and would make this network-heavy.
+    content_items, _stats = connector.get_content(course_ref)
     return seed_course_skills(
         institution_id=user.institution_id, course_id=course_id,
         content_items=content_items,
@@ -188,7 +194,13 @@ def ingest_course(
     # NOTE: the approved-skills lookup that used to live here is gone with
     # tagging. It was only read to tag chunks against; the worker's tag job
     # resolves each chunk's own course's approved skills itself.
-    content_items = connector.get_content(course_ref)
+    #
+    # THE ONLY CALLER THAT OPTS IN. Bounded by max_attachments (default 3):
+    # a course's PDFs drain over successive calls, and the response reports
+    # how many are left so "call again?" is answerable from the payload.
+    content_items, attachment_stats = connector.get_content(
+        course_ref, include_attachments=True,
+    )
 
     # Diagnostic breadcrumb. The reason this exists: the course silently
     # ingested FIVE items, all from one folder branch, and nothing reported
@@ -249,29 +261,60 @@ def ingest_course(
     stored_rows: list[tuple[str, str]] = []  # (row_id, clean_chunk)
     for item in content_items:
         body = item.get("body_or_description", "")
-        if not body:
-            continue
         # Skip an item already ingested for this course: re-running ingest
         # after a timeout must not duplicate every chunk it already stored.
-        if item.get("lms_content_id") in existing_refs:
-            continue
+        already_stored = item.get("lms_content_id") in existing_refs
+        if not body and not already_stored:
+            # A page with no body but WITH attachments is still worth storing
+            # (the PDF is the content; the page is just the link). Only skip
+            # when there is genuinely nothing.
+            if not item.get("attachments"):
+                continue
         item_folder_path = folder_paths.get(item.get("lms_content_id"), [])
         item_module_ref = module_ref_for(item_folder_path)
 
-        for chunk in chunk_text(body):
-            clean_chunk = strip_pii(chunk)
-            rows = db.insert("content_items", [{
-                "institution_id": user.institution_id,
-                "course_id": course_id,
-                "lms_ref": item.get("lms_content_id"),
-                "parent_lms_ref": item.get("parent_id"),
-                "folder_path": item_folder_path,
-                "module_ref": item_module_ref,
-                "chunk_text": clean_chunk,
-            }])
-            if not rows:
-                raise HTTPException(status.HTTP_502_BAD_GATEWAY, "content row was not stored")
-            stored_rows.append((rows[0]["id"], clean_chunk))
+        # The page's own prose, when it has any and is not already stored.
+        if body and not already_stored:
+            for chunk in chunk_text(body):
+                clean_chunk = strip_pii(chunk)
+                rows = db.insert("content_items", [{
+                    "institution_id": user.institution_id,
+                    "course_id": course_id,
+                    "lms_ref": item.get("lms_content_id"),
+                    "parent_lms_ref": item.get("parent_id"),
+                    "folder_path": item_folder_path,
+                    "module_ref": item_module_ref,
+                    "chunk_text": clean_chunk,
+                }])
+                if not rows:
+                    raise HTTPException(status.HTTP_502_BAD_GATEWAY, "content row was not stored")
+                stored_rows.append((rows[0]["id"], clean_chunk))
+
+        # Extracted attachment text (PDFs). Each file gets its OWN lms_ref so
+        # the existing dedupe treats it as a distinct piece of content — a PDF
+        # is course material in its own right, not a suffix on the page that
+        # linked it. `<item_id>:<filename>` is stable across runs, so a second
+        # /ingest skips a file it already stored rather than duplicating it.
+        for att in item.get("attachments") or []:
+            att_ref = f"{item.get('lms_content_id')}:{att.get('file_name')}"
+            if att_ref in existing_refs:
+                continue
+            for chunk in att.get("chunks") or []:
+                if not chunk.strip():
+                    continue
+                clean_chunk = strip_pii(chunk)
+                rows = db.insert("content_items", [{
+                    "institution_id": user.institution_id,
+                    "course_id": course_id,
+                    "lms_ref": att_ref,
+                    "parent_lms_ref": item.get("lms_content_id"),
+                    "folder_path": item_folder_path,
+                    "module_ref": item_module_ref,
+                    "chunk_text": clean_chunk,
+                }])
+                if not rows:
+                    raise HTTPException(status.HTTP_502_BAD_GATEWAY, "attachment row was not stored")
+                stored_rows.append((rows[0]["id"], clean_chunk))
 
     # ---- Phase 2: embed what has no embedding yet (network, bounded) ------
     # Embeddings are the cheap network call (one batched HTTP round trip each,
@@ -308,6 +351,21 @@ def ingest_course(
         "stored": len(stored_rows),
         "embedded": embedded,
         "embedFailed": embed_failed,
+        # Attachment fetch outcome for THIS call. `pdfsRemaining` > 0 means the
+        # per-call cap stopped the walk early and another /ingest call will make
+        # further progress; 0 means no fetchable document was left behind by the
+        # cap. These make the resumption rule a fact in the payload instead of a
+        # comment someone has to find.
+        #
+        # NOTE `documentsFailed` is NOT part of `pdfsRemaining` on purpose: a
+        # failed href is retried next call, so counting it as remaining would
+        # make the number never reach 0. A permanently broken link therefore
+        # never clears and keeps costing one cap slot per call — see
+        # get_content's docstring for why that is accepted for now.
+        "documentsFetched": attachment_stats.get("fetched", 0),
+        "documentsRemaining": attachment_stats.get("remaining", 0),
+        "documentsFailed": attachment_stats.get("failed", 0),
+        "documentsSkippedType": attachment_stats.get("skipped_unsupported", 0),
         # Not "remaining": there is no client-side loop left to drive. This is
         # how many chunks the WORKER will pick up on its next scheduled run,
         # surfaced for observability rather than as something to poll on.

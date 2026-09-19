@@ -11,7 +11,11 @@ from unittest.mock import patch
 import httpx
 
 from app.config import Settings
-from app.lms.blackboard import BlackboardConnector, BlackboardRateLimitedError, _to_plain_text
+import html
+
+from app.lms.blackboard import (
+    BlackboardConnector, BlackboardRateLimitedError, _attachment_links, _to_plain_text,
+)
 
 
 # ---- HTML/BBML -> plain text ---------------------------------------------
@@ -80,6 +84,20 @@ def test_empty_input_is_empty():
 # ---- tree traversal -------------------------------------------------------
 
 
+class _RawResponse:
+    """A response whose .content is bytes (an attachment download)."""
+
+    def __init__(self, content: bytes, *, status_code: int = 200):
+        self.content = content
+        self.status_code = status_code
+        self.headers = {}
+        self.request = httpx.Request("GET", "https://learn.example/download")
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError(str(self.status_code), request=self.request, response=self)
+
+
 class _Response:
     """Minimal stand-in for httpx.Response.
 
@@ -141,7 +159,7 @@ def test_content_walks_children_of_a_container_even_without_haschildren():
     with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
         "app.lms.blackboard.httpx.get", side_effect=fake_get
     ):
-        items = connector.get_content("_course_1")
+        items, _stats = connector.get_content("_course_1")
 
     ids = [i["lms_content_id"] for i in items]
     assert "_3_1" in ids, "the nested AWS page must be reached"
@@ -162,7 +180,7 @@ def test_content_does_not_revisit_a_node_reported_twice():
     with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
         "app.lms.blackboard.httpx.get", side_effect=fake_get
     ):
-        items = connector.get_content("_course_1")
+        items, _stats = connector.get_content("_course_1")
 
     assert [i["lms_content_id"] for i in items].count("_1_1") == 1
 
@@ -190,7 +208,7 @@ def test_content_survives_a_failing_subtree():
     with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
         "app.lms.blackboard.httpx.get", side_effect=raise_http
     ):
-        items = connector.get_content("_course_1")
+        items, _stats = connector.get_content("_course_1")
 
     ids = [i["lms_content_id"] for i in items]
     assert "_2_1" in ids, "sibling content survives a failing subtree"
@@ -207,7 +225,8 @@ def test_description_is_used_only_when_body_is_absent():
     with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
         "app.lms.blackboard.httpx.get", side_effect=fake_get
     ):
-        items = {i["lms_content_id"]: i for i in connector.get_content("_course_1")}
+        items, _stats = connector.get_content("_course_1")
+        items = {i["lms_content_id"]: i for i in items}
 
     assert items["_1_1"]["body_or_description"] == "real body"
     assert items["_2_1"]["body_or_description"] == "only a description"
@@ -389,3 +408,292 @@ def test_a_response_without_quota_headers_is_not_an_error():
         side_effect=lambda path, **kw: _Response({"results": []}, status_code=200),
     ):
         assert connector.get_roster("_course_1") == []
+
+
+# ---- attachment extraction (Lead B) ---------------------------------------
+#
+# The professor's AWS PDFs are embedded in Ultra document bodies as anchors
+# carrying a data-bbfile JSON blob. Verified live 2026-09-19: the sibling href
+# is self-authenticating (a plain GET follows a 302 to the bytes) while
+# resourceUrl, a DIFFERENT signed URL in the same blob, 404s.
+#
+# The tests below pin the three things that cost real probe time:
+#   1. attribute order is NOT stable (data-bbfile before or after href)
+#   2. resourceUrl must never be used
+#   3. a document with no data-bbfile must fall through to a normal item
+
+
+def _anchor(href: str, blob: dict, *, blob_first: bool = False, text: str = "") -> str:
+    import json as _json
+    esc = html.escape(_json.dumps(blob))
+    a = f'href="{href}"'
+    b = f'data-bbfile="{esc}"'
+    attrs = f"{b} {a}" if blob_first else f"{a} {b}"
+    return f"<div><p><a {attrs}>{text}</a></p></div>"
+
+
+def test_attachment_links_extracts_href_and_metadata():
+    body = _anchor(
+        "https://bb.example/bbcswebdav/xid-1?VxJw3wfC56=1789817965",
+        {"mimeType": "application/pdf", "fileName": "Guide.pdf", "fileSize": 819568},
+    )
+    links = _attachment_links(body)
+    assert len(links) == 1
+    assert links[0]["href"] == "https://bb.example/bbcswebdav/xid-1?VxJw3wfC56=1789817965"
+    assert links[0]["mime_type"] == "application/pdf"
+    assert links[0]["file_name"] == "Guide.pdf"
+
+
+def test_attachment_links_are_order_independent():
+    """The live course had anchors with data-bbfile BEFORE href and anchors with
+    no inner text at all. An early probe regex assumed href-first and silently
+    missed most of the PDFs, so this is pinned rather than assumed."""
+    blob = {"mimeType": "application/pdf", "fileName": "Module_01.pdf"}
+    href = "https://bb.example/bbcswebdav/xid-2"
+    for blob_first in (True, False):
+        links = _attachment_links(_anchor(href, blob, blob_first=blob_first))
+        assert len(links) == 1, f"missed the anchor (blob_first={blob_first})"
+        assert links[0]["href"] == href
+
+
+def test_attachment_links_skips_an_anchor_with_no_href():
+    """Metadata without a fetchable URL is not an attachment we can use."""
+    import json as _json
+    body = f'<a data-bbfile="{html.escape(_json.dumps({"mimeType": "application/pdf"}))}"></a>'
+    assert _attachment_links(body) == []
+
+
+def test_attachment_links_survives_malformed_json():
+    """One broken anchor must not lose the rest of the body's attachments."""
+    good_href = "https://bb.example/bbcswebdav/xid-good"
+    good = _anchor(good_href, {"mimeType": "application/pdf", "fileName": "ok.pdf"})
+    body = '<a href="https://x/y" data-bbfile="{not json}"></a>' + good
+    links = _attachment_links(body)
+    assert len(links) == 1
+    assert links[0]["href"] == good_href
+
+
+def test_attachment_links_uses_href_not_resourceurl():
+    """Both URLs are in the blob. resourceUrl is the inline-render variant and
+    returns 404 on this instance; using it would look like a successful
+    extraction and fail at fetch time."""
+    body = _anchor(
+        "https://bb.example/bbcswebdav/pid-622-dt-content-rid-5560/xid-5560",
+        {
+            "mimeType": "application/pdf", "fileName": "Guide.pdf",
+            "resourceUrl": "https://bb.example/bbcswebdav/pid-622-dt-content-rid-46141487/xid-46141487",
+        },
+    )
+    links = _attachment_links(body)
+    assert "rid-5560" in links[0]["href"]
+    assert "46141487" not in links[0]["href"]
+
+
+def test_attachment_links_finds_every_anchor_in_one_body():
+    """A real body held a PDF plus several screenshots; all must be seen so the
+    caller can apply the MIME filter itself."""
+    body = (
+        _anchor("https://bb.example/a", {"mimeType": "application/pdf", "fileName": "a.pdf"})
+        + _anchor("https://bb.example/b", {"mimeType": "image/png", "fileName": "b.png"})
+        + _anchor("https://bb.example/c", {"mimeType": "image/jpeg", "fileName": "c.jpg"})
+    )
+    links = _attachment_links(body)
+    assert [l["mime_type"] for l in links] == ["application/pdf", "image/png", "image/jpeg"]
+
+
+def test_attachment_links_returns_empty_for_a_body_with_none():
+    assert _attachment_links("<div><p>Just prose, no files.</p></div>") == []
+    assert _attachment_links("") == []
+
+
+def test_attachment_links_prefers_filename_over_linkname():
+    body = _anchor("https://bb.example/a", {
+        "mimeType": "application/pdf", "fileName": "real.pdf", "linkName": "Read me",
+    })
+    assert _attachment_links(body)[0]["file_name"] == "real.pdf"
+    # ...and falls back to linkName when fileName is absent (some anchors).
+    body2 = _anchor("https://bb.example/b", {
+        "mimeType": "application/pdf", "linkName": "Read me",
+    })
+    assert _attachment_links(body2)[0]["file_name"] == "Read me"
+
+
+# ---- the gate: include_attachments defaults to the cheap path --------------
+
+
+def test_get_content_does_not_fetch_attachments_by_default():
+    """Three callers share this method: the debug preview route, propose_skills,
+    and _seed_course_skills — the last of which runs on every instructor launch
+    under a 'never blocks the 302' contract. Default False must keep them all on
+    the metadata-only path."""
+    body = _anchor("https://bb.example/pdf", {"mimeType": "application/pdf", "fileName": "x.pdf"})
+    root = [{"id": "_1_1", "title": "Page", "body": body,
+             "contentHandler": {"id": "resource/x-bb-document"}}]
+    settings = Settings(LMS_REST_BASE_URL="https://learn.example/learn/api/public/v1",
+                        LMS_VERIFY_TLS=False)
+    connector = BlackboardConnector()
+    connector._headers = lambda: {"Authorization": "Bearer test"}
+
+    fetched = []
+
+    def spy_get(path, **kw):
+        if "bbcswebdav" in str(path):
+            fetched.append(path)
+        return _Response({"results": root})
+
+    with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
+        "app.lms.blackboard.httpx.get", side_effect=spy_get
+    ):
+        items, stats = connector.get_content("_course_1")
+
+    assert fetched == [], "the default path must not download any attachment"
+    assert stats["fetched"] == 0
+    assert items[0]["attachments"] == []
+
+
+def test_get_content_fetches_and_extracts_when_asked():
+    """The ingest path opts in and gets text back, capped by max_attachments."""
+    body = _anchor("https://bb.example/pdf-a", {"mimeType": "application/pdf", "fileName": "a.pdf"})
+    root = [{"id": "_1_1", "title": "Page", "body": body,
+             "contentHandler": {"id": "resource/x-bb-document"}}]
+    settings = Settings(LMS_REST_BASE_URL="https://learn.example/learn/api/public/v1",
+                        LMS_VERIFY_TLS=False)
+    connector = BlackboardConnector()
+    connector._headers = lambda: {"Authorization": "Bearer test"}
+
+    def fake_get(path, **kw):
+        if "bbcswebdav" in str(path) or "bb.example" in str(path):
+            return _RawResponse(b"%PDF-1.7 fake")
+        return _Response({"results": root})
+
+    with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
+        "app.lms.blackboard.httpx.get", side_effect=fake_get
+    ), patch("app.ai.documents.extract_text", return_value="Extracted PDF body text."):
+        items, stats = connector.get_content("_course_1", include_attachments=True)
+
+    assert stats["fetched"] == 1
+    assert stats["remaining"] == 0
+    atts = items[0]["attachments"]
+    assert len(atts) == 1
+    assert atts[0]["text"] == "Extracted PDF body text."
+    assert atts[0]["chunks"] == ["Extracted PDF body text."]
+
+
+def test_get_content_skips_non_document_mime_types():
+    """Screenshots share the same markup. Fetching them wastes a cap slot and
+    extracts to nothing."""
+    body = (
+        _anchor("https://bb.example/a.png", {"mimeType": "image/png", "fileName": "a.png"})
+        + _anchor("https://bb.example/b.jpg", {"mimeType": "image/jpeg", "fileName": "b.jpg"})
+    )
+    root = [{"id": "_1_1", "title": "Page", "body": body,
+             "contentHandler": {"id": "resource/x-bb-document"}}]
+    settings = Settings(LMS_REST_BASE_URL="https://learn.example/learn/api/public/v1",
+                        LMS_VERIFY_TLS=False)
+    connector = BlackboardConnector()
+    connector._headers = lambda: {"Authorization": "Bearer test"}
+
+    def fake_get(path, **kw):
+        if "bbcswebdav" in str(path) or str(path).endswith((".png", ".jpg")):
+            raise AssertionError("must not fetch a non-document attachment")
+        return _Response({"results": root})
+
+    with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
+        "app.lms.blackboard.httpx.get", side_effect=fake_get
+    ):
+        items, stats = connector.get_content("_course_1", include_attachments=True)
+
+    assert stats["fetched"] == 0
+    assert stats["skipped_unsupported"] == 2
+    assert items[0]["attachments"] == []
+
+
+def test_get_content_caps_fetches_and_reports_what_is_left():
+    """The cap is what keeps this inside the Lambda 30s wall. `remaining` is how
+    the caller learns to call again — it must count what the CAP held back."""
+    hrefs = [f"https://bb.example/pdf-{i}" for i in range(5)]
+    body = "".join(
+        _anchor(h, {"mimeType": "application/pdf", "fileName": f"{i}.pdf"})
+        for i, h in enumerate(hrefs)
+    )
+    root = [{"id": "_1_1", "title": "Page", "body": body,
+             "contentHandler": {"id": "resource/x-bb-document"}}]
+    settings = Settings(LMS_REST_BASE_URL="https://learn.example/learn/api/public/v1",
+                        LMS_VERIFY_TLS=False)
+    connector = BlackboardConnector()
+    connector._headers = lambda: {"Authorization": "Bearer test"}
+
+    seen = []
+
+    def fake_get(path, **kw):
+        if "pdf-" in str(path):
+            seen.append(path)
+            return _RawResponse(b"%PDF-1.7 x")
+        return _Response({"results": root})
+
+    with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
+        "app.lms.blackboard.httpx.get", side_effect=fake_get
+    ), patch("app.ai.documents.extract_text", return_value="text"):
+        items, stats = connector.get_content(
+            "_course_1", include_attachments=True, max_attachments=3,
+        )
+
+    assert len(seen) == 3, "must not exceed the cap"
+    assert stats["fetched"] == 3
+    assert stats["remaining"] == 2, "the caller needs this to know to call again"
+
+
+def test_one_failed_attachment_does_not_lose_the_others():
+    """Same per-item isolation the subtree walk already has. A dead link must
+    not abort the course."""
+    body = (
+        _anchor("https://bb.example/dead", {"mimeType": "application/pdf", "fileName": "dead.pdf"})
+        + _anchor("https://bb.example/live", {"mimeType": "application/pdf", "fileName": "live.pdf"})
+    )
+    root = [{"id": "_1_1", "title": "Page", "body": body,
+             "contentHandler": {"id": "resource/x-bb-document"}}]
+    settings = Settings(LMS_REST_BASE_URL="https://learn.example/learn/api/public/v1",
+                        LMS_VERIFY_TLS=False)
+    connector = BlackboardConnector()
+    connector._headers = lambda: {"Authorization": "Bearer test"}
+
+    def fake_get(path, **kw):
+        if "dead" in str(path):
+            raise httpx.ConnectError("gone")
+        if "live" in str(path):
+            return _RawResponse(b"%PDF-1.7 y")
+        return _Response({"results": root})
+
+    with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
+        "app.lms.blackboard.httpx.get", side_effect=fake_get
+    ), patch("app.ai.documents.extract_text", return_value="live text"):
+        items, stats = connector.get_content("_course_1", include_attachments=True)
+
+    assert stats["fetched"] == 1
+    assert stats["failed"] == 1
+    assert len(items[0]["attachments"]) == 1
+    assert items[0]["attachments"][0]["text"] == "live text"
+    # A FAILED fetch is NOT counted as remaining, or the number would never
+    # reach 0 and "call until remaining is 0" would be a lie.
+    assert stats["remaining"] == 0
+
+
+def test_document_item_with_no_data_bbfile_still_yields_a_normal_item():
+    """The fall-through: most items have plain prose and no attachments. They
+    must come through untouched, with an empty attachments list."""
+    root = [{"id": "_1_1", "title": "Vision", "body": "<p>Excellence and relevance.</p>",
+             "contentHandler": {"id": "resource/x-bb-document"}}]
+    settings = Settings(LMS_REST_BASE_URL="https://learn.example/learn/api/public/v1",
+                        LMS_VERIFY_TLS=False)
+    connector = BlackboardConnector()
+    connector._headers = lambda: {"Authorization": "Bearer test"}
+
+    with patch("app.lms.blackboard.get_settings", return_value=settings), patch(
+        "app.lms.blackboard.httpx.get",
+        side_effect=lambda p, **kw: _Response({"results": root}),
+    ):
+        items, stats = connector.get_content("_course_1", include_attachments=True)
+
+    assert items[0]["body_or_description"] == "Excellence and relevance."
+    assert items[0]["attachments"] == []
+    assert stats["fetched"] == 0
