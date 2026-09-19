@@ -196,15 +196,175 @@ Repetition tracks corpus DEPTH, not size. Two levers applied:
 
 **The remaining lever is content, not code.** A skill with 1-2 chunks still
 produces near-synonym questions, and no prompt or rotation can fix that — there
-are not two facts to ask about. The real fix is staff uploading the AWS teaching
-PDFs (see the Blackboard bulk-export item). On a skill with 4+ chunks a 5-item
-batch now draws on distinct facts rather than rewording one.
+are not two facts to ask about. The real fix is ingesting the AWS teaching PDFs,
+which as of 2026-09-19 are confirmed reachable (see task #22 below) rather than
+requiring manual staff upload. On a skill with 4+ chunks a 5-item batch now
+draws on distinct facts rather than rewording one.
 
 **Verification status: needs a live sample at real scale.** The unit tests pin
 the mechanics (banned-phrase rejection, rotation order, offset threading, token
 bounds) and the suite is green, but the claim "near-zero meta-referential stems
 on real generation" requires deploying and sampling >=30 questions across skills
 of varying depth. One good call proves nothing for an intermittent failure.
+
+---
+
+## Next session, in this order (do not reorder)
+
+Set 2026-09-19. Items 1-4 are pending; item 5 is the Blackboard lead below.
+The ordering is load-bearing: nothing else can be trusted until the rate-limit
+fix is proven live.
+
+### 1. Confirm 0016 is applied and the new code is actually running
+
+Everything below depends on this being true, and neither has been verified.
+- Migration `0016_lms_course_resolution_cache.sql` — check that
+  `courses.lms_course_external_id`, `last_roster_sync_at`, and
+  `last_skill_seed_at` exist. If the column is missing, the code fails OPEN
+  (silently falls back to REST), so a green test suite proves nothing here.
+- Confirm the deployed API is the build containing `5b8c086`, not an older one.
+  The cooldown cannot engage if the old code is still serving.
+
+### 2. Explain what consumed ~79 requests before trusting quota deltas
+
+During the 2026-09-19 probe the quota read 9920/10000 roughly 30 seconds after
+reading 9999. Something made ~79 calls. Until that is understood, a "remaining
+did not move" result from the experiment below is not trustworthy — an unknown
+consumer could be masking a cache miss, or producing a drop that gets misread as
+a cache failure. Check the deployed API's logs for launch, roster, or content
+activity in that window.
+
+### 3. Item 1 — live-scale verification (two separate things, don't conflate)
+
+- **Stem/repetition fix.** Pull >=30 generated questions across skills of
+  varying depth. Expect near-zero "according to the excerpt"-style stems, and
+  distinct facts across a batch on skills with 4+ chunks. 1-2 chunk skills will
+  still repeat; that is the corpus depth ceiling, not a bug.
+- **Rate-limit fix, three-step.** Curl the course endpoint and note
+  `X-Rate-Limit-Remaining`; do exactly ONE Kala launch; curl again immediately.
+  Expect a drop of ~1 on the first launch of a course (populating the cached
+  external id) and **no movement at all** on a relaunch of the same course
+  inside the cooldown. A drop of more than a handful means the caching or the
+  cooldown is not engaging.
+
+### 4. Item 2 — question-bank reset, drafted as SQL for the user to run
+
+No linked Supabase CLI or DB password in this environment; the user applies it.
+- There is **no per-user generated content**. `generated_items` and `quiz_sets`
+  have no `user_id` column by design — diagnostic items are one row per skill
+  shared course-wide, quiz sets are shared decks. The low-substance rows in the
+  bank are course-wide, not one test account's.
+- Delete course-wide `generated_items` for `kind in ('diagnostic','practice')`
+  and the course's `quiz_sets`. Deleting a `quiz_sets` row cascades its
+  `generated_items.set_id` rows and every student's `quiz_set_attempts` for that
+  set — do NOT delete those separately.
+- Do **not** touch `evidence_events` or `mastery_state`. No FK links them to the
+  item bank; they hold the actual learning history, and `evidence_events` is
+  append-only besides.
+- Confirm with the user before running, and ask explicitly whether
+  `kind='flashcard'` should be included — it was not called out as bad.
+- This stops being a casual reset once real students exist. Say so rather than
+  assuming.
+
+### 5. Task #22 — build the Lead B extraction (see the section above)
+
+Only after the connector is proven stable in production.
+
+---
+
+## Blackboard course content / the AWS PDFs (task #22)
+
+**Status: investigated live, 2026-09-19. PDFs ARE reachable. Not built yet.**
+
+The standing conclusion in the code — "the professor's PDFs are unreachable via
+the REST API, staff `POST /content/upload` is the only path" — is **wrong**,
+and so is the REST-attachments lead that was proposed to replace it. Both are
+recorded below so neither gets retried. Verified against the live instance
+(`AWS101 | Cloud Practitioner`) once the rate-limit quota cleared.
+
+### Lead A — REST attachment endpoints: DEAD END, do not retry
+
+Anthology's cookbook documents `/contents/{id}/attachments` →
+`/attachments/{attachmentId}/download` for `resource/x-bb-document` items. On
+this instance it fails at the first call:
+
+```
+GET /courses/_8_1/contents/_622_1/attachments
+400 {"status":400,"message":"The Content Item does not support file attachments"}
+```
+
+Ultra documents do not use the attachments API at all — they embed files in the
+body instead (Lead B). The cookbook path applies to Original-view content, which
+this course is not. The old code comment claiming `/attachments` "returns JSON"
+was reading a 400 body, not a result list.
+
+### Lead B — embedded `data-bbfile` href: CONFIRMED WORKING
+
+An Ultra document item's `body` carries literal anchor tags with the file
+metadata inline. Real example from `_622_1` (`[Read] Student Guide - Introduction`):
+
+```html
+<a href="https://<host>/bbcswebdav/pid-622-dt-content-rid-5560_1/xid-5560_1?Kq3cZ..."
+   data-bbtype="attachment"
+   data-bbfile="{&quot;fileName&quot;:&quot;Student Guide AcademyCloudFoundations.pdf&quot;,
+                 &quot;fileSize&quot;:819568,
+                 &quot;mimeType&quot;:&quot;application/pdf&quot;,
+                 &quot;resourceUrl&quot;:&quot;...&quot;}">Student Guide - Course Introduction</a>
+```
+
+`data-bbfile` is HTML-escaped JSON: `fileName`, `fileSize`, `mimeType`,
+`resourceUrl`. The sibling `href` is the real file.
+
+**Verified end to end, no OAuth required:**
+
+- `curl -L "$href"` → `302` → `200`, `application/pdf`, **819568 bytes** — exactly
+  the `fileSize` in `data-bbfile`. `%PDF-1.7`, 37 pages.
+- Kala's existing `app.ai.documents.extract_text(data, "application/pdf")` pulls
+  **12,062 chars** of clean text: real AWS Academy Cloud Foundations student
+  guide content (`© 2022, Amazon Web Services, Inc.`).
+- The signed `bbcswebdav` href is self-authenticating. No bearer token, no
+  `JSESSIONID`, no referer, no admin rights.
+
+**Two gotchas that cost probe time:**
+
+1. Use `href`, **not** `resourceUrl`. They are different signed URLs
+   (`rid-5560` vs `rid-46141487`); `resourceUrl` is the inline-render variant and
+   returns **404**. The `href` returns the file.
+2. The signature is short-lived (the `VxJw3wfC56` param is a unix timestamp). It
+   must be fetched from a freshly-read body, not cached and reused.
+
+### The three steps to build this later
+
+Do not start until the connector is confirmed stable in production. This
+changes `blackboard.py`, the file whose rate-limit behaviour was just fixed.
+
+1. **Extract before stripping.** `_HTMLTextExtractor` currently discards the
+   anchors on the way to plain text. Pull `href` + `data-bbfile` out of `body`
+   first, keep the anchor's text as the title, and only then strip markup for
+   the prose chunk.
+2. **Filter by MIME.** Allow-list against `documents.ALLOWED_MIME_TYPES`, which
+   already contains `application/pdf`. The same `data-bbfile` blob also carries
+   `image/png` screenshots — those must be skipped, or the corpus fills with
+   images that extract to nothing.
+3. **Feed the existing pipeline.** Fetch the href, pass bytes through
+   `extract_text`, then reuse the chunk + embed path `/content/upload` already
+   uses. No new dependency, no new auth, no new table. `pypdf` is already a
+   declared dependency.
+
+**Budget note:** each PDF is one extra HTTP request, and this instance's quota
+is 10,000 per window. A course-wide walk that downloads every attachment in one
+ingest run would be exactly the kind of burst that caused the 2026-09-17 outage.
+Whatever this ships as must respect the same cooldown/rate-limit discipline
+(0016) — and it belongs in the WORKER, next to tagging, not in a request path.
+
+### Fallback if Lead B ever regresses
+
+Blackboard's built-in **Export/Archive Course** (Packages and Utilities → Export
+or Archive) produces a ZIP with an explicit "include copies of the content"
+option, normally available to the course's own instructor without institution
+admin rights. Manual and browser-triggered, so it does not solve automatic
+detection, but it turns one-PDF-at-a-time into "export once, unzip, bulk-call the
+existing `/content/upload` over the contents." Good enough to build on if needed.
 
 ---
 
