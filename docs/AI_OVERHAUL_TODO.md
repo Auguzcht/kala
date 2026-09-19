@@ -417,15 +417,51 @@ existing `/content/upload` over the contents." Good enough to build on if needed
 
 ---
 
-## Two defects found during the 2026-09-19 live verification
+## The 30s wall is now the top structural risk (measured 2026-09-19)
 
-Neither is fixed yet. Both are recorded here rather than chased, per the
-standing instruction to flag and stop.
+Three separate paths hit the same Lambda ceiling, and they are the same
+underlying problem: unbounded work behind a request-response door.
 
-### A malformed `course_id` in a token returns 500, not 4xx
+| path | measured | wall |
+|---|---|---|
+| `connector.get_content` tree walk (178 items) | **31.8s** | 30s |
+| tree walk + 3 PDF attachments | **38.4s** | 30s |
+| practice set generation (5 items, free-tier model) | hits 30000.00 ms | 30s |
+| the old serial tagging loop | fixed by moving to the worker | — |
+
+**The tree walk is the root of it.** It makes ~40+ sequential Blackboard REST
+calls at ~0.7s each. That ALONE exceeds the wall for this course, which is the
+smallest one in the pilot \u2014 so capping PDF attachments cannot fix ingest,
+because ingest was already too slow before any PDF was fetched. Confirmed in
+the logs: eight `Duration: 30000.00 ms ... Status: timeout` invocations, and no
+`Ingest pulled ...` line, meaning ingest requests never reached their own
+logging.
+
+This also explains the `documentsRemaining` value being less useful than
+intended: the cap works (3 fetched, 5 left, 6.6s — matching the predicted
+~2s/file), but a caller never gets to see the response because the request
+dies first.
+
+**The fix has the same shape as tagging's.** Tagging moved to the worker for
+exactly this reason. The content walk should too: it is unbounded in the number
+of LMS items, it is network-bound with no per-call ceiling, and nothing about
+it needs to happen inside a user's request. That is a real piece of work, not a
+constant to tune, and it is deliberately NOT started here.
+
+Until then, treat `/ingest` as unreliable for any course of this size, and do
+not build on the assumption that it completes.
+
+---
+
+## Two more defects found during the 2026-09-19 live verification
+
+Both are recorded here rather than chased, per the standing instruction to
+flag and stop. The malformed-UUID one was FIXED in `3d40c4f`.
+
+### A malformed `course_id` in a token returned 500, not 4xx — FIXED in `3d40c4f`
 
 Any route with `course_id` in the path, given a course id that is not a valid
-UUID, returns a **bare 500** with a `text/plain` body reading
+UUID, returned a **bare 500** with a `text/plain` body reading
 `Internal Server Error`. Verified on four routes at once:
 
 ```
