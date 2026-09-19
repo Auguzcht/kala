@@ -217,52 +217,101 @@ fix is proven live.
 
 ### 1. Confirm 0016 is applied and the new code is actually running
 
-Everything below depends on this being true, and neither has been verified.
-- Migration `0016_lms_course_resolution_cache.sql` — check that
-  `courses.lms_course_external_id`, `last_roster_sync_at`, and
-  `last_skill_seed_at` exist. If the column is missing, the code fails OPEN
-  (silently falls back to REST), so a green test suite proves nothing here.
-- Confirm the deployed API is the build containing `5b8c086`, not an older one.
-  The cooldown cannot engage if the old code is still serving.
+**DONE 2026-09-19, confirmed live.**
+- The three columns exist and hold real values on the AWS101 course:
+  `lms_course_external_id = "AWS101.A321.1T.27.28"` (cache populated),
+  `last_roster_sync_at = 2026-09-19T10:31:49Z` (cooldown stamped).
+- The AWS101 launch that wrote those landed ~4 seconds before the session token
+  was minted, so this is post-deploy behavior, not a leftover row.
+- Lambda `kala-api` last modified 2026-09-17T07:36 UTC, which is AFTER both
+  `f0ad10e` (stem fix, 06:56 UTC) and `5b8c086` (rate-limit fix, 07:34 UTC).
+  The running build contains both.
+- `last_skill_seed_at` is still NULL. That is expected: skill seeding only runs
+  when it has something to propose, and the stamped path requires a non-skipped
+  result. Not a defect.
 
-### 2. Explain what consumed ~79 requests before trusting quota deltas
+### 2. The ~79-request drop: NOT a mystery consumer
 
-During the 2026-09-19 probe the quota read 9920/10000 roughly 30 seconds after
-reading 9999. Something made ~79 calls. Until that is understood, a "remaining
-did not move" result from the experiment below is not trustworthy — an unknown
-consumer could be masking a cache miss, or producing a drop that gets misread as
-a cache failure. Check the deployed API's logs for launch, roster, or content
-activity in that window.
+**Explained 2026-09-19.** It was our own probe traffic. The tree walk alone
+(root contents + five module listings + six folder listings + the
+`_537_1` children fetch + repeated attachment/download attempts) is 30-40 calls,
+and the two probe blocks plus concurrent manual testing account for the rest. No
+background consumer exists: the API log shows no Blackboard REST calls in the
+window, and the worker only ran `readinessSnapshot`. Steady-state drift is ~1
+request per quota probe (1 OAuth + 1 read). Do not re-investigate this.
 
-### 3. Item 1 — live-scale verification (two separate things, don't conflate)
+### 3. Item 1 — live-scale verification: RUN 2026-09-19
 
-- **Stem/repetition fix.** Pull >=30 generated questions across skills of
-  varying depth. Expect near-zero "according to the excerpt"-style stems, and
-  distinct facts across a batch on skills with 4+ chunks. 1-2 chunk skills will
-  still repeat; that is the corpus depth ceiling, not a bug.
-- **Rate-limit fix, three-step.** Curl the course endpoint and note
-  `X-Rate-Limit-Remaining`; do exactly ONE Kala launch; curl again immediately.
-  Expect a drop of ~1 on the first launch of a course (populating the cached
-  external id) and **no movement at all** on a relaunch of the same course
-  inside the cooldown. A drop of more than a handful means the caching or the
-  cooldown is not engaging.
+**Stem fix: VERIFIED.** 30 questions across 5 skills, generated against the
+deployed build. **0 meta-referential stems (0%)**, down from ~23/50 (46%) in the
+original sample. Every stem is scenario-framed and reads as knowledge-testing:
+
+```
+A startup expects highly unpredictable traffic: some months it needs a handful
+of servers, other months it needs hundreds for just a few days. Which approach…
+
+A company is deploying a web application on AWS and wants to ensure that it
+remains available even if an entire data center fails…
+```
+
+**Repetition: the brief's success criterion did NOT hold, and the cause is
+corpus quality, not the rotation code.** Measured per skill:
+
+| skill | chunks | questions | distinct facts observed |
+|---|---|---|---|
+| `ec529ba8` | 6 | 10 | **1** — 9 of 10 reword "which certification does the course prepare you for" |
+| `d2961973` | 3 | 5 | **1** — all 5 are "Auto Scaling group + traffic spikes" |
+| `99811a42` | 4 | 5 | **1** — all 5 reword the course-badge completion scenario |
+| `eed94898` | 6 | 5 | 3 |
+| `d9b33edd` | 2 | 5 | **1** — all 5 reword the data-center-failure scenario |
+
+Inspecting `ec529ba8`'s six chunks explains it: they are **not six facts**. Two
+are junk (18 chars: `"Course Orientation"`; 71 chars), two are 4000- and
+3518-char mega-chunks each containing many facts, and one is 275 chars of
+metadata. Every one of them mentions the same headline topic. Rotation has
+nothing to rotate *between* — the chunk COUNT is a misleading proxy for
+chunk DIVERSITY.
+
+**Conclusion to carry forward:** `_rotated_context` and `context_offset` are
+wired correctly and firing (`items.py:354`, `practice.py:150`), but rotation
+cannot manufacture variety a corpus does not contain. This is the same "depth is
+the remaining lever" conclusion as before, now measured rather than assumed —
+and it is stronger than the brief expected, since even 4-6 chunk skills repeat
+when those chunks cover one topic. The fix is better content (the AWS PDFs,
+task #22), not more prompting or a bigger `k`.
 
 ### 4. Item 2 — question-bank reset, drafted as SQL for the user to run
 
+**DRAFTED 2026-09-19, NOT RUN.** `packages/db/reset_question_bank_aws101.sql`.
 No linked Supabase CLI or DB password in this environment; the user applies it.
 - There is **no per-user generated content**. `generated_items` and `quiz_sets`
   have no `user_id` column by design — diagnostic items are one row per skill
   shared course-wide, quiz sets are shared decks. The low-substance rows in the
   bank are course-wide, not one test account's.
 - Delete course-wide `generated_items` for `kind in ('diagnostic','practice')`
-  and the course's `quiz_sets`. Deleting a `quiz_sets` row cascades its
-  `generated_items.set_id` rows and every student's `quiz_set_attempts` for that
-  set — do NOT delete those separately.
-- Do **not** touch `evidence_events` or `mastery_state`. No FK links them to the
-  item bank; they hold the actual learning history, and `evidence_events` is
-  append-only besides.
+  and the course's practice `quiz_sets`. Deleting a `quiz_sets` row cascades
+  its `generated_items.set_id` rows and every student's `quiz_set_attempts` for
+  that set — do NOT delete those separately. Both cascades verified against
+  `0012`/`0013`.
+- **CORRECTION to the earlier note that "nothing links the item bank by FK".**
+  Two tables DO reference `generated_items(id)`:
+  `srs_state.item_id` (ON DELETE **CASCADE** — a student's spaced-repetition
+  schedule) and `guided_lesson_steps.check_item_id` (ON DELETE **SET NULL** —
+  a lesson's comprehension check). Deleting a referenced row would destroy SRS
+  progress or blank a lesson. Checked against the live DB: of 293 rows matching
+  the delete filter, **zero** are referenced by SRS (31 rows) or lesson checks
+  (30), because both reference only `kind='tutor'` and `kind='flashcard'`.
+  The `kind` filter is what keeps this safe — widening it to include flashcards
+  or tutor items WOULD cascade real data away. The SQL carries a mandatory
+  collision check that must read 0 before the deletes.
+- Do **not** touch `evidence_events` or `mastery_state`. They hold the actual
+  learning history, and `evidence_events` is append-only besides.
+- Current bank: 313 items (`practice` 283, `tutor` 16, `diagnostic` 10,
+  `flashcard` 4). The reset removes 293 of them.
 - Confirm with the user before running, and ask explicitly whether
-  `kind='flashcard'` should be included — it was not called out as bad.
+  `kind='flashcard'` should be included — it was not called out as bad, and as
+  the FK note above shows it is the one kind where widening the filter is
+  actively destructive.
 - This stops being a casual reset once real students exist. Say so rather than
   assuming.
 
@@ -365,6 +414,54 @@ option, normally available to the course's own instructor without institution
 admin rights. Manual and browser-triggered, so it does not solve automatic
 detection, but it turns one-PDF-at-a-time into "export once, unzip, bulk-call the
 existing `/content/upload` over the contents." Good enough to build on if needed.
+
+---
+
+## Two defects found during the 2026-09-19 live verification
+
+Neither is fixed yet. Both are recorded here rather than chased, per the
+standing instruction to flag and stop.
+
+### A malformed `course_id` in a token returns 500, not 4xx
+
+Any route with `course_id` in the path, given a course id that is not a valid
+UUID, returns a **bare 500** with a `text/plain` body reading
+`Internal Server Error`. Verified on four routes at once:
+
+```
+GET /courses/<bad-id>              -> 500
+GET /courses/<bad-id>/diagnostic   -> 500
+GET /practice/<bad-id>/next        -> 500
+GET /courses/<bad-id>/modules      -> 500
+```
+
+Cause: every such route passes the path param straight into a PostgREST filter
+string. Postgres rejects it with `22P02 invalid input syntax for type uuid`, and
+the resulting `httpx.HTTPStatusError` propagates out of the handler unhandled,
+so Lambda turns it into a generic 500. A client-side bug (a mistyped or
+hand-edited token) therefore presents as a server outage.
+
+Fix (not yet written): validate path-param ids as UUIDs at the boundary and
+return 404, matching the two-layer gate's existing "404 not 403, so an
+unauthorized staffer cannot probe which ids exist" convention. Worth a shared
+dependency rather than repeating the check per route.
+
+### Practice set generation can exceed the Lambda 30s ceiling
+
+During the sample, several `POST /practice/{id}/set` calls returned
+`{"setId": null, "items": []}`. Eight Lambda invocations in that window show
+`Duration: 30000.00 ms ... Status: timeout` — the platform ceiling, hit exactly.
+The partial-tolerant batch fans out N concurrent model calls, and N=5 against a
+slow free-tier model can exceed the budget.
+
+The response shape is also misleading: `setId: null` is the shape of the "no
+approved skill" branch, so a TIMEOUT is indistinguishable from "this course has
+no skills" to the client. Note this is the same 30s wall that forced tagging
+into the worker — the batch generation path now shares that constraint.
+
+Repro note: intermittent, not size-dependent — the same skill at the same size
+alternated between 5 items and a timeout-derived empty set across consecutive
+calls.
 
 ---
 
