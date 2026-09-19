@@ -6,13 +6,16 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser, get_current_user, require_valid_course_id
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
 
 @router.get("/{course_id}")
-def get_course(course_id: str, user: CurrentUser = Depends(get_current_user)):
+def get_course(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     rows = db.select("courses", {
         "id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
         "select": "id,title,lms_course_id", "limit": "1",

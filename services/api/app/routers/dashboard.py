@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from app.ai import prescriber
 from app.db import supabase as db
-from app.deps import CurrentUser, require_role
+from app.deps import CurrentUser, require_role, require_valid_course_id, require_valid_rec_id, require_valid_skill_id, require_valid_user_id
 from app.twin import cohort, summary
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -87,9 +87,9 @@ def _band_cell(m: dict | None) -> dict:
 
 @router.get("/{course_id}/heatmap")
 def heatmap(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     module_ref: str | None = None,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     skills, students, cells = _cohort(
         institution_id=user.institution_id, course_id=course_id, module_ref=module_ref,
@@ -204,7 +204,10 @@ def _reason_for(*, evidence: list[dict], weakest: list[tuple[str, float | None]]
 
 
 @router.get("/{course_id}/at-risk")
-def at_risk(course_id: str, user: CurrentUser = Depends(require_role("instructor", "admin"))):
+def at_risk(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
+):
     skills, students, cells = _cohort(
         institution_id=user.institution_id, course_id=course_id,
     )
@@ -249,8 +252,11 @@ def at_risk(course_id: str, user: CurrentUser = Depends(require_role("instructor
 
 
 @router.get("/{course_id}/students/{user_id}/twin")
-def student_twin(course_id: str, user_id: str,
-                 user: CurrentUser = Depends(require_role("instructor", "admin"))):
+def student_twin(
+    course_id: str = Depends(require_valid_course_id),
+    user_id: str = Depends(require_valid_user_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
+):
     rows = db.select("users", {
         "id": f"eq.{user_id}", "institution_id": f"eq.{user.institution_id}",
         "select": "pseudonym", "limit": "1",
@@ -277,8 +283,8 @@ class ReviewDecision(BaseModel):
 
 @router.get("/{course_id}/skills/proposed")
 def list_proposed_skills(
-    course_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Skills awaiting review for this course, with any 'possible duplicate'
     hint the proposer attached. Feeds the review UI (or read straight in
@@ -294,8 +300,8 @@ def list_proposed_skills(
 
 @router.get("/{course_id}/skills/auto-matched")
 def list_auto_matched_skills(
-    course_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Skills that were auto-approved by cross-course match (they resembled a
     skill already approved in another course, above the AUTO_MATCH bar, so
@@ -319,8 +325,10 @@ def list_auto_matched_skills(
 
 @router.patch("/{course_id}/skills/{skill_id}/review")
 def review_proposed_skill(
-    course_id: str, skill_id: str, body: ReviewDecision,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    body: ReviewDecision,
+    course_id: str = Depends(require_valid_course_id),
+    skill_id: str = Depends(require_valid_skill_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Approve or reject a proposed skill, with optional inline edits. Only
     after approval does the skill feed the learner/instructor surfaces."""
@@ -353,8 +361,9 @@ def review_proposed_skill(
 
 @router.patch("/{course_id}/skills/{skill_id}/detach")
 def detach_auto_matched_skill(
-    course_id: str, skill_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    skill_id: str = Depends(require_valid_skill_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Turn an auto-matched skill back into a course-local skill for review.
 
@@ -398,8 +407,8 @@ def detach_auto_matched_skill(
 
 @router.get("/{course_id}/roster")
 def course_roster(
-    course_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """One row per enrolled STUDENT, with real names.
 
@@ -422,8 +431,8 @@ def course_roster(
 
 @router.get("/{course_id}/stats")
 def course_stats(
-    course_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Cohort KPI strip plus the series behind every chart on the overview:
     readiness trend (from the worker's snapshots, real history), daily
@@ -434,8 +443,9 @@ def course_stats(
 
 @router.get("/{course_id}/students/{user_id}/record")
 def student_record(
-    course_id: str, user_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user_id: str = Depends(require_valid_user_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """The teacher-facing read of one learner.
 
@@ -513,8 +523,9 @@ def _skill_names(*, institution_id: str, course_id: str) -> dict[str, str]:
 
 @router.get("/{course_id}/students/{user_id}/recommendations")
 def list_recommendations(
-    course_id: str, user_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user_id: str = Depends(require_valid_user_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Every recommendation for this learner, decided or not. Rejected rows
     stay in the list rather than disappearing: the decision history IS the
@@ -536,8 +547,9 @@ def list_recommendations(
 
 @router.post("/{course_id}/students/{user_id}/recommendations")
 def generate_recommendations(
-    course_id: str, user_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user_id: str = Depends(require_valid_user_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Ask Kala for next actions for this learner.
 
@@ -611,8 +623,10 @@ class RecommendationDecision(BaseModel):
 
 @router.patch("/{course_id}/recommendations/{rec_id}")
 def decide_recommendation(
-    course_id: str, rec_id: str, body: RecommendationDecision,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    body: RecommendationDecision,
+    course_id: str = Depends(require_valid_course_id),
+    rec_id: str = Depends(require_valid_rec_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Approve, modify, or reject one recommendation. This is the gate.
 
@@ -669,8 +683,10 @@ class InterventionCreate(BaseModel):
 
 @router.post("/{course_id}/students/{user_id}/interventions")
 def create_intervention(
-    course_id: str, user_id: str, body: InterventionCreate,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    body: InterventionCreate,
+    course_id: str = Depends(require_valid_course_id),
+    user_id: str = Depends(require_valid_user_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """The teacher's own move. Lands in the learner's plan immediately with
     status='approved' and source='instructor' — a human wrote it, so there

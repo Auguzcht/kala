@@ -38,7 +38,7 @@ from app.ai import documents, rag, router as model_router
 from app.ai.deidentify import safe_context
 from app.db import storage
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser, get_current_user, require_valid_attachment_id, require_valid_conversation_id, require_valid_course_id
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
 
@@ -172,7 +172,10 @@ def create_conversation(body: CreateConversation, user: CurrentUser = Depends(ge
 
 
 @router.get("/conversations")
-def list_conversations(course_id: str, user: CurrentUser = Depends(get_current_user)):
+def list_conversations(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     rows = db.select("tutor_conversations", {
         "institution_id": f"eq.{user.institution_id}",
         "user_id": f"eq.{user.user_id}",
@@ -184,7 +187,10 @@ def list_conversations(course_id: str, user: CurrentUser = Depends(get_current_u
 
 
 @router.get("/conversations/{conversation_id}")
-def get_conversation(conversation_id: str, user: CurrentUser = Depends(get_current_user)):
+def get_conversation(
+    conversation_id: str = Depends(require_valid_conversation_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     convo = _owned_conversation(conversation_id, user)
     messages = db.select("tutor_messages", {
         "conversation_id": f"eq.{conversation_id}",
@@ -219,7 +225,7 @@ def _attachment_view(row: dict) -> dict:
 
 @router.post("/conversations/{conversation_id}/attachments")
 def upload_attachment(
-    conversation_id: str,
+    conversation_id: str = Depends(require_valid_conversation_id),
     file: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
 ):
@@ -276,7 +282,9 @@ def upload_attachment(
 
 @router.delete("/conversations/{conversation_id}/attachments/{attachment_id}")
 def delete_attachment(
-    conversation_id: str, attachment_id: str, user: CurrentUser = Depends(get_current_user),
+    conversation_id: str = Depends(require_valid_conversation_id),
+    attachment_id: str = Depends(require_valid_attachment_id),
+    user: CurrentUser = Depends(get_current_user),
 ):
     _owned_conversation(conversation_id, user)
     rows = db.select("tutor_attachments", {
@@ -291,7 +299,10 @@ def delete_attachment(
 
 
 @router.delete("/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, user: CurrentUser = Depends(get_current_user)):
+def delete_conversation(
+    conversation_id: str = Depends(require_valid_conversation_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     _owned_conversation(conversation_id, user)  # 404s if not owned, before deleting
     # Attachment rows cascade away with the conversation (FK on delete
     # cascade), but the actual bytes in Storage don't — they're a separate

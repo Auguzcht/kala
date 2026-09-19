@@ -16,7 +16,7 @@ from app.routers import diagnostic
 
 
 def _staff(role="admin"):
-    return CurrentUser(user_id="user-1", institution_id="institution-1", app_role=role)
+    return CurrentUser(user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role=role)
 
 
 def _wire(monkeypatch, *, inserted, updates, embedded_text=None):
@@ -37,7 +37,7 @@ def _wire(monkeypatch, *, inserted, updates, embedded_text=None):
 
     def fake_select(table, params):
         if table == "skills":
-            return [{"id": "skill-1", "name": "Cloud Concepts"}]
+            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Cloud Concepts"}]
         if table == "content_items":
             if params.get("embedding") == "is.null":
                 return [{"id": "row-1", "chunk_text": embedded_text or "body"}]
@@ -61,7 +61,7 @@ def test_upload_rejects_a_student(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("a.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
             )
     finally:
@@ -76,7 +76,7 @@ def test_upload_rejects_an_instructor_of_another_course(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("a.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
             )
     finally:
@@ -89,7 +89,7 @@ def test_upload_rejects_an_unsupported_file_type(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("notes.exe", io.BytesIO(b"MZ"), "application/x-msdownload")},
             )
     finally:
@@ -106,7 +106,7 @@ def test_upload_rejects_a_file_with_no_extractable_text(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("scan.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
             )
     finally:
@@ -129,7 +129,7 @@ def test_upload_stores_extracted_text_as_course_content(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("deck.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
                 data={"module_ref": "Module 2|Building Blocks of AWS"},
             )
@@ -144,7 +144,7 @@ def test_upload_stores_extracted_text_as_course_content(monkeypatch) -> None:
 
     # Written to content_items with the course's tenant and the module the
     # uploader named, and lms_ref null because it has no LMS counterpart.
-    assert inserted[0]["course_id"] == "course-1"
+    assert inserted[0]["course_id"] == "00000000-0000-4000-8000-000000000001"
     assert inserted[0]["institution_id"] == "institution-1"
     assert inserted[0]["module_ref"] == "Module 2|Building Blocks of AWS"
     assert inserted[0]["lms_ref"] is None
@@ -163,7 +163,7 @@ def test_upload_embeds_and_queues_tagging_for_the_worker(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("deck.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
             )
     finally:
@@ -193,7 +193,7 @@ def test_upload_archiving_failure_does_not_fail_the_upload(monkeypatch) -> None:
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
             r = client.post(
-                "/courses/course-1/content/upload",
+                "/courses/00000000-0000-4000-8000-000000000001/content/upload",
                 files={"file": ("deck.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
             )
     finally:

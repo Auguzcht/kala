@@ -14,7 +14,7 @@ def test_heatmap_requires_instructor(monkeypatch) -> None:
         user_id="stu-1", institution_id="institution-1", app_role="student")
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/heatmap")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/heatmap")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 403
@@ -22,7 +22,7 @@ def test_heatmap_requires_instructor(monkeypatch) -> None:
 
 def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = instructor_user
-    skills = [{"id": "skill-1", "name": "Entropy", "bloom_level": "understand"}]
+    skills = [{"id": "00000000-0000-4000-8000-000000000010", "name": "Entropy", "bloom_level": "understand"}]
     enrollments = [{"user_id": "stu-1"}, {"user_id": "stu-2"}]
     users = [{"id": "stu-1", "pseudonym": "Mica V."}, {"id": "stu-2", "pseudonym": "Raf C."}]
     profiles = [
@@ -30,8 +30,8 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
         # stu-2 has no profile row -> displayName falls back to the pseudonym
     ]
     mastery = [
-        {"user_id": "stu-1", "skill_id": "skill-1", "estimate": 0.5, "attempts": 4},
-        {"user_id": "stu-2", "skill_id": "skill-1", "estimate": 0.2, "attempts": 2},
+        {"user_id": "stu-1", "skill_id": "00000000-0000-4000-8000-000000000010", "estimate": 0.5, "attempts": 4},
+        {"user_id": "stu-2", "skill_id": "00000000-0000-4000-8000-000000000010", "estimate": 0.2, "attempts": 2},
     ]
 
     def fake_select(table: str, params: dict[str, str]) -> list[dict]:
@@ -49,7 +49,7 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
 
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/heatmap")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/heatmap")
     finally:
         app.dependency_overrides.clear()
 
@@ -69,12 +69,12 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
 
 def test_at_risk_flags_inactive_student_with_supportive_reason(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = instructor_user
-    skills = [{"id": "skill-1", "name": "Entropy", "bloom_level": "understand"}]
+    skills = [{"id": "00000000-0000-4000-8000-000000000010", "name": "Entropy", "bloom_level": "understand"}]
     enrollments = [{"user_id": "stu-1"}, {"user_id": "stu-2"}]
     users = [{"id": "stu-1", "pseudonym": "Mica V."}, {"id": "stu-2", "pseudonym": "Raf C."}]
-    mastery = [{"user_id": "stu-1", "skill_id": "skill-1", "estimate": 0.2, "attempts": 2}]
+    mastery = [{"user_id": "stu-1", "skill_id": "00000000-0000-4000-8000-000000000010", "estimate": 0.2, "attempts": 2}]
     evidence = [
-        {"user_id": "stu-1", "skill_id": "skill-1", "type": "practice",
+        {"user_id": "stu-1", "skill_id": "00000000-0000-4000-8000-000000000010", "type": "practice",
          "correct": True, "created_at": "2025-08-10T00:00:00Z"},
     ]
 
@@ -93,7 +93,7 @@ def test_at_risk_flags_inactive_student_with_supportive_reason(monkeypatch) -> N
 
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/at-risk")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/at-risk")
     finally:
         app.dependency_overrides.clear()
 
@@ -116,7 +116,7 @@ def test_at_risk_good_news_empty_state(monkeypatch) -> None:
 
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/at-risk")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/at-risk")
     finally:
         app.dependency_overrides.clear()
 
@@ -132,12 +132,12 @@ def test_student_twin_drill_down(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         dashboard.summary, "twin_payload",
-        lambda **kwargs: {"courseId": "course-1", "readiness": 0.3, "skills": [], "evidence": []},
+        lambda **kwargs: {"courseId": "00000000-0000-4000-8000-000000000001", "readiness": 0.3, "skills": [], "evidence": []},
     )
 
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/students/stu-1/twin")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/students/00000000-0000-4000-8000-000000000042/twin")
     finally:
         app.dependency_overrides.clear()
 
@@ -151,7 +151,7 @@ def test_list_auto_matched_requires_instructor() -> None:
         user_id="stu-1", institution_id="institution-1", app_role="student")
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/skills/auto-matched")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/skills/auto-matched")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 403
@@ -169,7 +169,7 @@ def test_list_auto_matched_returns_inherited_skills(monkeypatch) -> None:
     }])
     try:
         with TestClient(app) as client:
-            response = client.get("/dashboard/course-1/skills/auto-matched")
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/skills/auto-matched")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 200
@@ -192,7 +192,7 @@ def test_detach_sends_auto_matched_skill_back_to_proposed(monkeypatch) -> None:
     monkeypatch.setattr(dashboard.db, "update", fake_update)
     try:
         with TestClient(app) as client:
-            response = client.patch("/dashboard/course-1/skills/sk-1/detach")
+            response = client.patch("/dashboard/00000000-0000-4000-8000-000000000001/skills/00000000-0000-4000-8000-0000000000b1/detach")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 200
@@ -210,7 +210,7 @@ def test_detach_404s_when_skill_is_not_auto_matched(monkeypatch) -> None:
     monkeypatch.setattr(dashboard.db, "update", lambda t, f, v: [])  # nothing matched
     try:
         with TestClient(app) as client:
-            response = client.patch("/dashboard/course-1/skills/sk-1/detach")
+            response = client.patch("/dashboard/00000000-0000-4000-8000-000000000001/skills/00000000-0000-4000-8000-0000000000b1/detach")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 404

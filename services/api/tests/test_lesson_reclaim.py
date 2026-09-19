@@ -52,7 +52,7 @@ def test_stuck_generating_lesson_is_reclaimed_not_served_incomplete(monkeypatch)
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill"}]
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "position": 0, "summary": "explained",
+            return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "explained",
                      "detail_points": [], "misconception": None, "key_takeaway": None,
                      "bloom_level": "understand", "check_item_id": "check-1"}]
         if table == "generated_items":
@@ -87,7 +87,7 @@ def test_failed_lesson_is_retried_on_next_open(monkeypatch):
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill"}]
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "position": 0, "summary": "explained",
+            return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "explained",
                      "detail_points": [], "misconception": None, "key_takeaway": None,
                      "bloom_level": "understand", "check_item_id": "check-1"}]
         if table == "generated_items":
@@ -157,7 +157,7 @@ def test_concurrent_insert_conflict_is_treated_as_found_not_an_error(monkeypatch
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill"}]
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "position": 0, "summary": "explained",
+            return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "explained",
                      "detail_points": [], "misconception": None, "key_takeaway": None,
                      "bloom_level": "understand", "check_item_id": "check-1"}]
         if table == "generated_items":

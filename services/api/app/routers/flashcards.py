@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from app.ai.concurrency import map_concurrent
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser, get_current_user, require_valid_course_id
 from app.learn import items as item_gen
 from app.learn import srs, xp
 
@@ -53,9 +53,13 @@ def _skill_map(*, institution_id: str, course_id: str,
 
 
 @router.get("/{course_id}/deck")
-def deck(course_id: str, limit: int = 10, module_ref: str | None = None,
-         skill_id: str | None = None,
-         user: CurrentUser = Depends(get_current_user)):
+def deck(
+    course_id: str = Depends(require_valid_course_id),
+    limit: int = 10,
+    module_ref: str | None = None,
+    skill_id: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
+):
     """The review queue: due scheduled cards first, topped up with fresh cards
     for skills the student hasn't started. Answer keys never leave the server.
     `skill_id` is the topic picker's explicit override — when set, the whole
@@ -194,7 +198,11 @@ class ReviewBody(BaseModel):
 
 
 @router.post("/{course_id}/review")
-def review(course_id: str, body: ReviewBody, user: CurrentUser = Depends(get_current_user)):
+def review(
+    body: ReviewBody,
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """Self-mark one study card and advance its spaced-repetition schedule.
 
     Study mode is memorization, not assessment: the student flips the card,

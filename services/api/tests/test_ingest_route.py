@@ -50,12 +50,12 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
     updates = []
 
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
     app.dependency_overrides[get_lms_connector] = IngestConnector
     monkeypatch.setattr(diagnostic.db, "select", _phase_select(
         courses=[{"lms_course_id": "_4_1"}],
-        skills=[{"id": "skill-1", "name": "Algebra"}],
+        skills=[{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}],
         # Phase 2/3 read back the row the store phase just wrote.
         pending_embed=[{"id": "content-row-1", "chunk_text": "[name]\nActual lesson content."}],
         pending_tag=[{"id": "content-row-1", "chunk_text": "[name]\nActual lesson content.",
@@ -70,7 +70,7 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
 
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/course-1/ingest")
+            response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
     finally:
         app.dependency_overrides.clear()
 
@@ -90,7 +90,7 @@ def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
 
     assert inserted == [{
         "institution_id": "institution-1",
-        "course_id": "course-1",
+        "course_id": "00000000-0000-4000-8000-000000000001",
         "lms_ref": "lesson-1",
         "parent_lms_ref": "folder-1",
         "folder_path": [{"lmsRef": "folder-1", "title": "Module 1"}],
@@ -114,12 +114,12 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
     updates = []
 
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
     app.dependency_overrides[get_lms_connector] = IngestConnector
     monkeypatch.setattr(diagnostic.db, "select", _phase_select(
         courses=[{"lms_course_id": "_4_1"}],
-        skills=[{"id": "skill-1", "name": "Algebra"}],
+        skills=[{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}],
         pending_embed=[{"id": "content-row-1", "chunk_text": "lesson body"}],
         pending_tag=[{"id": "content-row-1", "chunk_text": "lesson body", "module_ref": "Module 1"}],
     ))
@@ -135,7 +135,7 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
 
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/course-1/ingest")
+            response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
     finally:
         app.dependency_overrides.clear()
 
@@ -155,7 +155,7 @@ def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeyp
     inserted = []
 
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
     app.dependency_overrides[get_lms_connector] = IngestConnector
 
@@ -163,7 +163,7 @@ def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeyp
         if table == "courses":
             return [{"lms_course_id": "_4_1"}]
         if table == "skills":
-            return [{"id": "skill-1", "name": "Algebra"}]
+            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}]
         if table == "content_items":
             # The dedupe lookup is now ONE query returning every stored
             # lms_ref, so it reports lesson-1 as already present.
@@ -181,7 +181,7 @@ def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeyp
 
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/course-1/ingest")
+            response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
     finally:
         app.dependency_overrides.clear()
 
@@ -199,7 +199,7 @@ def test_propose_skills_endpoint_requires_instructor_or_admin(monkeypatch) -> No
     app.dependency_overrides[get_lms_connector] = IngestConnector
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/course-1/skills/propose")
+            response = client.post("/courses/00000000-0000-4000-8000-000000000001/skills/propose")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 403
@@ -211,7 +211,7 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
     handler uses, just callable on demand instead of only on a fresh
     Blackboard launch."""
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
     app.dependency_overrides[get_lms_connector] = IngestConnector
     monkeypatch.setattr(
@@ -231,20 +231,20 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
 
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/course-1/skills/propose")
+            response = client.post("/courses/00000000-0000-4000-8000-000000000001/skills/propose")
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
     assert response.json()["proposed"] == 2
     assert captured["institution_id"] == "institution-1"
-    assert captured["course_id"] == "course-1"
+    assert captured["course_id"] == "00000000-0000-4000-8000-000000000001"
     assert captured["content_items"][1]["lms_content_id"] == "lesson-1"
 
 
 def test_retag_reopens_only_unmatched_content(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="admin",
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="admin",
     )
     reopened = []
 
@@ -264,7 +264,7 @@ def test_retag_reopens_only_unmatched_content(monkeypatch) -> None:
 
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.post("/courses/course-1/content/retag")
+            r = client.post("/courses/00000000-0000-4000-8000-000000000001/content/retag")
     finally:
         app.dependency_overrides.clear()
 
@@ -284,7 +284,7 @@ def test_retag_requires_staff(monkeypatch) -> None:
     )
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.post("/courses/course-1/content/retag")
+            r = client.post("/courses/00000000-0000-4000-8000-000000000001/content/retag")
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 403
@@ -297,7 +297,7 @@ def test_retag_rejects_an_instructor_of_another_course(monkeypatch) -> None:
     monkeypatch.setattr(diagnostic.db, "select", lambda table, params: [])
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.post("/courses/course-1/content/retag")
+            r = client.post("/courses/00000000-0000-4000-8000-000000000001/content/retag")
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 404
@@ -305,14 +305,14 @@ def test_retag_rejects_an_instructor_of_another_course(monkeypatch) -> None:
 
 def test_retag_is_a_noop_when_everything_matched(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="admin",
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="admin",
     )
     monkeypatch.setattr(diagnostic.db, "select", lambda table, params: [])
     monkeypatch.setattr(diagnostic.db, "update", lambda t, f, v: [])
 
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
-            r = client.post("/courses/course-1/content/retag")
+            r = client.post("/courses/00000000-0000-4000-8000-000000000001/content/retag")
     finally:
         app.dependency_overrides.clear()
 
@@ -330,7 +330,7 @@ def test_ingest_dedupes_with_one_query_not_one_per_item(monkeypatch) -> None:
     Pinned by counting: the number of content_items SELECTs must not scale with
     the number of items."""
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="user-1", institution_id="institution-1", app_role="instructor"
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
 
     class ManyItems:
@@ -350,7 +350,7 @@ def test_ingest_dedupes_with_one_query_not_one_per_item(monkeypatch) -> None:
         if table == "courses":
             return [{"lms_course_id": "_4_1"}]
         if table == "skills":
-            return [{"id": "skill-1", "name": "Algebra"}]
+            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}]
         if table == "content_items":
             selects["content_items"] += 1
             return []
@@ -362,7 +362,7 @@ def test_ingest_dedupes_with_one_query_not_one_per_item(monkeypatch) -> None:
 
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/course-1/ingest")
+            response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
     finally:
         app.dependency_overrides.clear()
 

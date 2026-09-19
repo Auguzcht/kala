@@ -9,7 +9,7 @@ from app.routers import lessons as lessons_router
 
 
 def authenticated_user() -> CurrentUser:
-    return CurrentUser(user_id="user-1", institution_id="inst-1", app_role="student")
+    return CurrentUser(user_id="00000000-0000-4000-8000-000000000040", institution_id="inst-1", app_role="student")
 
 
 def test_check_belonging_to_a_different_course_is_rejected(monkeypatch) -> None:
@@ -22,8 +22,8 @@ def test_check_belonging_to_a_different_course_is_rejected(monkeypatch) -> None:
 
     def fake_select(table, params):
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "lesson_id": "lesson-in-course-a",
-                     "check_item_id": "check-1"}]
+            return [{"id": "00000000-0000-4000-8000-000000000070", "lesson_id": "lesson-in-course-a",
+                     "check_item_id": "00000000-0000-4000-8000-0000000000c1"}]
         if table == "guided_lessons":
             # Ownership check filters by course_id=eq.course-b (the URL) but
             # the lesson actually lives in course-a -> no match.
@@ -33,7 +33,7 @@ def test_check_belonging_to_a_different_course_is_rejected(monkeypatch) -> None:
     monkeypatch.setattr(lessons_router.db, "select", fake_select)
     monkeypatch.setattr(lessons_router.item_gen, "grade",
                         lambda **kw: graded_calls.append(kw) or {
-                            "skillId": "s-1", "courseId": "course-a",
+                            "skillId": "s-1", "courseId": "00000000-0000-4000-8000-0000000000a1",
                             "correct": True, "explanation": "x",
                         })
     monkeypatch.setattr(lessons_router.db, "insert_evidence",
@@ -42,8 +42,8 @@ def test_check_belonging_to_a_different_course_is_rejected(monkeypatch) -> None:
     try:
         with TestClient(app) as client:
             response = client.post(
-                "/lessons/course-b/steps/step-1/check",
-                json={"item_id": "check-1", "choice_id": "a"},
+                "/lessons/course-b/steps/00000000-0000-4000-8000-000000000070/check",
+                json={"item_id": "00000000-0000-4000-8000-0000000000c1", "choice_id": "a"},
             )
     finally:
         app.dependency_overrides.clear()
@@ -59,14 +59,14 @@ def test_check_belonging_to_this_course_is_accepted(monkeypatch) -> None:
 
     def fake_select(table, params):
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "lesson_id": "lesson-1", "check_item_id": "check-1"}]
+            return [{"id": "00000000-0000-4000-8000-000000000070", "lesson_id": "lesson-1", "check_item_id": "00000000-0000-4000-8000-0000000000c1"}]
         if table == "guided_lessons":
             return [{"id": "lesson-1"}]  # owned by course-a + inst-1
         return []
 
     monkeypatch.setattr(lessons_router.db, "select", fake_select)
     monkeypatch.setattr(lessons_router.item_gen, "grade", lambda **kw: {
-        "skillId": "s-1", "courseId": "course-a", "correct": True, "explanation": "nice",
+        "skillId": "s-1", "courseId": "00000000-0000-4000-8000-0000000000a1", "correct": True, "explanation": "nice",
     })
     monkeypatch.setattr(lessons_router.db, "insert_evidence",
                         lambda rows: evidence_calls.extend(rows) or rows)
@@ -77,8 +77,8 @@ def test_check_belonging_to_this_course_is_accepted(monkeypatch) -> None:
     try:
         with TestClient(app) as client:
             response = client.post(
-                "/lessons/course-a/steps/step-1/check",
-                json={"item_id": "check-1", "choice_id": "a"},
+                "/lessons/00000000-0000-4000-8000-0000000000a1/steps/00000000-0000-4000-8000-000000000070/check",
+                json={"item_id": "00000000-0000-4000-8000-0000000000c1", "choice_id": "a"},
             )
     finally:
         app.dependency_overrides.clear()
@@ -87,7 +87,7 @@ def test_check_belonging_to_this_course_is_accepted(monkeypatch) -> None:
     body = response.json()
     assert body["correct"] is True
     assert body["advance"] is True
-    assert evidence_calls[0]["course_id"] == "course-a"
+    assert evidence_calls[0]["course_id"] == "00000000-0000-4000-8000-0000000000a1"
     assert evidence_calls[0]["type"] == "tutor"
 
 
@@ -100,7 +100,7 @@ def test_check_item_mismatch_still_404s(monkeypatch) -> None:
     try:
         with TestClient(app) as client:
             response = client.post(
-                "/lessons/course-a/steps/step-1/check",
+                "/lessons/00000000-0000-4000-8000-0000000000a1/steps/00000000-0000-4000-8000-000000000070/check",
                 json={"item_id": "wrong-item", "choice_id": "a"},
             )
     finally:

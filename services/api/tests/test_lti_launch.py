@@ -100,7 +100,7 @@ def _patch_launch(monkeypatch, payload: dict, connector,
     monkeypatch.setattr(lti_routes.db, "resolve_user", fake_resolve_user)
     monkeypatch.setattr(lti_routes.db, "record_identity_alias",
                         lambda **kw: aliases.append(kw))
-    monkeypatch.setattr(lti_routes.db, "get_or_create_course", lambda **kw: {"id": "course-1"})
+    monkeypatch.setattr(lti_routes.db, "get_or_create_course", lambda **kw: {"id": "00000000-0000-4000-8000-000000000001"})
 
     # Fix 1 + Fix 2 collaborators. These MUST be mocked in every launch test,
     # not left to fall through: course_by_lms_external_id fails OPEN by design
@@ -288,7 +288,7 @@ def test_instructor_launch_reconciles_stale_enrollments(monkeypatch) -> None:
     assert response.status_code == 302
     assert len(recorded["removals"]) == 1
     call = recorded["removals"][0]
-    assert call["course_id"] == "course-1"
+    assert call["course_id"] == "00000000-0000-4000-8000-000000000001"
     # keep_user_ids is exactly what this pull produced. Anyone Kala has
     # enrolled as a STUDENT for this course outside that set is what gets
     # removed — asserted here as "the call carries the right keep-list",
@@ -369,7 +369,7 @@ def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> Non
     assert connector.content_calls == 1
     assert len(seed_calls) == 1
     assert seed_calls[0]["institution_id"] == "inst-1"
-    assert seed_calls[0]["course_id"] == "course-1"
+    assert seed_calls[0]["course_id"] == "00000000-0000-4000-8000-000000000001"
     # Raw content items pass through (the proposer groups by module itself).
     assert seed_calls[0]["content_items"][0]["body_or_description"] == "Module 1 content here."
     assert "course_content" not in seed_calls[0]
@@ -525,7 +525,7 @@ def test_second_launch_for_the_same_course_never_calls_resolve_course_ref(monkey
 
     # Simulate the row the first launch would have created.
     recorded["local_courses"]["ME301"] = {
-        "id": "course-1", "institution_id": "inst-1",
+        "id": "00000000-0000-4000-8000-000000000001", "institution_id": "inst-1",
         "lms_course_id": "ref-ME301", "title": "Thermo I",
     }
 

@@ -6,7 +6,7 @@ from app.routers import diagnostic
 
 
 def authenticated_user() -> CurrentUser:
-    return CurrentUser(user_id="user-1", institution_id="inst-1", app_role="student")
+    return CurrentUser(user_id="00000000-0000-4000-8000-000000000040", institution_id="inst-1", app_role="student")
 
 
 def test_diagnostic_reuses_existing_items_and_never_regenerates_them(monkeypatch) -> None:
@@ -19,14 +19,14 @@ def test_diagnostic_reuses_existing_items_and_never_regenerates_them(monkeypatch
     def fake_select(table, params):
         if table == "skills":
             return [
-                {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
-                {"id": "skill-2", "name": "Iteration", "bloom_level": "apply"},
+                {"id": "00000000-0000-4000-8000-000000000010", "name": "Recursion", "bloom_level": "apply"},
+                {"id": "00000000-0000-4000-8000-000000000011", "name": "Iteration", "bloom_level": "apply"},
             ]
         if table == "generated_items":
             return [
-                {"id": "item-1", "skill_id": "skill-1", "bloom_level": "apply",
+                {"id": "item-1", "skill_id": "00000000-0000-4000-8000-000000000010", "bloom_level": "apply",
                  "prompt": "Q1?", "choices": [{"id": "a", "label": "x"}]},
-                {"id": "item-2", "skill_id": "skill-2", "bloom_level": "apply",
+                {"id": "item-2", "skill_id": "00000000-0000-4000-8000-000000000011", "bloom_level": "apply",
                  "prompt": "Q2?", "choices": [{"id": "a", "label": "y"}]},
             ]
         return []
@@ -37,8 +37,8 @@ def test_diagnostic_reuses_existing_items_and_never_regenerates_them(monkeypatch
 
     try:
         with TestClient(app) as client:
-            first = client.get("/courses/course-1/diagnostic").json()
-            second = client.get("/courses/course-1/diagnostic").json()
+            first = client.get("/courses/00000000-0000-4000-8000-000000000001/diagnostic").json()
+            second = client.get("/courses/00000000-0000-4000-8000-000000000001/diagnostic").json()
     finally:
         app.dependency_overrides.clear()
 
@@ -58,12 +58,12 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
     def fake_select(table, params):
         if table == "skills":
             return [
-                {"id": "skill-1", "name": "Recursion", "bloom_level": "apply"},
-                {"id": "skill-2", "name": "Iteration", "bloom_level": "apply"},
+                {"id": "00000000-0000-4000-8000-000000000010", "name": "Recursion", "bloom_level": "apply"},
+                {"id": "00000000-0000-4000-8000-000000000011", "name": "Iteration", "bloom_level": "apply"},
             ]
         if table == "generated_items":
             return [
-                {"id": "item-1", "skill_id": "skill-1", "bloom_level": "apply",
+                {"id": "item-1", "skill_id": "00000000-0000-4000-8000-000000000010", "bloom_level": "apply",
                  "prompt": "Existing Q?", "choices": [{"id": "a", "label": "x"}]},
             ]
         return []
@@ -78,11 +78,11 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
 
     try:
         with TestClient(app) as client:
-            response = client.get("/courses/course-1/diagnostic").json()
+            response = client.get("/courses/00000000-0000-4000-8000-000000000001/diagnostic").json()
     finally:
         app.dependency_overrides.clear()
 
-    assert generated_for == ["skill-2"]  # only the missing one
+    assert generated_for == ["00000000-0000-4000-8000-000000000011"]  # only the missing one
     prompts = [q["prompt"] for q in response["questions"]]
     assert prompts == ["Existing Q?", "Freshly generated Q?"]  # order matches skills order
 
@@ -95,7 +95,7 @@ def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> Non
 
     def fake_select(table, params):
         if table == "skills":
-            return [{"id": "skill-1", "name": "Recursion", "bloom_level": "apply"}]
+            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Recursion", "bloom_level": "apply"}]
         if table == "generated_items":
             return []
         return []
@@ -110,11 +110,11 @@ def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> Non
 
     try:
         with TestClient(app) as client:
-            response = client.get("/courses/course-1/diagnostic").json()
+            response = client.get("/courses/00000000-0000-4000-8000-000000000001/diagnostic").json()
     finally:
         app.dependency_overrides.clear()
 
-    assert generated_for == ["skill-1"]
+    assert generated_for == ["00000000-0000-4000-8000-000000000010"]
     assert len(response["questions"]) == 1
 
 
@@ -124,8 +124,8 @@ def test_diagnostic_returns_empty_list_when_course_has_no_approved_skills(monkey
 
     try:
         with TestClient(app) as client:
-            response = client.get("/courses/course-1/diagnostic").json()
+            response = client.get("/courses/00000000-0000-4000-8000-000000000001/diagnostic").json()
     finally:
         app.dependency_overrides.clear()
 
-    assert response == {"courseId": "course-1", "questions": []}
+    assert response == {"courseId": "00000000-0000-4000-8000-000000000001", "questions": []}

@@ -29,8 +29,8 @@ def _capture_converse(monkeypatch, canned: str):
     return captured
 
 
-SKILLS = [{"id": "skill-1", "name": "Cloud concepts"},
-          {"id": "skill-2", "name": "AWS service categories"}]
+SKILLS = [{"id": "00000000-0000-4000-8000-000000000010", "name": "Cloud concepts"},
+          {"id": "00000000-0000-4000-8000-000000000011", "name": "AWS service categories"}]
 
 
 def test_tag_content_allows_a_reasoning_budget_large_enough_to_answer(monkeypatch) -> None:
@@ -41,7 +41,7 @@ def test_tag_content_allows_a_reasoning_budget_large_enough_to_answer(monkeypatc
     still failing on the most valuable content. A 3145-char module page needs
     ~2500-3500 reasoning tokens, so 4096 is the measured floor."""
     captured = _capture_converse(
-        monkeypatch, json.dumps({"skill_id": "skill-1", "bloom_level": "understand"})
+        monkeypatch, json.dumps({"skill_id": "00000000-0000-4000-8000-000000000010", "bloom_level": "understand"})
     )
     model_router.tag_content(text="Cloud computing is...", skills=SKILLS)
 
@@ -54,10 +54,10 @@ def test_tag_content_allows_a_reasoning_budget_large_enough_to_answer(monkeypatc
 
 def test_tag_content_parses_a_valid_match(monkeypatch) -> None:
     _capture_converse(
-        monkeypatch, json.dumps({"skill_id": "skill-1", "bloom_level": "apply"})
+        monkeypatch, json.dumps({"skill_id": "00000000-0000-4000-8000-000000000010", "bloom_level": "apply"})
     )
     out = model_router.tag_content(text="x", skills=SKILLS)
-    assert out == {"skill_id": "skill-1", "bloom_level": "apply"}
+    assert out == {"skill_id": "00000000-0000-4000-8000-000000000010", "bloom_level": "apply"}
 
 
 def test_tag_content_rejects_a_skill_id_not_in_the_candidate_list(monkeypatch) -> None:
@@ -71,19 +71,19 @@ def test_tag_content_rejects_a_skill_id_not_in_the_candidate_list(monkeypatch) -
 
 def test_tag_content_rejects_an_invalid_bloom_level(monkeypatch) -> None:
     _capture_converse(
-        monkeypatch, json.dumps({"skill_id": "skill-1", "bloom_level": "vibes"})
+        monkeypatch, json.dumps({"skill_id": "00000000-0000-4000-8000-000000000010", "bloom_level": "vibes"})
     )
     out = model_router.tag_content(text="x", skills=SKILLS)
-    assert out["skill_id"] == "skill-1"
+    assert out["skill_id"] == "00000000-0000-4000-8000-000000000010"
     assert out["bloom_level"] is None
 
 
 def test_tag_content_tolerates_a_fenced_response(monkeypatch) -> None:
     _capture_converse(
-        monkeypatch, '```json\n{"skill_id": "skill-2", "bloom_level": "remember"}\n```'
+        monkeypatch, '```json\n{"skill_id": "00000000-0000-4000-8000-000000000011", "bloom_level": "remember"}\n```'
     )
     out = model_router.tag_content(text="x", skills=SKILLS)
-    assert out["skill_id"] == "skill-2"
+    assert out["skill_id"] == "00000000-0000-4000-8000-000000000011"
 
 
 def test_tag_content_reports_no_match_on_an_empty_response(monkeypatch) -> None:

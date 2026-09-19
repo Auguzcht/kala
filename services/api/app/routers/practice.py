@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from app.ai.concurrency import map_concurrent_partial
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_set_id
 from app.learn import items as item_gen
 from app.learn.items import ItemGenerationError
 from app.twin import tracer
@@ -72,7 +72,7 @@ def _resolve_skill(*, institution_id: str, user_id: str, course_id: str,
 
 @router.get("/{course_id}/next")
 def next_item(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     skill_id: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
@@ -91,7 +91,7 @@ def next_item(
 
 @router.post("/{course_id}/set")
 def create_set(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     skill_id: str | None = None,
     size: int = DEFAULT_SET_SIZE,
     user: CurrentUser = Depends(get_current_user),
@@ -182,8 +182,8 @@ class FromItemsBody(BaseModel):
 
 @router.post("/{course_id}/set/from-items")
 def create_set_from_items(
-    course_id: str,
     body: FromItemsBody,
+    course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(get_current_user),
 ):
     """Group ALREADY-GENERATED items into a quiz set — the study -> test
@@ -314,7 +314,7 @@ def _item_counts_by_set(*, institution_id: str, set_ids: list[str]) -> dict[str,
 
 @router.get("/{course_id}/sets")
 def list_sets(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     skill_id: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
@@ -357,7 +357,11 @@ def list_sets(
 
 
 @router.get("/{course_id}/sets/{set_id}")
-def get_set(course_id: str, set_id: str, user: CurrentUser = Depends(get_current_user)):
+def get_set(
+    course_id: str = Depends(require_valid_course_id),
+    set_id: str = Depends(require_valid_set_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """Load one saved set's items so it can be retaken or re-entered — the
     read behind the study->test bridge navigation and the retake list. Items
     are returned in their natural order (oldest first, the order they were
@@ -435,7 +439,11 @@ def _record_set_attempt(*, institution_id: str, user_id: str, course_id: str,
 
 
 @router.post("/{course_id}/submit")
-def submit(course_id: str, body: SubmitBody, user: CurrentUser = Depends(get_current_user)):
+def submit(
+    body: SubmitBody,
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     try:
         graded = item_gen.grade(
             institution_id=user.institution_id, item_id=body.item_id, choice_id=body.choice_id,

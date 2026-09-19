@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser, get_current_user, require_valid_course_id
 from app.learn import items as item_gen
 from app.twin import summary
 
@@ -15,14 +15,20 @@ router = APIRouter(prefix="/courses", tags=["twin"])
 
 
 @router.get("/{course_id}/twin")
-def get_twin(course_id: str, user: CurrentUser = Depends(get_current_user)):
+def get_twin(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     return summary.twin_payload(
         institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
     )
 
 
 @router.get("/{course_id}/next-up")
-def next_up(course_id: str, user: CurrentUser = Depends(get_current_user)):
+def next_up(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """One recommendation: the skill this student should practice next.
     Lightweight — reuses the same weakest-skill picker as practice but does
     not generate an item (that happens when they actually start)."""
@@ -56,7 +62,10 @@ def next_up(course_id: str, user: CurrentUser = Depends(get_current_user)):
 
 
 @router.get("/{course_id}/plan")
-def learning_plan(course_id: str, user: CurrentUser = Depends(get_current_user)):
+def learning_plan(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """What this learner's instructor has actually assigned them.
 
     The closing half of the human-in-the-loop loop. The instructor surface

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_skill_id, require_valid_step_id
 from app.learn import items as item_gen
 from app.learn import lessons, srs, xp
 from app.twin import tracer
@@ -25,7 +25,11 @@ router = APIRouter(prefix="/lessons", tags=["lessons"])
 
 
 @router.get("/{course_id}/skill/{skill_id}")
-def get_lesson(course_id: str, skill_id: str, user: CurrentUser = Depends(get_current_user)):
+def get_lesson(
+    course_id: str = Depends(require_valid_course_id),
+    skill_id: str = Depends(require_valid_skill_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """Load the skill's guided lesson, generating and persisting it on first
     request. Idempotent thereafter."""
     skills = db.select("skills", {
@@ -49,8 +53,12 @@ class CheckBody(BaseModel):
 
 
 @router.post("/{course_id}/steps/{step_id}/check")
-def submit_check(course_id: str, step_id: str, body: CheckBody,
-                 user: CurrentUser = Depends(get_current_user)):
+def submit_check(
+    body: CheckBody,
+    course_id: str = Depends(require_valid_course_id),
+    step_id: str = Depends(require_valid_step_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """Grade a step's comprehension check server-side. The step advances (the
     read -> understand -> apply gate) only when the client sees correct=True.
     A pass writes a tutor evidence_event and moves the tracer; the schedule is

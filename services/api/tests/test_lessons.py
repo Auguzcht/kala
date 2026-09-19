@@ -17,7 +17,7 @@ def test_ready_lesson_fast_path_selects_guided_lessons_only_once(monkeypatch):
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill One"}]
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "position": 0, "summary": "sum",
+            return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "sum",
                      "detail_points": [], "misconception": None, "key_takeaway": None,
                      "bloom_level": "understand", "check_item_id": None}]
         return []
@@ -43,7 +43,7 @@ def test_get_or_generate_returns_stored_lesson_without_regenerating(monkeypatch)
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": None, "title": "Skill One"}]
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "position": 0, "summary": "sum",
+            return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "sum",
                      "detail_points": [], "misconception": None, "key_takeaway": None,
                      "bloom_level": "understand", "check_item_id": None}]
         return []
@@ -174,7 +174,7 @@ def test_generation_persists_steps_and_wires_check_item(monkeypatch):
             return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
                      "module_ref": "Module 1", "title": "Skill"}]
         if table == "guided_lesson_steps":
-            return [{"id": "step-1", "position": 0, "summary": "explained",
+            return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "explained",
                      "detail_points": ["p1", "p2"], "misconception": "a myth",
                      "key_takeaway": "the point", "bloom_level": "understand",
                      "check_item_id": "check-1"}]

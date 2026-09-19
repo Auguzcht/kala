@@ -10,7 +10,7 @@ class FakeConnector:
         assert (course_ref, column_id, user_ref, score) == ("_4_1", "_8_1", "_6_1", 85.0)
 
     def get_roster(self, course_ref: str) -> list[dict]:
-        return [{"lms_user_id": "user-1", "role": "Student"}]
+        return [{"lms_user_id": "00000000-0000-4000-8000-000000000040", "role": "Student"}]
 
     def get_content(self, course_ref: str) -> list[dict]:
         return [{"lms_content_id": "content-1", "title": "Lesson"}]
@@ -21,7 +21,7 @@ class FakeConnector:
 
 def authenticated_user() -> CurrentUser:
     return CurrentUser(
-        user_id="user-1",
+        user_id="00000000-0000-4000-8000-000000000040",
         institution_id="institution-1",
         app_role="student",
     )
@@ -30,13 +30,13 @@ def authenticated_user() -> CurrentUser:
 def fake_course_select(table: str, params: dict[str, str]) -> list[dict]:
     assert table == "courses"
     assert params["institution_id"] == "eq.institution-1"
-    assert params["id"] == "eq.course-1"
+    assert params["id"] == "eq.00000000-0000-4000-8000-000000000001"
     return [{"lms_course_id": "_4_1"}]
 
 
 def test_course_data_routes_require_lti_bearer_token() -> None:
     with TestClient(app) as client:
-        response = client.get("/courses/course-1/content")
+        response = client.get("/courses/00000000-0000-4000-8000-000000000001/content")
 
     assert response.status_code == 401
     assert response.json() == {"detail": "missing bearer token"}
@@ -49,11 +49,11 @@ def test_course_data_routes_are_authenticated_and_tenant_scoped(monkeypatch) -> 
 
     try:
         with TestClient(app) as client:
-            content = client.get("/courses/course-1/content")
-            assessments = client.get("/courses/course-1/assessments")
-            roster = client.get("/courses/course-1/roster")
+            content = client.get("/courses/00000000-0000-4000-8000-000000000001/content")
+            assessments = client.get("/courses/00000000-0000-4000-8000-000000000001/assessments")
+            roster = client.get("/courses/00000000-0000-4000-8000-000000000001/roster")
             grade = client.patch(
-                "/courses/course-1/assessments/_8_1/grade",
+                "/courses/00000000-0000-4000-8000-000000000001/assessments/_8_1/grade",
                 json={"user_id": "_6_1", "score": 85},
             )
     finally:
@@ -64,10 +64,10 @@ def test_course_data_routes_are_authenticated_and_tenant_scoped(monkeypatch) -> 
     assert assessments.status_code == 200
     assert assessments.json() == [{"lms_column_id": "column-1", "name": "Quiz"}]
     assert roster.status_code == 200
-    assert roster.json() == [{"lms_user_id": "user-1", "role": "Student"}]
+    assert roster.json() == [{"lms_user_id": "00000000-0000-4000-8000-000000000040", "role": "Student"}]
     assert grade.status_code == 200
     assert grade.json() == {
-        "courseId": "course-1",
+        "courseId": "00000000-0000-4000-8000-000000000001",
         "columnId": "_8_1",
         "userId": "_6_1",
         "score": 85.0,

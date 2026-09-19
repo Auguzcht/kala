@@ -16,7 +16,7 @@ from app.ai.concurrency import map_concurrent
 from app.ai.deidentify import strip_pii
 from app.ai.skill_proposer import seed_course_skills
 from app.db import storage, supabase as db
-from app.deps import CurrentUser, get_current_user, get_lms_connector, require_role
+from app.deps import CurrentUser, get_current_user, get_lms_connector, require_role, require_valid_course_id
 from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
 from app.lms.hierarchy import build_folder_paths, module_ref_for
@@ -127,30 +127,36 @@ def _course_ref(course_id: str, institution_id: str) -> str:
 
 
 @router.get("/{course_id}/roster")
-def get_roster(course_id: str,
-               user: CurrentUser = Depends(get_current_user),
-               connector: BlackboardConnector = Depends(get_lms_connector)):
+def get_roster(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+    connector: BlackboardConnector = Depends(get_lms_connector),
+):
     return connector.get_roster(_course_ref(course_id, user.institution_id))
 
 
 @router.get("/{course_id}/content")
-def get_content(course_id: str,
-                user: CurrentUser = Depends(get_current_user),
-                connector: BlackboardConnector = Depends(get_lms_connector)):
+def get_content(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+    connector: BlackboardConnector = Depends(get_lms_connector),
+):
     return connector.get_content(_course_ref(course_id, user.institution_id))
 
 
 @router.get("/{course_id}/assessments")
-def get_assessments(course_id: str,
-                    user: CurrentUser = Depends(get_current_user),
-                    connector: BlackboardConnector = Depends(get_lms_connector)):
+def get_assessments(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+    connector: BlackboardConnector = Depends(get_lms_connector),
+):
     return connector.get_assessments(_course_ref(course_id, user.institution_id))
 
 
 @router.post("/{course_id}/skills/propose")
 def propose_course_skills(
-    course_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
     """On-demand trigger for AI skill proposal, standalone, no relaunch
@@ -173,9 +179,11 @@ def propose_course_skills(
 
 
 @router.post("/{course_id}/ingest")
-def ingest_course(course_id: str,
-                  user: CurrentUser = Depends(get_current_user),
-                  connector: BlackboardConnector = Depends(get_lms_connector)):
+def ingest_course(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+    connector: BlackboardConnector = Depends(get_lms_connector),
+):
     course_ref = _course_ref(course_id, user.institution_id)
     # NOTE: the approved-skills lookup that used to live here is gone with
     # tagging. It was only read to tag chunks against; the worker's tag job
@@ -310,10 +318,10 @@ def ingest_course(course_id: str,
 
 @router.post("/{course_id}/content/upload")
 def upload_course_content(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     file: UploadFile = File(...),
     module_ref: str | None = Form(None),
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Staff upload of course material the LMS connector cannot reach.
 
@@ -430,8 +438,8 @@ def upload_course_content(
 
 @router.post("/{course_id}/content/retag")
 def reset_tagging(
-    course_id: str,
-    user: CurrentUser = Depends(require_role("instructor", "admin")),
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Clear the "already attempted" mark on UNMATCHED content so it can be
     tagged again against a changed skill set.
@@ -488,7 +496,10 @@ def reset_tagging(
 
 
 @router.get("/{course_id}/modules")
-def list_modules(course_id: str, user: CurrentUser = Depends(get_current_user)):
+def list_modules(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     """Distinct modules detected for this course from the last ingest run,
     with content and skill counts. Generic over however this institution's
     Blackboard course is actually organized, no naming assumed. Useful for
@@ -540,9 +551,13 @@ class GradeBody(BaseModel):
 
 
 @router.patch("/{course_id}/assessments/{column_id}/grade")
-def post_grade(course_id: str, column_id: str, body: GradeBody,
-               user: CurrentUser = Depends(get_current_user),
-               connector: BlackboardConnector = Depends(get_lms_connector)):
+def post_grade(
+    body: GradeBody,
+    column_id: str,
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+    connector: BlackboardConnector = Depends(get_lms_connector),
+):
     connector.post_grade(
         _course_ref(course_id, user.institution_id),
         column_id,
@@ -596,7 +611,7 @@ def _skills_needing_diagnostic(
 
 @router.get("/{course_id}/diagnostic/status")
 def get_diagnostic_status(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     module_ref: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
@@ -618,13 +633,10 @@ def get_diagnostic_status(
 
 @router.get("/{course_id}/diagnostic")
 def get_diagnostic(
-    course_id: str,
+    course_id: str = Depends(require_valid_course_id),
     module_ref: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
-    # module_ref lets a future UI scope the diagnostic to one module (e.g.
-    # "just Module 2") once skills.module_ref is populated by ingest.
-    # Omitted, this covers every skill still due for this student.
     skills = _skills_needing_diagnostic(
         institution_id=user.institution_id, course_id=course_id,
         user_id=user.user_id, module_ref=module_ref,
@@ -694,8 +706,11 @@ def get_diagnostic(
 
 
 @router.post("/{course_id}/diagnostic/submit")
-def submit_diagnostic(course_id: str, body: SubmitBody,
-                      user: CurrentUser = Depends(get_current_user)):
+def submit_diagnostic(
+    body: SubmitBody,
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
     results = []
     rows = []
     for a in body.answers:
