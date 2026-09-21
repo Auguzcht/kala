@@ -53,6 +53,25 @@
 --   If you ever widen it to include 'flashcard' or 'tutor', re-run the step 0
 --   collision check below FIRST — that version WOULD cascade away SRS
 --   schedules and null out lesson checks.
+--
+-- LIVE NUMBERS, measured 2026-09-21 (AWS101, immediately before the reset):
+--   generated_items      313 rows  (practice 283, tutor 16, diagnostic 10,
+--                                    flashcard 4)
+--   srs_state             31 rows  (flashcard 14, tutor 17; 21 of them reviewed)
+--   guided_lesson_steps   30 checks, ALL kind='tutor'
+--
+--   Collisions for the filter AS WRITTEN (diagnostic+practice): 0 and 0. Safe.
+--
+--   Collisions if you ALSO include 'flashcard': FOUR srs_state rows cascade
+--   away — 4 of the 14 flashcard schedules (max 2 reps each). Not unreviewed
+--   seeds: those four have real review history belonging to a student. Small,
+--   but it is a decision rather than a formality. Widen only if you accept it.
+--
+--   Do NOT add 'tutor': it would take 17 srs_state rows (17 reviewed, one with
+--   28 reps) AND all 30 lesson comprehension checks, which point at tutor
+--   items. Nothing about this task calls for touching tutor.
+--
+--   Lesson checks are unaffected by the diagnostic+practice filter either way.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -121,7 +140,8 @@ delete from public.quiz_sets
 --
 -- If you decide flashcards SHOULD be reset, change this to
 --   and kind in ('diagnostic', 'practice', 'flashcard')
--- and ask the user first — that decision is still open.
+-- The user has signalled they want flashcards included. See the LIVE NUMBERS
+-- note in the header: that choice cascades 4 reviewed srs_state rows.
 -- ---------------------------------------------------------------------
 delete from public.generated_items
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
