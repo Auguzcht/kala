@@ -28,6 +28,10 @@
 --   mid-term would delete questions students are actively working through.
 --   Re-read this paragraph before running it on a live cohort.
 --
+--   SCOPE, as decided 2026-09-21: diagnostic + practice + FLASHCARD items, and
+--   the course's practice quiz_sets. Tutor items are OUT of scope and must
+--   stay out — see the collision note below for why that is not negotiable.
+--
 -- WHAT THIS DOES *NOT* TOUCH
 --   evidence_events and mastery_state are NOT deleted. No FK links them to the
 --   item bank: they hold the actual learning history (what each student
@@ -43,56 +47,50 @@
 --       (a student's spaced-repetition schedule)
 --     * guided_lesson_steps.check_item_id -> generated_items(id) ON DELETE SET NULL
 --       (a lesson's comprehension-check question)
---   Deleting a row those point at would silently destroy SRS progress or
---   blank a lesson's check. Verified against the live DB on 2026-09-19 that
---   this is NOT a risk HERE: of 293 items matching the delete filter, ZERO
---   are referenced by srs_state (31 rows, all kind='tutor' or 'flashcard') or
---   by guided_lesson_steps (30 checks, all kind='tutor').
 --
---   The `kind in ('diagnostic','practice')` filter is what keeps this safe.
---   If you ever widen it to include 'flashcard' or 'tutor', re-run the step 0
---   collision check below FIRST — that version WOULD cascade away SRS
---   schedules and null out lesson checks.
+-- COLLISIONS — the two scopes are NOT treated the same, deliberately:
 --
--- LIVE NUMBERS, measured 2026-09-21 (AWS101, immediately before the reset):
---   generated_items      313 rows  (practice 283, tutor 16, diagnostic 10,
---                                    flashcard 4)
---   srs_state             31 rows  (flashcard 14, tutor 17; 21 of them reviewed)
---   guided_lesson_steps   30 checks, ALL kind='tutor'
+--   FLASHCARD-SCOPED: EXPECTED TO BE NON-ZERO. This reset INCLUDES flashcards
+--   (decided 2026-09-21), so the srs_state rows pointing at flashcard items
+--   cascade away with them. Measured before running: 14 such rows, of which 4
+--   have real review history (max 2 reps each). That is the ACCEPTED COST of
+--   including flashcards, not a red flag and not a reason to abort — the goal
+--   is a clean regenerated bank, and a handful of lightly-reviewed flashcard
+--   schedules is worth that. Do not stop on a non-zero flashcard count.
 --
---   Collisions for the filter AS WRITTEN (diagnostic+practice): 0 and 0. Safe.
+--   TUTOR-SCOPED: MUST BE 0, and is unchanged by this decision. Tutor items
+--   are NOT deleted (17 srs_state rows point at them, one with 28 reps) and
+--   all 30 lesson comprehension checks do too. A non-zero tutor collision
+--   means the filter was widened past what was decided — stop and investigate.
 --
---   Collisions if you ALSO include 'flashcard': FOUR srs_state rows cascade
---   away — 4 of the 14 flashcard schedules (max 2 reps each). Not unreviewed
---   seeds: those four have real review history belonging to a student. Small,
---   but it is a decision rather than a formality. Widen only if you accept it.
---
---   Do NOT add 'tutor': it would take 17 srs_state rows (17 reviewed, one with
---   28 reps) AND all 30 lesson comprehension checks, which point at tutor
---   items. Nothing about this task calls for touching tutor.
---
---   Lesson checks are unaffected by the diagnostic+practice filter either way.
+-- The `kind in ('diagnostic','practice','flashcard')` filter is what keeps the
+-- tutor side safe. Never add 'tutor'.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
 -- STEP 0 — inspect first. Do not skip this.
--- Run these to see the blast radius before deciding. Substitute the real
--- course id; the one below is the AWS101 row from the 2026-09-19 probe.
+-- Run these FRESH immediately before the deletes. Do not reuse numbers from
+-- an earlier session or an earlier run of this file.
 -- ---------------------------------------------------------------------
 -- \set course_id 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
 
--- What is in the bank, by kind? This is where you decide whether flashcards
--- (kind='flashcard') belong in the reset. They were NOT called out as
--- low-quality, so they are deliberately EXCLUDED from the deletes below.
+-- What is in the bank, by kind.
 select kind, count(*)
   from public.generated_items
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
  group by kind
  order by kind;
 
--- How many sets, and how many student attempts would cascade away?
--- The srs_state / check_item_id columns are the collision check: these MUST
--- both read 0 before you run the deletes. See the FK note in the header.
+-- Blast radius. Two of these are HARD GATES, two are INFORMATIONAL:
+--
+--   tutor_srs_collisions        MUST BE 0  — tutor is excluded; non-zero means
+--                                             the filter was widened too far.
+--   lesson_check_collisions     MUST BE 0  — all checks are tutor-scoped.
+--   flashcard_srs_collisions    EXPECTED    — non-zero is the accepted cost of
+--                                             including flashcards. Note the
+--                                             number, do not abort on it.
+--   flashcard_srs_reviewed      INFO        — how many of those rows have real
+--                                             review history (reps > 0).
 select
   (select count(*) from public.quiz_sets
     where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de')            as sets,
@@ -100,19 +98,29 @@ select
      join public.quiz_sets s on s.id = a.set_id
     where s.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de')          as set_attempts,
   (select count(*) from public.evidence_events
-    where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de')            as evidence_kept,
+    where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de')            as evidence_to_keep,
   (select count(*) from public.mastery_state
-    where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de')            as mastery_kept,
-  -- MUST be 0. Non-zero means an SRS schedule would be cascade-deleted.
+    where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de')            as mastery_to_keep,
+  -- MUST be 0.
   (select count(*) from public.srs_state ss
      join public.generated_items gi on gi.id = ss.item_id
     where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
-      and gi.kind in ('diagnostic','practice'))                          as srs_collisions,
-  -- MUST be 0. Non-zero means a lesson check would be set to null.
+      and gi.kind = 'tutor')                                             as tutor_srs_collisions,
+  -- MUST be 0.
   (select count(*) from public.guided_lesson_steps gs
      join public.generated_items gi on gi.id = gs.check_item_id
     where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
-      and gi.kind in ('diagnostic','practice'))                          as lesson_check_collisions;
+      and gi.kind in ('diagnostic','practice','flashcard'))              as lesson_check_collisions,
+  -- EXPECTED non-zero: this is the flashcard trade-off, already accepted.
+  (select count(*) from public.srs_state ss
+     join public.generated_items gi on gi.id = ss.item_id
+    where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
+      and gi.kind = 'flashcard')                                         as flashcard_srs_cascading,
+  -- How many of those carried real review history.
+  (select count(*) from public.srs_state ss
+     join public.generated_items gi on gi.id = ss.item_id
+    where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
+      and gi.kind = 'flashcard' and ss.reps > 0)                         as flashcard_srs_reviewed;
 
 
 -- ---------------------------------------------------------------------
@@ -134,38 +142,66 @@ delete from public.quiz_sets
 -- ---------------------------------------------------------------------
 -- STEP 2 — delete the remaining item rows for this course.
 --
--- Catches: ungrouped practice items (/next), diagnostic items, and
--- diagnostic items that were never given a set_id. Explicitly scoped to the
--- two kinds in question; flashcards are left alone.
+-- Catches: ungrouped practice items (/next), diagnostic items, and (as of the
+-- 2026-09-21 decision) flashcard items. Explicitly scoped to these three
+-- kinds; TUTOR IS NEVER INCLUDED — 17 srs_state rows (one with 28 reps) and
+-- all 30 lesson comprehension checks point at tutor items.
 --
--- If you decide flashcards SHOULD be reset, change this to
---   and kind in ('diagnostic', 'practice', 'flashcard')
--- The user has signalled they want flashcards included. See the LIVE NUMBERS
--- note in the header: that choice cascades 4 reviewed srs_state rows.
+-- Including 'flashcard' cascades its srs_state rows. That is the accepted
+-- cost recorded in the header. Expect a non-zero flashcard count in step 0.
 -- ---------------------------------------------------------------------
 delete from public.generated_items
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
-   and kind in ('diagnostic', 'practice');
+   and kind in ('diagnostic', 'practice', 'flashcard');
 
 
 -- ---------------------------------------------------------------------
--- STEP 3 — verify. Expect bank counts at zero and the kept counts unchanged
--- from the step 0 readings.
+-- STEP 3 — verify.
+--
+--   generated_items_remaining   MUST BE 0 for the widened scope
+--   quiz_sets_remaining         MUST BE 0
+--   evidence_events             MUST equal step 0's evidence_to_keep
+--   mastery_state               MUST equal step 0's mastery_to_keep
+--   srs_flashcard_remaining     MUST BE 0  — those cascaded, as accepted
+--   srs_tutor_remaining         MUST equal step 0's tutor count (17)
+--   lesson_checks_remaining     MUST equal step 0's count (30)
 -- ---------------------------------------------------------------------
-select 'generated_items remaining' as check, count(*)::text as value
+select 'generated_items remaining (scope)' as check, count(*)::text as value
   from public.generated_items
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
-   and kind in ('diagnostic', 'practice')
+   and kind in ('diagnostic', 'practice', 'flashcard')
 union all
 select 'quiz_sets remaining', count(*)::text
   from public.quiz_sets
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
 union all
-select 'evidence_events (must be unchanged)', count(*)::text
+select 'tutor items remaining (must be UNCHANGED)', count(*)::text
+  from public.generated_items
+ where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
+   and kind = 'tutor'
+union all
+select 'srs_state flashcard remaining (expect 0, cascaded)', count(*)::text
+  from public.srs_state ss
+  join public.generated_items gi on gi.id = ss.item_id
+ where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
+   and gi.kind = 'flashcard'
+union all
+select 'srs_state tutor remaining (must be UNCHANGED)', count(*)::text
+  from public.srs_state ss
+  join public.generated_items gi on gi.id = ss.item_id
+ where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
+   and gi.kind = 'tutor'
+union all
+select 'lesson checks remaining (must be UNCHANGED)', count(*)::text
+  from public.guided_lesson_steps gs
+  join public.generated_items gi on gi.id = gs.check_item_id
+ where gi.course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
+union all
+select 'evidence_events (must be UNCHANGED)', count(*)::text
   from public.evidence_events
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de'
 union all
-select 'mastery_state (must be unchanged)', count(*)::text
+select 'mastery_state (must be UNCHANGED)', count(*)::text
   from public.mastery_state
  where course_id = 'ae4e7680-f94b-4652-b3f6-b9c32f4420de';
 
