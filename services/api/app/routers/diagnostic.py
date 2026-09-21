@@ -19,7 +19,7 @@ from app.db import storage, supabase as db
 from app.deps import CurrentUser, get_current_user, get_lms_connector, require_role, require_valid_course_id
 from app.learn import items as item_gen
 from app.lms.blackboard import BlackboardConnector
-from app.lms.hierarchy import build_folder_paths, module_ref_for
+from app.routers.ingest_jobs import enqueue_ingest, ingest_job_status
 from app.twin import summary as twin_summary
 from app.twin import tracer
 
@@ -184,194 +184,52 @@ def propose_course_skills(
     )
 
 
-@router.post("/{course_id}/ingest")
+@router.post("/{course_id}/ingest", status_code=status.HTTP_202_ACCEPTED)
 def ingest_course(
     course_id: str = Depends(require_valid_course_id),
+    include_attachments: bool = False,
     user: CurrentUser = Depends(get_current_user),
-    connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    course_ref = _course_ref(course_id, user.institution_id)
-    # NOTE: the approved-skills lookup that used to live here is gone with
-    # tagging. It was only read to tag chunks against; the worker's tag job
-    # resolves each chunk's own course's approved skills itself.
+    # INTEGRATION NOTE (this wiring was missing until now — see
+    # docs/design/async-ingest.md): this route used to call
+    # connector.get_content(...) synchronously right here, then store + embed
+    # inline in this same request. That whole-tree walk measured 31.8s on a
+    # real course (AWS101) — over the api Lambda's 30s wall before a single
+    # PDF — so ingest silently timed out with no "Ingest pulled" log line
+    # ever printed. That old body (dedupe query, per-item store loop,
+    # _embed_pending call, pendingTagging count) is genuinely orphaned now
+    # and should be removed in ITS OWN commit, separate from this one, per
+    # the original patch note — `_embed_pending` itself stays, it is still
+    # used by /content/upload below.
     #
-    # THE ONLY CALLER THAT OPTS IN. Bounded by max_attachments (default 3):
-    # a course's PDFs drain over successive calls, and the response reports
-    # how many are left so "call again?" is answerable from the payload.
-    content_items, attachment_stats = connector.get_content(
-        course_ref, include_attachments=True,
+    # No Blackboard call here any more. Enqueue and return immediately; the
+    # worker's ingest_walk job (services/worker/app/jobs/ingest_walk.py)
+    # drains the tree over its own schedule, checkpointing progress in
+    # ingest_jobs so a killed run resumes.
+    job = enqueue_ingest(
+        institution_id=user.institution_id,
+        course_id=course_id,
+        include_attachments=include_attachments,
     )
-
-    # Diagnostic breadcrumb. The reason this exists: the course silently
-    # ingested FIVE items, all from one folder branch, and nothing reported
-    # that the AWS modules were never walked — it just looked like a small
-    # course. Logging what the connector actually returned (how many items,
-    # which handler types) makes a shallow traversal visible on the very first
-    # run instead of being inferred from bad questions weeks later.
-    handler_counts: dict[str, int] = {}
-    for item in content_items:
-        key = item.get("content_type") or "(none)"
-        handler_counts[key] = handler_counts.get(key, 0) + 1
-    with_body = sum(
-        1 for item in content_items if (item.get("body_or_description") or "").strip()
-    )
-    logger.info(
-        "Ingest pulled %d content items for course=%s (with text: %d, types: %s)",
-        len(content_items), course_id, with_body, handler_counts,
-    )
-
-    # Folder/module scoping is resolved once, generically, over whatever tree
-    # shape this institution's course actually has (see lms/hierarchy.py).
-    # No assumption here about depth or naming, "Module N" vs a school that
-    # organizes some other way both fall out of the same parent_id walk.
-    folder_paths = build_folder_paths(content_items)
-
-    # ---- Phase 1: store every chunk (cheap, pure DB) ----------------------
-    #
-    # WHY THIS IS SPLIT FROM TAGGING. This endpoint used to store, tag AND
-    # embed each chunk in one serial loop. Tagging is one LLM call per chunk, so
-    # a real course blew through the Lambda's 30s ceiling and was killed
-    # mid-run — observed three times at exactly 30.000s, which is why the
-    # course held 5 chunks while the connector returns 178 items. The run wrote
-    # what it had reached and died, so the partial result looked like a small
-    # course rather than a failed job.
-    #
-    # Storing is fast and idempotent-ish, so it all happens here in one call.
-    # Tagging and embedding then work from the ROWS THAT EXIST, which makes the
-    # rows themselves the progress record: no job table, no cursor to lose, and
-    # a killed run is resumable by simply calling again.
-    #
-    # The dedupe set is fetched in ONE query, not one per item. It used to do a
-    # `db.select` per content item to decide "have I stored this already?" — and
-    # this course has 178 items, so that was 178 sequential HTTP round trips to
-    # Supabase inside a request with a 30s wall. The store phase alone could
-    # exhaust the ceiling before tagging ever started, which is exactly why the
-    # endpoint kept returning 503 at 30.00s with no tagging work done at all.
-    existing_refs = {
-        row["lms_ref"]
-        for row in db.select("content_items", {
-            "institution_id": f"eq.{user.institution_id}",
-            "course_id": f"eq.{course_id}",
-            "lms_ref": "not.is.null",
-            "select": "lms_ref",
-        })
-        if row.get("lms_ref")
-    }
-
-    stored_rows: list[tuple[str, str]] = []  # (row_id, clean_chunk)
-    for item in content_items:
-        body = item.get("body_or_description", "")
-        # Skip an item already ingested for this course: re-running ingest
-        # after a timeout must not duplicate every chunk it already stored.
-        already_stored = item.get("lms_content_id") in existing_refs
-        if not body and not already_stored:
-            # A page with no body but WITH attachments is still worth storing
-            # (the PDF is the content; the page is just the link). Only skip
-            # when there is genuinely nothing.
-            if not item.get("attachments"):
-                continue
-        item_folder_path = folder_paths.get(item.get("lms_content_id"), [])
-        item_module_ref = module_ref_for(item_folder_path)
-
-        # The page's own prose, when it has any and is not already stored.
-        if body and not already_stored:
-            for chunk in chunk_text(body):
-                clean_chunk = strip_pii(chunk)
-                rows = db.insert("content_items", [{
-                    "institution_id": user.institution_id,
-                    "course_id": course_id,
-                    "lms_ref": item.get("lms_content_id"),
-                    "parent_lms_ref": item.get("parent_id"),
-                    "folder_path": item_folder_path,
-                    "module_ref": item_module_ref,
-                    "chunk_text": clean_chunk,
-                }])
-                if not rows:
-                    raise HTTPException(status.HTTP_502_BAD_GATEWAY, "content row was not stored")
-                stored_rows.append((rows[0]["id"], clean_chunk))
-
-        # Extracted attachment text (PDFs). Each file gets its OWN lms_ref so
-        # the existing dedupe treats it as a distinct piece of content — a PDF
-        # is course material in its own right, not a suffix on the page that
-        # linked it. `<item_id>:<filename>` is stable across runs, so a second
-        # /ingest skips a file it already stored rather than duplicating it.
-        for att in item.get("attachments") or []:
-            att_ref = f"{item.get('lms_content_id')}:{att.get('file_name')}"
-            if att_ref in existing_refs:
-                continue
-            for chunk in att.get("chunks") or []:
-                if not chunk.strip():
-                    continue
-                clean_chunk = strip_pii(chunk)
-                rows = db.insert("content_items", [{
-                    "institution_id": user.institution_id,
-                    "course_id": course_id,
-                    "lms_ref": att_ref,
-                    "parent_lms_ref": item.get("lms_content_id"),
-                    "folder_path": item_folder_path,
-                    "module_ref": item_module_ref,
-                    "chunk_text": clean_chunk,
-                }])
-                if not rows:
-                    raise HTTPException(status.HTTP_502_BAD_GATEWAY, "attachment row was not stored")
-                stored_rows.append((rows[0]["id"], clean_chunk))
-
-    # ---- Phase 2: embed what has no embedding yet (network, bounded) ------
-    # Embeddings are the cheap network call (one batched HTTP round trip each,
-    # no LLM), so this clears a whole course in one pass. Still bounded by a
-    # deadline so a very large course cannot reintroduce the timeout.
-    embedded, embed_failed = _embed_pending(
-        institution_id=user.institution_id, course_id=course_id,
-        budget_seconds=EMBED_SLICE_SECONDS,
-    )
-
-    # ---- Tagging is NOT here any more. ------------------------------------
-    # It moved to the worker's tag_backfill job (services/worker). Tagging is
-    # one reasoning-model call per chunk and measured 3-150s per call, with a
-    # single call able to exceed this Lambda's 30s wall on its own — so no
-    # time-slice value could make it safe here, and every symptom this endpoint
-    # had (the 30s timeouts, the repeatedly-tightened slice, the manual
-    # "POST until complete" grind) came from running a background batch job
-    # through a request-response door.
-    #
-    # This endpoint now stores + embeds and returns. The worker sweeps
-    # tag_attempted_at IS NULL on its 120s ceiling, every 15 minutes, so newly
-    # stored chunks tag themselves on a later run with no human at a terminal.
-    # See services/worker/app/jobs/tag_backfill.py for the failure semantics.
-    #
-    # Embedding deliberately STAYS: it is fast, it belongs at store time (the
-    # worker's tag job then finds chunks ready to tag), and only the LLM-bound
-    # phase was the problem.
-    pending_tag_count = len(db.select("content_items", {
-        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
-        "tag_attempted_at": "is.null", "select": "id",
-    }))
-
+    # 202 whether we created a job or found a live one; 200-with-existing
+    # would be a lie (nothing new started) and an error would punish a
+    # harmless retry or double-click.
     return {
-        "stored": len(stored_rows),
-        "embedded": embedded,
-        "embedFailed": embed_failed,
-        # Attachment fetch outcome for THIS call. `pdfsRemaining` > 0 means the
-        # per-call cap stopped the walk early and another /ingest call will make
-        # further progress; 0 means no fetchable document was left behind by the
-        # cap. These make the resumption rule a fact in the payload instead of a
-        # comment someone has to find.
-        #
-        # NOTE `documentsFailed` is NOT part of `pdfsRemaining` on purpose: a
-        # failed href is retried next call, so counting it as remaining would
-        # make the number never reach 0. A permanently broken link therefore
-        # never clears and keeps costing one cap slot per call — see
-        # get_content's docstring for why that is accepted for now.
-        "documentsFetched": attachment_stats.get("fetched", 0),
-        "documentsRemaining": attachment_stats.get("remaining", 0),
-        "documentsFailed": attachment_stats.get("failed", 0),
-        "documentsSkippedType": attachment_stats.get("skipped_unsupported", 0),
-        # Not "remaining": there is no client-side loop left to drive. This is
-        # how many chunks the WORKER will pick up on its next scheduled run,
-        # surfaced for observability rather than as something to poll on.
-        "pendingTagging": pending_tag_count,
-        "tagging": "queued for the worker's tag_backfill job",
+        "status": "queued" if job["created"] else "already_in_progress",
+        "job": job,
+        "message": "Ingest runs in the background; poll GET /{course_id}/ingest/status.",
     }
+
+
+@router.get("/{course_id}/ingest/status")
+def ingest_status(
+    course_id: str = Depends(require_valid_course_id),
+    user: CurrentUser = Depends(get_current_user),
+):
+    job = ingest_job_status(course_id=course_id)
+    if job is None:
+        return {"status": "never_ingested", "job": None}
+    return {"status": job["status"], "job": job}
 
 
 @router.post("/{course_id}/content/upload")

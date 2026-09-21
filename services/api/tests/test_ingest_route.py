@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.deps import CurrentUser, get_current_user, get_lms_connector
 from app.main import app
-from app.routers import diagnostic
+from app.routers import diagnostic, ingest_jobs
 
 
 class IngestConnector:
@@ -21,117 +21,84 @@ class IngestConnector:
         ], {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
 
 
-def _phase_select(*, courses, skills, pending_embed=None, pending_tag=None):
-    """A db.select stub that answers the ingest phases distinctly.
+# ---------------------------------------------------------------------------
+# /ingest now ENQUEUES instead of walking the tree inline. The walk itself
+# (store, embed, dedupe, folder_path scoping) moved to the worker's
+# ingest_walk job and is tested there (services/worker/tests/test_ingest_walk.py).
+# These tests cover only the api-side contract: enqueue is O(1) and never
+# calls Blackboard, a double-enqueue is a no-op that returns the live job
+# rather than erroring, and the status route reflects the job row. Mirrors
+# the original patch note's own "Tests" checklist for this route.
+# ---------------------------------------------------------------------------
 
-    The new ingest asks three different questions of content_items (which
-    chunks exist for dedupe, which lack an embedding, which lack a skill), so a
-    single catch-all lambda no longer models it. This dispatches on the filter.
-    """
-    def fake_select(table, params):
-        if table == "courses":
-            return courses
-        if table == "skills":
-            return skills
-        if table == "content_items":
-            # Dedupe check: filtered by lms_ref. Nothing present yet.
-            if "lms_ref" in params:
-                return []
-            if params.get("embedding") == "is.null":
-                return pending_embed or []
-            if params.get("tag_attempted_at") == "is.null":
-                return pending_tag or []
-        return []
-    return fake_select
-
-
-def test_ingest_uses_claim_tenant_and_finishes_embedding(monkeypatch) -> None:
-    inserted = []
-    updates = []
-
+def test_ingest_enqueues_a_job_and_returns_202(monkeypatch) -> None:
+    """No Blackboard call, no content_items write — POST /ingest is now just
+    a row write. get_lms_connector is deliberately NOT overridden here: if
+    the route reached for a connector at all, resolving it with no override
+    would error, which is exactly the regression this test guards against."""
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
-    app.dependency_overrides[get_lms_connector] = IngestConnector
-    monkeypatch.setattr(diagnostic.db, "select", _phase_select(
-        courses=[{"lms_course_id": "_4_1"}],
-        skills=[{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}],
-        # Phase 2/3 read back the row the store phase just wrote.
-        pending_embed=[{"id": "content-row-1", "chunk_text": "[name]\nActual lesson content."}],
-        pending_tag=[{"id": "content-row-1", "chunk_text": "[name]\nActual lesson content.",
-                      "module_ref": "Module 1"}],
-    ))
-    monkeypatch.setattr(
-        diagnostic.db, "insert",
-        lambda table, rows: inserted.extend(rows) or [{"id": "content-row-1"}],
-    )
-    monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: updates.append(values) or [])
-    monkeypatch.setattr(diagnostic.bedrock, "embed", lambda text: [0.0] * 1024)
+
+    inserted = []
+
+    def fake_select(table, params):
+        assert table == "ingest_jobs"
+        return []  # no live job yet
+
+    def fake_insert(table, rows, prefer="return=representation"):
+        assert table == "ingest_jobs"
+        row = {
+            "id": "job-1", "status": "pending",
+            "include_attachments": rows[0]["include_attachments"],
+            "folders_expanded": 0, "items_stored": 0, "pdfs_fetched": 0,
+        }
+        inserted.append(rows[0])
+        return [row]
+
+    monkeypatch.setattr(ingest_jobs.db, "select", fake_select)
+    monkeypatch.setattr(ingest_jobs.db, "insert", fake_insert)
 
     try:
         with TestClient(app) as client:
-            response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
+            response = client.post(
+                "/courses/00000000-0000-4000-8000-000000000001/ingest",
+                params={"include_attachments": "true"},
+            )
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     body = response.json()
-    assert body["stored"] == 1
-    assert body["embedded"] == 1
-    assert body["embedFailed"] == 0
-    # Tagging left this endpoint for the worker's tag_backfill job, so the
-    # response no longer reports tagged/remaining/complete. It reports how many
-    # chunks the worker will pick up, which is observability, not a loop to
-    # drive.
-    assert body["tagging"] == "queued for the worker's tag_backfill job"
-    assert "pendingTagging" in body
-    assert "tagged" not in body
-    assert "remaining" not in body
-
+    assert body["status"] == "queued"
+    assert body["job"]["id"] == "job-1"
+    assert body["job"]["created"] is True
     assert inserted == [{
         "institution_id": "institution-1",
         "course_id": "00000000-0000-4000-8000-000000000001",
-        "lms_ref": "lesson-1",
-        "parent_lms_ref": "folder-1",
-        "folder_path": [{"lmsRef": "folder-1", "title": "Module 1"}],
-        "module_ref": "Module 1",
-        "chunk_text": "[name]\nActual lesson content.",
+        "status": "pending",
+        "include_attachments": True,
     }]
-    assert any("embedding" in u for u in updates)
-    # No skill_id / tag_attempted_at / module_ref writes: tagging (and its
-    # skill->module inference) runs in the worker's tag_backfill job now, not
-    # on this request path.
-    assert not any("skill_id" in u for u in updates)
-    assert not any("tag_attempted_at" in u for u in updates)
-    assert not any("module_ref" in u for u in updates)
 
 
-def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
-    """A broken/timing-out embedding provider must not fail the whole ingest
-    request. The content row and its skill tag are stored either way; only that
-    chunk's embedding is skipped."""
-    inserted = []
-    updates = []
-
+def test_ingest_default_include_attachments_is_false(monkeypatch) -> None:
+    """include_attachments defaults False — same default-cheap contract
+    get_content() already had — when the caller doesn't pass the query param."""
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
-    app.dependency_overrides[get_lms_connector] = IngestConnector
-    monkeypatch.setattr(diagnostic.db, "select", _phase_select(
-        courses=[{"lms_course_id": "_4_1"}],
-        skills=[{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}],
-        pending_embed=[{"id": "content-row-1", "chunk_text": "lesson body"}],
-        pending_tag=[{"id": "content-row-1", "chunk_text": "lesson body", "module_ref": "Module 1"}],
-    ))
+    inserted = []
+    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [])
     monkeypatch.setattr(
-        diagnostic.db, "insert",
-        lambda table, rows: inserted.extend(rows) or [{"id": "content-row-1"}],
+        ingest_jobs.db, "insert",
+        lambda table, rows, prefer="return=representation": (
+            inserted.extend(rows) or [{
+                "id": "job-2", "status": "pending",
+                "include_attachments": rows[0]["include_attachments"],
+                "folders_expanded": 0, "items_stored": 0, "pdfs_fetched": 0,
+            }]
+        ),
     )
-    monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: updates.append(values) or [])
-    def flaky_embed(text):
-        raise TimeoutError("The read operation timed out")
-
-    monkeypatch.setattr(diagnostic.bedrock, "embed", flaky_embed)
 
     try:
         with TestClient(app) as client:
@@ -139,55 +106,87 @@ def test_ingest_survives_an_embedding_provider_failure(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200  # not a 502, the request survives
-    body = response.json()
-    assert body["embedded"] == 0
-    assert body["embedFailed"] == 1
-    assert inserted[0]["lms_ref"] == "lesson-1"
-    assert not any("embedding" in u for u in updates)
-    # Tagging is the worker's now, so this path writes no skill_id either way.
-    assert not any("skill_id" in u for u in updates)
+    assert response.status_code == 202
+    assert inserted[0]["include_attachments"] is False
 
 
-def test_ingest_skips_items_already_stored_so_a_rerun_does_not_duplicate(monkeypatch) -> None:
-    """Resumability depends on this: re-running ingest after a timeout must
-    pick up where it left off, not store every chunk again."""
-    inserted = []
-
+def test_ingest_double_enqueue_is_a_noop_returning_the_live_job(monkeypatch) -> None:
+    """A second POST while one job is already pending/in_progress must not
+    spawn a second walk against Blackboard's quota — it returns the SAME
+    job, still 202 (nothing new started, but nothing failed either)."""
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
-    app.dependency_overrides[get_lms_connector] = IngestConnector
 
-    def fake_select(table, params):
-        if table == "courses":
-            return [{"lms_course_id": "_4_1"}]
-        if table == "skills":
-            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}]
-        if table == "content_items":
-            # The dedupe lookup is now ONE query returning every stored
-            # lms_ref, so it reports lesson-1 as already present.
-            if params.get("lms_ref") == "not.is.null":
-                return [{"lms_ref": "lesson-1"}]
-            return []
-        return []
+    live_job = {
+        "id": "already-live", "status": "in_progress", "include_attachments": False,
+        "folders_expanded": 3, "items_stored": 7, "pdfs_fetched": 0,
+    }
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(
-        diagnostic.db, "insert",
-        lambda table, rows: inserted.extend(rows) or [{"id": "new"}],
-    )
-    monkeypatch.setattr(diagnostic.db, "update", lambda table, filters, values: [])
+    def insert_should_not_be_called(*args, **kwargs):
+        raise AssertionError("insert must not be called when a live job already exists")
+
+    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [live_job])
+    monkeypatch.setattr(ingest_jobs.db, "insert", insert_should_not_be_called)
 
     try:
         with TestClient(app) as client:
             response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "already_in_progress"
+    assert body["job"]["id"] == "already-live"
+    assert body["job"]["created"] is False
+
+
+def test_ingest_status_route_reports_never_ingested(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
+    )
+    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [])
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/courses/00000000-0000-4000-8000-000000000001/ingest/status")
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert inserted == [], "an already-stored item must not be inserted again"
-    assert response.json()["stored"] == 0
+    body = response.json()
+    assert body["status"] == "never_ingested"
+    assert body["job"] is None
+
+
+def test_ingest_status_route_reflects_the_job_row(monkeypatch) -> None:
+    """Drives the row directly (no live Blackboard), per the original patch
+    note's testing instructions: never_ingested -> pending -> complete as the
+    row advances, is exactly what the worker's checkpoints produce live."""
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
+    )
+    row = {
+        "id": "job-3", "status": "in_progress", "frontier": ["folder-9"],
+        "folders_expanded": 5, "items_stored": 12, "pdfs_fetched": 1,
+        "last_error": None, "created_at": "2026-01-01T00:00:00Z",
+        "started_at": "2026-01-01T00:00:01Z", "updated_at": "2026-01-01T00:05:00Z",
+        "finished_at": None,
+    }
+    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [row])
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/courses/00000000-0000-4000-8000-000000000001/ingest/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "in_progress"
+    assert body["job"]["id"] == "job-3"
+    assert body["job"]["items_stored"] == 12
 
 
 def test_propose_skills_endpoint_requires_instructor_or_admin(monkeypatch) -> None:
@@ -320,57 +319,9 @@ def test_retag_is_a_noop_when_everything_matched(monkeypatch) -> None:
     assert r.json()["next"] == "nothing to retag"
 
 
-def test_ingest_dedupes_with_one_query_not_one_per_item(monkeypatch) -> None:
-    """The store phase used to do a db.select PER content item to decide
-    "already stored?". This course has 178 items, so that was 178 sequential
-    round trips inside a 30s Lambda — the store phase alone blew the ceiling
-    before tagging began, which is why /ingest returned 503 at exactly 30.00s
-    with no tagging work done. The dedupe set must be fetched once.
-
-    Pinned by counting: the number of content_items SELECTs must not scale with
-    the number of items."""
-    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
-    )
-
-    class ManyItems:
-        def get_content(self, course_ref, *, include_attachments=False, max_attachments=3):
-            return [
-                {"lms_content_id": f"item-{i}", "title": f"Item {i}",
-                 "body_or_description": "body text", "content_type": "resource/x-bb-document",
-                 "parent_id": None}
-                for i in range(40)
-            ], {"fetched": 0, "skipped_unsupported": 0, "failed": 0, "capped": 0, "remaining": 0, "chunks": 0}
-
-    app.dependency_overrides[get_lms_connector] = ManyItems
-
-    selects = {"content_items": 0}
-
-    def fake_select(table, params):
-        if table == "courses":
-            return [{"lms_course_id": "_4_1"}]
-        if table == "skills":
-            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Algebra"}]
-        if table == "content_items":
-            selects["content_items"] += 1
-            return []
-        return []
-
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(diagnostic.db, "insert", lambda t, rows: [{"id": "x"}])
-    monkeypatch.setattr(diagnostic.db, "update", lambda t, f, v: [])
-
-    try:
-        with TestClient(app) as client:
-            response = client.post("/courses/00000000-0000-4000-8000-000000000001/ingest")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    # 40 items must not mean 40 dedupe lookups. A handful of phase queries is
-    # expected (dedupe set, pending embeds, pending tags, remaining); what is
-    # forbidden is growth with item count.
-    assert selects["content_items"] < 10, (
-        f"{selects['content_items']} content_items queries for 40 items — "
-        "the dedupe lookup is scaling per item again and will time out"
-    )
+# The old per-item dedupe-scaling test (test_ingest_dedupes_with_one_query_
+# not_one_per_item) is REMOVED, not ported: its premise was that /ingest's
+# own request handler scanned content_items, which no longer happens at all
+# now that the route only enqueues. That guarantee (one dedupe query, not one
+# per item) still matters — it moved with the store loop into the worker and
+# is covered there by ingest_walk's _existing_refs() and its tests.
