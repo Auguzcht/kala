@@ -415,6 +415,39 @@ admin rights. Manual and browser-triggered, so it does not solve automatic
 detection, but it turns one-PDF-at-a-time into "export once, unzip, bulk-call the
 existing `/content/upload` over the contents." Good enough to build on if needed.
 
+### The api-vs-worker row-count difference, explained (2026-09-21)
+
+An earlier note flagged "94 rows stored vs the api's 88" as unexplained. It is
+explained now, and **there is no discrepancy** — the comparison was made at the
+wrong level.
+
+At REF level (one `lms_ref` = one piece of content), comparing the worker's
+incremental walk against the api's whole-tree walk over the same AWS101 tree:
+
+| | count |
+|---|---|
+| worker refs | 86 |
+| api refs | 87 |
+| refs only in worker | **0** |
+| refs only in api | 1 (`lms_ref IS NULL`) |
+| refs in both with a DIFFERENT chunk count | **0** |
+
+The single difference is one row with `lms_ref = NULL`, created 2026-09-16 —
+before the ingest walk existed — whose `chunk_text` is the test fixture string
+"Managed AWS services trade higher per-unit cost...". Not course content the
+walk missed.
+
+The inflated "94" came from two things stacking: the run had
+`include_attachments=true`, so 6 PDF chunks were counted that **the api never
+had in the first place** (they are new content, not a discrepancy), and the
+remaining 87-vs-88 is that one legacy row.
+
+**Conclusion:** the incremental walk reproduces the api's tree exactly at ref
+level, and every shared ref has an identical chunk count. Verified per-item for
+`module_ref` AND the full `folder_path` chain (86/86 identical, including 52
+paths of depth >= 2 and depth 3 on both sides). A histogram match would not
+have proven this; the per-item comparison does.
+
 ---
 
 ## The 30s wall is now the top structural risk (measured 2026-09-19)

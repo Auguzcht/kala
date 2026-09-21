@@ -298,6 +298,68 @@ def test_a_leaf_child_gets_its_parents_folder_path_not_its_grandparents(monkeypa
     assert len(by_ref["leafB"]["folder_path"]) == 2
 
 
+def test_a_leaf_two_levels_deep_carries_the_FULL_ancestor_chain(monkeypatch):
+    """The module_ref bug mattered beyond cosmetics.
+
+    tag_backfill uses a chunk's module_ref to infer which MODULE a skill
+    belongs to (its skill_module_ref map), and it only ever FILLS a gap — never
+    overrides a value already set. So a leaf stored with module_ref=None is not
+    a display gap: it is a skill-inference input that starts from nothing, and
+    the wrong value is written once and then respected forever.
+
+    This asserts the ACTUAL CHAIN, root-to-parent in order, not merely that the
+    field is non-empty — a path of the wrong depth or wrong order would pass a
+    presence check and still mis-file every skill beneath it.
+    """
+    tree = {
+        "__root__": [_container("M1", "Module 1")],
+        "M1": [_container("W1", "Week 1")],
+        "W1": [_container("D1", "Day 1"), _leaf("leafAtDepth2")],
+        "D1": [_leaf("leafAtDepth3")],
+    }
+    fake = _wire(monkeypatch, _job())
+    ingest_walk._advance_one(FakeConnector(tree), dict(fake.job))
+    by_ref = {r["lms_ref"]: r for r in fake.stored}
+
+    # A leaf directly under Week 1 (two levels below the root).
+    path = by_ref["leafAtDepth2"]["folder_path"]
+    assert [e["lmsRef"] for e in path] == ["M1", "W1"], "root-to-parent order"
+    assert [e["title"] for e in path] == ["Module 1", "Week 1"]
+    # module_ref is the TOP-level ancestor, not the immediate parent.
+    assert by_ref["leafAtDepth2"]["module_ref"] == "Module 1"
+
+    # And three levels deep keeps the whole chain, in order.
+    deep = by_ref["leafAtDepth3"]["folder_path"]
+    assert [e["lmsRef"] for e in deep] == ["M1", "W1", "D1"]
+    assert by_ref["leafAtDepth3"]["module_ref"] == "Module 1"
+
+
+def test_the_incremental_walk_matches_the_apis_whole_tree_paths(monkeypatch):
+    """The api resolves folder_path from the WHOLE tree at once
+    (build_folder_paths); the worker can only ever know the ancestry it has
+    walked down. This pins that the incremental answer is the same one the api
+    would have produced for the same shape, including for a leaf that is only
+    reachable after several slices — i.e. the path survives being checkpointed
+    as jsonb and rehydrated on a later run."""
+    tree = {
+        "__root__": [_container("M1", "Module 1")],
+        "M1": [_container("W1", "Week 1")],
+        "W1": [_leaf("deepLeaf")],
+    }
+    fake = _wire(monkeypatch, _job())
+    # One folder per run, so deepLeaf is only reached on the THIRD slice and
+    # its path must have round-tripped through the persisted frontier.
+    monkeypatch.setattr(ingest_walk, "_FOLDERS_PER_RUN", 1)
+
+    ingest_walk._advance_one(FakeConnector(tree), dict(fake.job))
+    ingest_walk._advance_one(FakeConnector(tree), dict(fake.job))
+    ingest_walk._advance_one(FakeConnector(tree), dict(fake.job))
+
+    leaf = next(r for r in fake.stored if r["lms_ref"] == "deepLeaf")
+    assert [e["lmsRef"] for e in leaf["folder_path"]] == ["M1", "W1"]
+    assert leaf["module_ref"] == "Module 1"
+
+
 def test_pdfs_are_extracted_chunked_and_stored_under_their_own_ref(monkeypatch):
     """A PDF's text must land in content_items, addressable on its own — not
     fetched and discarded, and not appended to the linking page."""
