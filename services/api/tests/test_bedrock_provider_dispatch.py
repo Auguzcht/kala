@@ -164,7 +164,18 @@ def test_openrouter_converse_sends_structured_output_contract(monkeypatch):
     # cohere/north-mini-code:free, inclusionai/*). A model that ignores the
     # schema instead returns JSON that _validated_mcq rejects and retries, so
     # "try it and validate" beats "refuse to try".
-    assert "provider" not in captured["body"]
+    #
+    # Asserted on require_parameters rather than on the whole `provider` key:
+    # a `provider` block IS present now, but only for routing preference
+    # (order + allow_fallbacks), which is a different thing. The old blanket
+    # `"provider" not in body` was a proxy for this intent and would now fail
+    # for the wrong reason.
+    provider_block = captured["body"].get("provider") or {}
+    assert "require_parameters" not in provider_block
+    # And routing must never hard-pin: allow_fallbacks stays true so a busy
+    # preferred provider falls through instead of 503ing.
+    if provider_block:
+        assert provider_block.get("allow_fallbacks") is True
 
 
 def test_openrouter_converse_does_not_retry_a_bad_api_key(monkeypatch):
@@ -399,3 +410,97 @@ def test_openrouter_content_tolerates_null_and_empty_choices():
     assert bedrock._openrouter_content({"choices": [{"message": {"content": None}}]}) == ""
     assert bedrock._openrouter_content({"choices": []}) == ""
     assert bedrock._openrouter_content({}) == ""
+
+
+def test_provider_order_is_sent_as_a_preference_never_a_hard_pin(monkeypatch):
+    """OpenRouter load-balances one model id across ~15 providers whose
+    latencies differ by ~20x (measured: unpinned 32/64/113s vs pinned 2.8-8.5s
+    on the same prompt). That spread is what pushed tutor requests past the
+    30s Lambda wall.
+
+    The fix is a PREFERENCE with fallbacks left ON. A hard pin would trade a
+    slow success for a fast failure: a busy preferred provider would 503 where
+    the unpinned path would simply have used another one. So this pins the
+    exact shape that matters — order present, allow_fallbacks true — and not
+    merely that a provider key exists.
+    """
+    import app.ai.bedrock as bedrock
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    def fake_post(path, json=None):
+        captured.update(json or {})
+        return _Resp()
+
+    class _Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, path, json=None):
+            return fake_post(path, json=json)
+
+    monkeypatch.setattr(bedrock, "_openrouter_client", lambda: _Client())
+    monkeypatch.setattr(
+        bedrock, "get_settings",
+        lambda: type("S", (), {"openrouter_provider_order": "Relace,DeepInfra"})(),
+    )
+
+    bedrock._openrouter_post(
+        model_id="m", messages=[], max_tokens=10, response_format=None,
+    )
+
+    assert captured["provider"]["order"] == ["Relace", "DeepInfra"]
+    assert captured["provider"]["allow_fallbacks"] is True
+
+
+def test_an_empty_provider_order_sends_no_provider_block(monkeypatch):
+    """The escape hatch: blanking OPENROUTER_PROVIDER_ORDER must restore
+    exactly the previous behavior, so this can be switched off in config
+    without a code change if the provider mix shifts."""
+    import app.ai.bedrock as bedrock
+
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    class _Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, path, json=None):
+            captured.update(json or {})
+            return _Resp()
+
+    monkeypatch.setattr(bedrock, "_openrouter_client", lambda: _Client())
+    monkeypatch.setattr(
+        bedrock, "get_settings",
+        lambda: type("S", (), {"openrouter_provider_order": ""})(),
+    )
+
+    bedrock._openrouter_post(
+        model_id="m", messages=[], max_tokens=10, response_format=None,
+    )
+
+    assert "provider" not in captured

@@ -135,6 +135,22 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4.1-flash:floor",
         alias="OPENROUTER_MODEL_FALLBACK",
     )
+    # Comma-separated provider preference for OpenRouter's routing (its
+    # `provider.order` field). Empty = no preference, i.e. whatever OpenRouter
+    # picks, which is the pre-existing behavior.
+    #
+    # WHY THIS EXISTS: one model id is served by FIFTEEN providers here and
+    # OpenRouter load-balances across all of them. Measured 2026-09-21, same
+    # prompt and budget: unpinned 32/64/113s, pinned to Relace 2.8-8.5s. That
+    # spread is what pushed tutor requests past the 30s Lambda wall.
+    #
+    # Sent as `order` with allow_fallbacks LEFT TRUE (see ai/bedrock.py) — a
+    # hard pin would 503 whenever the preferred provider is at capacity,
+    # trading a slow success for a fast failure. This is a preference, not a
+    # requirement. Swappable without a code change as the provider mix shifts.
+    openrouter_provider_order: str = Field(
+        default="Relace", alias="OPENROUTER_PROVIDER_ORDER",
+    )
     # Nemotron 3 Embed 1B natively outputs 2048 dims; ai/bedrock.py slices to
     # the first 1024 and re-normalizes (NVIDIA's own documented technique for
     # this model family) so it matches the existing vector(1024) schema with

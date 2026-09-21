@@ -204,19 +204,43 @@ def _openrouter_client() -> httpx.Client:
             "HTTP-Referer": "https://kala.mmcm.edu.ph",
             "X-Title": "Kala",
         },
-        # 8s, not 20s: this client is called synchronously inside
-        # user-facing requests (/lti/launch's skill proposal, /skills/propose,
-        # tutor, item generation) that run on a 30s Lambda timeout behind an
-        # API Gateway HTTP API integration — which hard-caps the wait at 30s
-        # regardless of this client's own setting. A 60s timeout here meant
-        # a hung free-tier model never raised its own httpx.TimeoutException;
-        # the platform killed the whole Lambda first, with no exception for
-        # the surrounding try/except (_seed_course_skills) to catch — silent
-        # "Service Unavailable" instead of the clean "skipped" behavior that
-        # code already has. Eight seconds leaves headroom for DB work and the
-        # single cross-provider fallback attempt in converse() when a free
-        # provider stalls.
-        timeout=8.0,
+        # Socket/read timeout for the model call.
+        #
+        # WAS 8.0s, and that value was actively breaking every tutor request.
+        # Measured 2026-09-21 against the configured model
+        # (deepseek/deepseek-v4.1-flash:floor) on this endpoint:
+        #
+        #   unpinned (OpenRouter picks the provider):  32s, 64s, 113s
+        #   pinned to the fast provider (Relace):      2.8 - 8.5s
+        #
+        # Fifteen providers serve that model and OpenRouter load-balances
+        # across all of them. Their latencies differ by ~20x. So an 8s cap
+        # times out on the slow ones EVERY time, which then triggers the
+        # cross-provider fallback below, whose call ALSO gets 8s — two
+        # guaranteed failures plus any backoff sleep, inside a 30s Lambda.
+        # The request died having never successfully talked to a model, and
+        # reported only "Service Unavailable".
+        #
+        # The old comment justifies 8s as "fail fast so the fallback can run
+        # instead of the platform killing the Lambda". That reasoning is sound
+        # and the value was wrong: it assumed the fast path is the common case.
+        # It is not, for this model, on this endpoint.
+        #
+        # 25s, not 30s: API Gateway hard-caps the request at 30s regardless of
+        # the Lambda's own timeout, and _openrouter_converse is called AFTER
+        # RAG retrieval and DB reads — so this must leave room for those plus
+        # the response. A call that would exceed 25s now raises
+        # httpx.TimeoutException and gets ONE fallback attempt inside the
+        # remaining budget, which is the fail-fast behavior the old comment
+        # wanted; it just has to be slow enough that a NORMAL call succeeds
+        # before it fires.
+        #
+        # NOTE: this alone does NOT make a 30s wall sufficient. The same
+        # measurements show unpinned calls taking 32-113s, which no timeout
+        # can rescue. The real fix is provider pinning (see
+        # OPENROUTER_PROVIDER_ORDER) and/or streaming. This value is raised so
+        # the failure mode is an honest timeout rather than a silent one.
+        timeout=25.0,
     )
 
 
@@ -352,12 +376,48 @@ def _openrouter_post(
     Deliberately does NOT send provider.require_parameters — see the comment
     at the call site for why (it blocks capable models).
     """
+    s = get_settings()
     payload: dict = {
         "model": model_id,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.2,
     }
+    # Provider routing preferences.
+    #
+    # WHY: OpenRouter load-balances one model id across every provider serving
+    # it — FIFTEEN for the model configured here — and their latencies differ
+    # by roughly 20x. Measured 2026-09-21 on the same prompt and budget:
+    #
+    #   unpinned (OpenRouter chooses):        32s, 64s, 113s
+    #   pinned to Relace:                     2.8s, 3.7s, 4.7s, 8.1s, 8.5s
+    #
+    # The slow draws are what pushed tutor requests past the 30s Lambda wall
+    # and returned "Service Unavailable" — not max_tokens, not the prompt, not
+    # the retry logic. Pinning removes the lottery for the common case.
+    #
+    # `allow_fallbacks: true` is DELIBERATE and load-bearing. Pinning a
+    # provider outright would trade one failure mode for a worse one: if the
+    # preferred provider is at capacity, a hard pin has nothing to fall back
+    # on and 503s, where the unpinned path would simply have used someone
+    # else. So this is a PREFERENCE (`order`), not a requirement — OpenRouter
+    # tries the listed providers first and falls through on capacity.
+    #
+    # `sort` is intentionally NOT set: sorting by throughput would re-introduce
+    # the same variability this exists to remove.
+    #
+    # Empty list = no preference, i.e. exactly the old behavior. Configurable
+    # (OPENROUTER_PROVIDER_ORDER) so this can be tuned or switched off without
+    # a code change when the provider mix shifts.
+    provider_order = [
+        p.strip() for p in (getattr(s, "openrouter_provider_order", "") or "").split(",")
+        if p.strip()
+    ]
+    if provider_order:
+        payload["provider"] = {
+            "order": [p.strip() for p in provider_order],
+            "allow_fallbacks": True,
+        }
     if response_format is not None:
         # response_format WITHOUT provider.require_parameters.
         #
