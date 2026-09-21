@@ -291,8 +291,18 @@ class WorkerBlackboardConnector:
     def download(self, href: str) -> bytes:
         """Fetch a signed bbcswebdav href. Self-authenticating — no OAuth
         header — but SHORT-LIVED, so call this close to extraction, never from a
-        stored href. Follows the 302 to the signed URL. TODO(verify-live)."""
+        stored href. Follows the 302 to the signed URL. TODO(verify-live).
+
+        _check_rate_limit IS called here even though this host is not the REST
+        API. Without it a 429 on a PDF download raised a plain
+        HTTPStatusError, which _fetch_pdfs' `except Exception` swallows and
+        continues past — so the ONE path that can quietly burn requests into
+        an exhausted quota was also the one path the throttle logic could not
+        see. With it, a 429 here becomes BlackboardRateLimitedError like every
+        other call site, the walk checkpoints, and run() stops for the window.
+        """
         s = get_settings()
         resp = httpx.get(href, follow_redirects=True, verify=s.lms_verify_tls, timeout=30.0)
+        _check_rate_limit(resp)
         resp.raise_for_status()
         return resp.content
