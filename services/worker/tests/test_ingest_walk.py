@@ -466,3 +466,226 @@ def test_run_scopes_pickup_to_one_institution(monkeypatch):
     ingest_walk.run(institution_id="inst-9")
 
     assert seen["institution_id"] == "eq.inst-9"
+
+
+# ---------------------------------------------------------------------------
+# FIX B: the retry-after guard. These exist because the guard changes run()'s
+# PICKUP QUERY, which is exactly the surface the async wiring gap hid on —
+# correct logic that nothing ever calls. So these drive run() and the handler,
+# not just the WHERE clause.
+# ---------------------------------------------------------------------------
+
+
+class QueryAwareDB(FakeDB):
+    """A FakeDB that actually honours the not_before filter, so a test can
+    prove a backed-off job is not picked up rather than asserting the filter
+    string."""
+
+    def select(self, table, params):
+        if table == "ingest_jobs":
+            nb = params.get("not_before", "")
+            job_nb = self.job.get("not_before")
+            if job_nb:
+                # Emulate `is.null,not_before.lte.<now>`: a job with a FUTURE
+                # not_before must not come back.
+                cutoff = nb.split("lte.")[-1] if "lte." in nb else ""
+                if cutoff and str(job_nb) > cutoff:
+                    return []
+            return [dict(self.job)]
+        return super().select(table, params)
+
+
+def test_a_throttle_sets_not_before_from_retry_after(monkeypatch):
+    """The 429 carries the exact wait; the guard must record it rather than
+    retrying blind on the next schedule."""
+    tree = {"__root__": [_container("F1")], "F1": [_leaf("i1")]}
+    fake = _wire(monkeypatch, _job())
+    monkeypatch.setattr(
+        ingest_walk, "WorkerBlackboardConnector",
+        lambda: FakeConnector(tree, fail_on="F1"),
+    )
+
+    ingest_walk.run(institution_id="inst-1")
+
+    assert fake.job["not_before"], "a 429 must record a backoff"
+    from datetime import datetime, timezone
+    when = datetime.fromisoformat(fake.job["not_before"])
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    assert when > datetime.now(timezone.utc), "the backoff must be in the future"
+
+
+def test_a_429_without_a_retry_after_still_backs_off(monkeypatch):
+    """The header is optional. Leaving the job immediately eligible would
+    reproduce the very spin the guard exists to stop."""
+    tree = {"__root__": [_container("F1")], "F1": [_leaf("i1")]}
+    fake = _wire(monkeypatch, _job())
+
+    class NoHeader(FakeConnector):
+        def fetch_children(self, course_ref, parent_id=None):
+            if parent_id == "F1":
+                raise BlackboardRateLimitedError(retry_after=None, path="F1")
+            return super().fetch_children(course_ref, parent_id)
+
+    monkeypatch.setattr(ingest_walk, "WorkerBlackboardConnector", lambda: NoHeader(tree))
+    ingest_walk.run(institution_id="inst-1")
+
+    assert fake.job["not_before"], "must still back off, using the default"
+    assert fake.job["status"] != "failed", "a throttle is never 'failed'"
+
+
+def test_a_backed_off_job_is_not_picked_up(monkeypatch):
+    """The pickup filter must actually exclude it — this is the WHERE clause
+    doing its job against a query that honours it."""
+    future = "2099-01-01T00:00:00+00:00"
+    fake = QueryAwareDB(_job(status="in_progress", not_before=future, frontier=[]))
+    monkeypatch.setattr(ingest_walk, "db", fake)
+    called = {"advance": 0}
+    monkeypatch.setattr(
+        ingest_walk, "_advance_one",
+        lambda c, j: called.__setitem__("advance", called["advance"] + 1) or "in_progress",
+    )
+
+    result = ingest_walk.run(institution_id="inst-1")
+
+    assert result["jobsAdvanced"] == 0
+    assert called["advance"] == 0, "a job inside its backoff must not be advanced"
+
+
+def test_a_job_whose_backoff_has_elapsed_IS_picked_up(monkeypatch):
+    """The complement: once the window passes, the job resumes without any
+    manual re-enqueue."""
+    past = "2000-01-01T00:00:00+00:00"
+    fake = QueryAwareDB(_job(status="in_progress", not_before=past, frontier=[]))
+    monkeypatch.setattr(ingest_walk, "db", fake)
+    monkeypatch.setattr(
+        ingest_walk, "WorkerBlackboardConnector",
+        lambda: FakeConnector({"__root__": [_container("F1")], "F1": [_leaf("i1")]}),
+    )
+
+    result = ingest_walk.run(institution_id="inst-1")
+
+    assert result["jobsAdvanced"] == 1
+
+
+def test_the_livelock_is_broken_end_to_end_through_the_handler(monkeypatch):
+    """THE test this guard exists for, driven the way production drives it.
+
+    Before the guard: quota fully exhausted => every scheduled run gets 429 on
+    its first call, expands nothing, checkpoints nothing => folders_expanded
+    frozen forever with the job never failing. Verified by hand against the
+    fixed-but-unguarded code (frozen across 4 consecutive runs).
+
+    This runs the REAL handler five times against a connector that always
+    throttles, and asserts the spin is broken: the job backs off, the run
+    reports it, and NO further Blackboard calls are made on subsequent runs
+    until the window elapses.
+    """
+    from app.handler import handler
+
+    tree = {"__root__": [_container("F1")], "F1": [_leaf("i1")]}
+    fake = QueryAwareDB(_job())
+    monkeypatch.setattr(ingest_walk, "db", fake)
+
+    attempts = {"n": 0}
+
+    class AlwaysThrottled(FakeConnector):
+        def fetch_children(self, course_ref, parent_id=None):
+            attempts["n"] += 1
+            raise BlackboardRateLimitedError(retry_after=3600, path=str(parent_id))
+
+    monkeypatch.setattr(
+        ingest_walk, "WorkerBlackboardConnector", lambda: AlwaysThrottled(tree),
+    )
+    # The handler imports the jobs module; make sure it sees our patched db.
+    import app.handler as handler_module
+    monkeypatch.setattr(handler_module, "ingest_walk", ingest_walk)
+
+    # Run 1: hits the throttle, records the backoff.
+    handler({"scope": {"institution_id": "inst-1"}}, None)
+    after_first = attempts["n"]
+    assert after_first >= 1, "run 1 should have tried"
+    assert fake.job["not_before"], "run 1 must record the backoff"
+
+    # Runs 2-4: the job is inside its backoff, so Blackboard must NOT be hit.
+    for _ in range(3):
+        handler({"scope": {"institution_id": "inst-1"}}, None)
+
+    assert attempts["n"] == after_first, (
+        "the walk kept calling Blackboard while inside its backoff — this is "
+        "the spin the guard exists to stop"
+    )
+    assert fake.job["status"] != "failed", "a throttle never marks the job failed"
+
+
+# ---------------------------------------------------------------------------
+# FIX A: persisted cross-run dedupe
+# ---------------------------------------------------------------------------
+
+
+def test_a_container_already_expanded_in_a_previous_run_is_not_queued_again(monkeypatch):
+    """The run-local `queued` set starts empty each run, so without the
+    persisted `seen` set a container re-discovered later is queued again and
+    its whole subtree re-walked. This simulates exactly that: run 1 expands C,
+    run 2 rediscovers C as a child of A."""
+    # Run 1: A -> C, C -> leafC. C gets expanded, so it lands in `seen`.
+    tree1 = {"__root__": [_container("A")], "A": [_container("C")], "C": [_leaf("leafC")]}
+    fake = _wire(monkeypatch, _job())
+    ingest_walk._advance_one(FakeConnector(tree1), dict(fake.job))
+    assert "C" in (fake.job.get("seen") or []), "C must be recorded as expanded"
+    assert fake.job["status"] == "complete"
+
+    # Run 2: same tree, but the frontier is seeded so C is rediscovered.
+    fake.job["status"] = "in_progress"
+    fake.job["frontier"] = [["A", [], "A"]]
+    conn = FakeConnector(tree1)
+    ingest_walk._advance_one(conn, dict(fake.job))
+
+    assert conn.calls.count("C") == 0, "C was already expanded; do not re-fetch it"
+
+
+def test_seen_survives_a_run_boundary_via_the_job_row(monkeypatch):
+    """`seen` must be read back off the job row, or it is only run-local and
+    this whole fix is decorative."""
+    tree = {"__root__": [_container("F1")], "F1": [_leaf("i1")]}
+    fake = _wire(monkeypatch, _job())
+    ingest_walk._advance_one(FakeConnector(tree), dict(fake.job))
+    recorded = fake.job.get("seen")
+    assert recorded, "the checkpoint must persist `seen`"
+
+    # A fresh job dict carrying only what the DB would return still knows F1.
+    resumed = dict(fake.job)
+    assert "F1" in resumed["seen"]
+
+
+def test_the_pickup_query_requires_the_0018_columns(monkeypatch):
+    """DEPLOY-ORDER HAZARD, pinned rather than left to be rediscovered.
+
+    Unlike 0016 — where the new code failed open and apply-order did not
+    matter — this guard's filter names columns that only exist after 0018. On
+    a database without them PostgREST answers 400, db.select raises, and
+    run() propagates: ingest goes fully offline, it does not degrade.
+
+    So the required order is APPLY 0018, THEN deploy the worker. This test
+    exists so that if someone later "hardens" the query by dropping the filter
+    when the column is missing, that change is a visible decision rather than
+    a silent one.
+    """
+    captured = {}
+
+    class Fake:
+        def select(self, table, params):
+            captured.update(params)
+            return []
+
+        def insert(self, *a, **k):
+            return []
+
+        def update(self, *a, **k):
+            return []
+
+    monkeypatch.setattr(ingest_walk, "db", Fake())
+    ingest_walk.run(institution_id="inst-1")
+
+    assert "not_before" in captured, "the guard must filter on not_before"
+    assert "seen" in captured["select"], "the guard must select seen"

@@ -77,7 +77,7 @@ mirroring test_course_sync_cache.py's style.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.chunking import chunk_text, extract_text, resolve_mime_type, strip_pii
 from app.db import supabase as db
@@ -101,16 +101,37 @@ _PDFS_PER_RUN = 5
 # one bounded slice per run regardless.
 _JOBS_PER_RUN = 3
 
+# Fallback wait when a 429 arrives WITHOUT a parsable Retry-After header.
+# Blackboard normally sends one (`Retry-After: 20807s`), but the header is
+# optional in the spec and the parse can fail — and leaving the job eligible
+# in that case would reproduce the exact spin the backoff exists to prevent.
+# 15 minutes matches the scheduler's own cadence, so the job is retried on the
+# next tick rather than storming, and a genuinely long window still gets the
+# real value from the header when it IS present.
+_DEFAULT_BACKOFF_SECONDS = 900
+
 
 def run(*, institution_id: str | None = None) -> dict:
     """Advance up to _JOBS_PER_RUN pending/in_progress ingest jobs by one
     bounded slice each. institution_id None = all institutions (the schedule);
     a value scopes to one (manual console invoke), same contract as the other
-    worker jobs."""
+    worker jobs.
+
+    Jobs inside a throttle backoff (not_before in the future) are SKIPPED, not
+    failed. Without this, a job whose quota window is fully exhausted would be
+    re-attempted every 15 minutes forever: 429 on the first call, nothing
+    expanded, nothing checkpointed, repeat — zero net progress and no signal
+    anywhere. The per-folder checkpoint cannot fix that case, because there is
+    no progress to checkpoint.
+    """
     pickup_filter = {
+        # not_before is the retry-after skip (FIX B). NULL means never
+        # throttled, which is why it is eligible; a future value means we are
+        # still inside a window Blackboard told us to wait out.
+        "not_before": f"is.null,not_before.lte.{_utc_now_iso()}",
         "status": "in.(pending,in_progress)",
         "select": "id,institution_id,course_id,status,frontier,folders_expanded,"
-                  "items_stored,pdfs_fetched,include_attachments",
+                  "items_stored,pdfs_fetched,include_attachments,seen,not_before",
         "order": "created_at.asc",
         "limit": str(_JOBS_PER_RUN),
     }
@@ -138,18 +159,24 @@ def run(*, institution_id: str | None = None) -> dict:
             # docstring), so by the time this exception reaches us the frontier
             # already reflects every folder actually completed this run; at most
             # the one folder that was mid-fetch when the 429 landed is un-expanded,
-            # and it was put back on the frontier before the checkpoint. Stop
-            # touching Blackboard this run — the next scheduled run retries once
-            # the window resets.
+            # and it was put back on the frontier before the checkpoint.
+            #
+            # FIX B: record the retry-after Blackboard just gave us and skip
+            # this job until then. Stopping this run is not enough on its own —
+            # with the window fully exhausted, the NEXT scheduled run would
+            # re-attempt immediately, get 429 on its first call, and repeat
+            # forever with zero net progress. The exception carries the exact
+            # wait, so use it rather than retrying blind on the schedule.
             #
             # Counted as advanced: the job DID move (frontier checkpointed),
             # just not to completion. Reporting 0 here would read as "nothing
             # happened" in the run log while the job row says otherwise.
             advanced += 1
             rate_limited += 1
+            _set_backoff(job["id"], exc.retry_after)
             logger.warning(
-                "ingest walk rate-limited job=%s; checkpointed, will resume: %s",
-                job["id"], exc,
+                "ingest walk rate-limited job=%s; checkpointed, backoff=%ss: %s",
+                job["id"], exc.retry_after, exc,
             )
             break  # whole quota is shared; no point trying the next job either
         except Exception as exc:
@@ -192,6 +219,14 @@ def _advance_one(connector: WorkerBlackboardConnector, job: dict) -> str:
 
     existing_refs = _existing_refs(institution_id, course_id)
 
+    # FIX A: containers expanded on PREVIOUS runs, loaded from the job row.
+    # Defined here, BEFORE the seed branch, because that branch checkpoints too.
+    #
+    # Tolerant of the column not existing yet (0018 unapplied): job.get returns
+    # None and this degrades to the pre-0018 run-local-only behavior rather
+    # than raising. Same fail-open direction as course_by_lms_external_id.
+    seen: set[str] = set(job.get("seen") or [])
+
     # Running totals for THIS call, seeded from the job row so a checkpoint at
     # any point writes the correct cumulative total, not just this run's delta.
     folders_expanded_total = job.get("folders_expanded", 0)
@@ -220,6 +255,7 @@ def _advance_one(connector: WorkerBlackboardConnector, job: dict) -> str:
             items_stored=items_stored_total,
             pdfs_fetched=pdfs_fetched_total,
             status="in_progress" if frontier else "complete",
+            seen=seen,
         )
         if not frontier:
             return "complete"
@@ -237,7 +273,10 @@ def _advance_one(connector: WorkerBlackboardConnector, job: dict) -> str:
     # lets _store_item write a real folder_path/module_ref rather than the
     # empty ones a bare-id frontier would silently produce.
     frontier = _normalize_frontier(frontier)
-    queued = {cid for cid, _p, _t in frontier}
+    # Anything sitting on the frontier is by definition already queued, and
+    # anything in `seen` was expanded on an earlier run. The union is what the
+    # discovery check below tests against.
+    queued = {cid for cid, _p, _t in frontier} | seen
 
     expanded_this_run = 0
     pdfs_this_run = 0
@@ -264,6 +303,7 @@ def _advance_one(connector: WorkerBlackboardConnector, job: dict) -> str:
                 items_stored=items_stored_total,
                 pdfs_fetched=pdfs_fetched_total,
                 status="in_progress",
+                seen=seen,
             )
             raise
 
@@ -314,6 +354,7 @@ def _advance_one(connector: WorkerBlackboardConnector, job: dict) -> str:
         # each checkpoint rather than incremented twice.
         pdfs_fetched_total = job.get("pdfs_fetched", 0) + pdfs_this_run
 
+        seen.add(folder_id)
         status = "complete" if not frontier else "in_progress"
         _checkpoint(
             job_id,
@@ -322,6 +363,7 @@ def _advance_one(connector: WorkerBlackboardConnector, job: dict) -> str:
             items_stored=items_stored_total,
             pdfs_fetched=pdfs_fetched_total,
             status=status,
+            seen=seen,
         )
         logger.info(
             "ingest walk job=%s expanded folder=%s stored=%d pdfs_run=%d "
@@ -490,6 +532,16 @@ def _fetch_pdfs(connector, institution_id, course_id, raw, item, existing_refs, 
             data = connector.download(att["href"])
             mime = resolve_mime_type(att.get("fileName") or "", att.get("mimeType"))
             text = extract_text(data, mime)
+        except BlackboardRateLimitedError:
+            # MUST propagate, NOT be swallowed by the generic handler below.
+            # A 429 is the whole quota being gone, not one bad file — the walk
+            # has to checkpoint and stop (run() then leaves the job in_progress
+            # and skips it until not_before), instead of continuing to spend
+            # requests against an exhausted quota. This is the specific reason
+            # download() calls _check_rate_limit: without it a throttled PDF
+            # fetch arrived here as a plain HTTPStatusError and was silently
+            # treated as "this one file failed".
+            raise
         except Exception as exc:
             # One unreadable attachment must not lose the rest of the slice.
             # Note this leaves the href un-stored, so a permanently broken one
@@ -527,8 +579,41 @@ def _fetch_pdfs(connector, institution_id, course_id, raw, item, existing_refs, 
     return fetched
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utc_now_iso() -> str:
+    return _utc_now().isoformat()
+
+
+def _set_backoff(job_id: str, retry_after: int | None) -> None:
+    """Record a throttle backoff on the job (FIX B).
+
+    `not_before` = now + retry_after, so run()'s pickup skips this job until
+    the window Blackboard named has passed. When retry_after is None (a 429
+    with no parsable header), fall back to a fixed conservative wait rather
+    than leaving the job immediately eligible — leaving it eligible would
+    reproduce exactly the spin this exists to stop.
+
+    Best-effort: failing to record a backoff must not mask the throttle
+    itself, which is already logged and already checkpointed.
+    """
+    wait_seconds = retry_after if retry_after is not None else _DEFAULT_BACKOFF_SECONDS
+    try:
+        db.update("ingest_jobs", {"id": f"eq.{job_id}"}, {
+            "not_before": (_utc_now() + timedelta(seconds=wait_seconds)).isoformat(),
+            "updated_at": _utc_now_iso(),
+        })
+    except Exception as exc:  # noqa: BLE001
+        # Includes "column not migrated yet" — see the fail-open note on the
+        # pickup filter. Worst case the job is retried on the next schedule,
+        # which is the pre-0018 behavior, not a new failure.
+        logger.warning("could not record backoff on job=%s: %s", job_id, exc)
+
+
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return _utc_now_iso()
 
 
 def _touch_started(job_id: str) -> None:
@@ -536,7 +621,8 @@ def _touch_started(job_id: str) -> None:
               {"status": "in_progress", "started_at": _now(), "updated_at": _now()})
 
 
-def _checkpoint(job_id, *, frontier, folders_expanded, items_stored, pdfs_fetched, status) -> None:
+def _checkpoint(job_id, *, frontier, folders_expanded, items_stored, pdfs_fetched, status,
+                seen=None) -> None:
     values = {
         "frontier": frontier,
         "folders_expanded": folders_expanded,
@@ -545,6 +631,12 @@ def _checkpoint(job_id, *, frontier, folders_expanded, items_stored, pdfs_fetche
         "status": status,
         "updated_at": _now(),
     }
+    # FIX A: the persisted expanded-container set. Written on every checkpoint
+    # alongside the frontier so the two can never disagree about what has been
+    # walked. Omitted (not sent as null) when the caller has nothing to say, so
+    # a checkpoint from an older code path cannot blank it.
+    if seen is not None:
+        values["seen"] = sorted(seen)
     if status == "complete":
         values["finished_at"] = _now()
     db.update("ingest_jobs", {"id": f"eq.{job_id}"}, values)
