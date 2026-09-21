@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 from functools import lru_cache
 
-from fastapi import Depends, Header, HTTPException, Path, status
+from fastapi import Depends, Header, HTTPException, Path, Query, status
 
 from app.lms.blackboard import BlackboardConnector
 from app.security.jwt import verify_session_token
@@ -60,6 +60,28 @@ def _validated_uuid(value: str) -> str:
 # handler, the same way a native annotation would.
 
 def require_valid_course_id(course_id: str = Path(...)) -> str:
+    return _validated_uuid(course_id)
+
+
+def require_valid_course_id_query(course_id: str = Query(...)) -> str:
+    """Same validation, for a route that takes course_id in the QUERY STRING.
+
+    WHY THIS EXISTS — a regression this repo actually shipped. The first pass
+    of this guard rewrote every UUID param to `Depends(require_valid_<name>)`,
+    and those deps bind with `Path(...)`. For the one route that had been
+    taking course_id as a plain query parameter (`GET /tutor/conversations`,
+    which has no {course_id} segment in its path), that silently turned it
+    into a REQUIRED PATH PARAM: FastAPI then demanded a path segment the route
+    does not have, and every request 422'd with
+    `{"loc":["path","course_id"],"msg":"Field required"}`.
+
+    Routers migrated in that pass were checked for this shape, but the check
+    compared the param NAME against the route's path string and missed it
+    because the signature was single-line. The lesson worth keeping: a dep's
+    binding source (Path vs Query) is part of its contract, so a blanket
+    rewrite of `x: str` -> `Depends(dep)` can change a route's PUBLIC
+    interface without touching its path.
+    """
     return _validated_uuid(course_id)
 
 

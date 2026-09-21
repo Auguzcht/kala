@@ -174,3 +174,111 @@ def test_blackboard_column_ids_are_NOT_uuid_guarded() -> None:
     src = __import__("inspect").getsource(diagnostic.post_grade)
     assert "require_valid_column_id" not in src
     assert "column_id: str," in src
+
+
+# ---- the Path-vs-Query binding contract -----------------------------------
+
+
+def test_no_uuid_path_dep_is_attached_to_a_param_absent_from_the_route_path() -> None:
+    """REGRESSION, shipped and caught live.
+
+    The first pass of this guard rewrote every UUID param to
+    `Depends(require_valid_<name>)`, and those deps bind with `Path(...)`.
+    `GET /tutor/conversations` takes course_id in the QUERY STRING — its path
+    has no {course_id} segment — so that rewrite turned it into a REQUIRED
+    PATH PARAM and every request 422'd with
+    {"loc":["path","course_id"],"msg":"Field required"}.
+
+    A dep's binding source is part of the route's public interface, so a
+    blanket `x: str` -> `Depends(dep)` rewrite can change that interface
+    without touching the path.
+
+    Parsed with AST rather than regex: a regex keyed on the signature's final
+    line shape silently skipped exactly the multi-line signatures this is
+    meant to police (an earlier version matched 5 of 6 routes in tutor.py and
+    missed the broken one).
+    """
+    import ast
+    import inspect
+
+    from app.routers import tutor as tutor_router
+
+    tree = ast.parse(inspect.getsource(tutor_router))
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        route_path = None
+        for dec in node.decorator_list:
+            if (
+                isinstance(dec, ast.Call)
+                and isinstance(dec.func, ast.Attribute)
+                and isinstance(dec.func.value, ast.Name)
+                and dec.func.value.id == "router"
+                and dec.args
+                and isinstance(dec.args[0], ast.Constant)
+            ):
+                route_path = dec.args[0].value
+        if route_path is None:
+            continue
+        for arg, default in zip(node.args.args, _defaults_for(node)):
+            if not isinstance(default, ast.Call):
+                continue
+            # The dep name is the ARGUMENT to Depends(...), not its func —
+            # default.func is `Depends` itself. Checking the wrong node is why
+            # an earlier version of this sweep found nothing and passed with
+            # the bug present.
+            if not (default.args and isinstance(default.args[0], ast.Name)):
+                continue
+            dep_name = default.args[0].id
+            if not dep_name.startswith("require_valid_"):
+                continue
+            if dep_name.endswith("_query"):
+                continue  # correctly bound to the query string
+            if f"{{{arg.arg}}}" not in route_path:
+                offenders.append(f"{node.name} -> {arg.arg} via {dep_name}")
+
+    assert not offenders, (
+        "a UUID is validated as a PATH dep on a route whose path has no such "
+        f"segment (that param must use the _query dep instead): {offenders}"
+    )
+
+
+def _defaults_for(node):
+    """Paired defaults for node.args.args, padded with None on the left."""
+    positional = node.args.args
+    defaults = node.args.defaults
+    return [None] * (len(positional) - len(defaults)) + list(defaults)
+
+
+def test_tutor_conversations_accepts_course_id_as_a_QUERY_param() -> None:
+    """The specific route that broke. Pins the public interface directly, so a
+    future blanket rewrite fails loudly here rather than in a browser."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.deps import get_current_user, CurrentUser
+    import app.routers.tutor as tutor_router
+
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="00000000-0000-4000-8000-000000000040",
+        institution_id="64a59889-ba9c-44ae-87c8-765f86c92c78", app_role="admin",
+    )
+    original = tutor_router.db
+    tutor_router.db = type("D", (), {
+        "select": staticmethod(lambda t, p: []),
+        "insert": staticmethod(lambda t, r: [{}]),
+        "update": staticmethod(lambda *a: []),
+    })()
+    try:
+        c = TestClient(app)
+        ok = c.get(f"/tutor/conversations?course_id={VALID}")
+        assert ok.status_code == 200, (
+            f"course_id must be accepted as a query param; got {ok.status_code}"
+        )
+        # Validation still applies on the query path.
+        assert c.get("/tutor/conversations?course_id=not-a-uuid").status_code == 404
+        # And it must NOT have become a path param.
+        assert c.get(f"/tutor/conversations/{VALID}").status_code in (404, 405)
+    finally:
+        tutor_router.db = original
+        app.dependency_overrides.clear()
