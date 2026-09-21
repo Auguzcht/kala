@@ -49,10 +49,11 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 // question-rendering primitive changed.
 //
 // Shell migration: Diagnostic was the last STUDENT-LOOP surface still on the
-// retired StudySessionShell. It now uses the same StudySurface + SessionBar +
-// ComposeDock shell as Practice, Flashcards, and Lessons, with submit living
-// in the dock. StudySessionShell is NOT deleted — TutorChat still imports it;
-// Tutor's migration is separate work and this file must not strand it.
+// retired StudySessionShell at the time. It now uses the same StudySurface +
+// SessionBar + ComposeDock shell as Practice, Flashcards, and Lessons, with
+// submit living in the dock. TutorChat has since migrated too (see
+// docs/ai-overhaul-v2/05_TUTOR_AND_HIERARCHY.md and TutorSidebar) —
+// StudySessionShell.tsx has no real importers left and is ready to retire.
 //
 // Diagnostic is the one surface that puts more than one AnswerableCard on
 // screen at once (every other surface shows a single question/card at a

@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TopBar } from "@/components/shell/TopBar";
+import { TutorSidebar, TUTOR_SIDEBAR_COLLAPSED_PX, TUTOR_SIDEBAR_EXPANDED_PX } from "@/components/shell/TutorSidebar";
 import { useTwin } from "@/features/twin";
 import { GamificationSummary } from "@/features/gamification";
 import { useDiagnosticStatus } from "@/features/diagnostic";
@@ -131,6 +132,42 @@ export function CourseShell({
   const isSessionRoute = SESSION_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
+  // Tutor gets its own persistent left-rail extension (chat history — see
+  // TutorSidebar), on every other route the icon rail is the whole story.
+  const isTutorRoute = pathname.startsWith("/course/tutor");
+  const tutorSidebarKey = session?.userId
+    ? `kala.tutor-sidebar-collapsed.${session.userId}`
+    : null;
+  const [tutorSidebarCollapsed, setTutorSidebarCollapsed] = useState(
+    () => (tutorSidebarKey ? localStorage.getItem(tutorSidebarKey) === "1" : false)
+  );
+  // Re-read once the session key exists. The useState initializer above runs
+  // exactly once, on the FIRST render — and on a post-launch visit that render
+  // has `session === null` (AuthProvider boots before /launch captures the
+  // token, see its own docstring), so tutorSidebarKey is null, the read is
+  // skipped, and the value defaults to expanded. useState never re-runs its
+  // initializer when session later arrives, so without this effect a student
+  // who had collapsed the sidebar would get it expanded again after every LTI
+  // relaunch. The tour key below has the identical shape and an identical
+  // compensating effect (see the tourStep one) — this is that same pattern.
+  useEffect(() => {
+    if (tutorSidebarKey) {
+      setTutorSidebarCollapsed(localStorage.getItem(tutorSidebarKey) === "1");
+    }
+  }, [tutorSidebarKey]);
+  const toggleTutorSidebar = () => {
+    setTutorSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      if (tutorSidebarKey) localStorage.setItem(tutorSidebarKey, next ? "1" : "0");
+      return next;
+    });
+  };
+  // The rail (56px) plus, on the tutor route only, TutorSidebar's own
+  // width — collapsed or expanded. Off that route it's just the rail,
+  // same as every other page today.
+  const contentOffsetPx = isTutorRoute
+    ? 56 + (tutorSidebarCollapsed ? TUTOR_SIDEBAR_COLLAPSED_PX : TUTOR_SIDEBAR_EXPANDED_PX)
+    : 56;
   const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
   const diagnosticDue = diagnosticStatus?.due ?? false;
 
@@ -265,9 +302,22 @@ export function CourseShell({
         </div>
       </nav>
 
+      {isTutorRoute ? (
+        <TutorSidebar
+          courseId={courseId}
+          collapsed={tutorSidebarCollapsed}
+          onToggleCollapsed={toggleTutorSidebar}
+        />
+      ) : null}
+
       {/* Content column. This is the real height root for active study
-          sessions; ordinary course pages keep their own scroll region. */}
-      <div className="flex h-dvh flex-col overflow-hidden pl-14">
+          sessions; ordinary course pages keep their own scroll region.
+          Left padding is computed, not a static class, because it has to
+          track TutorSidebar's width (or absence) on the tutor route. */}
+      <div
+        className="flex h-dvh flex-col overflow-hidden"
+        style={{ paddingLeft: contentOffsetPx }}
+      >
         <div className="shrink-0">
           <TopBar
             courseId={courseId}
