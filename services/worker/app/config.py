@@ -77,6 +77,29 @@ class Settings(BaseSettings):
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_embed_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBED_MODEL")
 
+    # Blackboard Learn REST API. DELIBERATE DUPLICATE of the api's config
+    # (services/api/app/config.py, "Blackboard Learn REST API" block plus the
+    # LMS/LTI block that holds lms_verify_tls and lti_auth_token_url). The
+    # worker now runs the incremental course walk (app/jobs/ingest_walk.py), so
+    # it needs the same REST credentials the api connector uses. These come
+    # from the SAME kala/app secret the worker already loads via
+    # KALA_SECRETS_ARN — no new secret, no IAM change, no terraform change.
+    # The worker could always READ these values; it simply never declared the
+    # fields, so pydantic ignored them. Verified against the live secret on
+    # 2026-09-21: all five keys are present in kala/app.
+    # If the api's copy changes, change this one too; grep both for the alias
+    # before editing either (same contract as openrouter_model_fast).
+    lms_rest_base_url: str = Field(default="", alias="LMS_REST_BASE_URL")
+    lms_rest_client_id: str = Field(default="", alias="LMS_REST_CLIENT_ID")
+    lms_rest_client_secret: str = Field(default="", alias="LMS_REST_CLIENT_SECRET")
+    # NOTE: your brief said "four fields"; it is five. lms_verify_tls is needed
+    # or every LMS call from the worker would verify TLS against an instance
+    # configured with LMS_VERIFY_TLS=false, and lti_auth_token_url is where the
+    # connector's _get_token() posts the client-credentials grant. Both already
+    # live in kala/app, so declaring them costs nothing.
+    lms_verify_tls: bool = Field(default=True, alias="LMS_VERIFY_TLS")
+    lti_auth_token_url: str = Field(default="", alias="LTI_AUTH_TOKEN_URL")
+
     # Twin tracer step size. MUST match services/api/app/twin/tracer.py's _K
     # exactly, or reconciliation replays evidence into a different estimate
     # than the live request path produced. Kept as a setting (not hardcoded)

@@ -8,6 +8,12 @@ dependencies = [
     "httpx>=0.27",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    # PDF text extraction for the ingest walk (app/chunking.py). Same pin as
+    # services/api, where /content/upload already extracts PDFs — the two must
+    # parse identically or the same file yields different text by which door
+    # it came in. Added with the async-ingest work; before this the worker had
+    # no PDF need at all.
+    "pypdf>=5.0",
 ]
 
 [dependency-groups]
