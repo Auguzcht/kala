@@ -477,22 +477,52 @@ def test_run_scopes_pickup_to_one_institution(monkeypatch):
 
 
 class QueryAwareDB(FakeDB):
-    """A FakeDB that actually honours the not_before filter, so a test can
-    prove a backed-off job is not picked up rather than asserting the filter
-    string."""
+    """Evaluates the not_before pickup predicate the way POSTGREST actually
+    does, rather than the way the caller intends.
+
+    Why it is written this way. The previous version parsed
+    `nb.split("lte.")[-1]` out of whatever string arrived, which meant it
+    happily honoured a filter PostgREST would not — it re-implemented the
+    INTENT in Python and never exercised the wire syntax. That is how the
+    malformed `{"not_before": "is.null,not_before.lte.<ts>"}` stayed green
+    through an end-to-end test while matching ZERO rows on the live endpoint.
+
+    So this fake now mirrors the real semantics, including the failure mode:
+      - the predicate may only be satisfied via the reserved `or=(...)`
+        parameter (mirroring `?or=(age.lt.18,age.gt.21)`);
+      - a column-keyed value that LOOKS like a compound predicate matches
+        NOTHING, because PostgREST reads it as one unparseable operand.
+
+    That second rule is the point: the old, broken filter now returns no rows
+    here exactly as it returned no rows in production, so the regression is
+    reproducible in the suite instead of only against the live database.
+    """
 
     def select(self, table, params):
-        if table == "ingest_jobs":
-            nb = params.get("not_before", "")
-            job_nb = self.job.get("not_before")
-            if job_nb:
-                # Emulate `is.null,not_before.lte.<now>`: a job with a FUTURE
-                # not_before must not come back.
-                cutoff = nb.split("lte.")[-1] if "lte." in nb else ""
-                if cutoff and str(job_nb) > cutoff:
-                    return []
+        if table != "ingest_jobs":
+            return super().select(table, params)
+
+        job_nb = self.job.get("not_before")
+        or_clause = params.get("or")
+
+        if or_clause is None:
+            # No OR predicate at all: either no filter was asked for, or the
+            # caller used the malformed column-keyed form. Distinguish, so the
+            # fake fails the way PostgREST does rather than silently passing.
+            bogus = params.get("not_before")
+            if bogus and "," in str(bogus):
+                # A comma-joined value under a column key: PostgREST accepts
+                # the request (200) and matches nothing. Not a 400.
+                return []
+            return [dict(self.job)] if not bogus else (
+                [dict(self.job)] if (job_nb is None and bogus == "is.null") else []
+            )
+
+        # The real predicate: not_before IS NULL OR not_before <= now.
+        if job_nb is None:
             return [dict(self.job)]
-        return super().select(table, params)
+        cutoff = or_clause.split("not_before.lte.")[-1].rstrip(")")
+        return [dict(self.job)] if str(job_nb) <= cutoff else []
 
 
 def test_a_throttle_sets_not_before_from_retry_after(monkeypatch):
@@ -687,5 +717,5 @@ def test_the_pickup_query_requires_the_0018_columns(monkeypatch):
     monkeypatch.setattr(ingest_walk, "db", Fake())
     ingest_walk.run(institution_id="inst-1")
 
-    assert "not_before" in captured, "the guard must filter on not_before"
+    assert "not_before" in captured.get("or", ""), "the guard must filter on not_before via the real or= param"
     assert "seen" in captured["select"], "the guard must select seen"

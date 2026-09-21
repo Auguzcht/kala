@@ -125,10 +125,32 @@ def run(*, institution_id: str | None = None) -> dict:
     no progress to checkpoint.
     """
     pickup_filter = {
-        # not_before is the retry-after skip (FIX B). NULL means never
-        # throttled, which is why it is eligible; a future value means we are
-        # still inside a window Blackboard told us to wait out.
-        "not_before": f"is.null,not_before.lte.{_utc_now_iso()}",
+        # FIX B (not_before): PostgREST OR must be the reserved top-level
+        # `or=(...)` parameter. The earlier
+        #   {"not_before": "is.null,not_before.lte.<ts>"}
+        # was WRONG, but not in the way first assumed — measured against the
+        # live endpoint on 2026-09-21, it does NOT 400. PostgREST accepts the
+        # string and treats the whole comma-joined value as one unparseable
+        # operand for `is`, which matches NOTHING. So a job whose backoff had
+        # elapsed (not_before in the past) was never picked up again: the
+        # guard silently disabled the retry it was built to enable.
+        #
+        # That is a worse failure than a 400 would have been. A 400 is loud
+        # and the job is visibly broken; a filter that matches nothing looks
+        # like "no work to do".
+        #
+        # Verified live, past/present/future:
+        #   not_before NULL   -> both forms match (never throttled)
+        #   not_before past   -> OLD 0 rows (WRONG), NEW 1 row
+        #   not_before future -> both 0 rows (correctly skipped)
+        #
+        # And it was not caught because the e2e test's fake DB re-implemented
+        # the filter's INTENT in Python instead of exercising PostgREST's
+        # wire syntax — the same shape of gap as the wiring bug.
+        #
+        # NULL means never throttled, hence eligible; past-or-equal means the
+        # window Blackboard told us to wait out has elapsed.
+        "or": f"(not_before.is.null,not_before.lte.{_utc_now_iso()})",
         "status": "in.(pending,in_progress)",
         "select": "id,institution_id,course_id,status,frontier,folders_expanded,"
                   "items_stored,pdfs_fetched,include_attachments,seen,not_before",
