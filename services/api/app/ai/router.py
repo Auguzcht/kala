@@ -19,6 +19,7 @@ def get_model_for(task: str) -> str:
             "fast": s.openrouter_model_fast,
             "tag": s.openrouter_model_fast,
             "default": s.openrouter_model_default,
+            "chat": s.openrouter_model_chat,
             "item": s.openrouter_model_item,
             "reasoning": s.openrouter_model_reasoning,
             "premium": s.openrouter_model_premium,
@@ -28,6 +29,7 @@ def get_model_for(task: str) -> str:
             "fast": s.bedrock_model_fast,
             "tag": s.bedrock_model_fast,
             "default": s.bedrock_model_default,
+            "chat": s.bedrock_model_chat,
             "item": s.bedrock_model_default,
             "reasoning": s.bedrock_model_reasoning,
             "premium": s.bedrock_model_premium,
@@ -48,8 +50,27 @@ def get_model_for(task: str) -> str:
 _ANSWER_MAX_TOKENS = 2048
 
 
+def get_fallback_for(task: str) -> str | None:
+    """The fallback model for a role, or None to use the global default.
+
+    Only `chat` has its own today. The global fallback is deepseek, which is a
+    fine escape hatch for the generation roles (they run on the worker or in
+    bounded requests) but CANNOT serve the tutor: deepseek needs 34-103s on the
+    real tutor prompt, so falling back to it from a failed ling call just times
+    out again and produces the same 500. A role-specific fallback is the only
+    way to make the retry actually retry something viable.
+
+    Returning None for every other role is deliberate — `converse()` then uses
+    s.openrouter_model_fallback exactly as before, so nothing else changes.
+    """
+    s = get_settings()
+    if task == "chat":
+        return s.openrouter_model_chat_fallback or None
+    return None
+
+
 def answer(*, system: str, user_text: str, escalate: bool = False,
-           history: list[dict] | None = None) -> str:
+           history: list[dict] | None = None, task: str = "default") -> str:
     """`history` is prior turns already in bedrock.converse's message shape
     ({"role": "user"|"assistant", "content": [{"text": ...}]}), oldest
     first. Optional and backward-compatible: every existing caller omits
@@ -60,8 +81,21 @@ def answer(*, system: str, user_text: str, escalate: bool = False,
 
     The reply is post-processed with strip_reasoning() so a leaked
     chain-of-thought preamble never reaches a student (see ai/reasoning.py for
-    why this is enforced here rather than left to the prompt)."""
-    model = get_model_for("reasoning" if escalate else "default")
+    why this is enforced here rather than left to the prompt).
+
+    `task` selects the model role. Defaults to "default", which reproduces the
+    original behaviour EXACTLY for every existing caller (prescriber.py,
+    skill_proposer.py, lessons) — none of them pass it. The tutor passes
+    task="chat" to get its own model without disturbing theirs.
+
+    `escalate` is retained for callers that want the reasoning model on the
+    default role; when task is explicitly something other than "default" it
+    wins, because asking for the chat role and silently getting the reasoning
+    model would be a surprising thing to do."""
+    if task != "default":
+        model = get_model_for(task)
+    else:
+        model = get_model_for("reasoning" if escalate else "default")
     messages = list(history) if history else []
     messages.append({"role": "user", "content": [{"text": user_text}]})
     raw = bedrock.converse(
@@ -69,6 +103,7 @@ def answer(*, system: str, user_text: str, escalate: bool = False,
         system=system,
         messages=messages,
         max_tokens=_ANSWER_MAX_TOKENS,
+        fallback_model_id=get_fallback_for(task),
     )
     return strip_reasoning(raw)
 

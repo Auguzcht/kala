@@ -504,3 +504,110 @@ def test_an_empty_provider_order_sends_no_provider_block(monkeypatch):
     )
 
     assert "provider" not in captured
+
+
+# ---------------------------------------------------------------------------
+# The chat role (Piece 1): tutor gets its own model, everything else does not.
+# ---------------------------------------------------------------------------
+
+
+def test_chat_role_is_wired_and_distinct_from_default():
+    """`default` is not tutor-only — lessons phase 2, skill_proposer and
+    prescriber all call it. Repointing it would have moved all four onto an
+    unbenchmarked model at once, so the tutor got its own role instead."""
+    from app.ai.router import get_model_for
+
+    assert get_model_for("chat") != get_model_for("default")
+    # And default is unchanged, which is the whole point of a separate role.
+    assert get_model_for("default") == "deepseek/deepseek-v4.1-flash:floor"
+
+
+def test_answer_defaults_to_the_default_role_for_existing_callers(monkeypatch):
+    """Every pre-existing caller omits `task`, so their model must not move.
+    Pinned because a silent change here would alter lessons, the skill
+    proposer and the prescriber at once — none of which were benchmarked."""
+    import app.ai.router as router
+    import app.ai.bedrock as bedrock
+
+    seen = {}
+
+    def fake_converse(**kw):
+        seen.update(kw)
+        return "ok"
+
+    monkeypatch.setattr(bedrock, "converse", fake_converse)
+    router.answer(system="s", user_text="u")
+    assert seen["model_id"] == router.get_model_for("default")
+    assert seen["fallback_model_id"] is None, (
+        "existing callers must keep the global fallback, not a chat one"
+    )
+
+
+def test_answer_with_chat_task_selects_the_chat_model_and_fallback(monkeypatch):
+    import app.ai.router as router
+    import app.ai.bedrock as bedrock
+    from app.config import get_settings
+
+    seen = {}
+
+    def fake_converse(**kw):
+        seen.update(kw)
+        return "ok"
+
+    monkeypatch.setattr(bedrock, "converse", fake_converse)
+    router.answer(system="s", user_text="u", task="chat")
+
+    assert seen["model_id"] == router.get_model_for("chat")
+    assert seen["fallback_model_id"] == get_settings().openrouter_model_chat_fallback
+    # A chat fallback that is the same as the primary would be no fallback at
+    # all — a ling-specific outage would take out both.
+    assert seen["fallback_model_id"] != seen["model_id"]
+
+
+def test_escalate_is_ignored_when_an_explicit_task_is_passed(monkeypatch):
+    """Asking for the chat role and silently receiving the reasoning model
+    would be surprising, so an explicit task wins over escalate."""
+    import app.ai.router as router
+    import app.ai.bedrock as bedrock
+
+    seen = {}
+    monkeypatch.setattr(bedrock, "converse", lambda **kw: seen.update(kw) or "ok")
+    router.answer(system="s", user_text="u", escalate=True, task="chat")
+    assert seen["model_id"] == router.get_model_for("chat")
+
+
+def test_the_chat_fallback_actually_fires_and_is_a_different_model(monkeypatch):
+    """Not just the wiring: force a primary failure and confirm the retry uses
+    the chat fallback, not the global deepseek one (which cannot fit the
+    tutor's timeout, so falling back to it would just re-time-out)."""
+    import app.ai.bedrock as bedrock
+    from app.ai.errors import ModelUnavailableError
+
+    calls = []
+
+    def fake_post(**kw):
+        calls.append(kw["model_id"])
+        if kw["model_id"].startswith("inclusionai"):
+            raise ModelUnavailableError(
+                "primary down", provider="openrouter",
+                model_id=kw["model_id"], status_code=503,
+            )
+        return "FALLBACK ANSWER"
+
+    monkeypatch.setattr(bedrock, "_openrouter_converse", fake_post)
+    monkeypatch.setattr(bedrock, "_bedrock_converse", lambda **kw: "bedrock")
+
+    out = bedrock.converse(
+        model_id=bedrock.get_settings().openrouter_model_chat,
+        system="s", messages=[{"role": "user", "content": [{"text": "q"}]}],
+        max_tokens=1024,
+        fallback_model_id=bedrock.get_settings().openrouter_model_chat_fallback,
+    )
+
+    assert out == "FALLBACK ANSWER"
+    assert len(calls) == 2, "one primary attempt then exactly one fallback"
+    assert calls[1] == bedrock.get_settings().openrouter_model_chat_fallback
+    assert "deepseek" not in calls[1], (
+        "the global deepseek fallback cannot fit the tutor's 25s budget; "
+        "using it would just relocate the timeout"
+    )

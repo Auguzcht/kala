@@ -338,6 +338,34 @@ class Ask(BaseModel):
 
 @router.post("/ask")
 def ask(body: Ask, user: CurrentUser = Depends(get_current_user)):
+    # The tutor is the ONE surface that passes task="chat". Its own model role
+    # exists because deepseek cannot answer inside the request budget (34-103s
+    # against a 25s client timeout behind a 30s Lambda wall), and the global
+    # deepseek fallback cannot rescue it for the same reason. Every other
+    # answer() caller omits task and keeps its existing model.
+    #
+    # A MODEL OUTAGE IS ALREADY HANDLED, at the app level: main.py has an
+    # exception handler for ModelUnavailableError that returns a generic 502
+    # with {"detail": "..."}. An earlier version of this change also wrapped
+    # the call in a local try/except returning 503 with a nested
+    # {"detail": {"error", "message", "retryable"}} payload — that was
+    # removed, for two concrete reasons:
+    #
+    #   1. The frontend does not read the body. TutorChat's onError branches
+    #      on the ERROR, keeping the question and showing a retry, so the
+    #      extra payload was never consumed. There was no contract to match.
+    #   2. It BROKE apiErrorReason(), which extracts the message with a regex
+    #      expecting a flat {"detail":"..."}. A nested detail object does not
+    #      match, so the helper returned null instead of the sentence — a
+    #      worse outcome than the handler it duplicated.
+    #
+    # Two handlers doing one job with different shapes is exactly the drift
+    # this codebase keeps finding. One handler, at the layer every
+    # model-backed endpoint already goes through.
+    return _ask(body, user)
+
+
+def _ask(body: Ask, user: CurrentUser):
     if not body.conversation_id:
         # Original stateless path, unchanged. No conversation touched, no
         # history, no persistence — a canned hint stays a canned hint.
@@ -347,7 +375,7 @@ def ask(body: Ask, user: CurrentUser = Depends(get_current_user)):
         context = "\n".join(c.get("chunk_text", "") for c in chunks)
         prompt = safe_context(user, f"Course context:\n{context}\n\nQuestion: {body.question}")
         system = _SYSTEM + _STYLE_HINTS.get(body.style, "")
-        return {"answer": model_router.answer(system=system, user_text=prompt)}
+        return {"answer": model_router.answer(system=system, user_text=prompt, task="chat")}
 
     convo = _owned_conversation(body.conversation_id, user)
 
@@ -389,7 +417,9 @@ def ask(body: Ask, user: CurrentUser = Depends(get_current_user)):
         user, f"Course context:\n{context}{attachment_block}\n\nQuestion: {body.question}"
     )
     system = _SYSTEM + _STYLE_HINTS.get(body.style, "")
-    answer_text = model_router.answer(system=system, user_text=prompt, history=history)
+    answer_text = model_router.answer(
+        system=system, user_text=prompt, history=history, task="chat",
+    )
 
     db.insert("tutor_messages", [
         {"conversation_id": convo["id"], "role": "user", "content": body.question},

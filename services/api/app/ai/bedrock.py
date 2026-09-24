@@ -74,6 +74,11 @@ def converse(
     # this is still only a FLOOR: document-sized inputs need 4096. See above.
     max_tokens: int = _MAX_TOKENS_FLOOR,
     response_format: dict | None = None,
+    # Per-call fallback override. None (every existing caller) means use
+    # s.openrouter_model_fallback exactly as before, so nothing changes for
+    # them. Passed by the chat role, whose global fallback (deepseek) cannot
+    # fit the tutor's timeout and would just re-time-out — see router.answer.
+    fallback_model_id: str | None = None,
 ) -> str:
     s = get_settings()
     # A budget this small cannot survive a reasoning preamble, so the call will
@@ -103,7 +108,7 @@ def converse(
             # its provider has capacity. Give transient provider failures one
             # chance on a separate provider before exposing the outage to the
             # student. Do not retry bad credentials or malformed requests.
-            fallback = getattr(s, "openrouter_model_fallback", "")
+            fallback = fallback_model_id or getattr(s, "openrouter_model_fallback", "")
             if not fallback or fallback == model_id or not _can_fallback(exc):
                 raise
             # Back off before retrying a rate limit or a transient 5xx. An

@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     bedrock_model_fast: str = Field(default="", alias="BEDROCK_MODEL_FAST")
     bedrock_model_default: str = Field(default="", alias="BEDROCK_MODEL_DEFAULT")
     bedrock_model_reasoning: str = Field(default="", alias="BEDROCK_MODEL_REASONING")
+    # Parity with openrouter_model_chat. This environment runs AI_PROVIDER=openrouter
+    # so it is unused today, but every other role is mirrored across both
+    # providers and an unmirrored one would be a silent trap the day Bedrock
+    # access lands (get_model_for would KeyError on "chat").
+    bedrock_model_chat: str = Field(default="", alias="BEDROCK_MODEL_CHAT")
     bedrock_model_premium: str = Field(default="", alias="BEDROCK_MODEL_PREMIUM")
     bedrock_embed_model: str = Field(default="", alias="BEDROCK_EMBED_MODEL")
 
@@ -117,6 +122,44 @@ class Settings(BaseSettings):
     )
     openrouter_model_default: str = Field(
         default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_DEFAULT",
+    )
+    # The tutor's own role, deliberately SEPARATE from `default`.
+    #
+    # `default` is not tutor-only: learn/lessons.py phase 2, ai/skill_proposer.py,
+    # and ai/prescriber.py's recommend() all call it. Repointing `default` would
+    # have moved all four onto an unbenchmarked model at once. This role is
+    # wired ONLY into routers/tutor.py's two answer() calls, so everything else
+    # keeps exactly the behaviour it already had.
+    #
+    # WHY THE TUTOR NEEDED ITS OWN MODEL AT ALL: deepseek takes 34-103s on the
+    # real tutor prompt (measured), and the request runs inside a 30s Lambda
+    # wall behind a 25s client timeout, so every answer timed out and fell back
+    # to another deepseek call that also could not fit. Result: an unhandled
+    # 500 on every message.
+    #
+    # PAID slug, not the :free variant. Verified 2026-09-24: the free slug now
+    # returns HTTP 404 "This model is unavailable for free. The paid version is
+    # available now". The earlier benchmark measured the free one; it is gone.
+    # Paid measures 4.8-6.4s here, faster and more consistent than the free
+    # tier it replaces.
+    openrouter_model_chat: str = Field(
+        default="inclusionai/ling-3.0-flash-vl", alias="OPENROUTER_MODEL_CHAT",
+    )
+    # Fallback for the chat role specifically.
+    #
+    # The global openrouter_model_fallback is deepseek, which CANNOT serve as
+    # the tutor's fallback: it takes 34-103s, so a failed primary would fall
+    # back to another call that blows the same 25s timeout. The 500 would just
+    # relocate rather than go away.
+    #
+    # nex-agi/nex-n2.5-mini was benchmarked on the REAL tutor prompt before
+    # being wired in (not a toy prompt): 1.8-2.5s across four runs, no empty
+    # responses, and a read-through of a full answer showed accurate, grounded,
+    # well-structured teaching. Deliberately a DIFFERENT provider from the
+    # primary, so a ling/InclusionAI-specific outage does not take out both.
+    openrouter_model_chat_fallback: str = Field(
+        default="nex-agi/nex-n2.5-mini:free",
+        alias="OPENROUTER_MODEL_CHAT_FALLBACK",
     )
     openrouter_model_reasoning: str = Field(
         default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_REASONING",
