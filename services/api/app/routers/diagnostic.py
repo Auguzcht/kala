@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.ai import bedrock, documents
 from app.ai.chunking import chunk_text
-from app.ai.concurrency import map_concurrent
+from app.ai.concurrency import map_concurrent_partial
 from app.ai.deidentify import strip_pii
 from app.ai.skill_proposer import seed_course_skills
 from app.db import storage, supabase as db
@@ -591,22 +591,74 @@ def get_diagnostic(
 
     skills_needing_items = [s for s in skills if s["id"] not in existing_by_skill]
 
-    # One Bedrock call per skill still missing an item (RAG retrieval +
+    # One model call per skill still missing an item (RAG retrieval +
     # generation), each fully independent — parallelized so generating for
     # several skills at once is one round trip's worth of wall-clock time,
     # not several serial ones. See ai/concurrency.py.
-    newly_generated = map_concurrent(
+    #
+    # PARTIAL-TOLERANT, and this is the fix for a real 503. It used to be
+    # map_concurrent (all-or-nothing), so ONE skill that could not produce a
+    # question sank the entire sitting:
+    #
+    #   - a skill with no retrievable course content raises
+    #     NoCourseContentError (items.py), which is not an infrastructure
+    #     failure, it is "this skill has no material yet"
+    #   - a single slow or timed-out model call on a 10-skill fan-out raises
+    #     ItemGenerationError
+    #
+    # Either way the student got a 503 instead of a baseline. That was hidden
+    # until the bank reset: while items existed, the GET read them back
+    # cheaply and never reached this code. The reset removed the warm buffer
+    # and exposed a cold start that could never fit the 30s wall anyway.
+    #
+    # This is the same robustness practice practice.py already earned, and the
+    # reasoning there applies verbatim: 9 of 10 questions is a perfectly
+    # usable baseline, and 503-ing the whole sitting because one skill has no
+    # content is a worse outcome than a slightly shorter one.
+    #
+    # NOTE on ordering: map_concurrent_partial returns successes in order but
+    # OMITS failures, so its length can be shorter than the input. It must NOT
+    # be zip()ed against skills_needing_items — that would silently mis-align
+    # every question after the first failure to the wrong skill. Results are
+    # matched back by skill id below, exactly like practice.py matches its
+    # short batch to the set row it actually created.
+    generated, gen_errors = map_concurrent_partial(
         lambda s: item_gen.generate_question(
             institution_id=user.institution_id, course_id=course_id,
             skill=s, kind="diagnostic",
         ),
         skills_needing_items,
     )
-    new_by_skill = dict(zip((s["id"] for s in skills_needing_items), newly_generated))
+    # Pair each success with the skill it was generated FOR. Relies on
+    # generate_question echoing skillId, which it does (items.py returns
+    # {"skillId": skill["id"], ...}). Mapping by id rather than by index is
+    # what makes a partial batch safe.
+    new_by_skill: dict[str, dict] = {
+        item["skillId"]: item for item in generated
+    }
+    if gen_errors:
+        # Logged with the skill names, not just the count: "which skill has no
+        # material" is the actionable part, and it is what a staff member
+        # needs in order to upload content or approve a different skill.
+        failed_skills = [
+            s["name"] for s in skills_needing_items
+            if s["id"] not in new_by_skill
+        ]
+        logger.warning(
+            "diagnostic: %d/%d skills produced no question (course=%s): %s",
+            len(gen_errors), len(skills_needing_items), course_id, failed_skills,
+        )
 
     # Reassemble in the original skills order, whichever source each came
-    # from, so the response shape is identical to before this fix.
+    # from, so the response shape is identical to before this fix. A skill
+    # that failed BOTH ways (no existing item, no new one) is DROPPED from the
+    # sitting rather than represented as a null question — the client renders
+    # a list of AnswerableCards and has no shape for an empty one. The sitting
+    # is simply shorter, which is the honest outcome; `skippedSkillCount`
+    # reports it so the frontend can say so rather than silently differing
+    # from `dueSkillCount`.
     questions = []
+    skipped = 0
     for s in skills:
         if s["id"] in existing_by_skill:
             item = existing_by_skill[s["id"]]
@@ -615,10 +667,19 @@ def get_diagnostic(
                 "bloomLevel": item.get("bloom_level"),
                 "prompt": item["prompt"], "choices": item["choices"],
             })
-        else:
+        elif s["id"] in new_by_skill:
             questions.append(new_by_skill[s["id"]])
+        else:
+            skipped += 1
 
-    return {"courseId": course_id, "questions": questions}
+    return {
+        "courseId": course_id,
+        "questions": questions,
+        # 0 in the normal case. Non-zero means the sitting is shorter than the
+        # due set because those skills could not produce a question — surfaced
+        # rather than left for someone to notice by comparing counters.
+        "skippedSkillCount": skipped,
+    }
 
 
 @router.post("/{course_id}/diagnostic/submit")
