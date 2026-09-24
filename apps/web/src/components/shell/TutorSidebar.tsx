@@ -30,7 +30,23 @@ export function TutorSidebar({
   onToggleCollapsed: () => void;
 }) {
   const navigate = useNavigate();
-  const { conversation: activeId } = useSearch({ from: "/course/tutor" });
+  // NOT `useSearch({ from: "/course/tutor" })`. This component is rendered
+  // by CourseShell, which is the PARENT `/course` layout route — TutorChat
+  // is the one actually living under `/course/tutor` via <Outlet/>. The
+  // strict form requires the router's current match array to already
+  // contain that exact route at render time, and during a navigation into
+  // or out of /course/tutor there's a real window where useLocation()'s
+  // pathname (what CourseShell's isTutorRoute check uses) has updated but
+  // the match array hasn't caught up yet — that race threw "Invariant
+  // failed: Could not find an active match from '/course/tutor'" here,
+  // reliably, on real navigations. `strict: false` reads the merged search
+  // state without requiring that guarantee, which is exactly the documented
+  // escape hatch for a shell-level component like this one.
+  const search = useSearch({ strict: false });
+  const activeId =
+    typeof search === "object" && search !== null && "conversation" in search
+      ? (search as { conversation?: string }).conversation
+      : undefined;
   const conversations = useTutorConversations(courseId);
   const deleteConversation = useDeleteTutorConversation(courseId);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -71,7 +87,7 @@ export function TutorSidebar({
 
   return (
     <div className="fixed inset-y-0 left-14 z-10 flex w-64 flex-col border-r bg-card">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-3">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b bg-card px-3">
         <span className="font-display text-sm font-semibold text-foreground">Chats</span>
         <button
           type="button"

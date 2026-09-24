@@ -9,6 +9,7 @@ import { StudyStream } from "@/components/study/StudyStream";
 import { UserBlock } from "@/components/study/UserBlock";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Spinner } from "@/components/ui/spinner";
@@ -108,16 +109,31 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const session = useSession();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { conversation: activeId } = useSearch({ from: "/course/tutor" });
+  // Same fix as TutorSidebar (see its comment): strict useSearch({ from })
+  // requires the route to already be in the router's resolved match array,
+  // which raced and crashed during real navigations. strict: false doesn't
+  // have that requirement.
+  const search = useSearch({ strict: false });
+  const activeId =
+    typeof search === "object" && search !== null && "conversation" in search
+      ? (search as { conversation?: string }).conversation
+      : undefined;
   const active = useTutorConversation(activeId ?? null);
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
-  // The question currently being answered, held until the server's message
-  // list actually contains it. Gating the optimistic turn on `isPending`
-  // instead meant it vanished the instant the request resolved — before the
-  // invalidated query had refetched — so the stream showed nothing, then
-  // snapped both turns in at once. Holding it until the real row exists makes
-  // the handoff seamless.
-  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  // The in-flight turn, held until the server's message list actually
+  // contains it — gating on `isPending` instead meant it vanished the
+  // instant the request resolved, before the invalidated query had
+  // refetched, so the stream showed nothing then snapped both turns in at
+  // once. Holding it until the real row exists makes the handoff seamless.
+  //
+  // On failure this does NOT clear to null the way it used to. It used to:
+  // a toast fired and the student's question just vanished, with no way to
+  // recover it short of retyping the whole thing. Now a failed turn stays
+  // visible with an inline retry action — the toast is a secondary signal,
+  // not the only record that anything happened.
+  const [pendingTurn, setPendingTurn] = useState<
+    { status: "asking" | "failed"; question: string; style: TutorStyle } | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAttachment = useUploadTutorAttachment();
   const deleteAttachment = useDeleteTutorAttachment();
@@ -140,7 +156,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
       selfNavigatedRef.current = false;
       return;
     }
-    setPendingQuestion(null);
+    setPendingTurn(null);
     setLastQuestion(null);
   }, [activeId]);
 
@@ -197,10 +213,13 @@ export function TutorChat({ courseId }: { courseId: string }) {
         queryKey: ["tutor-conversation", data.conversationId],
       });
       queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
-      setPendingQuestion(null);
+      setPendingTurn(null);
     },
-    onError: () => {
-      setPendingQuestion(null);
+    onError: (_error, variables) => {
+      // Keep the question on screen with a retry action instead of
+      // silently dropping it — a toast alone is easy to miss and gives the
+      // student nothing to do but retype what they already wrote.
+      setPendingTurn({ status: "failed", question: variables.question, style: variables.style });
       toast.error("Kala couldn't answer that", {
         description: "Check your connection and try again.",
       });
@@ -211,7 +230,14 @@ export function TutorChat({ courseId }: { courseId: string }) {
     if (!question.trim() || send.isPending) return;
     // The student's turn appears immediately, before the request is even
     // sent — this is the whole point of the optimistic turn.
-    setPendingQuestion(question);
+    setPendingTurn({ status: "asking", question, style });
+    send.mutate({ question, style });
+  }
+
+  function retryLastTurn() {
+    if (!pendingTurn || send.isPending) return;
+    const { question, style } = pendingTurn;
+    setPendingTurn({ status: "asking", question, style });
     send.mutate({ question, style });
   }
 
@@ -264,7 +290,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
 
   return (
     <StudySurface
-      bar={<SessionBar title={active.data?.title ?? "Ask Kala"} />}
+      // No fallback to "Ask Kala": that text sat directly above the
+      // EmptyState's own "Ask anything about this course" heading and just
+      // duplicated it. Once a real conversation exists this shows its
+      // actual title; until then the bar is quietly blank and the
+      // EmptyState alone carries the introduction.
+      bar={<SessionBar title={active.data?.title || undefined} />}
       dock={
         <ComposeDock
           inputId="tour-tutor-input"
@@ -311,23 +342,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
       <StudyStream>
         {activeId && active.isLoading ? (
           <Shimmer>Loading conversation…</Shimmer>
-        ) : activeId && active.isError ? (
-          // A conversation id in the URL that no longer resolves. More
-          // reachable since the active id moved into the search param: a
-          // back-button, a bookmark, or a link into a chat that has since
-          // been deleted all land here, where the old local-state version
-          // could only ever name a conversation it had just created.
-          //
-          // Without this branch the empty-messages case falls through to the
-          // NEW-CHAT prompt below, so a deleted thread renders as a clean
-          // "ask anything" screen and the student types into a conversation
-          // that 404s on send. The sidebar still lists every live thread, so
-          // the useful next step is naming that rather than offering a retry.
-          <EmptyState
-            title="That chat isn't available"
-            description="It may have been deleted. Pick another chat from the list on the left, or start a new one."
-          />
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !pendingTurn ? (
+          // Gated on !pendingTurn too — without this, starting a brand new
+          // chat showed the EmptyState AND the just-sent question/answer at
+          // the same time (zero persisted messages yet, but a turn already
+          // in flight), stacked on top of each other. Once a turn exists,
+          // the stream should show IT, not the "nothing here yet" card.
           <EmptyState
             title="Ask anything about this course"
             description="Kala answers grounded in the actual course content, and never the answer to something graded."
@@ -351,20 +371,36 @@ export function TutorChat({ courseId }: { courseId: string }) {
           )
         )}
 
-        {pendingQuestion ? (
+        {pendingTurn ? (
           <>
             {/* The student's own turn, present the moment they hit send.
                 It stays until the persisted copy arrives (cleared in the
-                mutation's onSuccess after the refetch resolves), so there
-                is never a gap where the question disappears. */}
+                mutation's onSuccess after the refetch resolves) OR the
+                request fails, in which case it stays visible with a retry
+                action rather than disappearing. */}
             <div id="tour-tutor-user-turn" className="mr-auto w-full max-w-full">
-              <UserBlock text={pendingQuestion} initials={userInitials || undefined} />
+              <UserBlock text={pendingTurn.question} initials={userInitials || undefined} />
             </div>
-            <AssistantBlock
-              id="tour-tutor-thinking"
-              pending
-              pendingLabel="Kala is thinking…"
-            />
+            {pendingTurn.status === "asking" ? (
+              <AssistantBlock
+                id="tour-tutor-thinking"
+                pending
+                pendingLabel="Kala is thinking…"
+              />
+            ) : (
+              <div className="mr-auto flex w-full max-w-full items-center gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                <span className="flex-1">Kala couldn't answer that.</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={retryLastTurn}
+                  disabled={send.isPending}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
           </>
         ) : null}
 

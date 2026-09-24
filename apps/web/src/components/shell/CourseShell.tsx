@@ -141,20 +141,6 @@ export function CourseShell({
   const [tutorSidebarCollapsed, setTutorSidebarCollapsed] = useState(
     () => (tutorSidebarKey ? localStorage.getItem(tutorSidebarKey) === "1" : false)
   );
-  // Re-read once the session key exists. The useState initializer above runs
-  // exactly once, on the FIRST render — and on a post-launch visit that render
-  // has `session === null` (AuthProvider boots before /launch captures the
-  // token, see its own docstring), so tutorSidebarKey is null, the read is
-  // skipped, and the value defaults to expanded. useState never re-runs its
-  // initializer when session later arrives, so without this effect a student
-  // who had collapsed the sidebar would get it expanded again after every LTI
-  // relaunch. The tour key below has the identical shape and an identical
-  // compensating effect (see the tourStep one) — this is that same pattern.
-  useEffect(() => {
-    if (tutorSidebarKey) {
-      setTutorSidebarCollapsed(localStorage.getItem(tutorSidebarKey) === "1");
-    }
-  }, [tutorSidebarKey]);
   const toggleTutorSidebar = () => {
     setTutorSidebarCollapsed((collapsed) => {
       const next = !collapsed;
