@@ -424,7 +424,7 @@ def test_provider_order_is_sent_as_a_preference_never_a_hard_pin(monkeypatch):
     exact shape that matters — order present, allow_fallbacks true — and not
     merely that a provider key exists.
     """
-    import app.ai.bedrock as bedrock
+    from app.ai import bedrock
 
     captured = {}
 
@@ -469,7 +469,7 @@ def test_an_empty_provider_order_sends_no_provider_block(monkeypatch):
     """The escape hatch: blanking OPENROUTER_PROVIDER_ORDER must restore
     exactly the previous behavior, so this can be switched off in config
     without a code change if the provider mix shifts."""
-    import app.ai.bedrock as bedrock
+    from app.ai import bedrock
 
     captured = {}
 
@@ -511,12 +511,29 @@ def test_an_empty_provider_order_sends_no_provider_block(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_chat_role_is_wired_and_distinct_from_default():
+def test_chat_role_is_wired_and_distinct_from_default(monkeypatch):
     """`default` is not tutor-only — lessons phase 2, skill_proposer and
     prescriber all call it. Repointing it would have moved all four onto an
-    unbenchmarked model at once, so the tutor got its own role instead."""
-    from app.ai.router import get_model_for
+    unbenchmarked model at once, so the tutor got its own role instead.
 
+    AI_PROVIDER IS PINNED TO openrouter HERE, and that is not incidental.
+    config.ai_provider defaults to "bedrock", and every bedrock_model_* field
+    defaults to "" — so under the bare default (which is what CI runs with, no
+    .env) every role resolves to the empty string and this assertion compares
+    '' against ''. That is exactly how this test passed locally and failed in
+    CI: the deployed environment gets AI_PROVIDER=openrouter from the kala/app
+    secret, so the openrouter branch was the only one ever exercised by hand.
+
+    Pinning it makes the test assert the wiring it is actually about. The
+    empty-under-bedrock behaviour is pre-existing and affects every role, not
+    just chat — noted in the docstring rather than silently worked around.
+    """
+    from app.ai.router import get_model_for
+    from app.config import get_settings
+
+    monkeypatch.setattr(
+        get_settings(), "ai_provider", "openrouter", raising=False,
+    )
     assert get_model_for("chat") != get_model_for("default")
     # And default is unchanged, which is the whole point of a separate role.
     assert get_model_for("default") == "deepseek/deepseek-v4.1-flash:floor"
@@ -525,9 +542,13 @@ def test_chat_role_is_wired_and_distinct_from_default():
 def test_answer_defaults_to_the_default_role_for_existing_callers(monkeypatch):
     """Every pre-existing caller omits `task`, so their model must not move.
     Pinned because a silent change here would alter lessons, the skill
-    proposer and the prescriber at once — none of which were benchmarked."""
-    import app.ai.router as router
-    import app.ai.bedrock as bedrock
+    proposer and the prescriber at once — none of which were benchmarked.
+
+    AI_PROVIDER pinned to openrouter — see the note in the test above."""
+    from app.ai import bedrock, router
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_provider", "openrouter", raising=False)
 
     seen = {}
 
@@ -544,9 +565,10 @@ def test_answer_defaults_to_the_default_role_for_existing_callers(monkeypatch):
 
 
 def test_answer_with_chat_task_selects_the_chat_model_and_fallback(monkeypatch):
-    import app.ai.router as router
-    import app.ai.bedrock as bedrock
+    from app.ai import bedrock, router
     from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_provider", "openrouter", raising=False)
 
     seen = {}
 
@@ -567,8 +589,10 @@ def test_answer_with_chat_task_selects_the_chat_model_and_fallback(monkeypatch):
 def test_escalate_is_ignored_when_an_explicit_task_is_passed(monkeypatch):
     """Asking for the chat role and silently receiving the reasoning model
     would be surprising, so an explicit task wins over escalate."""
-    import app.ai.router as router
-    import app.ai.bedrock as bedrock
+    from app.ai import bedrock, router
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_provider", "openrouter", raising=False)
 
     seen = {}
     monkeypatch.setattr(bedrock, "converse", lambda **kw: seen.update(kw) or "ok")
@@ -580,9 +604,11 @@ def test_the_chat_fallback_actually_fires_and_is_a_different_model(monkeypatch):
     """Not just the wiring: force a primary failure and confirm the retry uses
     the chat fallback, not the global deepseek one (which cannot fit the
     tutor's timeout, so falling back to it would just re-time-out)."""
-    import app.ai.bedrock as bedrock
+    from app.ai import bedrock
     from app.ai.errors import ModelUnavailableError
+    from app.config import get_settings
 
+    monkeypatch.setattr(get_settings(), "ai_provider", "openrouter", raising=False)
     calls = []
 
     def fake_post(**kw):
