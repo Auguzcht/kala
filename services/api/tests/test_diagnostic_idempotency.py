@@ -44,6 +44,8 @@ def test_diagnostic_reuses_existing_items_and_never_regenerates_them(monkeypatch
 
     assert generate_calls == []  # never regenerated — both skills already had items
     assert first == second  # identical across fetches
+    assert first["status"] == "ready"
+    assert first["readyCount"] == 2
     assert [q["id"] for q in first["questions"]] == ["item-1", "item-2"]
     assert first["questions"][0]["prompt"] == "Q1?"
     assert "correct_choice_id" not in first["questions"][0]  # answer key never leaks
@@ -53,7 +55,7 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
     """Mixed case: skill-1 already has an item, skill-2 does not. Only
     skill-2 should trigger generation."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    generated_for = []
+    enqueued_for = []
 
     def fake_select(table, params):
         if table == "skills":
@@ -68,13 +70,12 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
             ]
         return []
 
-    def fake_generate(*, institution_id, course_id, skill, kind):
-        generated_for.append(skill["id"])
-        return {"id": "new-item", "skillId": skill["id"], "bloomLevel": "apply",
-                "prompt": "Freshly generated Q?", "choices": []}
+    def fake_enqueue(*, institution_id, course_id, skill_id):
+        enqueued_for.append(skill_id)
+        return ({"id": "job-2", "status": "pending"}, True)
 
     monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(diagnostic.item_gen, "generate_question", fake_generate)
+    monkeypatch.setattr(diagnostic, "enqueue_diagnostic", fake_enqueue)
 
     try:
         with TestClient(app) as client:
@@ -82,16 +83,18 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
     finally:
         app.dependency_overrides.clear()
 
-    assert generated_for == ["00000000-0000-4000-8000-000000000011"]  # only the missing one
+    assert enqueued_for == ["00000000-0000-4000-8000-000000000011"]
     prompts = [q["prompt"] for q in response["questions"]]
-    assert prompts == ["Existing Q?", "Freshly generated Q?"]  # order matches skills order
+    assert prompts == ["Existing Q?"]
+    assert response["status"] == "generating"
+    assert response["pendingSkillIds"] == ["00000000-0000-4000-8000-000000000011"]
 
 
 def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> None:
     """First-ever fetch: no existing items, so every skill generates —
     unchanged behavior from before the fix for the true first-run case."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    generated_for = []
+    enqueued_for = []
 
     def fake_select(table, params):
         if table == "skills":
@@ -100,13 +103,12 @@ def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> Non
             return []
         return []
 
-    def fake_generate(*, institution_id, course_id, skill, kind):
-        generated_for.append(skill["id"])
-        return {"id": "item-x", "skillId": skill["id"], "bloomLevel": "apply",
-                "prompt": "Q?", "choices": []}
+    def fake_enqueue(*, institution_id, course_id, skill_id):
+        enqueued_for.append(skill_id)
+        return ({"id": "job-x", "status": "pending"}, True)
 
     monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(diagnostic.item_gen, "generate_question", fake_generate)
+    monkeypatch.setattr(diagnostic, "enqueue_diagnostic", fake_enqueue)
 
     try:
         with TestClient(app) as client:
@@ -114,8 +116,9 @@ def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> Non
     finally:
         app.dependency_overrides.clear()
 
-    assert generated_for == ["00000000-0000-4000-8000-000000000010"]
-    assert len(response["questions"]) == 1
+    assert enqueued_for == ["00000000-0000-4000-8000-000000000010"]
+    assert response["status"] == "generating"
+    assert response["questions"] == []
 
 
 def test_diagnostic_returns_empty_list_when_course_has_no_approved_skills(monkeypatch) -> None:
@@ -128,4 +131,8 @@ def test_diagnostic_returns_empty_list_when_course_has_no_approved_skills(monkey
     finally:
         app.dependency_overrides.clear()
 
-    assert response == {"courseId": "00000000-0000-4000-8000-000000000001", "questions": []}
+    assert response == {
+        "courseId": "00000000-0000-4000-8000-000000000001",
+        "status": "ready", "questions": [], "readyCount": 0,
+        "pendingSkillIds": [], "failedSkillIds": [], "skippedSkillCount": 0,
+    }

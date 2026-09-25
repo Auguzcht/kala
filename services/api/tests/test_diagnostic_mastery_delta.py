@@ -84,9 +84,8 @@ def test_submit_diagnostic_returns_mastery_delta_per_skill(monkeypatch) -> None:
 
 
 def _diag_harness(monkeypatch, *, n_skills: int, failing: set[int]):
-    """Wire get_diagnostic to n synthetic skills with the given ones failing."""
+    """Wire get_diagnostic to n synthetic skills with durable queue rows."""
     from app.routers import diagnostic as diag
-    from app.learn.items import NoCourseContentError
 
     skills = [
         {
@@ -102,16 +101,13 @@ def _diag_harness(monkeypatch, *, n_skills: int, failing: set[int]):
         lambda table, params: skills if table == "skills" else [],
     )
 
-    def fake_generate(*, skill, **kw):
-        if skill["id"] in bad_ids:
-            raise NoCourseContentError(skill_name=skill["name"])
-        n = skill["name"]
-        return {
-            "id": f"item-{n}", "skillId": skill["id"], "bloomLevel": "apply",
-            "prompt": f"QUESTION-FOR-{n}", "choices": [{"id": "a", "label": "x"}],
-        }
+    def fake_enqueue(*, skill_id, **kw):
+        return ({
+            "id": f"job-{skill_id}",
+            "status": "failed" if skill_id in bad_ids else "pending",
+        }, True)
 
-    monkeypatch.setattr(diag.item_gen, "generate_question", fake_generate)
+    monkeypatch.setattr(diag, "enqueue_diagnostic", fake_enqueue)
     return skills
 
 
@@ -137,8 +133,10 @@ def test_one_contentless_skill_shortens_the_sitting_instead_of_503ing(
 
     assert resp.status_code == 200, "one bad skill must not 503 the baseline"
     body = resp.json()
-    assert len(body["questions"]) == 4
-    assert body["skippedSkillCount"] == 1
+    assert body["questions"] == []
+    assert body["status"] == "generating"
+    assert len(body["pendingSkillIds"]) == 4
+    assert len(body["failedSkillIds"]) == 1
 
 
 def test_questions_stay_aligned_to_their_skill_when_one_fails(monkeypatch) -> None:
@@ -164,9 +162,8 @@ def test_questions_stay_aligned_to_their_skill_when_one_fails(monkeypatch) -> No
     finally:
         app.dependency_overrides.clear()
 
-    for q in body["questions"]:
-        # skillId ends in the same digit the prompt names; a shift breaks this.
-        assert q["prompt"] == f"QUESTION-FOR-Skill{int(q['skillId'][-2:])}"
+    assert body["status"] == "generating"
+    assert len(body["pendingSkillIds"]) == 4
 
 
 def test_all_skills_failing_returns_an_empty_sitting_not_an_error(monkeypatch) -> None:
@@ -189,7 +186,8 @@ def test_all_skills_failing_returns_an_empty_sitting_not_an_error(monkeypatch) -
 
     assert resp.status_code == 200
     assert resp.json()["questions"] == []
-    assert resp.json()["skippedSkillCount"] == 3
+    assert resp.json()["status"] == "failed"
+    assert len(resp.json()["failedSkillIds"]) == 3
 
 
 def test_a_healthy_sitting_reports_zero_skipped(monkeypatch) -> None:
@@ -210,5 +208,5 @@ def test_a_healthy_sitting_reports_zero_skipped(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert len(body["questions"]) == 4
-    assert body["skippedSkillCount"] == 0
+    assert body["questions"] == []
+    assert body["status"] == "generating"

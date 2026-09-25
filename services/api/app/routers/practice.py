@@ -22,11 +22,15 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.ai.concurrency import map_concurrent_partial
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_set_id
+from app.deps import (
+    CurrentUser,
+    get_current_user,
+    require_valid_course_id,
+    require_valid_set_id,
+)
 from app.learn import items as item_gen
-from app.learn.items import ItemGenerationError
+from app.routers.item_generation_jobs import enqueue_practice, practice_jobs
 from app.twin import tracer
 
 logger = logging.getLogger(__name__)
@@ -70,6 +74,50 @@ def _resolve_skill(*, institution_id: str, user_id: str, course_id: str,
     )
 
 
+def _item_view(row: dict) -> dict:
+    """Return the client-safe portion of a generated item."""
+    return {
+        "id": row["id"], "skillId": row["skill_id"],
+        "bloomLevel": row.get("bloom_level"),
+        "prompt": row["prompt"], "choices": row.get("choices") or [],
+    }
+
+
+def _practice_set_view(
+    *, course_id: str, set_row: dict, jobs: list[dict], items: list[dict],
+) -> dict:
+    requested_size = int(set_row.get("size") or 0)
+    pending_count = sum(job["status"] in {"pending", "in_progress"} for job in jobs)
+    failed_jobs = [job for job in jobs if job["status"] == "failed"]
+    complete_count = sum(job["status"] == "complete" for job in jobs)
+    failed_count = len(failed_jobs)
+    # Complete queue rows are the only rows allowed to contribute playable
+    # items. The generated_items query is tenant-scoped and answer-sanitized.
+    ready_count = len(items)
+    resolved_count = complete_count + failed_count
+    # No queue rows means this is a legacy synchronous/from-items set created
+    # before 0019, not a current async set that silently lost its queue.
+    # Current create_set rejects that latter condition before returning.
+    status_value = (
+        ("ready" if ready_count else "failed") if not jobs else
+        ("generating" if pending_count or resolved_count < requested_size
+         else ("ready" if ready_count else "failed"))
+    )
+    return {
+        "courseId": course_id,
+        "setId": set_row["id"],
+        "skillId": set_row["skill_id"],
+        "kind": set_row["kind"],
+        "status": status_value,
+        "requestedSize": requested_size,
+        "readyCount": ready_count,
+        "pendingCount": pending_count,
+        "failedCount": failed_count,
+        "failedOffsets": [job["context_offset"] for job in failed_jobs],
+        "items": [_item_view(item) for item in items],
+    }
+
+
 @router.get("/{course_id}/next")
 def next_item(
     course_id: str = Depends(require_valid_course_id),
@@ -89,24 +137,22 @@ def next_item(
     return {"courseId": course_id, "item": item}
 
 
-@router.post("/{course_id}/set")
+@router.post("/{course_id}/set", status_code=status.HTTP_202_ACCEPTED)
 def create_set(
     course_id: str = Depends(require_valid_course_id),
     skill_id: str | None = None,
     size: int = DEFAULT_SET_SIZE,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Generate a batch of practice items for ONE skill and group them under a
-    quiz_sets row. This is the batch replacement for calling /next N times.
+    """Queue a batch of practice items for ONE skill under a quiz_sets row.
+    This is the async batch replacement for calling /next N times.
 
-    The set row is created FIRST (status-free — it's just a grouping) so each
-    generate_question call can write its set_id at insert time; an item is
-    therefore never briefly persisted outside the set it belongs to. If every
-    generation call fails, the empty set row is cleaned up rather than left as
-    a dangling grouping with no items.
+    The set row is created FIRST, then one durable queue row per context offset
+    is inserted. The worker writes each generated item with this set_id and
+    checkpoints its queue row. The route returns before any model call.
 
-    A POST, not a GET: this has a side effect (persists N items), so it must
-    not be cached or prefetched like the read-shaped /next is.
+    A POST, not a GET: this has a side effect (persists N queue rows), so it
+    must not be cached or prefetched like the read-shaped /next is.
     """
     if size < 1:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "size must be at least 1")
@@ -121,7 +167,11 @@ def create_set(
     # (map_concurrent short-circuits on empty input, but an empty set row with
     # no skill to attribute it to is meaningless — better to return null).
     if not skill:
-        return {"courseId": course_id, "setId": None, "items": []}
+        return {
+            "courseId": course_id, "setId": None, "status": "failed",
+            "requestedSize": size, "readyCount": 0, "pendingCount": 0,
+            "failedCount": 0, "failedOffsets": [], "items": [],
+        }
 
     set_rows = db.insert("quiz_sets", [{
         "institution_id": user.institution_id,
@@ -131,49 +181,27 @@ def create_set(
         "size": size,
     }])
     set_id = set_rows[0]["id"]
-
-    # N independent model calls for the SAME skill, run concurrently — mirrors
-    # flashcards.py's deck top-up, just fanning out over items for one skill
-    # instead of over distinct skills. PARTIAL-tolerant: a model that fails one
-    # roll (validation or a provider hiccup) yields a slightly shorter set
-    # rather than 502-ing the whole thing. Free-tier churn made all-or-nothing
-    # generation too brittle for a surface where 4 of 5 questions is still a
-    # perfectly usable test.
-    items, errors = map_concurrent_partial(
-        lambda index: item_gen.generate_question(
-            institution_id=user.institution_id, course_id=course_id,
-            skill=skill, kind="practice", set_id=set_id,
-            # Each roll leads with a different retrieved chunk, so independent
-            # rolls stop converging on the same top-ranked fact. See
-            # items._rotated_context — on a 1-2 chunk skill this is a no-op and
-            # repetition remains, which is a content-depth limit, not a bug.
-            context_offset=index,
-        ),
-        list(range(size)),
+    jobs = enqueue_practice(
+        institution_id=user.institution_id, course_id=course_id,
+        skill_id=skill["id"], set_id=set_id, size=size,
     )
-    if errors:
-        logger.warning(
-            "Quiz set generation dropped %d/%d items (course=%s set=%s): %s",
-            len(errors), size, course_id, set_id, errors[0],
+    if len(jobs) < size:
+        logger.error(
+            "new practice set has only %d/%d queue rows; refusing dead set "
+            "course=%s set=%s",
+            len(jobs), size, course_id, set_id,
         )
-
-    if not items:
-        # EVERY roll failed — nothing to serve, so this is a real outage, not a
-        # partial set. Delete the empty grouping (its items, if any were
-        # half-inserted, cascade away) and surface the same 502 the single-item
-        # path produces, rather than handing the client a set with no questions.
         db.delete("quiz_sets", {"id": f"eq.{set_id}"})
-        raise ItemGenerationError(
-            "Kala could not write questions just now. Please try again."
-        ) from (errors[0] if errors else None)
-
-    # The set row was created with the REQUESTED size before generation; if the
-    # batch came back short, correct it so the count the UI shows matches what
-    # the set actually contains.
-    if len(items) != size:
-        db.update("quiz_sets", {"id": f"eq.{set_id}"}, {"size": len(items)})
-
-    return {"courseId": course_id, "setId": set_id, "items": items}
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "practice set could not be queued; please try again",
+        )
+    # A newly-created set is pending by construction. Keep the response
+    # derived from the queue rows so a unique-index recovery or a future
+    # idempotent enqueue path cannot claim a different state than the worker.
+    return _practice_set_view(
+        course_id=course_id, set_row=set_rows[0], jobs=jobs, items=[],
+    )
 
 
 class FromItemsBody(BaseModel):
@@ -390,21 +418,16 @@ def get_set(
         "select": "id,skill_id,prompt,choices,bloom_level",
         "order": "created_at.asc",
     })
+    jobs = practice_jobs(
+        institution_id=user.institution_id, course_id=course_id, set_id=set_id,
+    )
     s = sets[0]
     attempts = _attempts_by_set(
         institution_id=user.institution_id, user_id=user.user_id, set_ids=[s["id"]],
     )
     return {
-        "courseId": course_id,
-        "setId": s["id"],
-        "skillId": s["skill_id"],
-        "kind": s["kind"],
+        **_practice_set_view(course_id=course_id, set_row=s, jobs=jobs, items=items),
         **_attempt_view(attempts.get(s["id"])),
-        "items": [{
-            "id": r["id"], "skillId": r["skill_id"],
-            "bloomLevel": r.get("bloom_level"),
-            "prompt": r["prompt"], "choices": r.get("choices") or [],
-        } for r in items],
     }
 
 

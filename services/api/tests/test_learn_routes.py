@@ -2,12 +2,27 @@ import itertools
 import threading
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.deps import CurrentUser, get_current_user
 from app.learn.items import ItemGenerationError
 from app.main import app
 from app.routers import flashcards, practice
+
+
+@pytest.fixture(autouse=True)
+def legacy_route_fixtures(monkeypatch):
+    """Keep pre-async route fixtures focused on the set API response."""
+    def enqueue(*, institution_id, course_id, skill_id, set_id, size):
+        return [{
+            "id": f"job-{offset}", "institution_id": institution_id,
+            "course_id": course_id, "skill_id": skill_id, "kind": "practice",
+            "set_id": set_id, "context_offset": offset, "status": "pending",
+        } for offset in range(size)]
+
+    monkeypatch.setattr(practice, "enqueue_practice", enqueue)
+    monkeypatch.setattr(practice, "practice_jobs", lambda **kwargs: [])
 
 
 def authenticated_user() -> CurrentUser:
@@ -264,22 +279,21 @@ def test_practice_set_returns_a_batch_grouped_under_one_set(monkeypatch) -> None
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     body = response.json()
     assert body["courseId"] == "00000000-0000-4000-8000-000000000001"
     assert body["setId"] == "00000000-0000-4000-8000-000000000020"
-    # map_concurrent preserves INPUT order of results, but these fake items
-    # get their ids from a completion-order counter, so compare as a set.
-    assert sorted(i["id"] for i in body["items"]) == ["item-1", "item-2", "item-3"]
-    assert len(body["items"]) == 3
-    # The set row is created before generation, sized to the request.
+    assert body["status"] == "generating"
+    assert body["requestedSize"] == 3
+    assert body["readyCount"] == 0
+    assert body["pendingCount"] == 3
+    assert body["items"] == []
+    # The set row is created before queue rows, sized to the request.
     assert inserted_sets == [{
         "institution_id": "institution-1", "course_id": "00000000-0000-4000-8000-000000000001",
         "skill_id": "00000000-0000-4000-8000-000000000010", "kind": "practice", "size": 3,
     }]
-    # Every generated item is grouped under the set at insert time.
-    assert all(call["set_id"] == "00000000-0000-4000-8000-000000000020" for call in generated)
-    assert all(call["kind"] == "practice" for call in generated)
+    assert generated == []
 
 
 def test_practice_set_defaults_to_five_items(monkeypatch) -> None:
@@ -307,8 +321,8 @@ def test_practice_set_defaults_to_five_items(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert len(response.json()["items"]) == 5
+    assert response.status_code == 202
+    assert response.json()["requestedSize"] == 5
 
 
 def test_practice_set_clamps_size_to_the_maximum(monkeypatch) -> None:
@@ -338,8 +352,8 @@ def test_practice_set_clamps_size_to_the_maximum(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert len(generated) == practice.MAX_SET_SIZE
+    assert response.status_code == 202
+    assert response.json()["requestedSize"] == practice.MAX_SET_SIZE
 
 
 def test_practice_set_rejects_a_non_positive_size(monkeypatch) -> None:
@@ -370,16 +384,14 @@ def test_practice_set_returns_empty_when_course_has_no_skills(monkeypatch) -> No
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert response.json() == {"courseId": "00000000-0000-4000-8000-000000000001", "setId": None, "items": []}
+    assert response.status_code == 202
+    assert response.json()["setId"] is None
+    assert response.json()["status"] == "failed"
 
 
-def test_practice_set_deletes_the_set_when_generation_fails(monkeypatch) -> None:
-    """A failed batch must not leave a dangling set row behind — the grouping
-    is removed, taking any partially-inserted items with it, and the error
-    still surfaces as the same 502 the single-item path produces."""
+def test_practice_set_returns_before_generation_runs(monkeypatch) -> None:
+    """The route persists the grouping and queue, then returns immediately."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    deleted = []
 
     monkeypatch.setattr(
         practice.item_gen, "weakest_skill",
@@ -389,24 +401,14 @@ def test_practice_set_deletes_the_set_when_generation_fails(monkeypatch) -> None
         practice.db, "insert",
         lambda table, rows, prefer="return=representation": [{"id": "00000000-0000-4000-8000-000000000020", **rows[0]}],
     )
-    monkeypatch.setattr(
-        practice.db, "delete",
-        lambda table, filters: deleted.append((table, filters)) or [],
-    )
-
-    def raise_invalid(**kwargs):
-        raise ItemGenerationError("Kala could not create a valid question. Please try again.")
-
-    monkeypatch.setattr(practice.item_gen, "generate_question", raise_invalid)
-
     try:
         with TestClient(app) as client:
             response = client.post("/practice/00000000-0000-4000-8000-000000000001/set")
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 502
-    assert deleted == [("quiz_sets", {"id": "eq.00000000-0000-4000-8000-000000000020"})]
+    assert response.status_code == 202
+    assert response.json()["status"] == "generating"
 
 
 def test_practice_set_uses_an_explicit_skill_id_when_given(monkeypatch) -> None:
@@ -434,8 +436,8 @@ def test_practice_set_uses_an_explicit_skill_id_when_given(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert generated[0]["skill"]["id"] == "skill-7"
+    assert response.status_code == 202
+    assert response.json()["skillId"] == "skill-7"
 
 
 def test_practice_set_404s_an_unknown_skill_id(monkeypatch) -> None:
@@ -801,14 +803,9 @@ def test_get_set_includes_this_students_attempt_row(monkeypatch) -> None:
     assert body["lastAttemptedAt"] == "2026-02-03T09:00:00Z"
 
 
-def test_practice_set_returns_a_short_set_when_some_items_fail(monkeypatch) -> None:
-    """Partial-tolerant generation: 3 of 5 rolls succeeding yields a 3-question
-    set, not a 502. The set row is resized to what actually generated so the
-    count the UI shows is honest."""
+def test_practice_set_is_not_resolved_by_the_create_request(monkeypatch) -> None:
+    """Partial completion is reported by the existing set-detail poll target."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    updates = []
-    counter = itertools.count(1)
-    lock = threading.Lock()
 
     monkeypatch.setattr(
         practice.item_gen, "weakest_skill",
@@ -818,41 +815,23 @@ def test_practice_set_returns_a_short_set_when_some_items_fail(monkeypatch) -> N
         practice.db, "insert",
         lambda table, rows, prefer="return=representation": [{"id": "00000000-0000-4000-8000-000000000020", **rows[0]}],
     )
-    monkeypatch.setattr(
-        practice.db, "update",
-        lambda table, filters, values: updates.append((filters, values)) or [],
-    )
-
-    def flaky(**kwargs):
-        with lock:
-            n = next(counter)
-        # Two of the five rolls fail (validation), the rest succeed.
-        if n in (2, 4):
-            raise ItemGenerationError("bad roll")
-        return {"id": f"item-{n}", "skillId": "00000000-0000-4000-8000-000000000010", "bloomLevel": "apply",
-                "prompt": "...", "choices": []}
-
-    monkeypatch.setattr(practice.item_gen, "generate_question", flaky)
-
     try:
         with TestClient(app) as client:
             response = client.post("/practice/00000000-0000-4000-8000-000000000001/set?size=5")
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     body = response.json()
     assert body["setId"] == "00000000-0000-4000-8000-000000000020"
-    assert len(body["items"]) == 3
-    # Set row corrected to the real count.
-    assert updates == [({"id": "eq.00000000-0000-4000-8000-000000000020"}, {"size": 3})]
+    assert body["status"] == "generating"
+    assert body["readyCount"] == 0
+    assert body["pendingCount"] == 5
 
 
-def test_practice_set_502s_only_when_every_item_fails(monkeypatch) -> None:
-    """If nothing generated, this is a real outage, not a short set: delete the
-    empty grouping and surface the same 502 the single-item path produces."""
+def test_practice_set_does_not_surface_worker_failure_at_enqueue_time(monkeypatch) -> None:
+    """Worker failures are read later through GET /sets/{set_id}."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    deleted = []
 
     monkeypatch.setattr(
         practice.item_gen, "weakest_skill",
@@ -862,24 +841,14 @@ def test_practice_set_502s_only_when_every_item_fails(monkeypatch) -> None:
         practice.db, "insert",
         lambda table, rows, prefer="return=representation": [{"id": "00000000-0000-4000-8000-000000000020", **rows[0]}],
     )
-    monkeypatch.setattr(
-        practice.db, "delete",
-        lambda table, filters: deleted.append((table, filters)) or [],
-    )
-
-    def all_fail(**kwargs):
-        raise ItemGenerationError("bad roll")
-
-    monkeypatch.setattr(practice.item_gen, "generate_question", all_fail)
-
     try:
         with TestClient(app) as client:
             response = client.post("/practice/00000000-0000-4000-8000-000000000001/set?size=3")
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 502
-    assert deleted == [("quiz_sets", {"id": "eq.00000000-0000-4000-8000-000000000020"})]
+    assert response.status_code == 202
+    assert response.json()["status"] == "generating"
 
 
 def test_list_sets_reports_actual_item_count_not_the_stale_size_column(monkeypatch) -> None:
