@@ -129,7 +129,10 @@ def _generate_step_content(*, skill: dict, step: dict, context: str) -> dict:
     fallback keeps the step renderable if generation fails."""
     try:
         raw = bedrock.converse(
-            model_id=get_model_for("default"),
+            # Lesson step generation is isolated to this module. Use the
+            # paid, bounded reasoning role here rather than moving the shared
+            # default role used by other surfaces.
+            model_id=get_model_for("reasoning"),
             system=_STEP_SYSTEM,
             messages=[{"role": "user", "content": [{"text": json.dumps({
                 "skill": skill["name"], "step_title": step["title"],

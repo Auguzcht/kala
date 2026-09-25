@@ -136,6 +136,24 @@ def test_step_content_falls_back_cleanly(monkeypatch):
     assert content["misconception"] is None
 
 
+def test_step_content_uses_the_lesson_reasoning_role(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        lessons.bedrock,
+        "converse",
+        lambda **kw: captured.update(kw) or (
+            '{"summary":"s","detail_points":["d"],'
+            '"misconception":"m","key_takeaway":"k"}'
+        ),
+    )
+    lessons._generate_step_content(
+        skill={"name": "Cloud basics"},
+        step={"title": "Models", "focus": "Service models"},
+        context="clouds",
+    )
+    assert captured["model_id"] == lessons.get_model_for("reasoning")
+
+
 def test_generation_persists_steps_in_position_order_even_when_parallel_completion_is_out_of_order(monkeypatch):
     """The risky part of parallelizing per-step generation: content is built
     concurrently (so steps can finish in any order), but they must still be
