@@ -39,6 +39,31 @@ class FakeDB:
                 return [dict(row)]
         return []
 
+
+class LessonDB(FakeDB):
+    def __init__(self, rows):
+        super().__init__(rows)
+        self.step = {
+            "id": "step-1",
+            "lesson_id": "lesson-1",
+            "check_item_id": None,
+        }
+
+    def select(self, table, params):
+        if table == "guided_lesson_steps":
+            assert params["id"] == "eq.step-1"
+            assert params["guided_lessons.institution_id"] == "eq.inst-1"
+            assert "guided_lessons!inner(institution_id)" in params["select"]
+            return [{**self.step, "guided_lessons": {"institution_id": "inst-1"}}]
+        return super().select(table, params)
+
+    def update(self, table, filters, values):
+        if table == "guided_lesson_steps":
+            assert filters == {"id": "eq.step-1", "lesson_id": "eq.lesson-1"}
+            self.step.update(values)
+            return [dict(self.step)]
+        return super().update(table, filters, values)
+
     def insert(self, table, rows):
         self.inserted.extend(rows)
         return rows
@@ -58,6 +83,14 @@ def _row(job_id, *, offset=0, status="pending", attempt_count=0, started_at=None
         "next_attempt_at": datetime.now(UTC).isoformat(),
         "started_at": started_at or datetime.now(UTC).isoformat(),
     }
+
+
+def _lesson_row(job_id="lesson-job", *, status="pending"):
+    row = _row(job_id, status=status)
+    row.update({
+        "kind": "lesson", "set_id": None, "lesson_step_id": "step-1",
+    })
+    return row
 
 
 def test_claims_at_most_two_eligible_rows_and_preserves_offsets(monkeypatch):
@@ -161,3 +194,45 @@ def test_reclaim_does_not_reset_recent_in_progress_row(monkeypatch):
     assert item_generation._reclaim_stale(institution_id=None) == 0
     assert fake.rows[0]["status"] == "in_progress"
     assert fake.updates == []
+
+
+def test_lesson_success_updates_tenant_verified_step_before_checkpoint(monkeypatch):
+    fake = LessonDB([_lesson_row()])
+    monkeypatch.setattr(item_generation, "db", fake)
+    seen = []
+
+    def generate(**kwargs):
+        seen.append(kwargs)
+        return {"id": kwargs["job_id"]}
+
+    monkeypatch.setattr(item_generation, "generate_question", generate)
+
+    result = item_generation.run()
+
+    assert result["completed"] == 1
+    assert seen[0]["kind"] == "tutor"
+    assert fake.step["check_item_id"] == "lesson-job"
+    assert fake.rows[0]["status"] == "complete"
+    assert fake.rows[0]["item_id"] == "lesson-job"
+
+
+def test_lesson_tenant_mismatch_does_not_checkpoint(monkeypatch):
+    fake = LessonDB([_lesson_row()])
+    monkeypatch.setattr(item_generation, "db", fake)
+
+    def wrong_tenant_select(table, params):
+        if table == "guided_lesson_steps":
+            return []
+        return fake.select(table, params)
+
+    monkeypatch.setattr(item_generation, "db", type("DB", (), {
+        "select": staticmethod(wrong_tenant_select),
+        "update": staticmethod(fake.update),
+    })())
+    monkeypatch.setattr(item_generation, "generate_question", lambda **kwargs: {"id": kwargs["job_id"]})
+
+    result = item_generation.run()
+
+    assert result["retrying"] == 1
+    assert fake.rows[0]["status"] == "pending"
+    assert fake.step["check_item_id"] is None

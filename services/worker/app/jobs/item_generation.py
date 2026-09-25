@@ -66,7 +66,7 @@ def _eligible_rows(*, institution_id: str | None) -> list[dict]:
     filters = {
         "status": "eq.pending",
         "next_attempt_at": f"lte.{now}",
-        "select": "id,institution_id,course_id,skill_id,kind,set_id,context_offset,attempt_count",
+        "select": "id,institution_id,course_id,skill_id,kind,set_id,lesson_step_id,context_offset,attempt_count",
         "order": "next_attempt_at.asc",
         "limit": str(_MAX_ROWS),
     }
@@ -92,12 +92,13 @@ def _existing_item(row: dict) -> bool:
     persist-then-checkpoint gap recoverable without guessing which practice
     offset a same-set item belongs to.
     """
+    item_kind = "tutor" if row["kind"] == "lesson" else row["kind"]
     found = db.select("generated_items", {
         "id": f"eq.{row['id']}",
         "institution_id": f"eq.{row['institution_id']}",
         "course_id": f"eq.{row['course_id']}",
         "skill_id": f"eq.{row['skill_id']}",
-        "kind": f"eq.{row['kind']}",
+        "kind": f"eq.{item_kind}",
         "select": "id",
         "limit": "1",
     })
@@ -105,6 +106,23 @@ def _existing_item(row: dict) -> bool:
 
 
 def _complete(row: dict) -> None:
+    if row["kind"] == "lesson":
+        # guided_lesson_steps has no institution_id of its own. Verify the
+        # parent lesson through the same relationship used by its RLS policy
+        # before writing the generated tutor item onto the step.
+        steps = db.select("guided_lesson_steps", {
+            "id": f"eq.{row['lesson_step_id']}",
+            "guided_lessons.institution_id": f"eq.{row['institution_id']}",
+            "select": "id,lesson_id,guided_lessons!inner(institution_id)",
+            "limit": "1",
+        })
+        if not steps:
+            raise ItemGenerationError("lesson step is not owned by queue institution")
+        db.update(
+            "guided_lesson_steps",
+            {"id": f"eq.{steps[0]['id']}", "lesson_id": f"eq.{steps[0]['lesson_id']}"},
+            {"check_item_id": row["id"]},
+        )
     now = _iso(_now())
     db.update(
         "item_generation_jobs",
@@ -164,11 +182,12 @@ def _process(row: dict, *, deadline: float) -> str:
         if not skills:
             raise ItemGenerationError("approved skill not found for queued item")
 
+        item_kind = "tutor" if row["kind"] == "lesson" else row["kind"]
         generate_question(
             institution_id=row["institution_id"],
             course_id=row["course_id"],
             skill=skills[0],
-            kind=row["kind"],
+            kind=item_kind,
             job_id=row["id"],
             set_id=row.get("set_id"),
             context_offset=int(row.get("context_offset") or 0),
