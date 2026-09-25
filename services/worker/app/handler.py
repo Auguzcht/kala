@@ -1,5 +1,5 @@
 """Async worker (Lambda), triggered by EventBridge Scheduler. Not in the
-request path. Each scheduled run does five things, all tenant-scoped and
+request path. Each scheduled run does six best-effort things, all tenant-scoped and
 idempotent, all safe to retry:
 
   1. reconcile_mastery — replay evidence_events and rebuild mastery_state,
@@ -17,15 +17,17 @@ idempotent, all safe to retry:
      left behind, so RAG retrieval quality doesn't silently degrade over
      time (see docs/UI_AND_MODULES.md section 4 for the failure this
      repairs).
-  4. tag_backfill — tag any content_items chunk stored + embedded but not
-     yet classified against the course's approved skills. This moved OUT of
-     the /ingest HTTP endpoint (services/api): tagging is one reasoning-model
-     call per chunk, measured 3-150s each, which does not belong on the api
-     Lambda's 30s wall. Here it runs on the worker's 120s ceiling and drains
-     a course's backlog over successive scheduled runs, no manual re-POSTing.
-  5. readiness_snapshot — write one readiness_snapshots row per active
+  4. readiness_snapshot — write one readiness_snapshots row per active
      student per run, so the twin has an actual history, not just a
      current state.
+  5. item_generation — drain at most two queued diagnostic/practice item
+     generations in the worker's bounded long-model slice.
+  6. tag_backfill — tag any content_items chunk stored + embedded but not yet
+     classified against the course's approved skills. This moved OUT of the
+     /ingest HTTP endpoint (services/api): tagging is one reasoning-model call
+     per chunk, measured 3-150s each, which does not belong on the api
+     Lambda's 30s wall. It is skipped when item_generation claims the
+     long-model slot.
 
 Deliberately NOT in this worker: LMS grade/attempt sync. That would need a
 get_attempts()-shaped method the LMSConnector protocol (app/lms/base.py)
@@ -61,48 +63,75 @@ import logging
 import time
 
 from app.jobs import (
-    embed_backfill, ingest_walk, readiness_snapshot, reconcile_mastery, tag_backfill,
+    embed_backfill,
+    ingest_walk,
+    item_generation,
+    readiness_snapshot,
+    reconcile_mastery,
+    tag_backfill,
 )
 
 logger = logging.getLogger("kala.worker")
 logger.setLevel(logging.INFO)
 
+# Matches the worker Lambda timeout in infra/terraform/lambda.tf.
+_INVOCATION_BUDGET_SECONDS = 120.0
+
 
 def handler(event, context):
+    invocation_started = time.monotonic()
     event = event or {}
     institution_id = (event.get("scope") or {}).get("institution_id")
 
     results: dict[str, dict] = {}
     errors: dict[str, str] = {}
 
-    # Each job runs independently and its own failure doesn't block the
-    # others — a Bedrock/embedding outage stopping reconcile_mastery (which
-    # has no model dependency at all) would be a needless coupling. Order:
-    # ingest_walk before embed, because embedding reads chunks that the walk
-    # may have just stored; embed before tag, because tagging reads chunks
-    # that embedding may have just backfilled; all five are best-effort and
-    # a miss is picked up next run.
-    for name, job in (
-        ("reconcileMastery", reconcile_mastery),
-        ("ingestWalk", ingest_walk),
-        ("embedBackfill", embed_backfill),
-        ("tagBackfill", tag_backfill),
-        ("readinessSnapshot", readiness_snapshot),
-    ):
+    def run_one(name, job) -> None:
+        """Run one isolated job and record structured timing/result."""
         started = time.monotonic()
         logger.info("job start name=%s institution_id=%s", name, institution_id or "all")
         try:
-            result = job.run(institution_id=institution_id)
+            job_kwargs = {"institution_id": institution_id}
+            if name == "itemGeneration":
+                job_kwargs["remaining_seconds"] = max(
+                    0.0,
+                    _INVOCATION_BUDGET_SECONDS - (time.monotonic() - invocation_started),
+                )
+            result = job.run(**job_kwargs)
             results[name] = result
             duration_ms = round((time.monotonic() - started) * 1000)
             logger.info(
                 "job done name=%s duration_ms=%d result=%s", name, duration_ms, result,
             )
-        except Exception as exc:  # surface loudly in logs; don't crash the whole run
+        except Exception as exc:  # noqa: BLE001 — surface loudly; don't crash the whole run
             duration_ms = round((time.monotonic() - started) * 1000)
             logger.error(
                 "job failed name=%s duration_ms=%d error=%s", name, duration_ms, exc,
             )
             errors[name] = str(exc)
+
+    # Each job runs independently. Dependency order: ingest before embed
+    # because embedding reads chunks the walk may have stored; embed before
+    # item generation because item RAG reads embeddings; readiness is cheap and
+    # should not be lost to a long model slice. Item generation owns the
+    # long-model slot before tag.
+    for name, job in (
+        ("reconcileMastery", reconcile_mastery),
+        ("ingestWalk", ingest_walk),
+        ("embedBackfill", embed_backfill),
+        ("readinessSnapshot", readiness_snapshot),
+    ):
+        run_one(name, job)
+
+    run_one("itemGeneration", item_generation)
+    item_active = bool(results.get("itemGeneration", {}).get("claimed", 0))
+    if item_active:
+        results["tagBackfill"] = {"skipped": "item_generation_active"}
+        logger.info(
+            "job skipped name=tagBackfill reason=item_generation_active institution_id=%s",
+            institution_id or "all",
+        )
+    else:
+        run_one("tagBackfill", tag_backfill)
 
     return {"ok": not errors, "results": results, "errors": errors}
