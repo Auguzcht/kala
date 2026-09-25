@@ -114,6 +114,17 @@ def test_outline_falls_back_to_single_step_on_garbage(monkeypatch):
     assert out[0]["title"] == "Boolean logic"  # never empty
 
 
+def test_outline_passes_the_reasoning_fallback(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        lessons.bedrock,
+        "converse",
+        lambda **kw: captured.update(kw) or '{"steps": []}',
+    )
+    lessons._generate_outline(skill={"name": "Cloud basics"}, context="clouds")
+    assert captured["fallback_model_id"] == lessons.get_fallback_for("reasoning")
+
+
 def test_step_content_falls_back_cleanly(monkeypatch):
     monkeypatch.setattr(lessons.bedrock, "converse", lambda **kw: "not json")
     content = lessons._generate_step_content(

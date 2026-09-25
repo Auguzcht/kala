@@ -36,7 +36,7 @@ import httpx
 
 from app.ai import bedrock, rag
 from app.ai.concurrency import map_concurrent
-from app.ai.router import get_model_for
+from app.ai.router import get_fallback_for, get_model_for
 from app.db import supabase as db
 from app.routers.item_generation_jobs import enqueue_lesson
 
@@ -97,6 +97,7 @@ def _generate_outline(*, skill: dict, context: str) -> list[dict]:
                 "excerpt": context,
             })}]}],
             max_tokens=768,
+            fallback_model_id=get_fallback_for("reasoning"),
         )
         parsed = _parse_json(raw)
         steps = parsed.get("steps", [])
