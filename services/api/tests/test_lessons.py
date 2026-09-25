@@ -32,6 +32,32 @@ def test_ready_lesson_fast_path_selects_guided_lessons_only_once(monkeypatch):
     assert lesson["lessonId"] == "lesson-1"
 
 
+def test_ready_lesson_with_null_check_is_never_reclaimed(monkeypatch):
+    monkeypatch.setattr(
+        lessons,
+        "_reclaim_for_regeneration",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("ready lesson reclaimed")),
+    )
+
+    def fake_select(table, params):
+        if table == "guided_lessons":
+            return [{"id": "lesson-1", "status": "ready", "skill_id": "s-1",
+                     "module_ref": None, "title": "Skill One"}]
+        if table == "guided_lesson_steps":
+            return [{"id": "step-1", "position": 0, "summary": "sum",
+                     "detail_points": [], "misconception": None, "key_takeaway": None,
+                     "bloom_level": "understand", "check_item_id": None}]
+        return []
+
+    monkeypatch.setattr(lessons.db, "select", fake_select)
+    lesson = lessons.get_or_generate_lesson(
+        institution_id="inst-1", course_id="c-1", skill={"id": "s-1", "name": "Skill One"},
+    )
+
+    assert lesson["status"] == "ready"
+    assert lesson["steps"][0]["check"] is None
+
+
 def test_get_or_generate_returns_stored_lesson_without_regenerating(monkeypatch):
     """If a ready lesson exists, load it and never call the model."""
     called = {"converse": 0}
@@ -123,11 +149,12 @@ def test_generation_persists_steps_in_position_order_even_when_parallel_completi
                 "key_takeaway": None}
 
     monkeypatch.setattr(lessons, "_generate_step_content", content_with_variable_delay)
-    monkeypatch.setattr(lessons.item_gen, "generate_question", lambda **kw: {"id": "check"})
+    monkeypatch.setattr(lessons, "enqueue_lesson", lambda **kw: ({"id": "job"}, True))
 
     def fake_insert(table, rows, prefer="return=representation"):
         if table == "guided_lesson_steps":
             inserted_positions.append((rows[0]["position"], rows[0]["summary"]))
+            return [{"id": f"step-{rows[0]['position']}"}]
         return []
 
     monkeypatch.setattr(lessons.db, "insert", fake_insert)
@@ -142,9 +169,8 @@ def test_generation_persists_steps_in_position_order_even_when_parallel_completi
     ]
 
 
-def test_generation_persists_steps_and_wires_check_item(monkeypatch):
-    """First open: outline -> per-step content + a check MCQ, all persisted,
-    lesson flipped to ready."""
+def test_generation_persists_steps_with_null_check_and_enqueues_it(monkeypatch):
+    """First open persists teaching content quickly and queues its check."""
     inserts = {"guided_lessons": [], "guided_lesson_steps": []}
     updates = []
 
@@ -156,8 +182,8 @@ def test_generation_persists_steps_and_wires_check_item(monkeypatch):
         "summary": "explained", "detail_points": ["p1", "p2"],
         "misconception": "a myth", "key_takeaway": "the point",
     })
-    monkeypatch.setattr(lessons.item_gen, "generate_question",
-                        lambda **kw: {"id": "check-1", "prompt": "Q?", "choices": []})
+    queued = []
+    monkeypatch.setattr(lessons, "enqueue_lesson", lambda **kw: queued.append(kw) or ({"id": "job-1"}, True))
 
     guided_lessons_calls = {"n": 0}
 
@@ -177,9 +203,7 @@ def test_generation_persists_steps_and_wires_check_item(monkeypatch):
             return [{"id": "00000000-0000-4000-8000-000000000070", "position": 0, "summary": "explained",
                      "detail_points": ["p1", "p2"], "misconception": "a myth",
                      "key_takeaway": "the point", "bloom_level": "understand",
-                     "check_item_id": "check-1"}]
-        if table == "generated_items":
-            return [{"id": "check-1", "prompt": "Q?", "choices": [{"id": "a", "label": "x"}]}]
+                         "check_item_id": None}]
         return []
 
     def fake_insert(table, rows, prefer="return=representation"):
@@ -198,8 +222,11 @@ def test_generation_persists_steps_and_wires_check_item(monkeypatch):
     assert len(inserts["guided_lessons"]) == 1
     assert inserts["guided_lessons"][0]["status"] == "generating"
     assert len(inserts["guided_lesson_steps"]) == 1
-    assert inserts["guided_lesson_steps"][0]["check_item_id"] == "check-1"
+    assert inserts["guided_lesson_steps"][0]["check_item_id"] is None
+    assert queued == [{
+        "institution_id": "inst-1", "course_id": "c-1",
+        "skill_id": "s-1", "lesson_step_id": "00000000-0000-4000-8000-000000000070",
+    }]
     assert updates and updates[0]["status"] == "ready"
-    # Client view carries the check WITHOUT an answer key.
-    assert lesson["steps"][0]["check"]["itemId"] == "check-1"
-    assert "correct_choice_id" not in lesson["steps"][0]["check"]
+    # The check is intentionally absent until the worker completes its queue row.
+    assert lesson["steps"][0]["check"] is None

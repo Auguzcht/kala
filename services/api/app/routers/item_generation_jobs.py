@@ -16,7 +16,7 @@ from app.db import supabase as db
 logger = logging.getLogger(__name__)
 
 _QUEUE_SELECT = (
-    "id,institution_id,course_id,skill_id,kind,set_id,context_offset,status,"
+    "id,institution_id,course_id,skill_id,kind,set_id,lesson_step_id,context_offset,status,"
     "attempt_count,item_id,last_error,next_attempt_at,created_at,finished_at"
 )
 
@@ -140,3 +140,59 @@ def enqueue_practice(
             len(recovered), size, course_id, set_id,
         )
     return recovered
+
+
+def lesson_job(*, institution_id: str, lesson_step_id: str) -> dict | None:
+    rows = db.select("item_generation_jobs", {
+        "institution_id": f"eq.{institution_id}",
+        "lesson_step_id": f"eq.{lesson_step_id}",
+        "kind": "eq.lesson",
+        "select": _QUEUE_SELECT,
+        "order": "created_at.desc",
+        "limit": "1",
+    })
+    return rows[0] if rows else None
+
+
+def enqueue_lesson(
+    *, institution_id: str, course_id: str, skill_id: str, lesson_step_id: str,
+) -> tuple[dict, bool]:
+    """Enqueue one lesson check, recovering a concurrent insert race.
+
+    The step is inserted before this helper is called, so the queue row always
+    points at a real guided_lesson_steps UUID. A complete historical row is
+    also returned as the existing record; ordinary lesson GETs only enqueue
+    during the initial content-generation transaction.
+    """
+    existing = lesson_job(
+        institution_id=institution_id, lesson_step_id=lesson_step_id,
+    )
+    if existing:
+        return existing, False
+
+    try:
+        rows = db.insert("item_generation_jobs", [{
+            "institution_id": institution_id,
+            "course_id": course_id,
+            "skill_id": skill_id,
+            "kind": "lesson",
+            "lesson_step_id": lesson_step_id,
+            "context_offset": 0,
+        }])
+    except httpx.HTTPStatusError as exc:
+        response = exc.response
+        if response is not None and response.status_code == 409:
+            winner = lesson_job(
+                institution_id=institution_id, lesson_step_id=lesson_step_id,
+            )
+            if winner:
+                logger.info(
+                    "lesson enqueue lost race step=%s job=%s",
+                    lesson_step_id, winner["id"],
+                )
+                return winner, False
+        raise
+
+    if not rows:
+        raise RuntimeError("failed to enqueue lesson check")
+    return rows[0], True

@@ -32,8 +32,7 @@ def _stub_generation(monkeypatch, *, raise_on_step: bool = False):
             "summary": "explained", "detail_points": [], "misconception": None,
             "key_takeaway": None,
         })
-    monkeypatch.setattr(lessons.item_gen, "generate_question",
-                        lambda **kw: {"id": "check-1", "prompt": "Q?", "choices": []})
+    monkeypatch.setattr(lessons, "enqueue_lesson", lambda **kw: ({"id": "job-1"}, True))
 
 
 def test_stuck_generating_lesson_is_reclaimed_not_served_incomplete(monkeypatch):

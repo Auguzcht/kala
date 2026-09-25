@@ -38,7 +38,7 @@ from app.ai import bedrock, rag
 from app.ai.concurrency import map_concurrent
 from app.ai.router import get_model_for
 from app.db import supabase as db
-from app.learn import items as item_gen
+from app.routers.item_generation_jobs import enqueue_lesson
 
 _OUTLINE_SYSTEM = (
     "You are Kala, planning a short guided lesson for ONE skill, grounded "
@@ -204,6 +204,8 @@ def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) 
     if existing:
         row = existing[0]
         if row["status"] == "ready":
+            # Null check_item_id is healthy while asynchronous check jobs are
+            # pending or failed; never reclaim a ready lesson for that reason.
             return _assemble_lesson(lesson_row=row, institution_id=institution_id)
         lesson_id = row["id"]
         _reclaim_for_regeneration(lesson_id)
@@ -266,49 +268,33 @@ def _lesson_shell(*, institution_id: str, course_id: str, skill: dict) -> dict:
 
 
 def _reclaim_for_regeneration(lesson_id: str) -> None:
-    """Clear any steps left by a partial/crashed attempt and mark the lesson
-    'generating' again before retrying. Deleting first means step `position`
-    can never collide with leftovers from the earlier attempt."""
+    """Clear steps from a failed outline/content attempt and retry generation.
+
+    Ready lessons never enter this function: asynchronous check work may leave
+    check_item_id null, so a missing check is not evidence of failed teaching
+    generation.
+    """
     db.delete("guided_lesson_steps", {"lesson_id": f"eq.{lesson_id}"})
     db.update("guided_lessons", {"id": f"eq.{lesson_id}"}, {"status": "generating"})
 
 
 def _build_step_payload(*, institution_id: str, course_id: str, skill: dict,
                         step: dict, context: str) -> dict:
-    """One step's worth of work: teaching content + its comprehension check.
-    Fully independent of every other step (only reads the shared, read-only
-    `context`), which is what makes running these on a thread pool safe."""
+    """Build teaching content; comprehension checks are queued after insert."""
     content = _generate_step_content(skill=skill, step=step, context=context)
-
-    # The comprehension check: a real generated_items MCQ (kind='tutor'),
-    # so passing it grades server-side and writes a tutor evidence_event.
-    # Reuses the tested item generator rather than a parallel path.
-    check_item_id = None
-    try:
-        check = item_gen.generate_question(
-            institution_id=institution_id, course_id=course_id,
-            skill=skill, kind="tutor",
-        )
-        check_item_id = check["id"]
-    except Exception:
-        check_item_id = None  # explanation-only step; still valid
-
-    return {"content": content, "check_item_id": check_item_id, "bloom_level": step.get("bloom_level")}
+    return {"content": content, "check_item_id": None, "bloom_level": step.get("bloom_level")}
 
 
 def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
                          lesson_id: str) -> None:
-    """Phases 1+2: outline, then per-step content + check, persisted under an
+    """Phases 1+2: outline, then per-step content, persisted under an
     already-created lesson row. Raises on failure; the caller is responsible
     for marking the row 'failed'.
 
-    Per-step generation (content + its comprehension check) is TWO model
-    calls each, and every step is independent of the others — this used to
-    run fully serial (up to 2N sequential Bedrock round trips for an N-step
-    lesson, the actual cause of guided lessons taking minutes to first open),
-    so it is parallelized across steps via map_concurrent. Only the DB
-    inserts stay sequential, so `position` is still written in outline order
-    regardless of which step's generation happened to finish first.
+    Comprehension checks are queued after each step insert, so the expensive
+    item-role call is not on the request path. Only the DB inserts and queue
+    writes stay sequential, so `position` is still written in outline order
+    regardless of content completion order.
     """
     context, _ = _context_for(institution_id=institution_id, course_id=course_id, skill=skill)
     outline = _generate_outline(skill=skill, context=context)
@@ -323,7 +309,7 @@ def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
 
     for position, payload in enumerate(built):
         content = payload["content"]
-        db.insert("guided_lesson_steps", [{
+        inserted = db.insert("guided_lesson_steps", [{
             "lesson_id": lesson_id,
             "position": position,
             "summary": content["summary"],
@@ -332,7 +318,24 @@ def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
             "key_takeaway": content["key_takeaway"],
             "bloom_level": payload["bloom_level"],
             "check_item_id": payload["check_item_id"],
-        }], prefer="return=minimal")
+        }])
+        step_id = inserted[0].get("id") if inserted else None
+        if not step_id:
+            persisted = db.select("guided_lesson_steps", {
+                "lesson_id": f"eq.{lesson_id}",
+                "position": f"eq.{position}",
+                "select": "id",
+                "limit": "1",
+            })
+            if not persisted:
+                raise RuntimeError("guided lesson step insert returned no id")
+            step_id = persisted[0]["id"]
+        enqueue_lesson(
+            institution_id=institution_id,
+            course_id=course_id,
+            skill_id=skill["id"],
+            lesson_step_id=step_id,
+        )
 
 
 def load_lesson(*, institution_id: str, lesson_id: str) -> dict:

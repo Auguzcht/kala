@@ -117,6 +117,38 @@ def test_practice_enqueue_race_reads_existing_offsets_with_tenant_scope(monkeypa
     assert params["kind"] == "eq.practice"
 
 
+def test_lesson_enqueue_race_reads_existing_step_with_tenant_scope(monkeypatch):
+    calls = []
+    winner = {
+        "id": "job-lesson", "institution_id": _INSTITUTION,
+        "course_id": _COURSE, "skill_id": _SKILL, "kind": "lesson",
+        "lesson_step_id": "step-1", "status": "pending",
+    }
+
+    def select(table, params):
+        calls.append((table, params))
+        return [] if len(calls) == 1 else [winner]
+
+    def insert(*args, **kwargs):
+        response = httpx.Response(409, request=httpx.Request("POST", "https://db"))
+        raise httpx.HTTPStatusError("duplicate", request=response.request, response=response)
+
+    monkeypatch.setattr(item_generation_jobs.db, "select", select)
+    monkeypatch.setattr(item_generation_jobs.db, "insert", insert)
+
+    row, created = item_generation_jobs.enqueue_lesson(
+        institution_id=_INSTITUTION, course_id=_COURSE,
+        skill_id=_SKILL, lesson_step_id="step-1",
+    )
+
+    assert row == winner
+    assert created is False
+    for _, params in calls:
+        assert params["institution_id"] == f"eq.{_INSTITUTION}"
+        assert params["lesson_step_id"] == "eq.step-1"
+        assert params["kind"] == "eq.lesson"
+
+
 def test_new_practice_set_does_not_return_a_dead_zero_queue_set(monkeypatch, caplog):
     app.dependency_overrides[get_current_user] = authenticated_user
     deleted = []
