@@ -73,6 +73,18 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_FAST",
     )
 
+    # The item-generation model. MUST match services/api/app/config.py's
+    # openrouter_model_item. Item generation uses DeepSeek because it is the
+    # measured model that supports the strict structured-output schema; the
+    # worker needs the same role setting when diagnostic/practice generation
+    # moves off the API request path. Kept env-overridable
+    # (OPENROUTER_MODEL_ITEM) so a provider/model change remains a config
+    # change, never a code one. This is a deliberate duplicate: grep both
+    # config.py files for `openrouter_model_item` before changing either copy.
+    openrouter_model_item: str = Field(
+        default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_ITEM",
+    )
+
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_embed_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBED_MODEL")

@@ -62,3 +62,16 @@ def update(table: str, filters: dict[str, str], values: dict[str, Any]) -> list[
                     headers={"Prefer": "return=representation"})
         r.raise_for_status()
         return r.json() if r.content else []
+
+
+def rpc(fn: str, args: dict[str, Any]) -> Any:
+    """Call a tenant-scoped Postgres function through PostgREST.
+
+    Deliberate duplicate of services/api/app/db/supabase.py's rpc primitive.
+    The worker-side RAG path uses match_content_items for item generation;
+    grep both db helpers for `def rpc` before changing either one.
+    """
+    with _client() as c:
+        r = c.post(f"/rpc/{fn}", json=args)
+        r.raise_for_status()
+        return r.json() if r.content else None
