@@ -34,13 +34,17 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
-from app.ai import documents, rag, router as model_router
+from app.ai import documents, rag
+from app.ai import router as model_router
 from app.ai.deidentify import safe_context
 from app.db import storage
 from app.db import supabase as db
 from app.deps import (
-    CurrentUser, get_current_user, require_valid_attachment_id,
-    require_valid_conversation_id, require_valid_course_id_query,
+    CurrentUser,
+    get_current_user,
+    require_valid_attachment_id,
+    require_valid_conversation_id,
+    require_valid_course_id_query,
 )
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
@@ -422,7 +426,9 @@ def _ask(body: Ask, user: CurrentUser):
     )
 
     db.insert("tutor_messages", [
-        {"conversation_id": convo["id"], "role": "user", "content": body.question},
+        # PostgREST bulk inserts require every object to have the same keys;
+        # style is nullable for user messages, but it must still be present.
+        {"conversation_id": convo["id"], "role": "user", "content": body.question, "style": None},
         {"conversation_id": convo["id"], "role": "assistant", "content": answer_text, "style": body.style},
     ])
     updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
