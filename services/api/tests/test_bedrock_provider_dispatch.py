@@ -586,6 +586,27 @@ def test_answer_with_chat_task_selects_the_chat_model_and_fallback(monkeypatch):
     assert seen["fallback_model_id"] != seen["model_id"]
 
 
+def test_answer_with_reasoning_task_selects_paid_model_and_fast_fallback(monkeypatch):
+    from app.ai import bedrock, router
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ai_provider", "openrouter", raising=False)
+
+    seen = {}
+
+    def fake_converse(**kw):
+        seen.update(kw)
+        return "ok"
+
+    monkeypatch.setattr(bedrock, "converse", fake_converse)
+    router.answer(system="s", user_text="u", task="reasoning")
+
+    assert seen["model_id"] == "inclusionai/ling-3.0-flash-vl"
+    assert seen["fallback_model_id"] == get_settings().openrouter_model_reasoning_fallback
+    assert seen["fallback_model_id"] != seen["model_id"]
+    assert "deepseek" not in seen["fallback_model_id"]
+
+
 def test_escalate_is_ignored_when_an_explicit_task_is_passed(monkeypatch):
     """Asking for the chat role and silently receiving the reasoning model
     would be surprising, so an explicit task wins over escalate."""

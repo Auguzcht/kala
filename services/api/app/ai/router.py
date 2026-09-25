@@ -53,19 +53,18 @@ _ANSWER_MAX_TOKENS = 2048
 def get_fallback_for(task: str) -> str | None:
     """The fallback model for a role, or None to use the global default.
 
-    Only `chat` has its own today. The global fallback is deepseek, which is a
-    fine escape hatch for the generation roles (they run on the worker or in
-    bounded requests) but CANNOT serve the tutor: deepseek needs 34-103s on the
-    real tutor prompt, so falling back to it from a failed ling call just times
-    out again and produces the same 500. A role-specific fallback is the only
-    way to make the retry actually retry something viable.
+    `chat` and `reasoning` have role-specific fallbacks. The global fallback
+    is deepseek, which can take 34-103s on these prompts and is not suitable
+    for an inline API request after a primary model failure.
 
-    Returning None for every other role is deliberate — `converse()` then uses
-    s.openrouter_model_fallback exactly as before, so nothing else changes.
+    Returning None for other roles is deliberate — `converse()` then uses the
+    global fallback for those roles.
     """
     s = get_settings()
     if task == "chat":
         return s.openrouter_model_chat_fallback or None
+    if task == "reasoning":
+        return s.openrouter_model_reasoning_fallback or None
     return None
 
 

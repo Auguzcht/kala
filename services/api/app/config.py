@@ -162,10 +162,17 @@ class Settings(BaseSettings):
         alias="OPENROUTER_MODEL_CHAT_FALLBACK",
     )
     openrouter_model_reasoning: str = Field(
-        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_REASONING",
+        default="inclusionai/ling-3.0-flash-vl", alias="OPENROUTER_MODEL_REASONING",
+    )
+    # Reasoning runs inline for lesson outlines and skill proposals, so its
+    # fallback must also fit the API Lambda wall. DeepSeek can take 34-103s
+    # on these calls and is not suitable as the inline fallback.
+    openrouter_model_reasoning_fallback: str = Field(
+        default="nex-agi/nex-n2.5-mini:free",
+        alias="OPENROUTER_MODEL_REASONING_FALLBACK",
     )
     openrouter_model_premium: str = Field(
-        default="inclusionai/ling-3.0-flash-vl:free", alias="OPENROUTER_MODEL_PREMIUM",
+        default="inclusionai/ling-3.0-flash-vl", alias="OPENROUTER_MODEL_PREMIUM",
     )
     openrouter_model_item: str = Field(
         default="deepseek/deepseek-v4.1-flash:floor",
