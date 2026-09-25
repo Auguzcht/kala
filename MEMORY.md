@@ -88,6 +88,28 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ## Current State
 
+### Latest verification — 2026-09-25
+
+- **Async lesson checks are live and verified end to end.** The API first-open
+  returned HTTP 200 in 18.4s with five ready teaching steps and null checks;
+  three worker invocations claimed `2 + 2 + 1` lesson jobs, all five completed
+  with `item_id` values, and the later lesson GET returned all five real checks.
+  API Lambda `CodeSha256` matched ECR `kala-api:latest`.
+- **Tutor conversation switching was traced at the component lifecycle level.**
+  The `/course/tutor` route persists the same `TutorChat` instance when only the
+  `conversation` search param changes; there is no key-based remount. That is
+  safe because `TutorChat` has an effect keyed on `activeId` which clears both
+  `pendingTurn` and `lastQuestion` on an external conversation switch. A live
+  Chrome reproduction was not claimed because browser automation access was
+  unavailable during verification.
+- **Practice cold-generation is explicitly accepted on shared-plumbing evidence
+  for this pass, not silently marked live-verified.** The API route tests cover
+  the generating response and stable set/job creation, the worker tests cover
+  practice job claiming/completion, the shared item-generation worker path is
+  live-verified by diagnostic and lesson checks, and the frontend polls the
+  stable set URL without re-POSTing. A dedicated cold practice POST → worker →
+  ready run remains an optional follow-up, not an unrecorded gap.
+
 ### Deployed and verified (newest first)
 - **API `09:53Z` 2026-09-24**, worker `09:53Z` — both `State=Active`, update
   `Successful`. ECR `:latest` digest == deployed `CodeSha256` (verified).
