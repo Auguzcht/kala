@@ -114,6 +114,20 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         action={<Button variant="outline">Retry</Button>}
       />
     );
+  if (data?.status === "generating")
+    return (
+      <LoadingPanel
+        label={`Building your baseline — ${data.readyCount} question${data.readyCount === 1 ? "" : "s"} ready…`}
+        lines={4}
+      />
+    );
+  if (data?.status === "failed")
+    return (
+      <EmptyState
+        title="Your baseline is not ready yet"
+        description="Kala could not create a question for any of the topics currently due. Your course team can reopen the failed topic after adding material."
+      />
+    );
   // Nothing due is the common, GOOD state here, not a missing-content
   // error: either every mapped skill already has this student's diagnostic
   // evidence, or the instructor hasn't approved any skills yet. Either
@@ -201,6 +215,11 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
             <CornerBrackets />
 
             <StudyStream height="h-[55vh]">
+              {data.failedSkillIds.length > 0 ? (
+                <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+                  {data.readyCount} of {data.readyCount + data.failedSkillIds.length} topics are ready. A topic without course material was left out.
+                </p>
+              ) : null}
               {data.questions.map((q, qi) => (
                 <div key={q.id} className="rounded-md border bg-card p-4">
                   <AnswerableCard

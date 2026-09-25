@@ -18,7 +18,12 @@ export const questionSchema = z.object({
 
 export const diagnosticSchema = z.object({
   courseId: z.string(),
+  status: z.enum(["generating", "ready", "failed"]),
   questions: z.array(questionSchema),
+  readyCount: z.number().int().nonnegative(),
+  pendingSkillIds: z.array(z.string()),
+  failedSkillIds: z.array(z.string()),
+  skippedSkillCount: z.number().int().nonnegative(),
 });
 
 // The due-check. No questions here, just whether anything needs a

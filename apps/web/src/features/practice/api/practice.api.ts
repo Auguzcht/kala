@@ -1,11 +1,13 @@
 import { api } from "@/lib/api/client";
 import {
   practiceNextSchema,
+  practiceBridgeSetSchema,
   practiceSavedSetSchema,
   practiceSetListSchema,
   practiceSetSchema,
   practiceSubmitResultSchema,
   type PracticeNext,
+  type PracticeBridgeSet,
   type PracticeSavedSet,
   type PracticeSet,
   type PracticeSetList,
@@ -18,12 +20,8 @@ export async function fetchNextPracticeItem(courseId: string, skillId?: string):
   return practiceNextSchema.parse(data);
 }
 
-// A batch of N items for one skill, generated concurrently server-side and
-// grouped under a quiz_sets row. The session path: the hook holds the whole
-// set and advances locally, so N questions cost one generation round trip
-// instead of N. `skillId` omitted resolves to the student's weakest skill.
-// timeoutMs is generous because this awaits N concurrent model calls in one
-// request — same class as lesson generation, not a plain read.
+// Enqueue a batch of N items for one skill, grouped under a quiz_sets row.
+// The 202 response is followed by GET /sets/{set_id} polling in the hook.
 export async function fetchPracticeSet(
   courseId: string,
   args: { skillId?: string; size?: number } = {}
@@ -35,7 +33,7 @@ export async function fetchPracticeSet(
   const data = await api<unknown>(
     `/practice/${courseId}/set${query}`,
     { method: "POST" },
-    60_000
+    15_000
   );
   return practiceSetSchema.parse(data);
 }
@@ -48,13 +46,13 @@ export async function fetchPracticeSet(
 export async function createPracticeSetFromItems(
   courseId: string,
   itemIds: string[]
-): Promise<PracticeSet> {
+): Promise<PracticeBridgeSet> {
   const data = await api<unknown>(
     `/practice/${courseId}/set/from-items`,
     { method: "POST", body: JSON.stringify({ item_ids: itemIds }) },
     15_000
   );
-  return practiceSetSchema.parse(data);
+  return practiceBridgeSetSchema.parse(data);
 }
 
 // Load a saved set by id, so test mode can run it instead of generating.

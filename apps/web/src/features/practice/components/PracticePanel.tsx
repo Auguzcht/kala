@@ -181,6 +181,21 @@ export function PracticePanel({
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
+  if (data?.status === "generating")
+    return (
+      <LoadingPanel
+        label={`Building your practice set — ${data.readyCount}/${data.requestedSize} ready…`}
+        lines={4}
+      />
+    );
+  if (data?.status === "failed")
+    return (
+      <EmptyState
+        title="This practice set could not be built"
+        description="No question became ready for this set. Please try generating another set."
+        action={<Button variant="outline" onClick={() => refetch()}>Try again</Button>}
+      />
+    );
   if (!item)
     return (
       <EmptyState

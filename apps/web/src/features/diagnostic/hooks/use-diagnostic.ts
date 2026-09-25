@@ -11,11 +11,13 @@ export function useDiagnostic(courseId: string) {
   return useQuery({
     queryKey: ["diagnostic", courseId],
     queryFn: () => fetchDiagnostic(courseId),
-    // The diagnostic is a fixed baseline instrument (one question per topic,
-    // reused across fetches — see routers/diagnostic.py's idempotency fix),
-    // not a randomized quiz, so there is nothing to gain from re-fetching it
-    // frequently within a session.
-    staleTime: 5 * 60_000,
+    // A cold baseline is durable but not ready yet. Poll only while the
+    // worker is resolving queue rows; once ready/failed, the fixed item bank
+    // can go back to a long cache window.
+    staleTime: (query) =>
+      query.state.data?.status === "generating" ? 0 : 5 * 60_000,
+    refetchInterval: (query) =>
+      query.state.data?.status === "generating" ? 5_000 : false,
   });
 }
 

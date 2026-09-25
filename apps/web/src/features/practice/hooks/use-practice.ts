@@ -7,6 +7,7 @@ import {
   fetchPracticeSets,
   submitPracticeAttempt,
 } from "@/features/practice/api/practice.api";
+import type { PracticeSavedSet, PracticeSet } from "@/features/practice/schema/practice.schema";
 
 // Quick practice: fetch the next item for a given skill, submit an
 // attempt, then refetch the next item so the loop continues.
@@ -19,25 +20,29 @@ export function useNextPracticeItem(courseId: string, skillId?: string) {
   });
 }
 
-// The session path: one batched set of items for the skill, fetched once.
-// The panel holds the set and advances through it locally — answering is
-// instant because the next item already exists client-side, which is the
-// whole point of batching (server-side generation is the ~10s cost, not
-// rendering). A new set is only fetched when the student exhausts this one
-// ("Generate another set") or changes topic, both of which are explicit
-// actions, so this query never refetches mid-session and the set can't shift
-// under an in-progress answer.
-//
-// Cache key is per skill and marked staleTime: Infinity for the same reason:
-// a background refetch would swap the batch out from under the student.
-// Invalidation is not needed on submit — evidence/mastery live on other keys
-// (twin, next-up, gamification), which useSubmitPractice already handles.
+const POLL_INTERVAL_MS = 5_000;
+
+// The session path creates one durable set, then polls its stable detail URL.
+// The query function deliberately switches from POST to GET after the first
+// generating response; polling must never create a second quiz set.
 export function usePracticeSet(courseId: string, skillId: string, size = 5) {
+  const queryClient = useQueryClient();
+  const queryKey = ["practice", courseId, "set", skillId, size];
   return useQuery({
-    queryKey: ["practice", courseId, "set", skillId, size],
-    queryFn: () => fetchPracticeSet(courseId, { skillId, size }),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
+    queryKey,
+    queryFn: async (): Promise<PracticeSet | PracticeSavedSet> => {
+      const current = queryClient.getQueryData<PracticeSet>(queryKey);
+      if (current?.status === "generating" && current.setId) {
+        return fetchPracticeSetById(courseId, current.setId);
+      }
+      return fetchPracticeSet(courseId, { skillId, size });
+    },
+    staleTime: (query) =>
+      query.state.data?.status === "generating" ? 0 : Infinity,
+    refetchInterval: (query) =>
+      query.state.data?.status === "generating" ? POLL_INTERVAL_MS : false,
+    refetchOnWindowFocus: (query) =>
+      query.state.data?.status === "generating",
   });
 }
 
@@ -49,8 +54,12 @@ export function usePracticeSetById(courseId: string, setId: string | null) {
     queryKey: ["practice", courseId, "saved-set", setId],
     queryFn: () => fetchPracticeSetById(courseId, setId as string),
     enabled: Boolean(setId),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
+    staleTime: (query) =>
+      query.state.data?.status === "generating" ? 0 : Infinity,
+    refetchInterval: (query) =>
+      query.state.data?.status === "generating" ? POLL_INTERVAL_MS : false,
+    refetchOnWindowFocus: (query) =>
+      query.state.data?.status === "generating",
   });
 }
 
