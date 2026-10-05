@@ -15,6 +15,7 @@
     "setup:api": "cd services/api && uv sync",
     "setup:worker": "cd services/worker && uv sync",
     "check:stack": "bash ./check_stack.sh",
+    "context:claude": "node scripts/claude-context.mjs",
     "schema:types": "pnpm supabase gen types typescript --project-id \"${SUPABASE_PROJECT_ID:-jcufmpxjlgdfzefvulvz}\" --schema public > packages/schema/supabase.ts",
     "aws": "sh ./scripts/aws-cli.sh",
     "terraform": "sh ./scripts/terraform.sh",

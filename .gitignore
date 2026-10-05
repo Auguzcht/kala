@@ -21,6 +21,7 @@ dist-ssr/
 
 **/[Cc][Ll][Aa][Uu][Dd][Ee].[Mm][Dd]
 !/CLAUDE.md
+claude-context.md
 .claude/
 **/.claude/
 .claude.json
