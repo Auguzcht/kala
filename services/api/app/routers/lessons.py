@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.db import supabase as db
+from app.bank.serving import record_exposure
 from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_skill_id, require_valid_step_id
 from app.learn import items as item_gen
 from app.learn import lessons, srs, xp
@@ -119,6 +120,11 @@ def submit_check(
         institution_id=user.institution_id, user_id=user.user_id,
         course_id=course_id, item_id=body.item_id, skill_id=skill_id,
         correct=graded["correct"],
+    )
+    record_exposure(
+        institution_id=user.institution_id, user_id=user.user_id,
+        course_id=course_id, skill_id=skill_id, item_id=body.item_id,
+        tested=True, answered=True, correct=graded["correct"],
     )
 
     return {

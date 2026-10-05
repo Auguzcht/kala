@@ -417,6 +417,196 @@
             }
           },
           {
+            "name": "include_attachments",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Attachments"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/courses/{course_id}/ingest/status": {
+      "get": {
+        "tags": [
+          "diagnostic"
+        ],
+        "summary": "Ingest Status",
+        "operationId": "ingest_status_courses__course_id__ingest_status_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/courses/{course_id}/content/upload": {
+      "post": {
+        "tags": [
+          "diagnostic"
+        ],
+        "summary": "Upload Course Content",
+        "description": "Staff upload of course material the LMS connector cannot reach.\n\nWHY THIS EXISTS. Blackboard's Learn REST API exposes `resource/x-bb-file`\nitems as METADATA ONLY \u2014 fileName and mimeType, no download reference\n(verified live: /download and /file 404, the sole link is a browser-session\nUltra redirect). So for a course whose real material is a shelf of PDFs\n(the AWS Academy module decks, the syllabus, the review sheets), ingest has\nnothing to read and the generator ends up writing questions from the skill\nname alone. This is the escape hatch: a human with the files uploads them\ndirectly, they land in content_items, and they go through the SAME tagging\nand embedding path ingest uses \u2014 so they behave exactly like scraped\ncontent downstream, including feeding RAG retrieval and generation.\n\nDeliberately NOT the tutor_attachments path. That table is a student's own\nprivate material for one conversation: not shared, not skill-tagged, not\npart of the course corpus. Reusing it would have looked like a shortcut and\nproduced a file that no generation surface could ever see.\n\nGate: two layers, because course_id is caller-supplied. require_role proves\nthe caller is staff somewhere; _assert_teaches_course proves it is THIS\ncourse. Same shape as the instructor dashboard's checks.",
+        "operationId": "upload_course_content_courses__course_id__content_upload_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_course_content_courses__course_id__content_upload_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/courses/{course_id}/content/retag": {
+      "post": {
+        "tags": [
+          "diagnostic"
+        ],
+        "summary": "Reset Tagging",
+        "description": "Clear the \"already attempted\" mark on UNMATCHED content so it can be\ntagged again against a changed skill set.\n\nWHY THIS IS NEEDED AND WHY IT IS EXPLICIT. Ingest is resumable via\n`tag_attempted_at`: a chunk that has been through the tagger stops being\npending, whether or not it matched a skill. That is what stops untaggable\ncontent looping forever \u2014 but it also means a plain re-run of /ingest\nretries NOTHING. Approving new skills and calling /ingest again would skip\nevery chunk that previously found no match, which is precisely the content\nthe new skills were approved to catch.\n\nSo this is the deliberate second half of \"approve skills, then retag\":\nreset first, then ingest. Returns how many rows were reopened so the caller\nknows whether a re-tag is even worth running (0 means nothing to do).\n\nOnly touches skill_id IS NULL rows. A chunk that already matched a skill\nkeeps its tag and is not re-sent to the model \u2014 re-tagging matched content\nwould be wasted calls and could reshuffle a correct match to a worse one.\n\nStaff-gated at both layers, like the upload endpoint: course_id is\ncaller-supplied, so \"staff somewhere\" is not sufficient.",
+        "operationId": "reset_tagging_courses__course_id__content_retag_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
@@ -521,21 +711,21 @@
         "operationId": "post_grade_courses__course_id__assessments__column_id__grade_patch",
         "parameters": [
           {
-            "name": "course_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Course Id"
-            }
-          },
-          {
             "name": "column_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
               "title": "Column Id"
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
             }
           },
           {
@@ -876,7 +1066,7 @@
           "practice"
         ],
         "summary": "Create Set",
-        "description": "Generate a batch of practice items for ONE skill and group them under a\nquiz_sets row. This is the batch replacement for calling /next N times.\n\nThe set row is created FIRST (status-free \u2014 it's just a grouping) so each\ngenerate_question call can write its set_id at insert time; an item is\ntherefore never briefly persisted outside the set it belongs to. If every\ngeneration call fails, the empty set row is cleaned up rather than left as\na dangling grouping with no items.\n\nA POST, not a GET: this has a side effect (persists N items), so it must\nnot be cached or prefetched like the read-shaped /next is.",
+        "description": "Queue a batch of practice items for ONE skill under a quiz_sets row.\nThis is the async batch replacement for calling /next N times.\n\nThe set row is created FIRST, then one durable queue row per context offset\nis inserted. The worker writes each generated item with this set_id and\ncheckpoints its queue row. The route returns before any model call.\n\nA POST, not a GET: this has a side effect (persists N queue rows), so it\nmust not be cached or prefetched like the read-shaped /next is.",
         "operationId": "create_set_practice__course_id__set_post",
         "parameters": [
           {
@@ -932,7 +1122,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -3078,6 +3268,62 @@
           }
         }
       }
+    },
+    "/courses/{course_id}/bank/status": {
+      "get": {
+        "tags": [
+          "bank"
+        ],
+        "summary": "Bank Status",
+        "operationId": "bank_status_courses__course_id__bank_status_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3152,6 +3398,31 @@
           "file"
         ],
         "title": "Body_upload_attachment_tutor_conversations__conversation_id__attachments_post"
+      },
+      "Body_upload_course_content_courses__course_id__content_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "module_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_course_content_courses__course_id__content_upload_post"
       },
       "CheckBody": {
         "properties": {
@@ -3528,6 +3799,17 @@
             "type": "integer",
             "title": "Latency Ms",
             "default": 0
+          },
+          "set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Id"
           }
         },
         "type": "object",

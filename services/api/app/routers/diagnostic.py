@@ -14,6 +14,8 @@ from app.ai import bedrock, documents
 from app.ai.chunking import chunk_text
 from app.ai.deidentify import strip_pii
 from app.ai.skill_proposer import seed_course_skills
+from app.bank.kick import kick_bank
+from app.bank.serving import bank_enabled, pick_diagnostic_item, record_exposure
 from app.db import storage
 from app.db import supabase as db
 from app.deps import (
@@ -572,6 +574,44 @@ def get_diagnostic(
         }
     skills = skills[:MAX_DIAGNOSTIC_QUESTIONS]
 
+    course_rows = db.select("courses", {
+        "id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
+        "select": "id,bank_serving", "limit": "1",
+    })
+    if course_rows and bank_enabled(course_rows[0], "diagnostic"):
+        questions, pending_skill_ids, failed_skill_ids = [], [], []
+        for skill in skills:
+            states = db.select("skill_bank_state", {
+                "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill['id']}",
+                "select": "status,mcq_ready", "limit": "1",
+            })
+            state = states[0] if states else {"status": "waiting_content", "mcq_ready": 0}
+            if state.get("status") == "no_material":
+                failed_skill_ids.append(skill["id"])
+                continue
+            if int(state.get("mcq_ready") or 0) < 5:
+                pending_skill_ids.append(skill["id"])
+                kick_bank(course_id, "diagnostic")
+                continue
+            item = pick_diagnostic_item(
+                user.user_id, course_id, skill["id"], institution_id=user.institution_id,
+            )
+            if item:
+                questions.append({
+                    "id": item["id"], "skillId": item["skill_id"],
+                    "bloomLevel": item.get("bloom_level"), "prompt": item["prompt"],
+                    "choices": item.get("choices") or [],
+                })
+            else:
+                failed_skill_ids.append(skill["id"])
+        return {
+            "courseId": course_id,
+            "status": "ready" if questions else ("generating" if pending_skill_ids else "failed"),
+            "questions": questions, "readyCount": len(questions),
+            "pendingSkillIds": pending_skill_ids, "failedSkillIds": failed_skill_ids,
+            "skippedSkillCount": len(failed_skill_ids),
+        }
+
     # The diagnostic is a fixed baseline instrument ("Build your baseline"),
     # not a randomized quiz: re-fetching must return the SAME shared items.
     # Existing items are read first; missing skills are represented by durable
@@ -673,6 +713,11 @@ def submit_diagnostic(
             "course_id": course_id, "skill_id": graded["skillId"], "type": "diagnostic",
             "correct": graded["correct"], "latency_ms": a.latency_ms,
         })
+        record_exposure(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=graded["skillId"], item_id=a.item_id,
+            tested=True, answered=True, correct=graded["correct"],
+        )
     if rows:
         db.insert_evidence(rows)
 

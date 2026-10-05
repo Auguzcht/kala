@@ -123,6 +123,7 @@ def test_outline_passes_the_reasoning_fallback(monkeypatch):
     )
     lessons._generate_outline(skill={"name": "Cloud basics"}, context="clouds")
     assert captured["fallback_model_id"] == lessons.get_fallback_for("reasoning")
+    assert captured["max_tokens"] == 1536
 
 
 def test_step_content_falls_back_cleanly(monkeypatch):
@@ -152,6 +153,7 @@ def test_step_content_uses_the_lesson_reasoning_role(monkeypatch):
         context="clouds",
     )
     assert captured["model_id"] == lessons.get_model_for("reasoning")
+    assert captured["max_tokens"] == 1536
 
 
 def test_generation_persists_steps_in_position_order_even_when_parallel_completion_is_out_of_order(monkeypatch):

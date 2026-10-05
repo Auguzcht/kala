@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.ai.concurrency import map_concurrent
+from app.bank.serving import bank_enabled, pick_bank_items, record_exposure
 from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user, require_valid_course_id
 from app.learn import items as item_gen
@@ -88,6 +89,11 @@ def deck(
             institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
             skill_id=skill_id,
         )}
+    course_rows = db.select("courses", {
+        "id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
+        "select": "id,bank_serving", "limit": "1",
+    })
+    use_bank = bool(course_rows and bank_enabled(course_rows[0], "study"))
 
     # 1) Due, already-scheduled cards (most overdue first, mastered excluded).
     due = srs.due_cards(
@@ -100,7 +106,9 @@ def deck(
         rows = db.select("generated_items", {
             "id": f"in.({','.join(due_item_ids)})",
             "institution_id": f"eq.{user.institution_id}",
-            "select": "id,skill_id,prompt,choices",
+            "course_id": f"eq.{course_id}", "retired_at": "is.null",
+            "kind": "in.(practice,flashcard)",
+            "select": "id,skill_id,prompt,choices,origin,skills!inner(status)",
         })
         items_by_id = {r["id"]: r for r in rows}
 
@@ -119,7 +127,8 @@ def deck(
             "box": d["box"],
         })
 
-    # 2) Top up with new cards for skills that have no scheduled card yet.
+    # 2) Top up with bank cards when serving is enabled; otherwise retain the
+    # legacy model-backed seeding path exactly as it was.
     if len(cards) < limit:
         tracked = db.select("srs_state", {
             "user_id": f"eq.{user.user_id}", "course_id": f"eq.{course_id}",
@@ -128,33 +137,48 @@ def deck(
         tracked_skill_ids = {t["skill_id"] for t in tracked}
         fresh_skills = [s for sid, s in skills.items() if sid not in tracked_skill_ids]
 
-        # Generation is one Bedrock call per skill, independent of the
+        if use_bank:
+            bank_items = pick_bank_items(
+                user.user_id, course_id, skill_id, limit - len(cards), "study",
+                institution_id=user.institution_id,
+            )
+            for item in bank_items:
+                skill = skills.get(item["skill_id"], {})
+                srs.ensure_tracked(
+                    institution_id=user.institution_id, user_id=user.user_id,
+                    course_id=course_id, item_id=item["id"], skill_id=item["skill_id"],
+                    module_ref=skill.get("module_ref"),
+                )
+                record_exposure(
+                    institution_id=user.institution_id, user_id=user.user_id,
+                    course_id=course_id, skill_id=item["skill_id"], item_id=item["id"], studied=True,
+                )
+                cards.append({"itemId": item["id"], "skillId": item["skill_id"],
+                              "skillName": skill.get("name"), "prompt": item["prompt"],
+                              "state": "new", "box": 0})
+        else:
+            # Generation is one Bedrock call per skill, independent of the
         # others — parallelized so seeding N new cards is one round trip's
         # worth of wall-clock time, not N serial ones. Scheduling writes
         # (ensure_tracked) stay sequential after, they're cheap DB I/O and
         # keeping them in order avoids any need to reason about interleaving.
-        to_generate = fresh_skills[: limit - len(cards)]
-        generated = map_concurrent(
-            lambda skill: item_gen.generate_question(
-                institution_id=user.institution_id, course_id=course_id,
-                skill=skill, kind="flashcard",
-            ),
-            to_generate,
-        )
-        for skill, card in zip(to_generate, generated):
-            srs.ensure_tracked(
-                institution_id=user.institution_id, user_id=user.user_id,
-                course_id=course_id, item_id=card["id"], skill_id=skill["id"],
-                module_ref=skill.get("module_ref"),
+            to_generate = fresh_skills[: limit - len(cards)]
+            generated = map_concurrent(
+                lambda skill: item_gen.generate_question(
+                    institution_id=user.institution_id, course_id=course_id,
+                    skill=skill, kind="flashcard",
+                ),
+                to_generate,
             )
-            cards.append({
-                "itemId": card["id"],
-                "skillId": skill["id"],
-                "skillName": skill.get("name"),
-                "prompt": card["prompt"],
-                "state": "new",
-                "box": 0,
-            })
+            for skill, card in zip(to_generate, generated):
+                srs.ensure_tracked(
+                    institution_id=user.institution_id, user_id=user.user_id,
+                    course_id=course_id, item_id=card["id"], skill_id=skill["id"],
+                    module_ref=skill.get("module_ref"),
+                )
+                cards.append({"itemId": card["id"], "skillId": skill["id"],
+                              "skillName": skill.get("name"), "prompt": card["prompt"],
+                              "state": "new", "box": 0})
 
     # 3) Derive the study back (answer label + explanation) for every card in
     # ONE query. Study mode shows a flip, so it needs the answer the MCQ
@@ -181,7 +205,7 @@ def deck(
         for card in cards:
             card["back"] = backs.get(card["itemId"], {"label": None, "explanation": ""})
 
-    return {
+    result = {
         "courseId": course_id,
         "cards": cards,
         "stats": srs.stats(
@@ -189,6 +213,18 @@ def deck(
             skill_id=skill_id,
         ),
     }
+    if skill_id is not None and use_bank:
+        state = db.select("skill_bank_state", {
+            "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill_id}",
+            "select": "status,mcq_ready,mcq_target", "limit": "1",
+        })
+        if state:
+            row = state[0]
+            result["bankStatus"] = {
+                "status": row.get("status"), "mcqReady": row.get("mcq_ready", 0),
+                "usable": row.get("status") == "ready" and int(row.get("mcq_ready") or 0) >= int(row.get("mcq_target") or 0),
+            }
+    return result
 
 
 class ReviewBody(BaseModel):
@@ -241,6 +277,10 @@ def review(
         course_id=course_id, item_id=body.item_id, skill_id=skill_id,
         correct=body.remembered,
     )
+    record_exposure(
+        institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+        skill_id=skill_id, item_id=body.item_id, answered=True, correct=body.remembered,
+    )
 
     return {
         "remembered": body.remembered,
@@ -251,4 +291,3 @@ def review(
             institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
         ),
     }
-

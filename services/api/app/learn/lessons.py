@@ -37,6 +37,8 @@ import httpx
 from app.ai import bedrock, rag
 from app.ai.concurrency import map_concurrent
 from app.ai.router import get_fallback_for, get_model_for
+from app.bank.kick import kick_bank
+from app.bank.serving import _approved_item_pool, bank_enabled
 from app.db import supabase as db
 from app.routers.item_generation_jobs import enqueue_lesson
 
@@ -96,7 +98,7 @@ def _generate_outline(*, skill: dict, context: str) -> list[dict]:
                 "skill": skill["name"], "bloom_level": skill.get("bloom_level"),
                 "excerpt": context,
             })}]}],
-            max_tokens=768,
+            max_tokens=1536,
             fallback_model_id=get_fallback_for("reasoning"),
         )
         parsed = _parse_json(raw)
@@ -138,7 +140,7 @@ def _generate_step_content(*, skill: dict, step: dict, context: str) -> dict:
                 "skill": skill["name"], "step_title": step["title"],
                 "step_focus": step["focus"], "excerpt": context,
             })}]}],
-            max_tokens=640,
+            max_tokens=1536,
         )
         parsed = _parse_json(raw)
         details = parsed.get("detail_points", [])
@@ -198,6 +200,9 @@ def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) 
     with the row already in hand instead of going through load_lesson()'s
     own select.
     """
+    # Keep this compact select stable for the existing hot-path and test
+    # contract; load_lesson performs the richer select when it needs bank
+    # assignment metadata.
     lesson_fields = "id,status,skill_id,module_ref,title"
     existing = db.select("guided_lessons", {
         "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill['id']}",
@@ -210,7 +215,7 @@ def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) 
         if row["status"] == "ready":
             # Null check_item_id is healthy while asynchronous check jobs are
             # pending or failed; never reclaim a ready lesson for that reason.
-            return _assemble_lesson(lesson_row=row, institution_id=institution_id)
+            return _assemble_lesson(lesson_row=row, institution_id=institution_id, course_id=course_id)
         lesson_id = row["id"]
         _reclaim_for_regeneration(lesson_id)
     else:
@@ -231,7 +236,7 @@ def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) 
                 if not refetched:
                     raise  # genuinely unexpected; surface the original error
                 if refetched[0]["status"] == "ready":
-                    return _assemble_lesson(lesson_row=refetched[0], institution_id=institution_id)
+                    return _assemble_lesson(lesson_row=refetched[0], institution_id=institution_id, course_id=course_id)
                 lesson_id = refetched[0]["id"]
                 _reclaim_for_regeneration(lesson_id)
             else:
@@ -334,12 +339,18 @@ def _generate_steps_into(*, institution_id: str, course_id: str, skill: dict,
             if not persisted:
                 raise RuntimeError("guided lesson step insert returned no id")
             step_id = persisted[0]["id"]
-        enqueue_lesson(
-            institution_id=institution_id,
-            course_id=course_id,
-            skill_id=skill["id"],
-            lesson_step_id=step_id,
-        )
+        try:
+            course_rows = db.select("courses", {
+                "id": f"eq.{course_id}", "institution_id": f"eq.{institution_id}",
+                "select": "bank_serving", "limit": "1",
+            })
+        except Exception:  # noqa: BLE001 - old test/schema fixtures mean legacy path
+            course_rows = []
+        if not (course_rows and bank_enabled(course_rows[0], "lesson")):
+            enqueue_lesson(
+                institution_id=institution_id, course_id=course_id,
+                skill_id=skill["id"], lesson_step_id=step_id,
+            )
 
 
 def load_lesson(*, institution_id: str, lesson_id: str) -> dict:
@@ -350,14 +361,14 @@ def load_lesson(*, institution_id: str, lesson_id: str) -> dict:
     the row and skips this select entirely."""
     lessons = db.select("guided_lessons", {
         "id": f"eq.{lesson_id}", "institution_id": f"eq.{institution_id}",
-        "select": "id,skill_id,module_ref,title,status", "limit": "1",
+        "select": "id,course_id,skill_id,module_ref,title,status,source_chunk_ids", "limit": "1",
     })
     if not lessons:
         raise ValueError(f"lesson {lesson_id} not found")
     return _assemble_lesson(lesson_row=lessons[0], institution_id=institution_id)
 
 
-def _assemble_lesson(*, lesson_row: dict, institution_id: str) -> dict:
+def _assemble_lesson(*, lesson_row: dict, institution_id: str, course_id: str | None = None) -> dict:
     """Steps + check-item assembly for a lesson row the caller already has.
     Never returns a check item's answer key — the check MCQ is delivered
     like any other item (prompt + choices), and grading happens server-side
@@ -369,6 +380,35 @@ def _assemble_lesson(*, lesson_row: dict, institution_id: str) -> dict:
                   "key_takeaway,bloom_level,check_item_id",
         "order": "position.asc",
     })
+
+    course_id = course_id or lesson_row.get("course_id")
+    bank_course = db.select("courses", {
+        "id": f"eq.{course_id}", "institution_id": f"eq.{institution_id}",
+        "select": "bank_serving", "limit": "1",
+    }) if course_id else []
+    if bank_course and bank_enabled(bank_course[0], "lesson"):
+        state_rows = db.select("skill_bank_state", {
+            "course_id": f"eq.{course_id}", "skill_id": f"eq.{lesson_row['skill_id']}",
+            "select": "status,mcq_ready", "limit": "1",
+        })
+        state = state_rows[0] if state_rows else {"status": "waiting_content", "mcq_ready": 0}
+        if int(state.get("mcq_ready") or 0) >= 5:
+            pool = _approved_item_pool(
+                institution_id=institution_id, course_id=course_id,
+                skill_id=lesson_row["skill_id"],
+            )
+            used = {s["check_item_id"] for s in steps if s.get("check_item_id")}
+            lesson_chunks = set(lesson_row.get("source_chunk_ids") or [])
+            available = [item for item in pool if item["id"] not in used]
+            available.sort(key=lambda item: (
+                0 if lesson_chunks.intersection(item.get("source_chunk_ids") or []) else 1,
+                item.get("created_at") or "",
+            ))
+            for step, item in zip((s for s in steps if not s.get("check_item_id")), available):
+                db.update("guided_lesson_steps", {"id": f"eq.{step['id']}"}, {"check_item_id": item["id"]})
+                step["check_item_id"] = item["id"]
+        else:
+            kick_bank(course_id, "lesson")
 
     # Pull the client-safe view of every check item in one query (no answer key).
     check_ids = [s["check_item_id"] for s in steps if s.get("check_item_id")]
