@@ -59,10 +59,16 @@ rehearsal rather than waiting for the schedule.
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
+from datetime import UTC, datetime
 
+from app.bank_config import CHAIN_MAX
+from app.config import get_settings
+from app.db import supabase as db
 from app.jobs import (
+    bank_build,
     embed_backfill,
     ingest_walk,
     item_generation,
@@ -78,10 +84,40 @@ logger.setLevel(logging.INFO)
 _INVOCATION_BUDGET_SECONDS = 120.0
 
 
+def _long_job_work() -> tuple[bool, bool]:
+    """Return tag/bank pending flags; fail open to the legacy tag path."""
+    try:
+        tag_work = bool(db.select("content_items", {"tag_attempted_at": "is.null", "chunk_text": "not.is.null", "select": "id", "limit": "1"}))
+        bank_work = bool(db.select("skill_bank_state", {"status": "in.(waiting_content,building,error)", "select": "skill_id", "limit": "1"}))
+        return tag_work, bank_work
+    except Exception as exc:  # noqa: BLE001
+        logger.info("long-job work probe unavailable; preserving tag path error=%s", type(exc).__name__)
+        return True, False
+
+
+def _last_long_job() -> str | None:
+    try:
+        value = (db.select("worker_state", {"key": "eq.long_job_last", "select": "value", "limit": "1"}) or [{}])[0].get("value") or {}
+        return value.get("job")
+    except Exception as exc:  # noqa: BLE001
+        logger.info("worker-state probe unavailable error=%s", type(exc).__name__)
+        return None
+
+
+def _record_long_job(name: str) -> None:
+    try:
+        db.upsert("worker_state", [{"key": "long_job_last", "value": {"job": name}, "updated_at": datetime.now(UTC).isoformat()}], on_conflict="key")
+    except Exception as exc:  # noqa: BLE001
+        logger.info("worker-state update unavailable error=%s", type(exc).__name__)
+
+
 def handler(event, context):
     invocation_started = time.monotonic()
     event = event or {}
     institution_id = (event.get("scope") or {}).get("institution_id")
+    targeted_course_id = event.get("courseId")
+    trigger = event.get("trigger")
+    chain_depth = int(event.get("chainDepth", 0) or 0)
 
     results: dict[str, dict] = {}
     errors: dict[str, str] = {}
@@ -92,6 +128,9 @@ def handler(event, context):
         logger.info("job start name=%s institution_id=%s", name, institution_id or "all")
         try:
             job_kwargs = {"institution_id": institution_id}
+            if targeted_course_id and name == "bankBuild":
+                job_kwargs["course_id"] = targeted_course_id
+                job_kwargs["chain_depth"] = chain_depth
             if name == "itemGeneration":
                 job_kwargs["remaining_seconds"] = max(
                     0.0,
@@ -110,6 +149,13 @@ def handler(event, context):
             )
             errors[name] = str(exc)
 
+    if targeted_course_id and trigger:
+        if trigger == "skills_approved":
+            db.update("content_items", {"course_id": f"eq.{targeted_course_id}", "skill_id": "is.null"}, {"tag_attempted_at": None})
+        run_one("bankBuild", bank_build)
+        _maybe_chain(targeted_course_id, results.get("bankBuild", {}), chain_depth, errors)
+        return {"ok": not errors, "results": results, "errors": errors}
+
     # Each job runs independently. Dependency order: ingest before embed
     # because embedding reads chunks the walk may have stored; embed before
     # item generation because item RAG reads embeddings; readiness is cheap and
@@ -127,11 +173,42 @@ def handler(event, context):
     item_active = bool(results.get("itemGeneration", {}).get("claimed", 0))
     if item_active:
         results["tagBackfill"] = {"skipped": "item_generation_active"}
-        logger.info(
-            "job skipped name=tagBackfill reason=item_generation_active institution_id=%s",
-            institution_id or "all",
-        )
+        logger.info("job skipped name=tagBackfill reason=item_generation_active institution_id=%s", institution_id or "all")
     else:
-        run_one("tagBackfill", tag_backfill)
+        tag_work, bank_work = _long_job_work()
+        last = _last_long_job()
+        if tag_work and bank_work and last == "tagBackfill":
+            run_one("bankBuild", bank_build)
+            _record_long_job("bankBuild")
+            results["tagBackfill"] = {"skipped": "alternated_to_bankBuild"}
+        elif tag_work and bank_work:
+            run_one("tagBackfill", tag_backfill)
+            _record_long_job("tagBackfill")
+            results["bankBuild"] = {"skipped": "alternated_to_tagBackfill"}
+        elif bank_work:
+            run_one("bankBuild", bank_build)
+        elif tag_work:
+            run_one("tagBackfill", tag_backfill)
+        else:
+            results["bankBuild"] = {"skipped": "no_work"}
+            results["tagBackfill"] = {"skipped": "no_work"}
 
     return {"ok": not errors, "results": results, "errors": errors}
+
+
+def _maybe_chain(course_id: str, result: dict, chain_depth: int, errors: dict) -> None:
+    if not result.get("remaining") or result.get("rate_limited") or errors.get("bankBuild"):
+        return
+    if chain_depth >= CHAIN_MAX:
+        logger.warning("bank chain stopped course_id=%s reason=chain_max depth=%d", course_id, chain_depth)
+        return
+    arn = get_settings().worker_function_arn
+    if not arn:
+        logger.warning("bank chain skipped course_id=%s reason=missing_worker_function_arn", course_id)
+        return
+    try:
+        import boto3
+        boto3.client("lambda").invoke(FunctionName=arn, InvocationType="Event",
+                                       Payload=json.dumps({"trigger": "bank", "courseId": course_id, "chainDepth": chain_depth + 1}).encode())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bank chain invoke failed course_id=%s error=%s", course_id, exc)

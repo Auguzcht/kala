@@ -46,7 +46,8 @@ def test_worker_validation_reroll_is_gated_by_remaining_budget(monkeypatch):
     assert "explanation" not in result
     assert inserted[0]["correct_choice_id"] == "a"
     assert inserted[0]["explanation"]
-    assert inserted[0]["set_id"] == "set-1"
+    assert "set_id" not in inserted[0]
+    assert inserted[1] == {"set_id": "set-1", "item_id": "job-1", "position": 0}
 
 
 def test_worker_does_not_reroll_when_budget_is_below_gate(monkeypatch):

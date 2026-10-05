@@ -76,10 +76,12 @@ mirroring test_course_sync_cache.py's style.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
 from app.chunking import chunk_text, extract_text, resolve_mime_type, strip_pii
+from app.config import get_settings
 from app.db import supabase as db
 from app.lms.blackboard import BlackboardRateLimitedError, WorkerBlackboardConnector
 
@@ -662,6 +664,23 @@ def _checkpoint(job_id, *, frontier, folders_expanded, items_stored, pdfs_fetche
     if status == "complete":
         values["finished_at"] = _now()
     db.update("ingest_jobs", {"id": f"eq.{job_id}"}, values)
+    if status == "complete":
+        _invoke_bank_for_completed_course(job_id)
+
+
+def _invoke_bank_for_completed_course(job_id: str) -> None:
+    """Wake the bank after ingest completion; schedule remains the backstop."""
+    try:
+        rows = db.select("ingest_jobs", {"id": f"eq.{job_id}", "select": "course_id", "limit": "1"})
+        if not rows or not get_settings().worker_function_arn:
+            return
+        import boto3
+        boto3.client("lambda").invoke(
+            FunctionName=get_settings().worker_function_arn, InvocationType="Event",
+            Payload=json.dumps({"trigger": "bank", "courseId": rows[0]["course_id"], "chainDepth": 0}).encode(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bank invoke after ingest completion failed job=%s error=%s", job_id, exc)
 
 
 def _mark_failed(job_id: str, error: str) -> None:

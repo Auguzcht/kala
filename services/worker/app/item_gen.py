@@ -301,9 +301,16 @@ def generate_question(
         "correct_choice_id": correct_choice_id,
         "explanation": explanation,
     }
-    if set_id is not None:
-        row["set_id"] = set_id
     db.insert("generated_items", [row])
+    if set_id is not None:
+        try:
+            links = db.select("quiz_set_items", {
+                "set_id": f"eq.{set_id}", "select": "position", "order": "position.desc", "limit": "1",
+            })
+        except Exception:
+            links = []
+        position = int(links[0]["position"]) + 1 if links else 0
+        db.insert("quiz_set_items", [{"set_id": set_id, "item_id": job_id, "position": position}])
     return {
         "id": job_id,
         "skillId": skill["id"],

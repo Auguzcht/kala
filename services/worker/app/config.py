@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     openrouter_model_item: str = Field(
         default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_ITEM",
     )
+    openrouter_model_bank: str = Field(
+        default="deepseek/deepseek-v4.1-flash:nitro", alias="OPENROUTER_MODEL_BANK",
+    )
+    bank_reasoning_effort: str = Field(default="low", alias="BANK_REASONING_EFFORT")
+    worker_function_arn: str = Field(default="", alias="WORKER_FUNCTION_ARN")
 
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
