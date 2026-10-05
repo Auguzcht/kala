@@ -1,6 +1,7 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import {
   useGenerateSet,
   usePracticeSetById,
   usePracticeSets,
+  useBankStatus,
 } from "@/features/practice";
 import type { PracticeSetAttempt, PracticeSetSummary } from "@/features/practice";
 
@@ -29,7 +31,7 @@ import type { PracticeSetAttempt, PracticeSetSummary } from "@/features/practice
 // — that card already tells the student what to do, so it deep-links straight
 // to ?tab=test&start=1. This browser is for entering Test deliberately.
 
-const SET_SIZE = 5;
+const SET_SIZES = [5, 10, 20] as const;
 
 // The card header bar's color, cycled through the existing brand tokens. Keyed
 // by a stable hash of the set id rather than list position: the spec asked for
@@ -75,6 +77,7 @@ export function TestBrowser({
   courseId,
   skillId,
   setId,
+  includesRepeats,
   onSelectSet,
   onStart,
 }: {
@@ -83,7 +86,8 @@ export function TestBrowser({
   /** When set, show that set's detail view instead of the list. */
   setId: string | null;
   /** Open a set's detail view (from the list, or after generating). */
-  onSelectSet: (setId: string) => void;
+  includesRepeats?: boolean;
+  onSelectSet: (setId: string, includesRepeats?: boolean) => void;
   /** Begin the graded run on the currently open set. */
   onStart: () => void;
 }) {
@@ -94,6 +98,7 @@ export function TestBrowser({
         setId={setId}
         onStart={onStart}
         onBack={() => onSelectSet("")}
+        includesRepeats={includesRepeats}
       />
     );
   }
@@ -142,10 +147,14 @@ function SetList({
 }: {
   courseId: string;
   skillId: string;
-  onSelectSet: (setId: string) => void;
+  onSelectSet: (setId: string, includesRepeats?: boolean) => void;
 }) {
   const { data, isLoading, isError, refetch } = usePracticeSets(courseId, skillId);
   const generate = useGenerateSet(courseId);
+  const [size, setSize] = useState<number>(5);
+  const [preparing, setPreparing] = useState(false);
+  const [noMaterial, setNoMaterial] = useState(false);
+  const bank = useBankStatus(courseId, skillId, preparing);
   const reduceMotion = useReducedMotion();
   const sets = data?.sets ?? [];
   const allSets = sets;
@@ -173,8 +182,14 @@ function SetList({
 
   const onGenerate = () => {
     generate.mutate(
-      { skillId, size: SET_SIZE },
-      { onSuccess: (set) => { if (set.setId) onSelectSet(set.setId); } }
+      { skillId, size },
+      { onSuccess: (set) => {
+          if (set.setId) onSelectSet(set.setId, Boolean(set.includesRepeats));
+          else {
+            setPreparing(set.status === "preparing");
+            setNoMaterial(set.status === "no_material");
+          }
+        } }
     );
   };
 
@@ -192,6 +207,29 @@ function SetList({
             Generate one below, or study these cards and hit "Test me on these" —
             saved sets land here to retake.
           </p>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">Questions</span>
+        {SET_SIZES.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setSize(option)}
+            disabled={generate.isPending || preparing}
+            aria-pressed={size === option}
+            className={cn(
+              "border px-3 py-1.5 text-xs font-semibold transition-colors",
+              size === option ? "border-brand-orange bg-brand-orange/10 text-foreground" : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >{option}</button>
+        ))}
+      </div>
+
+      {noMaterial ? (
+        <div className="border border-dashed bg-card px-5 py-4 text-sm text-muted-foreground">
+          This skill doesn&apos;t have course material yet.
         </div>
       ) : null}
 
@@ -249,7 +287,7 @@ function SetList({
         <button
           type="button"
           onClick={onGenerate}
-          disabled={generate.isPending}
+          disabled={generate.isPending || preparing || noMaterial}
           className={cn(
             "group flex min-h-[116px] flex-col items-center justify-center gap-2 border-2 border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
             "transition-[border-color,background-color] hover:border-foreground/40 hover:bg-accent/40",
@@ -264,13 +302,19 @@ function SetList({
               <PlusIcon size={18} className="text-muted-foreground" />
             )}
           </div>
-          {generate.isPending ? (
+          {noMaterial ? (
+            <p className="text-sm font-semibold text-muted-foreground">No course material yet</p>
+          ) : preparing ? (
+            <p className="text-sm font-semibold text-foreground">
+              Preparing questions ({bank.data?.skills.find((s) => s.skillId === skillId)?.mcqReady ?? 0}/{bank.data?.skills.find((s) => s.skillId === skillId)?.mcqTarget ?? 0})
+            </p>
+          ) : generate.isPending ? (
             <Shimmer className="text-sm font-semibold">Writing your questions…</Shimmer>
           ) : (
             <p className="text-sm font-semibold text-foreground">Generate new set</p>
           )}
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Fresh questions, {SET_SIZE} at a time.
+            Fresh questions — choose 5, 10, or 20 at a time.
           </p>
           {generate.isError ? (
             <p className="text-xs text-destructive">
@@ -295,11 +339,13 @@ function SetDetail({
   setId,
   onStart,
   onBack,
+  includesRepeats,
 }: {
   courseId: string;
   setId: string;
   onStart: () => void;
   onBack: () => void;
+  includesRepeats?: boolean;
 }) {
   const { data, isLoading, isError, refetch } = usePracticeSetById(courseId, setId);
 
@@ -323,6 +369,7 @@ function SetDetail({
   }
 
   const attempted = data.attemptedCount !== null;
+  const canStart = data.status === "ready";
   const attempt: PracticeSetAttempt = {
     attemptedCount: data.attemptedCount,
     correctCount: data.correctCount,
@@ -359,11 +406,27 @@ function SetDetail({
           </div>
           {/* The single action this whole view exists to lead to — solid and
               high-contrast, not another card in the stack. */}
-          <Button variant="orange" size="lg" onClick={onStart} className="shrink-0">
-            {attempted ? "Retake test" : "Start test"} <ArrowRightIcon size={16} />
+          <Button
+            variant="orange"
+            size="lg"
+            onClick={onStart}
+            disabled={!canStart}
+            className="shrink-0"
+          >
+            {canStart
+              ? attempted ? "Retake test" : "Start test"
+              : data.status === "generating"
+                ? `Preparing questions (${data.readyCount}/${data.requestedSize})`
+                : "Questions unavailable"}
+            {canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>
       </div>
+      {includesRepeats ? (
+        <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
+          You&apos;ve seen every question for this skill. Here are the ones worth another look.
+        </div>
+      ) : null}
 
       {/* Prompts only — no choices or answers, by design. Grading is
           server-side on submit; this is a graded test, not a flashcard browse. */}

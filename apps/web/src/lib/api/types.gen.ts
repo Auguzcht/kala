@@ -187,6 +187,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/ingest/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ingest Status */
+        get: operations["ingest_status_courses__course_id__ingest_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/content/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Course Content
+         * @description Staff upload of course material the LMS connector cannot reach.
+         *
+         *     WHY THIS EXISTS. Blackboard's Learn REST API exposes `resource/x-bb-file`
+         *     items as METADATA ONLY — fileName and mimeType, no download reference
+         *     (verified live: /download and /file 404, the sole link is a browser-session
+         *     Ultra redirect). So for a course whose real material is a shelf of PDFs
+         *     (the AWS Academy module decks, the syllabus, the review sheets), ingest has
+         *     nothing to read and the generator ends up writing questions from the skill
+         *     name alone. This is the escape hatch: a human with the files uploads them
+         *     directly, they land in content_items, and they go through the SAME tagging
+         *     and embedding path ingest uses — so they behave exactly like scraped
+         *     content downstream, including feeding RAG retrieval and generation.
+         *
+         *     Deliberately NOT the tutor_attachments path. That table is a student's own
+         *     private material for one conversation: not shared, not skill-tagged, not
+         *     part of the course corpus. Reusing it would have looked like a shortcut and
+         *     produced a file that no generation surface could ever see.
+         *
+         *     Gate: two layers, because course_id is caller-supplied. require_role proves
+         *     the caller is staff somewhere; _assert_teaches_course proves it is THIS
+         *     course. Same shape as the instructor dashboard's checks.
+         */
+        post: operations["upload_course_content_courses__course_id__content_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/content/retag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Tagging
+         * @description Clear the "already attempted" mark on UNMATCHED content so it can be
+         *     tagged again against a changed skill set.
+         *
+         *     WHY THIS IS NEEDED AND WHY IT IS EXPLICIT. Ingest is resumable via
+         *     `tag_attempted_at`: a chunk that has been through the tagger stops being
+         *     pending, whether or not it matched a skill. That is what stops untaggable
+         *     content looping forever — but it also means a plain re-run of /ingest
+         *     retries NOTHING. Approving new skills and calling /ingest again would skip
+         *     every chunk that previously found no match, which is precisely the content
+         *     the new skills were approved to catch.
+         *
+         *     So this is the deliberate second half of "approve skills, then retag":
+         *     reset first, then ingest. Returns how many rows were reopened so the caller
+         *     knows whether a re-tag is even worth running (0 means nothing to do).
+         *
+         *     Only touches skill_id IS NULL rows. A chunk that already matched a skill
+         *     keeps its tag and is not re-sent to the model — re-tagging matched content
+         *     would be wasted calls and could reshuffle a correct match to a worse one.
+         *
+         *     Staff-gated at both layers, like the upload endpoint: course_id is
+         *     caller-supplied, so "staff somewhere" is not sufficient.
+         */
+        post: operations["reset_tagging_courses__course_id__content_retag_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/modules": {
         parameters: {
             query?: never;
@@ -314,17 +411,15 @@ export interface paths {
         put?: never;
         /**
          * Create Set
-         * @description Generate a batch of practice items for ONE skill and group them under a
-         *     quiz_sets row. This is the batch replacement for calling /next N times.
+         * @description Queue a batch of practice items for ONE skill under a quiz_sets row.
+         *     This is the async batch replacement for calling /next N times.
          *
-         *     The set row is created FIRST (status-free — it's just a grouping) so each
-         *     generate_question call can write its set_id at insert time; an item is
-         *     therefore never briefly persisted outside the set it belongs to. If every
-         *     generation call fails, the empty set row is cleaned up rather than left as
-         *     a dangling grouping with no items.
+         *     The set row is created FIRST, then one durable queue row per context offset
+         *     is inserted. The worker writes each generated item with this set_id and
+         *     checkpoints its queue row. The route returns before any model call.
          *
-         *     A POST, not a GET: this has a side effect (persists N items), so it must
-         *     not be cached or prefetched like the read-shaped /next is.
+         *     A POST, not a GET: this has a side effect (persists N queue rows), so it
+         *     must not be cached or prefetched like the read-shaped /next is.
          */
         post: operations["create_set_practice__course_id__set_post"];
         delete?: never;
@@ -1058,6 +1153,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/bank/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bank Status */
+        get: operations["bank_status_courses__course_id__bank_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1088,6 +1200,13 @@ export interface components {
         Body_upload_attachment_tutor_conversations__conversation_id__attachments_post: {
             /** File */
             file: string;
+        };
+        /** Body_upload_course_content_courses__course_id__content_upload_post */
+        Body_upload_course_content_courses__course_id__content_upload_post: {
+            /** File */
+            file: string;
+            /** Module Ref */
+            module_ref?: string | null;
         };
         /** CheckBody */
         CheckBody: {
@@ -1231,6 +1350,8 @@ export interface components {
              * @default 0
              */
             latency_ms: number;
+            /** Set Id */
+            set_id?: string | null;
         };
     };
     responses: never;
@@ -1521,6 +1642,111 @@ export interface operations {
     };
     ingest_course_courses__course_id__ingest_post: {
         parameters: {
+            query?: {
+                include_attachments?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_status_courses__course_id__ingest_status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_course_content_courses__course_id__content_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_course_content_courses__course_id__content_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_tagging_courses__course_id__content_retag_post: {
+        parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
@@ -1592,8 +1818,8 @@ export interface operations {
                 authorization?: string | null;
             };
             path: {
-                course_id: string;
                 column_id: string;
+                course_id: string;
             };
             cookie?: never;
         };
@@ -1782,7 +2008,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2914,6 +3140,39 @@ export interface operations {
         };
     };
     summary_gamification__course_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bank_status_courses__course_id__bank_status_get: {
         parameters: {
             query?: never;
             header?: {

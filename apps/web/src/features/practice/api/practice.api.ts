@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import { z } from "zod";
 import {
   practiceNextSchema,
   practiceBridgeSetSchema,
@@ -11,6 +12,7 @@ import {
   type PracticeSavedSet,
   type PracticeSet,
   type PracticeSetList,
+  type PracticeBankStatus,
   type PracticeSubmitResult,
 } from "@/features/practice/schema/practice.schema";
 
@@ -74,9 +76,27 @@ export async function fetchPracticeSets(
   return practiceSetListSchema.parse(data);
 }
 
+const bankStatusResponseSchema = z.object({
+  courseId: z.string(),
+  building: z.boolean(),
+  skills: z.array(z.object({
+    skillId: z.string(), status: z.string(), mcqReady: z.number(),
+    mcqTarget: z.number(), depth: z.number(), usable: z.boolean(),
+  })),
+});
+
+export async function fetchBankStatus(courseId: string): Promise<{
+  courseId: string;
+  building: boolean;
+  skills: Array<PracticeBankStatus & { skillId: string; depth: number }>;
+}> {
+  const data = await api<unknown>(`/courses/${courseId}/bank/status`);
+  return bankStatusResponseSchema.parse(data);
+}
+
 export async function submitPracticeAttempt(
   courseId: string,
-  args: { itemId: string; choiceId: string; latencyMs: number }
+  args: { itemId: string; choiceId: string; latencyMs: number; setId?: string | null }
 ): Promise<PracticeSubmitResult> {
   const data = await api<unknown>(`/practice/${courseId}/submit`, {
     method: "POST",
@@ -84,6 +104,7 @@ export async function submitPracticeAttempt(
       item_id: args.itemId,
       choice_id: args.choiceId,
       latency_ms: args.latencyMs,
+      ...(args.setId ? { set_id: args.setId } : {}),
     }),
   });
   return practiceSubmitResultSchema.parse(data);

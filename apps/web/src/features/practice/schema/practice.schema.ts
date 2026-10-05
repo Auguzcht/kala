@@ -19,13 +19,22 @@ const practiceSetPayloadSchema = z.object({
   items: z.array(practiceItemSchema),
 });
 
+const bankStatusSchema = z.object({
+  status: z.string(),
+  mcqReady: z.number().int().nonnegative(),
+  mcqTarget: z.number().int().nonnegative(),
+  usable: z.boolean(),
+});
+
 export const practiceSetProgressSchema = z.object({
-  status: z.enum(["generating", "ready", "failed"]),
+  status: z.enum(["generating", "ready", "failed", "preparing", "no_material"]),
   requestedSize: z.number().int().nonnegative(),
   readyCount: z.number().int().nonnegative(),
   pendingCount: z.number().int().nonnegative(),
   failedCount: z.number().int().nonnegative(),
   failedOffsets: z.array(z.number().int().nonnegative()),
+  bankStatus: bankStatusSchema.optional(),
+  includesRepeats: z.boolean().optional(),
 });
 
 // A generated batch of items for one skill (POST /practice/{id}/set).
@@ -89,6 +98,7 @@ export const practiceSubmitResultSchema = z.object({
 export type PracticeItem = z.infer<typeof practiceItemSchema>;
 export type PracticeNext = z.infer<typeof practiceNextSchema>;
 export type PracticeSet = z.infer<typeof practiceSetSchema>;
+export type PracticeBankStatus = z.infer<typeof bankStatusSchema>;
 export type PracticeSavedSet = z.infer<typeof practiceSavedSetSchema>;
 export type PracticeBridgeSet = z.infer<typeof practiceBridgeSetSchema>;
 export type PracticeSetSummary = z.infer<typeof practiceSetSummarySchema>;

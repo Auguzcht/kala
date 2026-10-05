@@ -5,6 +5,7 @@ import {
   fetchPracticeSet,
   fetchPracticeSetById,
   fetchPracticeSets,
+  fetchBankStatus,
   submitPracticeAttempt,
 } from "@/features/practice/api/practice.api";
 import type { PracticeSavedSet, PracticeSet } from "@/features/practice/schema/practice.schema";
@@ -25,11 +26,17 @@ const POLL_INTERVAL_MS = 5_000;
 // The session path creates one durable set, then polls its stable detail URL.
 // The query function deliberately switches from POST to GET after the first
 // generating response; polling must never create a second quiz set.
-export function usePracticeSet(courseId: string, skillId: string, size = 5) {
+export function usePracticeSet(
+  courseId: string,
+  skillId: string,
+  size = 5,
+  options: { enabled?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   const queryKey = ["practice", courseId, "set", skillId, size];
   return useQuery({
     queryKey,
+    enabled: options.enabled ?? true,
     queryFn: async (): Promise<PracticeSet | PracticeSavedSet> => {
       const current = queryClient.getQueryData<PracticeSet>(queryKey);
       if (current?.status === "generating" && current.setId) {
@@ -71,6 +78,18 @@ export function usePracticeSets(courseId: string, skillId?: string) {
   });
 }
 
+export function useBankStatus(courseId: string, skillId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["bank", courseId, "status"],
+    queryFn: () => fetchBankStatus(courseId),
+    enabled,
+    refetchInterval: (query) => {
+      const skill = query.state.data?.skills.find((item) => item.skillId === skillId);
+      return skill?.usable ? false : 10_000;
+    },
+  });
+}
+
 // The study -> test bridge: group studied items into a set. Not a query — it
 // is a one-shot action the caller then navigates with, so a mutation is the
 // honest shape. Invalidates the retake list so a new set shows up there.
@@ -103,7 +122,7 @@ export function useGenerateSet(courseId: string) {
 export function useSubmitPractice(courseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { itemId: string; choiceId: string; latencyMs: number }) =>
+    mutationFn: (args: { itemId: string; choiceId: string; latencyMs: number; setId?: string | null }) =>
       submitPracticeAttempt(courseId, args),
     onSuccess: () => {
       // refetchType: "none" — mark stale, but do NOT auto-refetch. The

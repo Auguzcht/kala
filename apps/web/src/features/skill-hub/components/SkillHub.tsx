@@ -129,6 +129,7 @@ export function SkillHub({
   skillId,
   tab,
   setId,
+  includesRepeats,
   start,
   onSelectTab,
   onSelectSet,
@@ -143,11 +144,12 @@ export function SkillHub({
   /** The set open in the Test tab's detail view (retake, bridge handoff, or
    * a freshly generated set). Empty string = back to the set list. */
   setId?: string;
+  includesRepeats?: boolean;
   /** True once a session is running (Study's flip deck, Test's graded run).
    * Replaces the hub frame with the mode's own takeover. */
   start?: boolean;
   onSelectTab: (tab: SkillTab) => void;
-  onSelectSet: (setId: string) => void;
+  onSelectSet: (setId: string, includesRepeats?: boolean) => void;
   onStart: () => void;
   /** Leave a running session back to the hub pane (clears `start` in the URL
    * so a refresh doesn't re-enter it). */
@@ -190,6 +192,7 @@ export function SkillHub({
           courseId={courseId}
           skillId={skillId}
           setId={setId || null}
+          includesRepeats={includesRepeats}
           onSelectSet={onSelectSet}
           onStart={onStart}
         />

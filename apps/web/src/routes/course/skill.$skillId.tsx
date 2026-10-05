@@ -16,6 +16,7 @@ import { SkillHub, type SkillTab } from "@/features/skill-hub";
 const skillSearchSchema = z.object({
   tab: z.enum(["lesson", "study", "test"]).optional(),
   setId: z.string().optional(),
+  repeats: z.coerce.boolean().optional(),
   start: z.coerce.boolean().optional(),
 });
 
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/course/skill/$skillId")({
 function SkillHubPage() {
   const courseId = useSession()?.courseId ?? "";
   const { skillId } = Route.useParams();
-  const { tab, setId, start } = Route.useSearch();
+  const { tab, setId, start, repeats } = Route.useSearch();
   const navigate = useNavigate();
   const to = "/course/skill/$skillId" as const;
 
@@ -37,6 +38,7 @@ function SkillHubPage() {
       skillId={skillId}
       tab={tab as SkillTab | undefined}
       setId={setId}
+      includesRepeats={repeats}
       start={start}
       // Switch panes in place. Dropping `start`/`setId` means switching tabs
       // always lands on the new tab's browse pane, never mid-session.
@@ -44,11 +46,11 @@ function SkillHubPage() {
         navigate({ to, params: { skillId }, search: { tab: nextTab } })
       }
       // Open a set's detail view (or clear back to the list with "").
-      onSelectSet={(nextSetId) =>
+      onSelectSet={(nextSetId, includesRepeats) =>
         navigate({
           to,
           params: { skillId },
-          search: nextSetId ? { tab: "test", setId: nextSetId } : { tab: "test" },
+          search: nextSetId ? { tab: "test", setId: nextSetId, repeats: includesRepeats || undefined } : { tab: "test" },
         })
       }
       // Commit to the running session for the active tab. Study and Test share

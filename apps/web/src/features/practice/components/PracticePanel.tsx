@@ -63,13 +63,14 @@ export function PracticePanel({
   setId?: string | null;
   onExit: () => void;
 }) {
-  // Generate a set when none is handed in; otherwise load the saved one. Both
-  // hooks are always called (rules of hooks) but only the active one fetches
-  // — the other is disabled via `enabled`. The generated path passes a real
-  // skillId, the saved path passes null so it never fires.
-  const generatedQuery = usePracticeSet(courseId, skillId, SET_SIZE);
-  const savedQuery = usePracticeSetById(courseId, setId ?? null);
   const usingSaved = Boolean(setId);
+  // Both hooks are always called (Rules of Hooks), but only the active path is
+  // enabled. A saved set must never also trigger the POST that creates a new
+  // set when the test session mounts.
+  const generatedQuery = usePracticeSet(courseId, skillId, SET_SIZE, {
+    enabled: !usingSaved,
+  });
+  const savedQuery = usePracticeSetById(courseId, setId ?? null);
   const { isLoading, isError, isFetching, refetch } = usingSaved ? savedQuery : generatedQuery;
   const queryError = usingSaved ? savedQuery.error : generatedQuery.error;
   const data = usingSaved ? savedQuery.data : generatedQuery.data;
@@ -222,7 +223,7 @@ export function PracticePanel({
   function handleAnswer(choiceId: string) {
     setSelectedChoice(choiceId);
     submit.mutate(
-      { itemId: item.id, choiceId, latencyMs: Date.now() - startedAt },
+      { itemId: item.id, choiceId, latencyMs: Date.now() - startedAt, setId: data?.setId },
       {
         onSuccess: (result) => {
           setLastResult(result);
