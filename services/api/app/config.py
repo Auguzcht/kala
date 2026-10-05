@@ -41,7 +41,6 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(default=3600, alias="SESSION_TTL_SECONDS")
 
     # AWS / Bedrock
-    aws_region: str = Field(default="ap-southeast-1", alias="AWS_REGION")
     bedrock_model_fast: str = Field(default="", alias="BEDROCK_MODEL_FAST")
     bedrock_model_default: str = Field(default="", alias="BEDROCK_MODEL_DEFAULT")
     bedrock_model_reasoning: str = Field(default="", alias="BEDROCK_MODEL_REASONING")
@@ -105,6 +104,8 @@ class Settings(BaseSettings):
     # All stay env-overridable (OPENROUTER_MODEL_*) so swapping the interim
     # provider for Bedrock later is a config change, never a code one.
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    worker_function_arn: str = Field(default="", alias="WORKER_FUNCTION_ARN")
+    aws_region: str = Field(default="ap-southeast-1", alias="AWS_REGION")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL",
     )

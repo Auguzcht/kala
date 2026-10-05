@@ -11,6 +11,7 @@ from app.ai.errors import ModelUnavailableError
 from app.config import get_settings
 from app.learn.items import ItemGenerationError
 from app.lti.routes import router as lti_router
+from app.routers.bank import router as bank_router
 from app.routers.courses import router as courses_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.diagnostic import router as diagnostic_router
@@ -68,6 +69,7 @@ app.include_router(tutor_router)
 app.include_router(twin_router)
 app.include_router(dashboard_router)
 app.include_router(gamification_router)
+app.include_router(bank_router)
 
 # Lambda entrypoint (referenced by the Dockerfile CMD: app.main.handler)
 handler = Mangum(app)

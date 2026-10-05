@@ -42,7 +42,9 @@ from __future__ import annotations
 
 import json
 
-from app.ai import bedrock, router as model_router
+from app.ai import bedrock
+from app.ai import router as model_router
+from app.bank.kick import kick_bank
 from app.db import supabase as db
 from app.lms.hierarchy import build_folder_paths, module_ref_for
 
@@ -326,6 +328,9 @@ def seed_course_skills(
                 # on the next refresh, but completed modules are not.
                 print(f"skill insert failed for '{p['name']}': {exc}")
                 insert_failed += 1
+
+    if auto_approved:
+        kick_bank(course_id, "skills_approved")
 
     return {
         "skipped": False,

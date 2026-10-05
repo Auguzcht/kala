@@ -15,8 +15,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.ai import prescriber
+from app.bank.kick import kick_bank
 from app.db import supabase as db
-from app.deps import CurrentUser, require_role, require_valid_course_id, require_valid_rec_id, require_valid_skill_id, require_valid_user_id
+from app.deps import (
+    CurrentUser,
+    require_role,
+    require_valid_course_id,
+    require_valid_rec_id,
+    require_valid_skill_id,
+    require_valid_user_id,
+)
 from app.twin import cohort, summary
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -356,6 +364,8 @@ def review_proposed_skill(
     )
     if not updated:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "proposed skill not found")
+    if body.status == "approved":
+        kick_bank(course_id, "skills_approved")
     return {"skillId": skill_id, "status": body.status}
 
 
