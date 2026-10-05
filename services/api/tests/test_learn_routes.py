@@ -504,12 +504,9 @@ def test_set_from_items_groups_existing_items_without_generating(monkeypatch) ->
     assert inserted_sets == [{
         "institution_id": "institution-1", "course_id": "00000000-0000-4000-8000-000000000001",
         "skill_id": "00000000-0000-4000-8000-000000000010", "kind": "practice", "size": 2,
-    }]
-    # Each studied item is re-pointed at the new set, and nothing was generated.
-    assert updated == [
-        ({"id": "eq.item-1"}, {"set_id": "00000000-0000-4000-8000-000000000020"}),
-        ({"id": "eq.item-2"}, {"set_id": "00000000-0000-4000-8000-000000000020"}),
-    ]
+    }, {"set_id": "00000000-0000-4000-8000-000000000020", "item_id": "item-1", "position": 0},
+       {"set_id": "00000000-0000-4000-8000-000000000020", "item_id": "item-2", "position": 1}]
+    assert updated == []
     assert generated == []
 
 
@@ -683,7 +680,7 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
     monkeypatch.setattr(
         practice.item_gen, "grade",
         lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
-                          "correct": True, "explanation": "ok", "setId": "00000000-0000-4000-8000-000000000020"},
+                          "correct": True, "explanation": "ok"},
     )
     monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
     monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.5})
@@ -701,7 +698,8 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
         with TestClient(app) as client:
             response = client.post(
                 "/practice/00000000-0000-4000-8000-000000000001/submit",
-                json={"item_id": "item-1", "choice_id": "a", "latency_ms": 100},
+                json={"item_id": "item-1", "choice_id": "a", "latency_ms": 100,
+                      "set_id": "00000000-0000-4000-8000-000000000020"},
             )
     finally:
         app.dependency_overrides.clear()
@@ -723,7 +721,11 @@ def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> Non
     )
     monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
     monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.2})
-    monkeypatch.setattr(practice.db, "select", lambda table, params: [])  # no row yet
+    def no_attempt_but_valid_set(table, params):
+        if table == "quiz_set_items":
+            return [{"set_id": "00000000-0000-4000-8000-000000000020"}]
+        return []
+    monkeypatch.setattr(practice.db, "select", no_attempt_but_valid_set)
     monkeypatch.setattr(
         practice.db, "upsert",
         lambda table, rows, on_conflict: upserted.extend(rows) or rows,
@@ -733,7 +735,7 @@ def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> Non
         with TestClient(app) as client:
             response = client.post(
                 "/practice/00000000-0000-4000-8000-000000000001/submit",
-                json={"item_id": "item-1", "choice_id": "b"},
+                json={"item_id": "item-1", "choice_id": "b", "set_id": "00000000-0000-4000-8000-000000000020"},
             )
     finally:
         app.dependency_overrides.clear()

@@ -17,11 +17,14 @@ Two ways to get practice content:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.bank.kick import kick_bank
+from app.bank.serving import MIN_USABLE, bank_enabled, pick_bank_items_with_meta, record_exposure
 from app.db import supabase as db
 from app.deps import (
     CurrentUser,
@@ -42,6 +45,7 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 # ai/concurrency.py), and this keeps that fan-out inside one request's budget.
 MAX_SET_SIZE = 10
 DEFAULT_SET_SIZE = 5
+BANK_SET_SIZES = {5, 10, 20}
 
 
 def _resolve_skill(*, institution_id: str, user_id: str, course_id: str,
@@ -80,6 +84,50 @@ def _item_view(row: dict) -> dict:
         "id": row["id"], "skillId": row["skill_id"],
         "bloomLevel": row.get("bloom_level"),
         "prompt": row["prompt"], "choices": row.get("choices") or [],
+    }
+
+
+def _bank_course(*, institution_id: str, course_id: str) -> dict | None:
+    try:
+        rows = db.select("courses", {
+            "id": f"eq.{course_id}", "institution_id": f"eq.{institution_id}",
+            "select": "id,bank_serving", "limit": "1",
+        })
+    except Exception:  # noqa: BLE001 - preserve the legacy fallback if old schemas are in use
+        return None
+    return rows[0] if rows else None
+
+
+def _bank_state(*, course_id: str, skill_id: str) -> dict | None:
+    rows = db.select("skill_bank_state", {
+        "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill_id}",
+        "select": "skill_id,status,mcq_ready,mcq_target,depth", "limit": "1",
+    })
+    return rows[0] if rows else None
+
+
+def _bank_status(state: dict | None) -> dict:
+    state = state or {}
+    ready = int(state.get("mcq_ready") or 0)
+    return {
+        "status": state.get("status") or "waiting_content",
+        "mcqReady": ready,
+        "mcqTarget": int(state.get("mcq_target") or 0),
+        "usable": ready >= MIN_USABLE,
+    }
+
+
+def _bank_set_response(*, course_id: str, skill_id: str, requested_size: int,
+                       status_value: str, bank_status: dict, items: list[dict] | None = None,
+                       set_id: str | None = None, includes_repeats: bool = False) -> dict:
+    items = items or []
+    return {
+        "courseId": course_id, "setId": set_id, "skillId": skill_id,
+        "kind": "practice", "status": status_value,
+        "requestedSize": requested_size, "readyCount": len(items),
+        "pendingCount": 0, "failedCount": 0, "failedOffsets": [],
+        "items": [_item_view(item) for item in items],
+        "bankStatus": bank_status, "includesRepeats": includes_repeats,
     }
 
 
@@ -130,6 +178,24 @@ def next_item(
     )
     if not skill:
         return {"courseId": course_id, "item": None}
+    course = _bank_course(institution_id=user.institution_id, course_id=course_id)
+    if course and bank_enabled(course, "test"):
+        state = _bank_state(course_id=course_id, skill_id=skill["id"])
+        bank_status = _bank_status(state)
+        if not bank_status["usable"]:
+            return {"courseId": course_id, "item": None, "bankStatus": bank_status}
+        items, _ = pick_bank_items_with_meta(
+            user.user_id, course_id, skill["id"], 1, "test",
+            institution_id=user.institution_id,
+        )
+        if not items:
+            return {"courseId": course_id, "item": None, "bankStatus": bank_status}
+        item = items[0]
+        record_exposure(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=item["skill_id"], item_id=item["id"], tested=True,
+        )
+        return {"courseId": course_id, "item": _item_view(item), "bankStatus": bank_status}
     item = item_gen.generate_question(
         institution_id=user.institution_id, course_id=course_id,
         skill=skill, kind="practice",
@@ -156,7 +222,6 @@ def create_set(
     """
     if size < 1:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "size must be at least 1")
-    size = min(size, MAX_SET_SIZE)
 
     skill = _resolve_skill(
         institution_id=user.institution_id, user_id=user.user_id,
@@ -172,6 +237,54 @@ def create_set(
             "requestedSize": size, "readyCount": 0, "pendingCount": 0,
             "failedCount": 0, "failedOffsets": [], "items": [],
         }
+
+    course = _bank_course(institution_id=user.institution_id, course_id=course_id)
+    if course and bank_enabled(course, "test"):
+        if size not in BANK_SET_SIZES:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "bank set size must be 5, 10, or 20")
+        state = _bank_state(course_id=course_id, skill_id=skill["id"])
+        bank_status = _bank_status(state)
+        if bank_status["status"] == "no_material":
+            return JSONResponse(_bank_set_response(
+                course_id=course_id, skill_id=skill["id"], requested_size=size,
+                status_value="no_material", bank_status=bank_status,
+            ), status_code=status.HTTP_200_OK)
+        if not bank_status["usable"]:
+            kick_bank(course_id, "test")
+            return JSONResponse(_bank_set_response(
+                course_id=course_id, skill_id=skill["id"], requested_size=size,
+                status_value="preparing", bank_status=bank_status,
+            ), status_code=status.HTTP_200_OK)
+        items, includes_repeats = pick_bank_items_with_meta(
+            user.user_id, course_id, skill["id"], size, "test",
+            institution_id=user.institution_id,
+        )
+        if not items:
+            return JSONResponse(_bank_set_response(
+                course_id=course_id, skill_id=skill["id"], requested_size=size,
+                status_value="preparing", bank_status=bank_status,
+            ), status_code=status.HTTP_200_OK)
+        set_rows = db.insert("quiz_sets", [{
+            "institution_id": user.institution_id, "course_id": course_id,
+            "skill_id": skill["id"], "kind": "practice", "size": len(items),
+        }])
+        set_id = set_rows[0]["id"]
+        db.insert("quiz_set_items", [
+            {"set_id": set_id, "item_id": item["id"], "position": position}
+            for position, item in enumerate(items)
+        ], prefer="return=minimal")
+        for item in items:
+            record_exposure(
+                institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+                skill_id=item["skill_id"], item_id=item["id"], tested=True,
+            )
+        return JSONResponse(_bank_set_response(
+            course_id=course_id, skill_id=skill["id"], requested_size=size,
+            status_value="ready", bank_status=bank_status, items=items,
+            set_id=set_id, includes_repeats=includes_repeats,
+        ), status_code=status.HTTP_200_OK)
+
+    size = min(size, MAX_SET_SIZE)
 
     set_rows = db.insert("quiz_sets", [{
         "institution_id": user.institution_id,
@@ -267,11 +380,15 @@ def create_set_from_items(
     }])
     set_id = set_rows[0]["id"]
 
-    # Attach the existing items to the set. This is the one place a set is
-    # built by re-pointing rows rather than inserting them — safe because
-    # set_id is a delivery grouping, not part of the answer key.
+    db.insert("quiz_set_items", [
+        {"set_id": set_id, "item_id": item["id"], "position": position}
+        for position, item in enumerate(ordered)
+    ], prefer="return=minimal")
     for item in ordered:
-        db.update("generated_items", {"id": f"eq.{item['id']}"}, {"set_id": set_id})
+        record_exposure(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=item["skill_id"], item_id=item["id"], tested=True,
+        )
 
     return {
         "courseId": course_id,
@@ -288,6 +405,7 @@ class SubmitBody(BaseModel):
     item_id: str
     choice_id: str
     latency_ms: int = 0
+    set_id: str | None = None
 
 
 def _attempts_by_set(*, institution_id: str, user_id: str, set_ids: list[str]) -> dict[str, dict]:
@@ -329,11 +447,15 @@ def _item_counts_by_set(*, institution_id: str, set_ids: list[str]) -> dict[str,
     """
     if not set_ids:
         return {}
-    rows = db.select("generated_items", {
+    rows = db.select("quiz_set_items", {
         "set_id": f"in.({','.join(set_ids)})",
-        "institution_id": f"eq.{institution_id}",
         "select": "set_id",
     })
+    if not rows or any("set_id" not in r for r in rows):
+        rows = db.select("generated_items", {
+            "set_id": f"in.({','.join(set_ids)})", "institution_id": f"eq.{institution_id}",
+            "select": "set_id",
+        })
     counts: dict[str, int] = {}
     for r in rows:
         counts[r["set_id"]] = counts.get(r["set_id"], 0) + 1
@@ -412,12 +534,28 @@ def get_set(
     if not sets:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found")
 
+    links = db.select("quiz_set_items", {
+        "set_id": f"eq.{set_id}", "select": "item_id,position", "order": "position.asc",
+    })
+    if not links or any("item_id" not in row for row in links):
+        legacy = db.select("generated_items", {
+            "set_id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
+            "select": "id,created_at", "order": "created_at.asc",
+        })
+        links = [{"item_id": row["id"], "position": index} for index, row in enumerate(legacy)]
+    item_ids = [r["item_id"] for r in links]
     items = db.select("generated_items", {
-        "set_id": f"eq.{set_id}",
+        "id": f"in.({','.join(item_ids)})" if item_ids else "in.(00000000-0000-0000-0000-000000000000)",
         "institution_id": f"eq.{user.institution_id}",
         "select": "id,skill_id,prompt,choices,bloom_level",
-        "order": "created_at.asc",
     })
+    items_by_id = {r["id"]: r for r in items}
+    items = [items_by_id[r["item_id"]] for r in links if r["item_id"] in items_by_id]
+    for item in items:
+        record_exposure(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=item["skill_id"], item_id=item["id"], tested=True,
+        )
     jobs = practice_jobs(
         institution_id=user.institution_id, course_id=course_id, set_id=set_id,
     )
@@ -457,7 +595,7 @@ def _record_set_attempt(*, institution_id: str, user_id: str, course_id: str,
         "institution_id": institution_id, "user_id": user_id,
         "course_id": course_id, "set_id": set_id,
         "attempted_count": attempted, "correct_count": correct_count,
-        "last_attempted_at": datetime.now(timezone.utc).isoformat(),
+        "last_attempted_at": datetime.now(UTC).isoformat(),
     }], on_conflict="user_id,set_id")
 
 
@@ -474,6 +612,18 @@ def submit(
     except ValueError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
 
+    if graded.get("courseId") != course_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+    if body.set_id is not None:
+        valid = db.select("quiz_set_items", {
+            "set_id": f"eq.{body.set_id}", "item_id": f"eq.{body.item_id}",
+            "quiz_sets.course_id": f"eq.{course_id}",
+            "quiz_sets.institution_id": f"eq.{user.institution_id}",
+            "select": "set_id,quiz_sets!inner(course_id)", "limit": "1",
+        })
+        if not valid:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "item is not in this set")
+
     db.insert_evidence([{
         "institution_id": user.institution_id, "user_id": user.user_id,
         "course_id": course_id, "skill_id": graded["skillId"], "type": "practice",
@@ -483,16 +633,21 @@ def submit(
         institution_id=user.institution_id, user_id=user.user_id,
         course_id=course_id, skill_id=graded["skillId"], correct=graded["correct"],
     )
-    # Attempt bookkeeping for a grouped item. An ungrouped item (/next, no
-    # set) has setId null and touches nothing here — same as it touches
+    # Attempt bookkeeping is explicit. An ungrouped item (/next, no set)
+    # touches nothing here — same as it touches
     # nothing in quiz_sets. Grading, evidence, and mastery above are all
     # unchanged; this is purely the per-student "have I taken this set"
     # counter the Test tab badge reads.
-    if graded.get("setId"):
+    if body.set_id:
         _record_set_attempt(
             institution_id=user.institution_id, user_id=user.user_id,
-            course_id=course_id, set_id=graded["setId"], correct=graded["correct"],
+            course_id=course_id, set_id=body.set_id, correct=graded["correct"],
         )
+    record_exposure(
+        institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+        skill_id=graded["skillId"], item_id=body.item_id, tested=bool(body.set_id),
+        answered=True, correct=graded["correct"],
+    )
     return {
         "correct": graded["correct"],
         "explanation": graded["explanation"],

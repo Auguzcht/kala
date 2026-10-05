@@ -175,7 +175,8 @@ def test_generate_question_threads_set_id_into_the_insert(monkeypatch) -> None:
         set_id="set-9",
     )
 
-    assert inserted[0]["set_id"] == "set-9"
+    assert "set_id" not in inserted[0]
+    assert inserted[1] == {"set_id": "set-9", "item_id": "item-1", "position": 0}
 
 
 def test_generate_question_omits_set_id_when_not_batched(monkeypatch) -> None:

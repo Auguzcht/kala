@@ -398,10 +398,13 @@ def generate_question(*, institution_id: str, course_id: str, skill: dict, kind:
         "correct_choice_id": correct_choice_id,
         "explanation": explanation,
     }
-    if set_id is not None:
-        item_row["set_id"] = set_id
     rows = db.insert("generated_items", [item_row])
     item = rows[0]
+    if set_id is not None:
+        _attach_item_to_set(
+            institution_id=institution_id, course_id=course_id,
+            set_id=set_id, item_id=item["id"], position=None,
+        )
     return {
         "id": item["id"],
         "skillId": skill["id"],
@@ -415,7 +418,7 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
     """Look up the stored answer key and grade server-side."""
     rows = db.select("generated_items", {
         "id": f"eq.{item_id}", "institution_id": f"eq.{institution_id}",
-        "select": "id,skill_id,course_id,correct_choice_id,explanation,set_id", "limit": "1",
+        "select": "id,skill_id,course_id,correct_choice_id,explanation", "limit": "1",
     })
     if not rows:
         raise ValueError(f"item {item_id} not found")
@@ -426,11 +429,21 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
         "courseId": item["course_id"],
         "correct": correct,
         "explanation": item.get("explanation") or "",
-        # Which quiz set this item belonged to, if any. Ungrouped items
-        # (/next, flashcards, tutor checks) have set_id null and the caller
-        # (practice.submit) simply skips the attempt bookkeeping for them.
-        "setId": item.get("set_id"),
     }
+
+
+def _attach_item_to_set(*, institution_id: str, course_id: str, set_id: str,
+                        item_id: str, position: int | None) -> None:
+    """Attach a generated item without mutating generated_items.set_id."""
+    if position is None:
+        try:
+            rows = db.select("quiz_set_items", {
+                "set_id": f"eq.{set_id}", "select": "position", "order": "position.desc", "limit": "1",
+            })
+        except Exception:
+            rows = []
+        position = int(rows[0]["position"]) + 1 if rows else 0
+    db.insert("quiz_set_items", [{"set_id": set_id, "item_id": item_id, "position": position}])
 
 
 def correct_label(item: dict) -> str | None:
