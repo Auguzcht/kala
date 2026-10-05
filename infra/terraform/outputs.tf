@@ -11,6 +11,11 @@ output "ecr_worker_repo" {
   value = aws_ecr_repository.worker.repository_url
 }
 
+output "worker_function_arn" {
+  value       = aws_lambda_function.worker.arn
+  description = "ARN of the worker Lambda function invoked by the API."
+}
+
 output "secrets_arn" {
   value = aws_secretsmanager_secret.app.arn
 }

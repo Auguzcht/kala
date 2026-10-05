@@ -35,6 +35,11 @@ data "aws_iam_policy_document" "lambda_extra" {
       "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/*",
     ]
   }
+  statement {
+    sid       = "InvokeWorker"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.worker.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_extra" {

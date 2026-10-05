@@ -13,8 +13,9 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      KALA_SECRETS_ARN = aws_secretsmanager_secret.app.arn
-      FRONTEND_URL     = var.frontend_url
+      KALA_SECRETS_ARN    = aws_secretsmanager_secret.app.arn
+      FRONTEND_URL        = var.frontend_url
+      WORKER_FUNCTION_ARN = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:kala-worker"
     }
   }
 
@@ -36,7 +37,8 @@ resource "aws_lambda_function" "worker" {
 
   environment {
     variables = {
-      KALA_SECRETS_ARN = aws_secretsmanager_secret.app.arn
+      KALA_SECRETS_ARN    = aws_secretsmanager_secret.app.arn
+      WORKER_FUNCTION_ARN = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:kala-worker"
     }
   }
 
