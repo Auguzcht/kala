@@ -31,12 +31,15 @@ not a per-student value that drifts like mastery. (Mastery lives in
 
 ## The pipeline
 
-1. **Propose** — one reasoning-tier model call per course reads the course's
+1. **Propose** — one reasoning-tier model call per module reads the module's
    ingested content and proposes a small set of canonical, assessable skills,
    each with a Bloom level and a blueprint weight. Guardrails live in the
    prompt AND are enforced in code (`_parse_proposals` drops anything vague or
    malformed): observable/assessable wording, a cognitive verb per skill,
    in-proposal dedup, few-but-good (3-6 per module), weights clamped 0.5-2.0.
+   Each proposal also carries `category: subject|logistics`; logistics are
+   dropped in code (not just prompt-filtered), while a missing category fails
+   open to `subject` and is logged.
 
 2. **Dedup across the institution** — before writing a proposed skill, embed it
    and search every ALREADY-APPROVED skill in the institution (any course) via
@@ -47,6 +50,14 @@ not a per-student value that drifts like mastery. (Mastery lives in
    - `>= REVIEW_HINT (0.82)` — likely duplicate. Create as `proposed` with a
      "possible duplicate of X" note for the reviewer.
    - `< REVIEW_HINT` — genuinely novel. Create as `proposed`.
+
+   Separately, same-course overlap is a reviewer hint, not an institution-wide
+   dedup decision. New proposals are compared with the course's existing
+   approved and proposed skills and with earlier proposals in the same batch.
+   At cosine similarity `>= 0.55`, the row remains `proposed` and
+   `proposed_source` includes `possible overlap with ...`. Institution-wide
+   `AUTO_MATCH = 0.92` and `REVIEW_HINT = 0.82` remain unchanged; when both
+   kinds of hint apply, both notes are retained.
 
 3. **Human-in-the-loop** — anything `proposed` waits for a human. Only
    `approved` skills feed the twin, heatmap, diagnostic, practice, flashcards

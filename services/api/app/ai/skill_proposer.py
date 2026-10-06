@@ -41,12 +41,15 @@ review burden shrinks as the catalog fills in.
 from __future__ import annotations
 
 import json
+import logging
 
 from app.ai import bedrock
 from app.ai import router as model_router
 from app.bank.kick import kick_bank
 from app.db import supabase as db
 from app.lms.hierarchy import build_folder_paths, module_ref_for
+
+logger = logging.getLogger(__name__)
 
 # Similarity thresholds (cosine, 0..1). Tuned conservatively: better to send a
 # borderline skill to a human than to silently collapse two distinct skills.
@@ -60,6 +63,12 @@ REVIEW_HINT = 0.82   # likely duplicate; create as proposed, flag the match
 # two proposals from one run are both unvetted, so picking a winner between
 # them is a review decision, which belongs to the human, not the machine.
 INBATCH_DUP = 0.82
+# Same-course overlap is intentionally much lower than institution-wide
+# deduplication. It is a reviewer hint only, so recall matters more than
+# making an automatic merge decision. Measured on the twelve approved AWS101
+# skills: this catches the service-category pair (0.7178) and the
+# certification/badge/readiness cluster (0.5495-0.6093).
+COURSE_OVERLAP = 0.55
 
 # Per-module content size cap. This is generous, not a real prompt-length
 # limit, current default model (minimax-m3:free) supports a 1M-token
@@ -88,34 +97,61 @@ _SYSTEM = (
     "understand, apply, analyze, evaluate, create.\n"
     "- weight is relative assessment importance, 0.5 (minor) to 2.0 (central "
     "to the course), default 1.0.\n"
+    "- category is exactly one of: subject, logistics. Use logistics for "
+    "course deliverables, submissions, badges, certification or exam "
+    "pathways/readiness, course navigation, onboarding, grading or attendance "
+    "policies, and platform/tool setup for the course itself.\n"
     "Return ONLY JSON: {\"skills\": [{\"name\": ..., \"bloom_level\": ..., "
-    "\"weight\": ...}, ...]}. No prose, no markdown fences."
+    "\"weight\": ..., \"category\": \"subject\"|\"logistics\"}, ...]}. "
+    "No prose, no markdown fences."
 )
 
 _BLOOM = {"remember", "understand", "apply", "analyze", "evaluate", "create"}
 
 
 def _parse_proposals(raw: str) -> list[dict]:
+    out, _logistics, _missing_category = _parse_proposals_with_stats(raw)
+    return out
+
+
+def _parse_proposals_with_stats(raw: str) -> tuple[list[dict], int, int]:
     text = raw.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        return []
+        return [], 0, 0
     out: list[dict] = []
+    logistics = 0
+    missing_category = 0
     for s in data.get("skills", []):
         name = (s.get("name") or "").strip()
         bloom = s.get("bloom_level")
         if not name or bloom not in _BLOOM:
             continue  # drop malformed proposals rather than trust them
+        category = s.get("category")
+        if category is None:
+            category = "subject"
+            missing_category += 1
+            logger.warning("skill proposal missing category; treating as subject: %s", name)
+        if category == "logistics":
+            logistics += 1
+            logger.info("dropping logistics skill proposal: %s", name)
+            continue
+        if category != "subject":
+            continue
         try:
             weight = float(s.get("weight", 1.0))
         except (TypeError, ValueError):
             weight = 1.0
         weight = max(0.5, min(2.0, weight))
-        out.append({"name": name, "bloom_level": bloom, "weight": weight})
-    return out
+        out.append({"name": name, "bloom_level": bloom, "weight": weight, "category": category})
+    if logistics:
+        logger.info("dropped %d logistics skill proposal(s)", logistics)
+    if missing_category:
+        logger.warning("%d skill proposal(s) missing category; treated as subject", missing_category)
+    return out, logistics, missing_category
 
 
 def propose_skills_from_text(*, course_content: str) -> list[dict]:
@@ -156,6 +192,39 @@ def _find_approved_match(*, institution_id: str, name: str) -> dict | None:
         "p_match_count": 1,
     }) or []
     return matches[0] if matches else None
+
+
+def _course_skills(*, institution_id: str, course_id: str) -> list[dict]:
+    """Return existing approved/proposed skills for same-course overlap hints."""
+    return db.select("skills", {
+        "institution_id": f"eq.{institution_id}",
+        "course_id": f"eq.{course_id}",
+        "status": "in.(approved,proposed)",
+        "select": "name,embedding,status",
+    })
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def _find_course_overlap(*, name: str, embedding: list[float], existing: list[dict],
+                         staged: list[dict]) -> tuple[str, float] | None:
+    candidates = existing + staged
+    best = None
+    for candidate in candidates:
+        candidate_embedding = candidate.get("embedding")
+        if isinstance(candidate_embedding, str):
+            candidate_embedding = json.loads(candidate_embedding)
+        if not candidate_embedding:
+            continue
+        sim = _cosine(embedding, candidate_embedding)
+        if sim >= COURSE_OVERLAP and (best is None or sim > best[1]):
+            best = (candidate["name"], sim)
+    return best
 
 
 def _already_proposed_modules(*, institution_id: str, course_id: str) -> set[str | None]:
@@ -250,6 +319,9 @@ def seed_course_skills(
 
     proposed = auto_approved = flagged = insert_failed = 0
     flagged_in_batch = 0
+    existing_course_skills = _course_skills(
+        institution_id=institution_id, course_id=course_id,
+    )
 
     for mod_ref, joined_text in pending.items():
         proposals = propose_skills_from_text(course_content=joined_text)
@@ -272,6 +344,19 @@ def seed_course_skills(
                 "name": p["name"],
                 "dup_note": None,
             })
+
+        # Same-course overlap is only a reviewer hint. Existing approved and
+        # proposed skills, plus earlier proposals in this batch, are all
+        # eligible; institution-wide auto-match/review bands remain separate.
+        course_staged = []
+        for s in staged:
+            overlap = _find_course_overlap(
+                name=s["name"], embedding=s["embedding"],
+                existing=existing_course_skills, staged=course_staged,
+            )
+            if overlap and overlap[0] != s["name"]:
+                s["course_overlap"] = overlap
+            course_staged.append(s)
 
         # Flag near-duplicates within this run (mutates dup_note in place).
         flagged_in_batch += _flag_in_batch_duplicates(staged)
@@ -298,6 +383,9 @@ def seed_course_skills(
                         "module_ref": mod_ref,
                         "proposed_source": f"auto-matched to '{match['name']}' (sim {sim:.2f})",
                     }])
+                    existing_course_skills.append({
+                        "name": match["name"], "embedding": emb, "status": "approved",
+                    })
                     auto_approved += 1
                 else:
                     # Novel, or a possible duplicate (of an approved skill
@@ -309,6 +397,11 @@ def seed_course_skills(
                         flagged += 1
                     if s["dup_note"]:
                         notes.append(s["dup_note"])
+                    if s.get("course_overlap"):
+                        notes.append(
+                            f"possible overlap with {s['course_overlap'][0]} "
+                            f"(same course, sim {s['course_overlap'][1]:.2f})"
+                        )
                     source = "; ".join(notes) if notes else mod_ref
                     db.insert("skills", [{
                         "institution_id": institution_id, "course_id": course_id,
@@ -319,6 +412,9 @@ def seed_course_skills(
                         "module_ref": mod_ref,
                         "proposed_source": source,
                     }])
+                    existing_course_skills.append({
+                        "name": p["name"], "embedding": emb, "status": "proposed",
+                    })
                     proposed += 1
             except Exception as exc:
                 # A single bad write (timeout on a heavy vector insert, etc.)

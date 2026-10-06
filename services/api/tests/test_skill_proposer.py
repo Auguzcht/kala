@@ -4,15 +4,33 @@ from app.ai import skill_proposer
 def test_parse_drops_vague_and_malformed_proposals():
     """Guardrail: only well-formed, valid-Bloom skills survive parsing."""
     raw = """{"skills": [
-        {"name": "Construct a truth table", "bloom_level": "apply", "weight": 1.5},
+        {"name": "Construct a truth table", "bloom_level": "apply", "weight": 1.5, "category": "subject"},
         {"name": "", "bloom_level": "apply"},
         {"name": "Understand things", "bloom_level": "not-a-bloom-level"},
-        {"name": "Analyze a circuit", "bloom_level": "analyze"}
+        {"name": "Analyze a circuit", "bloom_level": "analyze", "category": "subject"}
     ]}"""
     out = skill_proposer._parse_proposals(raw)
     assert [s["name"] for s in out] == ["Construct a truth table", "Analyze a circuit"]
     assert out[0]["weight"] == 1.5  # preserved
     assert out[1]["weight"] == 1.0  # defaulted
+    assert all(s["category"] == "subject" for s in out)
+
+
+def test_parse_drops_logistics_proposals_even_if_prompt_is_ignored(caplog):
+    caplog.set_level("INFO")
+    raw = '{"skills": [' \
+        '{"name": "Compile course badge submission", "bloom_level": "apply", "category": "logistics"},' \
+        '{"name": "Configure a load balancer", "bloom_level": "apply", "category": "subject"}' \
+        ']}'
+    assert [s["name"] for s in skill_proposer._parse_proposals(raw)] == ["Configure a load balancer"]
+    assert "dropped 1 logistics" in caplog.text
+
+
+def test_parse_missing_category_fails_open_to_subject(caplog):
+    raw = '{"skills": [{"name": "Apply a routing policy", "bloom_level": "apply"}]}'
+    out = skill_proposer._parse_proposals(raw)
+    assert out == [{"name": "Apply a routing policy", "bloom_level": "apply", "weight": 1.0, "category": "subject"}]
+    assert "missing category" in caplog.text
 
 
 def test_parse_clamps_weight_to_bounds():
@@ -242,6 +260,63 @@ def test_seed_flags_possible_duplicate_in_review_band(monkeypatch):
     assert result["flagged_possible_duplicate"] == 1
     assert inserted[0]["status"] == "proposed"
     assert "possible duplicate" in inserted[0]["proposed_source"]
+
+
+def test_seed_flags_overlap_against_existing_approved_and_proposed(monkeypatch):
+    items = [{"lms_content_id": "l1", "title": "L1", "parent_id": None, "body_or_description": "AWS"}]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: (
+        [{"name": "Existing approved", "embedding": "[1.0,0.0]", "status": "approved", "module_ref": "done"},
+         {"name": "Existing proposed", "embedding": "[0.99,0.01]", "status": "proposed", "module_ref": "done"}]
+        if t == "skills" else []
+    ))
+    monkeypatch.setattr(skill_proposer, "propose_skills_from_text", lambda **k: [
+        {"name": "New same-course skill", "bloom_level": "apply", "weight": 1.0},
+    ])
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [1.0, 0.0])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+    result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=items)
+    assert result["proposed"] == 1
+    assert "possible overlap with Existing approved" in inserted[0]["proposed_source"]
+
+
+def test_seed_flags_overlap_against_same_batch(monkeypatch):
+    items = [{"lms_content_id": "l1", "title": "L1", "parent_id": None, "body_or_description": "AWS"}]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [])
+    monkeypatch.setattr(skill_proposer, "propose_skills_from_text", lambda **k: [
+        {"name": "First skill", "bloom_level": "apply", "weight": 1.0},
+        {"name": "Second skill", "bloom_level": "apply", "weight": 1.0},
+    ])
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [1.0, 0.0])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+    skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=items)
+    assert all("this batch" in row["proposed_source"] for row in inserted)
+
+
+def test_course_overlap_does_not_change_institution_bands(monkeypatch):
+    items = [{"lms_content_id": "l1", "title": "L1", "parent_id": None, "body_or_description": "AWS"}]
+    monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: (
+        [{"name": "Same course", "embedding": "[1.0,0.0]", "status": "approved", "module_ref": "done"}]
+        if t == "skills" else []
+    ))
+    monkeypatch.setattr(skill_proposer, "propose_skills_from_text", lambda **k: [
+        {"name": "Institution match", "bloom_level": "apply", "weight": 1.0},
+    ])
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [1.0, 0.0])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [{
+        "id": "canon", "name": "Institution match", "bloom_level": "apply",
+        "blueprint_weight": 1.0, "similarity": 0.97,
+    }])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+    result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=items)
+    assert result["auto_approved"] == 1
+    assert inserted[0]["status"] == "approved"
+    assert skill_proposer.AUTO_MATCH == 0.92
+    assert skill_proposer.REVIEW_HINT == 0.82
 
 
 def test_seed_creates_novel_proposal_when_no_match(monkeypatch):
