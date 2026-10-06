@@ -11,6 +11,7 @@ const maximumFileBytes = 512 * 1024;
 
 const excludedPath = /(^|\/)(node_modules|dist|build|coverage|\.git|\.agents|\.codex)(\/|$)|(^|\/)(\.env(?:\.|$)|.*\.(pem|key|p12|pfx|jks))$/i;
 const sensitiveName = /(^|\/)(evaluation-data|private-results|secrets?)(\/|$)|(^|\/)(bellaura_architecture_lock\.md|claude-context\.md|claude-context\.mjs)$/i;
+const lowSignalPath = /(^|\/)(pnpm-lock\.yaml|services\/api\/openapi\.json|apps\/web\/src\/lib\/api\/types\.gen\.ts|apps\/web\/src\/routeTree\.gen\.ts|packages\/schema\/supabase\.ts|apps\/web\/public\/favicon\.svg)$/i;
 const textExtensions = new Set([
   '.cjs', '.css', '.csv', '.html', '.ini', '.js', '.json', '.mjs', '.md',
   '.mts', '.sql', '.svg', '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml',
@@ -29,6 +30,7 @@ const files = execFileSync(
   .split('\0')
   .filter(Boolean)
   .filter((filePath) => !excludedPath.test(filePath) && !sensitiveName.test(filePath))
+  .filter((filePath) => !lowSignalPath.test(filePath))
   .filter((filePath) => resolve(repositoryRoot, filePath) !== outputPath)
   .filter(
     (filePath) =>
