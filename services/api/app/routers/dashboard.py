@@ -364,8 +364,7 @@ def review_proposed_skill(
     )
     if not updated:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "proposed skill not found")
-    if body.status == "approved":
-        kick_bank(course_id, "skills_approved")
+    kick_bank(course_id, "skills_approved" if body.status == "approved" else "skills_changed")
     return {"skillId": skill_id, "status": body.status}
 
 

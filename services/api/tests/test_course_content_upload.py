@@ -140,7 +140,7 @@ def test_upload_stores_extracted_text_as_course_content(monkeypatch) -> None:
     body = r.json()
     assert body["stored"] == 1
     assert body["filename"] == "deck.pdf"
-    assert body["tagging"] == "queued for the worker's tag_backfill job"
+    assert body["tagging"] == "queued for the worker's tag_recompute job"
 
     # Written to content_items with the course's tenant and the module the
     # uploader named, and lms_ref null because it has no LMS counterpart.
@@ -171,7 +171,7 @@ def test_upload_embeds_and_queues_tagging_for_the_worker(monkeypatch) -> None:
 
     body = r.json()
     assert body["embedded"] == 1
-    assert body["tagging"] == "queued for the worker's tag_backfill job"
+    assert body["tagging"] == "queued for the worker's tag_recompute job"
     assert "pendingTagging" in body
     # No tag write happened on this request path.
     assert not any("skill_id" in v for (_, v) in updates)

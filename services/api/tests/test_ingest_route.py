@@ -241,25 +241,13 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
     assert captured["content_items"][1]["lms_content_id"] == "lesson-1"
 
 
-def test_retag_reopens_only_unmatched_content(monkeypatch) -> None:
+def test_retag_runs_embedding_recompute_and_returns_counts(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="admin",
     )
-    reopened = []
-
-    def fake_select(table, params):
-        if table == "content_items":
-            # The reset query asks for unmatched AND already-attempted.
-            if params.get("tag_attempted_at") == "not.is.null":
-                return [{"id": "unmatched-1"}, {"id": "unmatched-2"}]
-            return [{"id": "unmatched-1"}, {"id": "unmatched-2"}]  # still unmatched
-        return []
-
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
-    monkeypatch.setattr(
-        diagnostic.db, "update",
-        lambda table, filters, values: reopened.append((filters, values)) or [],
-    )
+    monkeypatch.setattr(diagnostic.tagging, "tag_recompute", lambda **kwargs: {
+        "tagged": 7, "below_threshold": 3, "ambiguous": 2,
+    })
 
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
@@ -269,12 +257,9 @@ def test_retag_reopens_only_unmatched_content(monkeypatch) -> None:
 
     assert r.status_code == 200
     body = r.json()
-    assert body["reopened"] == 2
-    assert body["pendingAfterReset"] == 2
-    # Clears the mark and nothing else — never touches skill_id, so an
-    # existing correct match cannot be disturbed.
-    assert all(v == {"tag_attempted_at": None} for _, v in reopened)
-    assert not any("skill_id" in v for _, v in reopened)
+    assert body["tagged"] == 7
+    assert body["belowThreshold"] == 3
+    assert body["ambiguous"] == 2
 
 
 def test_retag_requires_staff(monkeypatch) -> None:
@@ -302,12 +287,11 @@ def test_retag_rejects_an_instructor_of_another_course(monkeypatch) -> None:
     assert r.status_code == 404
 
 
-def test_retag_is_a_noop_when_everything_matched(monkeypatch) -> None:
+def test_retag_returns_zero_counts_when_nothing_matches(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="admin",
     )
-    monkeypatch.setattr(diagnostic.db, "select", lambda table, params: [])
-    monkeypatch.setattr(diagnostic.db, "update", lambda t, f, v: [])
+    monkeypatch.setattr(diagnostic.tagging, "tag_recompute", lambda **kwargs: {})
 
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
@@ -315,8 +299,9 @@ def test_retag_is_a_noop_when_everything_matched(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
 
-    assert r.json()["reopened"] == 0
-    assert r.json()["next"] == "nothing to retag"
+    assert r.json()["tagged"] == 0
+    assert r.json()["belowThreshold"] == 0
+    assert r.json()["ambiguous"] == 0
 
 
 # The old per-item dedupe-scaling test (test_ingest_dedupes_with_one_query_

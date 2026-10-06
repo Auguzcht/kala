@@ -22,12 +22,8 @@ idempotent, all safe to retry:
      current state.
   5. item_generation — drain at most two queued diagnostic/practice item
      generations in the worker's bounded long-model slice.
-  6. tag_backfill — tag any content_items chunk stored + embedded but not yet
-     classified against the course's approved skills. This moved OUT of the
-     /ingest HTTP endpoint (services/api): tagging is one reasoning-model call
-     per chunk, measured 3-150s each, which does not belong on the api
-     Lambda's 30s wall. It is skipped when item_generation claims the
-     long-model slot.
+  6. tag_recompute — classify every embedded chunk against approved skill
+     embeddings in one database operation per course. It makes no model calls.
 
 Deliberately NOT in this worker: LMS grade/attempt sync. That would need a
 get_attempts()-shaped method the LMSConnector protocol (app/lms/base.py)
@@ -62,11 +58,10 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import UTC, datetime
 
 from app.bank_config import CHAIN_MAX
 from app.config import get_settings
-from app.db import supabase as db
+from app.db import supabase as db  # noqa: F401 — retained for handler-level test seams
 from app.jobs import (
     bank_build,
     embed_backfill,
@@ -74,7 +69,7 @@ from app.jobs import (
     item_generation,
     readiness_snapshot,
     reconcile_mastery,
-    tag_backfill,
+    tag_recompute,
 )
 
 logger = logging.getLogger("kala.worker")
@@ -82,33 +77,6 @@ logger.setLevel(logging.INFO)
 
 # Matches the worker Lambda timeout in infra/terraform/lambda.tf.
 _INVOCATION_BUDGET_SECONDS = 120.0
-
-
-def _long_job_work() -> tuple[bool, bool]:
-    """Return tag/bank pending flags; fail open to the legacy tag path."""
-    try:
-        tag_work = bool(db.select("content_items", {"tag_attempted_at": "is.null", "chunk_text": "not.is.null", "select": "id", "limit": "1"}))
-        bank_work = bool(db.select("skill_bank_state", {"status": "in.(waiting_content,building,error)", "select": "skill_id", "limit": "1"}))
-        return tag_work, bank_work
-    except Exception as exc:  # noqa: BLE001
-        logger.info("long-job work probe unavailable; preserving tag path error=%s", type(exc).__name__)
-        return True, False
-
-
-def _last_long_job() -> str | None:
-    try:
-        value = (db.select("worker_state", {"key": "eq.long_job_last", "select": "value", "limit": "1"}) or [{}])[0].get("value") or {}
-        return value.get("job")
-    except Exception as exc:  # noqa: BLE001
-        logger.info("worker-state probe unavailable error=%s", type(exc).__name__)
-        return None
-
-
-def _record_long_job(name: str) -> None:
-    try:
-        db.upsert("worker_state", [{"key": "long_job_last", "value": {"job": name}, "updated_at": datetime.now(UTC).isoformat()}], on_conflict="key")
-    except Exception as exc:  # noqa: BLE001
-        logger.info("worker-state update unavailable error=%s", type(exc).__name__)
 
 
 def handler(event, context):
@@ -128,9 +96,10 @@ def handler(event, context):
         logger.info("job start name=%s institution_id=%s", name, institution_id or "all")
         try:
             job_kwargs = {"institution_id": institution_id}
-            if targeted_course_id and name == "bankBuild":
+            if targeted_course_id and name in {"bankBuild", "tagRecompute"}:
                 job_kwargs["course_id"] = targeted_course_id
-                job_kwargs["chain_depth"] = chain_depth
+                if name == "bankBuild":
+                    job_kwargs["chain_depth"] = chain_depth
             if name == "itemGeneration":
                 job_kwargs["remaining_seconds"] = max(
                     0.0,
@@ -150,8 +119,8 @@ def handler(event, context):
             errors[name] = str(exc)
 
     if targeted_course_id and trigger:
-        if trigger == "skills_approved":
-            db.update("content_items", {"course_id": f"eq.{targeted_course_id}", "skill_id": "is.null"}, {"tag_attempted_at": None})
+        if trigger in {"skills_approved", "skills_changed"}:
+            run_one("tagRecompute", tag_recompute)
         run_one("bankBuild", bank_build)
         _maybe_chain(targeted_course_id, results.get("bankBuild", {}), chain_depth, errors)
         return {"ok": not errors, "results": results, "errors": errors}
@@ -159,8 +128,7 @@ def handler(event, context):
     # Each job runs independently. Dependency order: ingest before embed
     # because embedding reads chunks the walk may have stored; embed before
     # item generation because item RAG reads embeddings; readiness is cheap and
-    # should not be lost to a long model slice. Item generation owns the
-    # long-model slot before tag.
+    # should not be lost to a long model slice.
     for name, job in (
         ("reconcileMastery", reconcile_mastery),
         ("ingestWalk", ingest_walk),
@@ -170,28 +138,8 @@ def handler(event, context):
         run_one(name, job)
 
     run_one("itemGeneration", item_generation)
-    item_active = bool(results.get("itemGeneration", {}).get("claimed", 0))
-    if item_active:
-        results["tagBackfill"] = {"skipped": "item_generation_active"}
-        logger.info("job skipped name=tagBackfill reason=item_generation_active institution_id=%s", institution_id or "all")
-    else:
-        tag_work, bank_work = _long_job_work()
-        last = _last_long_job()
-        if tag_work and bank_work and last == "tagBackfill":
-            run_one("bankBuild", bank_build)
-            _record_long_job("bankBuild")
-            results["tagBackfill"] = {"skipped": "alternated_to_bankBuild"}
-        elif tag_work and bank_work:
-            run_one("tagBackfill", tag_backfill)
-            _record_long_job("tagBackfill")
-            results["bankBuild"] = {"skipped": "alternated_to_tagBackfill"}
-        elif bank_work:
-            run_one("bankBuild", bank_build)
-        elif tag_work:
-            run_one("tagBackfill", tag_backfill)
-        else:
-            results["bankBuild"] = {"skipped": "no_work"}
-            results["tagBackfill"] = {"skipped": "no_work"}
+    run_one("tagRecompute", tag_recompute)
+    run_one("bankBuild", bank_build)
 
     return {"ok": not errors, "results": results, "errors": errors}
 
