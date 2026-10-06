@@ -54,10 +54,12 @@ not a per-student value that drifts like mastery. (Mastery lives in
    Separately, same-course overlap is a reviewer hint, not an institution-wide
    dedup decision. New proposals are compared with the course's existing
    approved and proposed skills and with earlier proposals in the same batch.
-   At cosine similarity `>= 0.55`, the row remains `proposed` and
+   At cosine similarity `>= 0.60`, the row remains `proposed` and
    `proposed_source` includes `possible overlap with ...`. Institution-wide
    `AUTO_MATCH = 0.92` and `REVIEW_HINT = 0.82` remain unchanged; when both
-   kinds of hint apply, both notes are retained.
+   kinds of hint apply, both notes are retained. The threshold was tuned from
+   the AWS101 matrix: the three genuine overlaps score 0.61+, while most
+   pairs in the 0.55-0.60 band are related but distinct skills.
 
 3. **Human-in-the-loop** — anything `proposed` waits for a human. Only
    `approved` skills feed the twin, heatmap, diagnostic, practice, flashcards

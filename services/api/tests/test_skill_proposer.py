@@ -315,6 +315,7 @@ def test_course_overlap_does_not_change_institution_bands(monkeypatch):
     result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=items)
     assert result["auto_approved"] == 1
     assert inserted[0]["status"] == "approved"
+    assert skill_proposer.COURSE_OVERLAP == 0.60
     assert skill_proposer.AUTO_MATCH == 0.92
     assert skill_proposer.REVIEW_HINT == 0.82
 

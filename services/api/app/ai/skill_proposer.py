@@ -64,11 +64,10 @@ REVIEW_HINT = 0.82   # likely duplicate; create as proposed, flag the match
 # them is a review decision, which belongs to the human, not the machine.
 INBATCH_DUP = 0.82
 # Same-course overlap is intentionally much lower than institution-wide
-# deduplication. It is a reviewer hint only, so recall matters more than
-# making an automatic merge decision. Measured on the twelve approved AWS101
-# skills: this catches the service-category pair (0.7178) and the
-# certification/badge/readiness cluster (0.5495-0.6093).
-COURSE_OVERLAP = 0.55
+# deduplication. It is a reviewer hint only. The AWS101 tuning pass found the
+# three genuine overlaps at 0.61+; most pairs from 0.55 to 0.60 are related
+# but distinct, so the flag floor is 0.60.
+COURSE_OVERLAP = 0.60
 
 # Per-module content size cap. This is generous, not a real prompt-length
 # limit, current default model (minimax-m3:free) supports a 1M-token
