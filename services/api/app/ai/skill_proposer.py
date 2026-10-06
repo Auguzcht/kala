@@ -165,8 +165,56 @@ def propose_skills_from_text(*, course_content: str) -> list[dict]:
     return _parse_proposals(raw)
 
 
+def _propose_skills_with_stats(*, course_content: str) -> tuple[list[dict], int, int]:
+    """Run one window and retain parser-stage counts for operational logs."""
+    raw = model_router.answer(
+        system=_SYSTEM,
+        user_text=json.dumps({"module_content": course_content[:MAX_CHARS_PER_MODULE]}),
+        escalate=True,
+    )
+    return _parse_proposals_with_stats(raw)
+
+
 def _is_pdf_chunk(row: dict) -> bool:
     return "::" in str(row.get("lms_ref") or "")
+
+
+def _content_windows(rows: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Pack qualifying chunks into <=12k windows, capped at four windows."""
+    windows: list[dict] = []
+    current: list[str] = []
+    current_ids: list[str] = []
+    current_chars = 0
+    omitted: list[dict] = []
+
+    def flush() -> None:
+        nonlocal current, current_ids, current_chars
+        if current:
+            windows.append({"text": "\n---\n".join(current), "chunk_ids": current_ids,
+                            "chars": current_chars})
+            current, current_ids, current_chars = [], [], 0
+
+    for row in rows:
+        text = (row.get("chunk_text") or "").strip()
+        remaining = text
+        while remaining:
+            if len(windows) >= 4:
+                omitted.append(row)
+                break
+            room = BANK_CONTEXT_CAP_CHARS - current_chars - (5 if current else 0)
+            if room <= 0:
+                flush()
+                continue
+            part, remaining = remaining[:room], remaining[room:]
+            current.append(part)
+            current_ids.append(row.get("id"))
+            current_chars += len(part) + (5 if len(current) > 1 else 0)
+            if remaining:
+                flush()
+        if len(windows) >= 4 and remaining:
+            continue
+    flush()
+    return windows[:4], omitted
 
 
 def _stored_content_by_module(*, institution_id: str, course_id: str,
@@ -206,35 +254,22 @@ def _stored_content_by_module(*, institution_id: str, course_id: str,
             key=lambda row: (_is_pdf_chunk(row), len((row.get("chunk_text") or "").strip())),
             reverse=True,
         )
-        selected: list[dict] = []
-        left_out: list[dict] = []
-        chars = 0
-        for row in ordered:
-            text = (row.get("chunk_text") or "").strip()
-            extra = len(text) + (5 if selected else 0)
-            if selected and chars + extra > BANK_CONTEXT_CAP_CHARS:
-                left_out.append(row)
-                continue
-            if not selected and len(text) > BANK_CONTEXT_CAP_CHARS:
-                row = {**row, "chunk_text": text[:BANK_CONTEXT_CAP_CHARS]}
-                text = row["chunk_text"]
-                extra = len(text)
-            selected.append(row)
-            chars += extra
-        if not selected:
+        windows, left_out = _content_windows(ordered)
+        if not windows:
             logger.warning("no qualifying stored content for module %r; no proposals", module_ref)
             continue
         if left_out:
             logger.info(
-                "left out %d stored chunks for module %r over %d-char cap: %s",
+                "left out %d stored chunks for module %r after four %d-char windows: %s",
                 len(left_out), module_ref, BANK_CONTEXT_CAP_CHARS,
                 [row.get("id") for row in left_out],
             )
         content_times = [_parse_created_at(row.get("created_at")) for row in module_rows]
         modules[module_ref] = {
-            "rows": selected,
-            "text": "\n---\n".join(row["chunk_text"] for row in selected),
-            "chars": chars,
+            "rows": ordered,
+            "windows": windows,
+            "text": windows[0]["text"],
+            "chars": sum(w["chars"] for w in windows),
             "left_out": left_out,
             "max_created_at": max((t for t in content_times if t), default=None),
         }
@@ -440,7 +475,36 @@ def seed_course_skills(
     )
 
     for mod_ref, (module, covered) in pending.items():
-        proposals = propose_skills_from_text(course_content=module["text"])
+        module_counts = {
+            "raw": 0, "logistics": 0, "ungrounded": 0,
+            "overlap": 0, "staged": 0, "thin": 0,
+        }
+        candidates = []
+        for window_index, window in enumerate(module["windows"], start=1):
+            proposals, logistics, _missing = _propose_skills_with_stats(
+                course_content=window["text"],
+            )
+            module_counts["raw"] += len(proposals) + logistics
+            module_counts["logistics"] += logistics
+            logger.info(
+                "skill proposal stages module=%r window=%d chunks=%d raw=%d logistics=%d",
+                mod_ref, window_index, len(window["chunk_ids"]),
+                len(proposals) + logistics, logistics,
+            )
+            for p in proposals:
+                emb = bedrock.embed(p["name"], input_type="search_document")
+                match = _find_approved_match_with_embedding(
+                    institution_id=institution_id, embedding=emb,
+                )
+                candidates.append({
+                    "p": p,
+                    "match": match,
+                    "sim": float(match["similarity"]) if match else 0.0,
+                    "embedding": emb,
+                    "name": p["name"],
+                    "dup_note": None,
+                    "window": window_index,
+                })
 
         # Phase 1: embed every proposal in this module once, and resolve its
         # cross-course approved match, before writing anything. Doing this up
@@ -448,28 +512,21 @@ def seed_course_skills(
         # compared to EACH OTHER, not only to already-approved skills. (The
         # embedding is reused for both the dup check and the row write, so
         # this is no extra embed calls vs before.)
+        # Cross-window in-batch duplicate checking happens before the
+        # grounding and same-course gates, so no window can hide a duplicate.
+        flagged_in_batch += _flag_in_batch_duplicates(candidates)
         staged = []
-        for p in proposals:
-            emb = bedrock.embed(p["name"], input_type="search_document")
-            match = _find_approved_match_with_embedding(
-                institution_id=institution_id, embedding=emb,
-            )
+        for s in candidates:
+            p, emb, match = s["p"], s["embedding"], s["match"]
             depth, context_chars = _grounding(embedding=emb, course_chunks=course_chunks)
             if depth == 0:
                 logger.info("ungrounded skill proposal dropped: %s (module %r)", p["name"], mod_ref)
                 ungrounded += 1
+                module_counts["ungrounded"] += 1
                 continue
-            staged.append({
-                "p": p,
-                "match": match,
-                "sim": float(match["similarity"]) if match else 0.0,
-                "embedding": emb,
-                "name": p["name"],
-                "dup_note": None,
-                "depth": depth,
-                "context_chars": context_chars,
-                "thin": context_chars < BANK_MIN_CONTEXT_CHARS,
-            })
+            s.update({"depth": depth, "context_chars": context_chars,
+                      "thin": context_chars < BANK_MIN_CONTEXT_CHARS})
+            staged.append(s)
 
         # Same-course overlap is only a reviewer hint. Existing approved and
         # proposed skills, plus earlier proposals in this batch, are all
@@ -483,9 +540,6 @@ def seed_course_skills(
             if overlap and overlap[0] != s["name"]:
                 s["course_overlap"] = overlap
             course_staged.append(s)
-
-        # Flag near-duplicates within this run (mutates dup_note in place).
-        flagged_in_batch += _flag_in_batch_duplicates(staged)
 
         # Phase 2: write. Cross-course auto-match and per-skill insert
         # resilience are unchanged from before.
@@ -504,8 +558,12 @@ def seed_course_skills(
                             p["name"], approved_overlap[0], approved_overlap[1],
                         )
                         overlap_dropped += 1
+                        module_counts["overlap"] += 1
                         continue
                 thin_note = f"thin material: {s['context_chars']} chars" if s["thin"] else None
+                module_counts["staged"] += 1
+                if s["thin"]:
+                    module_counts["thin"] += 1
                 if match and sim >= AUTO_MATCH and not s["thin"]:
                     # Same skill, already vetted elsewhere. Reuse it verbatim
                     # and go straight to approved, pointing at the canonical
@@ -566,6 +624,14 @@ def seed_course_skills(
                 # on the next refresh, but completed modules are not.
                 print(f"skill insert failed for '{p['name']}': {exc}")
                 insert_failed += 1
+
+        logger.info(
+            "skill proposal stages module=%r raw=%d logistics=%d ungrounded=%d "
+            "overlap=%d staged=%d thin=%d",
+            mod_ref, module_counts["raw"], module_counts["logistics"],
+            module_counts["ungrounded"], module_counts["overlap"],
+            module_counts["staged"], module_counts["thin"],
+        )
 
     if auto_approved:
         kick_bank(course_id, "skills_approved")

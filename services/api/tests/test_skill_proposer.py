@@ -24,13 +24,18 @@ def legacy_seed_content_fixture(monkeypatch, request):
             row = {"id": f"test-{ref}", "chunk_text": text, "embedding": [1.0, 0.0],
                    "module_ref": ref, "created_at": "2026-01-01T00:00:00+00:00"}
             modules[ref] = {"rows": [row], "text": text, "chars": len(text),
+                            "windows": [{"text": text, "chunk_ids": [row["id"]], "chars": len(text)}],
                             "left_out": [], "max_created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)}
             chunks.append(row)
         return modules, chunks
 
     if request.node.name not in {"test_stored_loader_has_no_description_fallback"}:
         monkeypatch.setattr(skill_proposer, "_stored_content_by_module", fake_loader)
-    monkeypatch.setattr(skill_proposer, "_grounding", lambda **kwargs: (1, 2000))
+        monkeypatch.setattr(skill_proposer, "_grounding", lambda **kwargs: (1, 2000))
+        monkeypatch.setattr(
+            skill_proposer, "_propose_skills_with_stats",
+            lambda **kwargs: (skill_proposer.propose_skills_from_text(**kwargs), 0, 0),
+        )
 
 
 def test_parse_drops_vague_and_malformed_proposals():
@@ -77,6 +82,7 @@ def test_parse_tolerates_markdown_fences():
 
 def test_grounding_drops_ungrounded_and_stages_thin(monkeypatch):
     module = {"rows": [], "text": "stored material", "chars": 15,
+              "windows": [{"text": "stored material", "chunk_ids": ["m"], "chars": 15}],
               "left_out": [], "max_created_at": None}
     monkeypatch.setattr(skill_proposer, "_stored_content_by_module",
                         lambda **k: ({"M": module}, []))
@@ -100,6 +106,41 @@ def test_grounding_drops_ungrounded_and_stages_thin(monkeypatch):
     assert inserted[0]["proposed_source"] == "thin material: 500 chars"
 
 
+def test_content_windows_split_and_cap_at_four():
+    rows = [{"id": str(i), "chunk_text": "x" * 6000, "lms_ref": "pdf::x"}
+            for i in range(10)]
+    windows, omitted = skill_proposer._content_windows(rows)
+    assert len(windows) == 4
+    assert all(window["chars"] <= skill_proposer.BANK_CONTEXT_CAP_CHARS for window in windows)
+    assert omitted
+
+
+def test_cross_window_duplicates_are_flagged_and_stage_counts_logged(monkeypatch, caplog):
+    module = {
+        "rows": [], "text": "unused", "chars": 0, "left_out": [],
+        "max_created_at": None,
+        "windows": [
+            {"text": "window one", "chunk_ids": ["a"], "chars": 10},
+            {"text": "window two", "chunk_ids": ["b"], "chars": 10},
+        ],
+    }
+    monkeypatch.setattr(skill_proposer, "_stored_content_by_module",
+                        lambda **k: ({"M": module}, []))
+    monkeypatch.setattr(skill_proposer, "_module_skill_created_at", lambda **k: {})
+    monkeypatch.setattr(skill_proposer, "_course_skills", lambda **k: [])
+    monkeypatch.setattr(skill_proposer, "_propose_skills_with_stats", lambda **k: (
+        [{"name": "Skill one", "bloom_level": "apply", "weight": 1.0}], 0, 0,
+    ))
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda *a, **k: [1.0, 0.0])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda *a, **k: [])
+    monkeypatch.setattr(skill_proposer, "_grounding", lambda **k: (1, 1200))
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda *a, **k: [])
+    caplog.set_level("INFO")
+    result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=[])
+    assert result["flagged_in_batch_duplicate"] == 2
+    assert "module='M' raw=2 logistics=0 ungrounded=0 overlap=0 staged=2 thin=0" in caplog.text
+
+
 def test_stored_loader_has_no_description_fallback(monkeypatch):
     monkeypatch.setattr(skill_proposer.db, "select", lambda table, params: [])
     modules, chunks = skill_proposer._stored_content_by_module(
@@ -113,6 +154,7 @@ def test_stored_loader_has_no_description_fallback(monkeypatch):
 
 def test_reproposal_uses_new_content_and_drops_approved_overlap(monkeypatch):
     module = {"rows": [], "text": "new stored material", "chars": 18,
+              "windows": [{"text": "new stored material", "chunk_ids": ["m"], "chars": 18}],
               "left_out": [], "max_created_at": datetime(2026, 2, 1, tzinfo=timezone.utc)}
     monkeypatch.setattr(skill_proposer, "_stored_content_by_module",
                         lambda **k: ({"M": module}, []))

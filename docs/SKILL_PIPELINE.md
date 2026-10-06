@@ -44,8 +44,10 @@ not a per-student value that drifts like mastery. (Mastery lives in
 
    A module with no embedded chunk of at least 200 characters produces no
    proposals; its Blackboard description is not a fallback. Model input is
-   capped at 12,000 content characters. When a module has more material, PDF
-   chunks and longer chunks are preferred and omitted chunk IDs are logged.
+   capped at 12,000 content characters per window. Larger modules are split
+   into at most four windows, with PDF chunks and longer chunks preferred;
+   proposal counts and any content left after the fourth window are logged.
+   Proposals from all windows are merged before same-batch duplicate checks.
    The proposal is then grounded against the course's embedded chunks using
    the bank's thresholds: similarity `>= 0.544` and chunk length `>= 200`.
    Depth zero is dropped as `ungrounded`; otherwise context under 1,000
