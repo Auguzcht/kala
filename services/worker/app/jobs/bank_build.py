@@ -59,7 +59,7 @@ class ThinContextError(RuntimeError):
     """The retrieval window is too small to support a grounded batch."""
 
 
-_ABSOLUTE_WORDS = re.compile(r"\b(always|never|no|none|identical|only|every|all)\b", re.IGNORECASE)
+_ABSOLUTE_WORDS = re.compile(r"\b(always|never|no|none|identical|every|all)\b", re.IGNORECASE)
 
 
 def _now() -> datetime:
@@ -156,7 +156,7 @@ def _call_model(*, skill: dict, context: str, do_not_repeat: list[str], remainin
         "model": settings.openrouter_model_bank,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "max_completion_tokens": MAX_COMPLETION_TOKENS,
-        "reasoning": {"effort": settings.bank_reasoning_effort},
+        "reasoning": {"max_tokens": settings.bank_reasoning_max_tokens},
         "response_format": _schema(), "temperature": 0.2,
     }
     started = time.perf_counter()

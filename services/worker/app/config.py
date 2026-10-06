@@ -88,6 +88,7 @@ class Settings(BaseSettings):
         default="deepseek/deepseek-v4.1-flash:nitro", alias="OPENROUTER_MODEL_BANK",
     )
     bank_reasoning_effort: str = Field(default="low", alias="BANK_REASONING_EFFORT")
+    bank_reasoning_max_tokens: int = Field(default=3072, alias="BANK_REASONING_MAX_TOKENS")
     worker_function_arn: str = Field(default="", alias="WORKER_FUNCTION_ARN")
 
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")

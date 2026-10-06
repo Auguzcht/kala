@@ -33,6 +33,24 @@ def test_absolute_distractors_are_rejected():
     assert bank_build._valid_items([item], []) == []
 
 
+def test_only_is_not_absolute_but_no_value_and_identical_are():
+    for phrase in (
+        "The badge is only for internal use and has no value to employers.",
+        "The badge is awarded only after passing the AWS Certified Cloud Practitioner exam.",
+        "It is suitable only for students who already have AWS certifications.",
+    ):
+        item = _item()
+        item["choices"][1]["label"] = phrase
+        item["choices"][2]["label"] = "A different valid alternative"
+        assert bank_build._valid_items([item], [])
+
+    for phrase in ("It has no value here", "It has identical behavior"):
+        item = _item()
+        item["choices"][1]["label"] = phrase
+        item["choices"][2]["label"] = "It always works"
+        assert bank_build._valid_items([item], []) == []
+
+
 def test_batch_size_is_clamped_to_remaining_need(monkeypatch):
     captured = {}
     monkeypatch.setattr(bank_build, "_live_items", lambda *args: [{"prompt": "existing"}] * 3)
@@ -211,6 +229,7 @@ def test_failure_counter_increments_once(monkeypatch):
 
 
 def test_non_stop_finish_is_failure(monkeypatch):
+    captured = {}
     class Response:
         status_code = 200
         def raise_for_status(self):
@@ -221,12 +240,15 @@ def test_non_stop_finish_is_failure(monkeypatch):
         def __init__(self, *args, **kwargs): pass
         def __enter__(self): return self
         def __exit__(self, *args): pass
-        def post(self, *args, **kwargs): return Response()
+        def post(self, *args, **kwargs):
+            captured.update(kwargs)
+            return Response()
     monkeypatch.setattr(bank_build.httpx, "Client", Client)
-    monkeypatch.setattr(bank_build, "get_settings", lambda: type("S", (), {"openrouter_model_bank": "m", "bank_reasoning_effort": "low", "openrouter_base_url": "https://x", "openrouter_api_key": "k"})())
+    monkeypatch.setattr(bank_build, "get_settings", lambda: type("S", (), {"openrouter_model_bank": "m", "bank_reasoning_effort": "low", "bank_reasoning_max_tokens": 3072, "openrouter_base_url": "https://x", "openrouter_api_key": "k"})())
     try:
         bank_build._call_model(skill={"name": "x"}, context="x", do_not_repeat=[], remaining=50)
     except RuntimeError as exc:
         assert "non-stop" in str(exc)
     else:
         raise AssertionError("non-stop response must fail")
+    assert captured["json"]["reasoning"] == {"max_tokens": 3072}
