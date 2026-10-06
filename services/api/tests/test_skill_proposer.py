@@ -1,4 +1,36 @@
+from datetime import datetime, timezone
+import importlib.util
+from pathlib import Path
+
+import pytest
+
 from app.ai import skill_proposer
+
+
+@pytest.fixture(autouse=True)
+def legacy_seed_content_fixture(monkeypatch, request):
+    """Keep the pre-4c seed unit cases focused on write/dedup behavior.
+
+    New grounding/content-source tests call the real loader directly. The
+    older cases provide LMS-shaped descriptions, so adapt those explicitly at
+    the seam rather than weakening production's no-description-fallback rule.
+    """
+    def fake_loader(*, institution_id, course_id, content_items=None):
+        groups = skill_proposer._group_content_by_module(content_items or [])
+        refs = set(groups) or {"Module 1"}
+        modules, chunks = {}, []
+        for ref in refs:
+            text = groups.get(ref, "x" * 240)
+            row = {"id": f"test-{ref}", "chunk_text": text, "embedding": [1.0, 0.0],
+                   "module_ref": ref, "created_at": "2026-01-01T00:00:00+00:00"}
+            modules[ref] = {"rows": [row], "text": text, "chars": len(text),
+                            "left_out": [], "max_created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+            chunks.append(row)
+        return modules, chunks
+
+    if request.node.name not in {"test_stored_loader_has_no_description_fallback"}:
+        monkeypatch.setattr(skill_proposer, "_stored_content_by_module", fake_loader)
+    monkeypatch.setattr(skill_proposer, "_grounding", lambda **kwargs: (1, 2000))
 
 
 def test_parse_drops_vague_and_malformed_proposals():
@@ -41,6 +73,77 @@ def test_parse_clamps_weight_to_bounds():
 def test_parse_tolerates_markdown_fences():
     raw = '```json\n{"skills": [{"name": "Apply Y", "bloom_level": "apply"}]}\n```'
     assert skill_proposer._parse_proposals(raw)[0]["name"] == "Apply Y"
+
+
+def test_grounding_drops_ungrounded_and_stages_thin(monkeypatch):
+    module = {"rows": [], "text": "stored material", "chars": 15,
+              "left_out": [], "max_created_at": None}
+    monkeypatch.setattr(skill_proposer, "_stored_content_by_module",
+                        lambda **k: ({"M": module}, []))
+    monkeypatch.setattr(skill_proposer, "_module_skill_created_at", lambda **k: {})
+    monkeypatch.setattr(skill_proposer, "_course_skills", lambda **k: [])
+    monkeypatch.setattr(skill_proposer, "propose_skills_from_text", lambda **k: [
+        {"name": "Grounded skill", "bloom_level": "apply", "weight": 1.0},
+        {"name": "Ungrounded skill", "bloom_level": "apply", "weight": 1.0},
+    ])
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k:
+                        [1.0, 0.0] if "Grounded" in text else [0.0, 1.0])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda *a, **k: [])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+    monkeypatch.setattr(skill_proposer, "_grounding", lambda *, embedding, course_chunks:
+                        (1, 500) if embedding == [1.0, 0.0] else (0, 0))
+
+    result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=[])
+    assert result["ungrounded"] == 1
+    assert len(inserted) == 1
+    assert inserted[0]["proposed_source"] == "thin material: 500 chars"
+
+
+def test_stored_loader_has_no_description_fallback(monkeypatch):
+    monkeypatch.setattr(skill_proposer.db, "select", lambda table, params: [])
+    modules, chunks = skill_proposer._stored_content_by_module(
+        institution_id="i", course_id="c", content_items=[
+            {"body_or_description": "description that must not be used"},
+        ],
+    )
+    assert modules == {}
+    assert chunks == []
+
+
+def test_reproposal_uses_new_content_and_drops_approved_overlap(monkeypatch):
+    module = {"rows": [], "text": "new stored material", "chars": 18,
+              "left_out": [], "max_created_at": datetime(2026, 2, 1, tzinfo=timezone.utc)}
+    monkeypatch.setattr(skill_proposer, "_stored_content_by_module",
+                        lambda **k: ({"M": module}, []))
+    monkeypatch.setattr(skill_proposer, "_module_skill_created_at", lambda **k: {
+        "M": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    })
+    monkeypatch.setattr(skill_proposer, "_course_skills", lambda **k: [
+        {"name": "Existing", "embedding": [1.0, 0.0], "status": "approved"},
+    ])
+    monkeypatch.setattr(skill_proposer, "propose_skills_from_text", lambda **k: [
+        {"name": "Refresh wording", "bloom_level": "apply", "weight": 1.0},
+    ])
+    monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda *a, **k: [1.0, 0.0])
+    monkeypatch.setattr(skill_proposer.db, "rpc", lambda *a, **k: [])
+    inserted = []
+    monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: inserted.extend(rows) or rows)
+    monkeypatch.setattr(skill_proposer, "_grounding", lambda **k: (1, 1200))
+    result = skill_proposer.seed_course_skills(institution_id="i", course_id="c", content_items=[])
+    assert result["overlapDropped"] == 1
+    assert inserted == []
+
+
+def test_proposer_grounding_constants_match_worker_config():
+    path = Path(__file__).parents[2] / "worker" / "app" / "bank_config.py"
+    spec = importlib.util.spec_from_file_location("worker_bank_config", path)
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    assert skill_proposer.BANK_SIM_THRESHOLD == worker.SIM_THRESHOLD
+    assert skill_proposer.BANK_MIN_CHUNK_CHARS == worker.MIN_CHUNK_CHARS
+    assert skill_proposer.BANK_MIN_CONTEXT_CHARS == worker.MIN_CONTEXT_CHARS
+    assert skill_proposer.BANK_CONTEXT_CAP_CHARS == worker.CONTEXT_CAP_CHARS
 
 
 def test_parse_returns_empty_on_garbage():
@@ -88,6 +191,9 @@ def test_seed_skips_only_modules_that_already_have_skills(monkeypatch):
         skill_proposer.db, "select",
         lambda t, p: [{"module_ref": "Module 1"}],
     )
+    monkeypatch.setattr(skill_proposer, "_module_skill_created_at", lambda **k: {
+        "Module 1": datetime(2026, 2, 1, tzinfo=timezone.utc),
+    })
     monkeypatch.setattr(skill_proposer.db, "rpc", lambda fn, args: [])
     monkeypatch.setattr(skill_proposer.db, "insert", lambda t, rows: rows)
     monkeypatch.setattr(skill_proposer.bedrock, "embed", lambda text, **k: [0.0] * 1024)
@@ -118,6 +224,9 @@ def test_seed_is_a_noop_when_all_modules_already_done(monkeypatch):
         {"lms_content_id": "l1", "title": "L1", "parent_id": "mod-1", "body_or_description": "module one text"},
     ]
     monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [{"module_ref": "Module 1"}])
+    monkeypatch.setattr(skill_proposer, "_module_skill_created_at", lambda **k: {
+        "Module 1": datetime(2026, 2, 1, tzinfo=timezone.utc),
+    })
     called = {"proposed": False}
     monkeypatch.setattr(
         skill_proposer, "propose_skills_from_text",
@@ -140,6 +249,9 @@ def test_seed_treats_root_content_as_its_own_trackable_module(monkeypatch):
     ]
     # None already recorded as done.
     monkeypatch.setattr(skill_proposer.db, "select", lambda t, p: [{"module_ref": None}])
+    monkeypatch.setattr(skill_proposer, "_module_skill_created_at", lambda **k: {
+        None: datetime(2026, 2, 1, tzinfo=timezone.utc),
+    })
     called = {"proposed": False}
     monkeypatch.setattr(
         skill_proposer, "propose_skills_from_text",

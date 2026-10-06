@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 
 from app.ai import bedrock
 from app.ai import router as model_router
@@ -69,15 +70,13 @@ INBATCH_DUP = 0.82
 # but distinct, so the flag floor is 0.60.
 COURSE_OVERLAP = 0.60
 
-# Per-module content size cap. This is generous, not a real prompt-length
-# limit, current default model (minimax-m3:free) supports a 1M-token
-# context; this exists only to guard against one pathologically large single
-# module (a course with everything dumped in one folder), not to trim normal
-# content. The original version of this file capped the WHOLE COURSE at
-# 24,000 characters in one call, which silently starved every module after
-# the first on any real, content-rich course. Per-module + generous is the
-# actual fix, not just a bigger number on the same design.
-MAX_CHARS_PER_MODULE = 120_000
+# These are deliberately duplicated from services/worker/app/bank_config.py.
+# The proposer and bank must make the same groundedness decision.
+BANK_SIM_THRESHOLD = 0.544
+BANK_MIN_CHUNK_CHARS = 200
+BANK_MIN_CONTEXT_CHARS = 1000
+BANK_CONTEXT_CAP_CHARS = 12000
+MAX_CHARS_PER_MODULE = BANK_CONTEXT_CAP_CHARS
 
 # Guardrails for the proposal call. Kept here (not just in the prompt) so the
 # intent is reviewable in code.
@@ -160,34 +159,115 @@ def propose_skills_from_text(*, course_content: str) -> list[dict]:
     test."""
     raw = model_router.answer(
         system=_SYSTEM,
-        user_text=json.dumps({"module_content": course_content})[:MAX_CHARS_PER_MODULE],
+        user_text=json.dumps({"module_content": course_content[:MAX_CHARS_PER_MODULE]}),
         escalate=True,  # skill design is worth the reasoning-tier model
     )
     return _parse_proposals(raw)
 
 
+def _is_pdf_chunk(row: dict) -> bool:
+    return "::" in str(row.get("lms_ref") or "")
+
+
+def _stored_content_by_module(*, institution_id: str, course_id: str,
+                              content_items: list[dict] | None = None) -> tuple[dict, list[dict]]:
+    """Load grounded, embedded content from the persisted ingest corpus.
+
+    The raw LMS tree is intentionally not a fallback: a proposal must be
+    grounded in what the worker can later retrieve. PDF chunks are identified
+    by the persisted ``lms_ref::filename`` convention used by ingest_walk.
+    """
+    rows = db.select("content_items", {
+        "institution_id": f"eq.{institution_id}",
+        "course_id": f"eq.{course_id}",
+        "embedding": "not.is.null",
+        "select": "id,chunk_text,embedding,module_ref,created_at,lms_ref",
+        "limit": "10000",
+    })
+    embedded_rows = [row for row in rows if row.get("embedding") is not None]
+    qualifying = [
+        row for row in rows
+        if row.get("embedding") is not None
+        and len((row.get("chunk_text") or "").strip()) >= BANK_MIN_CHUNK_CHARS
+    ]
+    all_modules = {row.get("module_ref") for row in embedded_rows}
+    grouped: dict[str | None, list[dict]] = {}
+    for row in qualifying:
+        grouped.setdefault(row.get("module_ref"), []).append(row)
+
+    modules: dict[str | None, dict] = {}
+    for module_ref in all_modules:
+        module_rows = grouped.get(module_ref, [])
+        if not module_rows:
+            logger.info("no qualifying stored content for module %r; no proposals", module_ref)
+            continue
+        ordered = sorted(
+            module_rows,
+            key=lambda row: (_is_pdf_chunk(row), len((row.get("chunk_text") or "").strip())),
+            reverse=True,
+        )
+        selected: list[dict] = []
+        left_out: list[dict] = []
+        chars = 0
+        for row in ordered:
+            text = (row.get("chunk_text") or "").strip()
+            extra = len(text) + (5 if selected else 0)
+            if selected and chars + extra > BANK_CONTEXT_CAP_CHARS:
+                left_out.append(row)
+                continue
+            if not selected and len(text) > BANK_CONTEXT_CAP_CHARS:
+                row = {**row, "chunk_text": text[:BANK_CONTEXT_CAP_CHARS]}
+                text = row["chunk_text"]
+                extra = len(text)
+            selected.append(row)
+            chars += extra
+        if not selected:
+            logger.warning("no qualifying stored content for module %r; no proposals", module_ref)
+            continue
+        if left_out:
+            logger.info(
+                "left out %d stored chunks for module %r over %d-char cap: %s",
+                len(left_out), module_ref, BANK_CONTEXT_CAP_CHARS,
+                [row.get("id") for row in left_out],
+            )
+        content_times = [_parse_created_at(row.get("created_at")) for row in module_rows]
+        modules[module_ref] = {
+            "rows": selected,
+            "text": "\n---\n".join(row["chunk_text"] for row in selected),
+            "chars": chars,
+            "left_out": left_out,
+            "max_created_at": max((t for t in content_times if t), default=None),
+        }
+    return modules, qualifying
+
+
 def _group_content_by_module(content_items: list[dict]) -> dict[str | None, str]:
-    """Group content items' text by resolved module_ref (see
-    lms/hierarchy.py), joined into one string per module. None is a real key
-    here, content that lives at the course root with no enclosing folder, it
-    still gets proposed, just without a module_ref attached to the result."""
+    """Legacy pure grouping helper for LMS-shape unit tests and diagnostics.
+
+    Production proposal calls use _stored_content_by_module above, never this
+    raw-description grouping path.
+    """
     folder_paths = build_folder_paths(content_items)
     groups: dict[str | None, list[str]] = {}
     for item in content_items:
         body = item.get("body_or_description", "")
-        if not body:
-            continue
-        ref = module_ref_for(folder_paths.get(item.get("lms_content_id"), []))
-        groups.setdefault(ref, []).append(body)
+        if body:
+            ref = module_ref_for(folder_paths.get(item.get("lms_content_id"), []))
+            groups.setdefault(ref, []).append(body)
     return {ref: "\n\n".join(texts) for ref, texts in groups.items()}
 
 
 def _find_approved_match(*, institution_id: str, name: str) -> dict | None:
     """Nearest already-approved skill in the institution, or None."""
     emb = bedrock.embed(name, input_type="search_document")
+    return _find_approved_match_with_embedding(institution_id=institution_id, embedding=emb)
+
+
+def _find_approved_match_with_embedding(*, institution_id: str,
+                                        embedding: list[float]) -> dict | None:
     matches = db.rpc("match_skills", {
         "p_institution_id": institution_id,
-        "p_query": emb,
+        "p_query": embedding,
         "p_match_count": 1,
     }) or []
     return matches[0] if matches else None
@@ -208,6 +288,54 @@ def _cosine(a: list[float], b: list[float]) -> float:
     na = sum(x * x for x in a) ** 0.5
     nb = sum(y * y for y in b) ** 0.5
     return dot / (na * nb) if na and nb else 0.0
+
+
+def _grounding(*, embedding: list[float], course_chunks: list[dict]) -> tuple[int, int]:
+    """Return bank-compatible similarity depth and total grounded chars."""
+    depth = 0
+    chars = 0
+    for row in course_chunks:
+        text = (row.get("chunk_text") or "").strip()
+        row_embedding = row.get("embedding")
+        if isinstance(row_embedding, str):
+            row_embedding = json.loads(row_embedding)
+        if len(text) < BANK_MIN_CHUNK_CHARS or not row_embedding:
+            continue
+        if _cosine(embedding, row_embedding) >= BANK_SIM_THRESHOLD:
+            depth += 1
+            chars += len(text)
+    return depth, chars
+
+
+def _parse_created_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _module_skill_created_at(*, institution_id: str, course_id: str) -> dict[str | None, datetime | None]:
+    rows = db.select("skills", {
+        "institution_id": f"eq.{institution_id}",
+        "course_id": f"eq.{course_id}",
+        "select": "module_ref,created_at",
+        "limit": "10000",
+    })
+    latest: dict[str | None, datetime | None] = {}
+    for row in rows:
+        when = _parse_created_at(row.get("created_at"))
+        if when and (latest.get(row.get("module_ref")) is None or when > latest[row.get("module_ref")]):
+            latest[row.get("module_ref")] = when
+    return latest
+
+
+def _module_has_new_content(module: dict, latest_skill_at: datetime | None) -> bool:
+    if latest_skill_at is None:
+        return True
+    newest_content = module.get("max_created_at")
+    return bool(newest_content and newest_content > latest_skill_at)
 
 
 def _find_course_overlap(*, name: str, embedding: list[float], existing: list[dict],
@@ -280,50 +408,39 @@ def _flag_in_batch_duplicates(items: list[dict]) -> int:
 def seed_course_skills(
     *, institution_id: str, course_id: str, content_items: list[dict],
 ) -> dict:
-    """Propose skills for a course, one model call per detected module, and
-    reconcile each proposal against the institution's approved catalog.
+    """Propose skills from persisted, embedded content, one call per module.
 
-    INCREMENTAL by module: only processes modules that don't already have
-    skills for this course. Safe to call repeatedly, a re-run picks up any
-    module that wasn't covered before (a module added mid-term, or one that
-    produced nothing on a flaky first run) and skips everything already done.
-    This is what lets an instructor press a "refresh skills" button as many
-    times as they like: it only ever does the work that's actually new.
-
-    Completion is tracked per module via _already_proposed_modules (derived
-    from the module_ref already stored on every skill row, no separate
-    tracking table).
-
-    content_items is the raw list from LMSConnector.get_content(), the same
-    shape ingest_course() already consumes.
-
-    Returns counts for logging, including modulesProcessed (how many modules
-    were newly processed this run) and modulesSkipped (already done). A run
-    where everything's already covered returns modulesProcessed=0, which is
-    the correct, non-erroring "nothing new to do" outcome.
-    Best-effort by contract: the caller must treat a raised exception as
-    non-fatal, this must never block a launch.
+    Existing modules are eligible again only when newer stored content exists.
+    ``content_items`` remains in the caller contract but is intentionally not
+    used as a description fallback.
     """
-    by_module = _group_content_by_module(content_items)
-    done = _already_proposed_modules(institution_id=institution_id, course_id=course_id)
-
-    pending = {ref: text for ref, text in by_module.items() if ref not in done}
+    modules, course_chunks = _stored_content_by_module(
+        institution_id=institution_id, course_id=course_id, content_items=content_items,
+    )
+    latest_skills = _module_skill_created_at(
+        institution_id=institution_id, course_id=course_id,
+    )
+    pending: dict[str | None, tuple[dict, bool]] = {}
+    for ref, module in modules.items():
+        covered = ref in latest_skills
+        if not covered or _module_has_new_content(module, latest_skills[ref]):
+            pending[ref] = (module, covered)
     if not pending:
         return {
             "skipped": True,
-            "reason": "all modules already have skills",
+            "reason": "no new stored content in uncovered modules",
             "modulesProcessed": 0,
-            "modulesSkipped": len(by_module),
+            "modulesSkipped": len(modules),
         }
 
     proposed = auto_approved = flagged = insert_failed = 0
-    flagged_in_batch = 0
+    flagged_in_batch = ungrounded = overlap_dropped = 0
     existing_course_skills = _course_skills(
         institution_id=institution_id, course_id=course_id,
     )
 
-    for mod_ref, joined_text in pending.items():
-        proposals = propose_skills_from_text(course_content=joined_text)
+    for mod_ref, (module, covered) in pending.items():
+        proposals = propose_skills_from_text(course_content=module["text"])
 
         # Phase 1: embed every proposal in this module once, and resolve its
         # cross-course approved match, before writing anything. Doing this up
@@ -333,8 +450,15 @@ def seed_course_skills(
         # this is no extra embed calls vs before.)
         staged = []
         for p in proposals:
-            match = _find_approved_match(institution_id=institution_id, name=p["name"])
             emb = bedrock.embed(p["name"], input_type="search_document")
+            match = _find_approved_match_with_embedding(
+                institution_id=institution_id, embedding=emb,
+            )
+            depth, context_chars = _grounding(embedding=emb, course_chunks=course_chunks)
+            if depth == 0:
+                logger.info("ungrounded skill proposal dropped: %s (module %r)", p["name"], mod_ref)
+                ungrounded += 1
+                continue
             staged.append({
                 "p": p,
                 "match": match,
@@ -342,6 +466,9 @@ def seed_course_skills(
                 "embedding": emb,
                 "name": p["name"],
                 "dup_note": None,
+                "depth": depth,
+                "context_chars": context_chars,
+                "thin": context_chars < BANK_MIN_CONTEXT_CHARS,
             })
 
         # Same-course overlap is only a reviewer hint. Existing approved and
@@ -365,7 +492,21 @@ def seed_course_skills(
         for s in staged:
             p, match, sim, emb = s["p"], s["match"], s["sim"], s["embedding"]
             try:
-                if match and sim >= AUTO_MATCH:
+                if covered:
+                    approved_overlap = _find_course_overlap(
+                        name=s["name"], embedding=emb,
+                        existing=[x for x in existing_course_skills if x.get("status") == "approved"],
+                        staged=[],
+                    )
+                    if approved_overlap:
+                        logger.info(
+                            "dropping covered-module overlap proposal %s against %s (sim %.2f)",
+                            p["name"], approved_overlap[0], approved_overlap[1],
+                        )
+                        overlap_dropped += 1
+                        continue
+                thin_note = f"thin material: {s['context_chars']} chars" if s["thin"] else None
+                if match and sim >= AUTO_MATCH and not s["thin"]:
                     # Same skill, already vetted elsewhere. Reuse it verbatim
                     # and go straight to approved, pointing at the canonical
                     # origin. Even an auto-match is auditable + reversible:
@@ -391,6 +532,8 @@ def seed_course_skills(
                     # and/or of another proposal in this same batch). Stage
                     # for human review, carrying whichever hint(s) apply.
                     notes = []
+                    if thin_note:
+                        notes.append(thin_note)
                     if match and sim >= REVIEW_HINT:
                         notes.append(f"possible duplicate of approved '{match['name']}' (sim {sim:.2f})")
                         flagged += 1
@@ -430,10 +573,12 @@ def seed_course_skills(
     return {
         "skipped": False,
         "modulesProcessed": len(pending),
-        "modulesSkipped": len(by_module) - len(pending),
+        "modulesSkipped": len(modules) - len(pending),
         "proposed": proposed,
         "auto_approved": auto_approved,
         "flagged_possible_duplicate": flagged,
         "flagged_in_batch_duplicate": flagged_in_batch,
         "insertFailed": insert_failed,
+        "ungrounded": ungrounded,
+        "overlapDropped": overlap_dropped,
     }

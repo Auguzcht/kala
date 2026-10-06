@@ -31,8 +31,9 @@ not a per-student value that drifts like mastery. (Mastery lives in
 
 ## The pipeline
 
-1. **Propose** — one reasoning-tier model call per module reads the module's
-   ingested content and proposes a small set of canonical, assessable skills,
+1. **Propose** — one reasoning-tier model call per module reads that module's
+   persisted, embedded `content_items` (including qualifying PDF chunks) and
+   proposes a small set of canonical, assessable skills,
    each with a Bloom level and a blueprint weight. Guardrails live in the
    prompt AND are enforced in code (`_parse_proposals` drops anything vague or
    malformed): observable/assessable wording, a cognitive verb per skill,
@@ -40,6 +41,17 @@ not a per-student value that drifts like mastery. (Mastery lives in
    Each proposal also carries `category: subject|logistics`; logistics are
    dropped in code (not just prompt-filtered), while a missing category fails
    open to `subject` and is logged.
+
+   A module with no embedded chunk of at least 200 characters produces no
+   proposals; its Blackboard description is not a fallback. Model input is
+   capped at 12,000 content characters. When a module has more material, PDF
+   chunks and longer chunks are preferred and omitted chunk IDs are logged.
+   The proposal is then grounded against the course's embedded chunks using
+   the bank's thresholds: similarity `>= 0.544` and chunk length `>= 200`.
+   Depth zero is dropped as `ungrounded`; otherwise context under 1,000
+   characters remains staged with a `thin material: <chars> chars` note.
+   These constants intentionally mirror `services/worker/app/bank_config.py`;
+   the API test asserts they stay equal.
 
 2. **Dedup across the institution** — before writing a proposed skill, embed it
    and search every ALREADY-APPROVED skill in the institution (any course) via
@@ -60,6 +72,11 @@ not a per-student value that drifts like mastery. (Mastery lives in
    kinds of hint apply, both notes are retained. The threshold was tuned from
    the AWS101 matrix: the three genuine overlaps score 0.61+, while most
    pairs in the 0.55-0.60 band are related but distinct skills.
+
+   A module is re-proposed only when its newest qualifying content is newer
+   than its newest skill row. On such refreshes, proposals overlapping an
+   existing approved skill at `>= 0.60` are dropped; first-time modules keep
+   the overlap hint and remain reviewable.
 
 3. **Human-in-the-loop** — anything `proposed` waits for a human. Only
    `approved` skills feed the twin, heatmap, diagnostic, practice, flashcards
