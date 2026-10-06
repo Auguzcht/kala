@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type ProposeSkillsResult } from "@/features/instructor";
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
@@ -36,11 +36,8 @@ const PAGE_SIZE = 8;
 // HITL skill proposals (docs/SKILL_PIPELINE.md). AI proposes skills from
 // the course's content, one module at a time; nothing proposed reaches
 // learners until a human approves here. The "Refresh skills" button in the
-// header is the on-demand trigger (docs/DEEPSEEK_REFRESH_BUTTON.md): it's
-// incremental by module, safe to press any number of times, and only
-// processes modules that don't have skills yet — so it's also the recovery
-// path when a first launch produced nothing. Result messaging is honest:
-// a skipped run says why, never a silent no-op.
+// header is the on-demand trigger. It queues worker proposal work and polls
+// the review queue briefly so newly completed modules appear automatically.
 
 function RefreshStatus({
   isPending,
@@ -56,7 +53,7 @@ function RefreshStatus({
   if (isPending) {
     return (
       <p className="mt-3 text-xs text-muted-foreground">
-        Proposing — one model call per module, this can take a few seconds…
+        Kala is reviewing your course content. New proposals will appear here.
       </p>
     );
   }
@@ -67,21 +64,10 @@ function RefreshStatus({
       </p>
     );
   }
-  if (isSuccess && data) {
-    const processed = data.modulesProcessed ?? 0;
-    if (data.skipped || processed === 0) {
-      return (
-        <p className="mt-3 text-xs text-muted-foreground">
-          All modules already have skills — nothing new to propose.
-        </p>
-      );
-    }
+  if (isSuccess && data?.status === "queued") {
     return (
       <p className="mt-3 text-xs text-muted-foreground">
-        Processed {processed} new module{processed === 1 ? "" : "s"}, {data.proposed ?? 0} skill
-        {(data.proposed ?? 0) === 1 ? "" : "s"} ready for review
-        {data.auto_approved ? `, ${data.auto_approved} auto-matched from another course` : ""}
-        {data.insertFailed ? `, ${data.insertFailed} failed to save — press Refresh to retry` : ""}.
+        Kala is reviewing your course content. New proposals will appear here.
       </p>
     );
   }
@@ -139,9 +125,22 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
   const review = useReviewProposedSkill(courseId);
   const propose = useProposeSkills(courseId);
   const [page, setPage] = useState(0);
+  const [pollUntil, setPollUntil] = useState<number | null>(null);
   // Animated icons: the check/x/sparkle draw when their BUTTON is hovered
   // (controlled-mode handlers), same as the decision buttons elsewhere.
   const refreshRef = useRef<SparklesIconHandle | null>(null);
+
+  useEffect(() => {
+    if (!pollUntil) return;
+    const timer = window.setInterval(() => {
+      if (Date.now() >= pollUntil) {
+        setPollUntil(null);
+        return;
+      }
+      void refetch();
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [pollUntil, refetch]);
 
   if (isLoading) {
     return (
@@ -190,7 +189,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           variant="orange"
           size="sm"
           disabled={propose.isPending}
-          onClick={() => propose.mutate()}
+          onClick={() => propose.mutate(undefined, { onSuccess: () => setPollUntil(Date.now() + 180_000) })}
           onMouseEnter={() => refreshRef.current?.startAnimation()}
           onMouseLeave={() => refreshRef.current?.stopAnimation()}
           className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"

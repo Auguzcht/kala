@@ -204,11 +204,8 @@ def test_propose_skills_endpoint_requires_instructor_or_admin(monkeypatch) -> No
     assert response.status_code == 403
 
 
-def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypatch) -> None:
-    """The standalone endpoint fetches content fresh from the connector and
-    hands it straight to seed_course_skills, same pipeline the launch
-    handler uses, just callable on demand instead of only on a fresh
-    Blackboard launch."""
+def test_propose_skills_endpoint_queues_without_model_or_content_calls(monkeypatch) -> None:
+    """Proposal work belongs to the worker, never the request path."""
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
@@ -217,16 +214,8 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
         diagnostic.db, "select",
         lambda table, params: [{"lms_course_id": "_4_1"}] if table == "courses" else [],
     )
-    captured = {}
-
-    def fake_seed(*, institution_id, course_id, content_items):
-        captured["institution_id"] = institution_id
-        captured["course_id"] = course_id
-        captured["content_items"] = content_items
-        return {"skipped": False, "modulesProcessed": 1, "proposed": 2,
-                "auto_approved": 0, "flagged_possible_duplicate": 0}
-
-    monkeypatch.setattr(diagnostic, "seed_course_skills", fake_seed)
+    kick_calls = []
+    monkeypatch.setattr(diagnostic, "kick_bank", lambda course_id, trigger: kick_calls.append((course_id, trigger)))
 
     try:
         with TestClient(app) as client:
@@ -234,11 +223,9 @@ def test_propose_skills_endpoint_calls_the_proposer_with_fresh_content(monkeypat
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 200
-    assert response.json()["proposed"] == 2
-    assert captured["institution_id"] == "institution-1"
-    assert captured["course_id"] == "00000000-0000-4000-8000-000000000001"
-    assert captured["content_items"][1]["lms_content_id"] == "lesson-1"
+    assert response.status_code == 202
+    assert response.json() == {"status": "queued"}
+    assert kick_calls == [("00000000-0000-4000-8000-000000000001", "propose")]
 
 
 def test_retag_runs_embedding_recompute_and_returns_counts(monkeypatch) -> None:

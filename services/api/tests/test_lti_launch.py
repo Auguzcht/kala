@@ -146,6 +146,8 @@ def _patch_launch(monkeypatch, payload: dict, connector,
         lti_routes, "seed_course_skills",
         lambda **kw: seed_calls.append(kw) or {"skipped": False, "proposed": 1},
     )
+    kick_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(lti_routes, "kick_bank", lambda course_id, trigger: kick_calls.append((course_id, trigger)))
 
     def fake_upsert_enrollment(*, user_id: str, course_id: str, role: str, **kw) -> None:
         enrollments.append({"user_id": user_id, "role": role})
@@ -168,7 +170,7 @@ def _patch_launch(monkeypatch, payload: dict, connector,
     app.dependency_overrides[get_lms_connector] = lambda: connector
     return {"enrollments": enrollments, "users": users, "removals": removals,
             "aliases": aliases, "local_courses": local_courses, "stamped": stamped,
-            "cooldowns": cooldowns, "seed_calls": seed_calls}
+            "cooldowns": cooldowns, "seed_calls": seed_calls, "kick_calls": kick_calls}
 
 
 def _launch(connector) -> TestClient:
@@ -348,18 +350,11 @@ def test_roster_pull_failure_skips_reconciliation(monkeypatch) -> None:
     assert recorded["removals"] == []
 
 
-def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> None:
-    """BE-1 (skill pipeline): an instructor launch on a course with no skills
-    pulls the course content and calls the proposer."""
+def test_instructor_launch_queues_skill_proposal_when_enabled(monkeypatch) -> None:
+    """Enabled launch seeding queues the worker and never walks content inline."""
     connector = _fake_connector([])
     payload = _launch_payload([C._ROLE_INSTRUCTOR])
     recorded = _patch_launch(monkeypatch, payload, connector)
-    seed_calls: list[dict] = []
-    monkeypatch.setattr(lti_routes.db, "select", lambda t, p: [])  # no skills yet
-    monkeypatch.setattr(
-        lti_routes, "seed_course_skills",
-        lambda **kw: seed_calls.append(kw) or {"skipped": False, "proposed": 1},
-    )
 
     try:
         response = _launch(connector)
@@ -367,13 +362,8 @@ def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> Non
         app.dependency_overrides.clear()
 
     assert response.status_code == 302
-    assert connector.content_calls == 1
-    assert len(seed_calls) == 1
-    assert seed_calls[0]["institution_id"] == "inst-1"
-    assert seed_calls[0]["course_id"] == "00000000-0000-4000-8000-000000000001"
-    # Raw content items pass through (the proposer groups by module itself).
-    assert seed_calls[0]["content_items"][0]["body_or_description"] == "Module 1 content here."
-    assert "course_content" not in seed_calls[0]
+    assert connector.content_calls == 0
+    assert recorded["kick_calls"] == [("00000000-0000-4000-8000-000000000001", "propose")]
 
 
 def test_instructor_launch_default_off_makes_no_proposer_or_model_calls(monkeypatch) -> None:
@@ -587,12 +577,12 @@ def test_instructor_relaunch_inside_the_cooldown_skips_roster_and_content(monkey
     # and earns the cooldown window.
     _launch(connector)
     assert connector.roster_calls == 1
-    assert connector.content_calls == 1
+    assert connector.content_calls == 0
 
     # The relaunch rides the window the first launch opened.
     _launch(connector)
     assert connector.roster_calls == 1, "a relaunch inside the cooldown must not re-pull the roster"
-    assert connector.content_calls == 1, "a relaunch inside the cooldown must not re-walk content"
+    assert connector.content_calls == 0, "a relaunch inside the cooldown must not walk content"
 
 
 def test_instructor_launch_outside_the_cooldown_renews_both_syncs(monkeypatch) -> None:
@@ -614,7 +604,7 @@ def test_instructor_launch_outside_the_cooldown_renews_both_syncs(monkeypatch) -
 
     _launch(connector)
     assert connector.roster_calls == 2, "past the cooldown the roster must be pulled again"
-    assert connector.content_calls == 2
+    assert connector.content_calls == 0
 
 
 def test_a_successful_roster_sync_stamps_the_timestamp(monkeypatch) -> None:
@@ -628,7 +618,7 @@ def test_a_successful_roster_sync_stamps_the_timestamp(monkeypatch) -> None:
 
     stamped = {s["column"] for s in recorded["stamped"]}
     assert "last_roster_sync_at" in stamped
-    assert "last_skill_seed_at" in stamped
+    assert "last_skill_seed_at" not in stamped
 
 
 def test_a_failed_roster_sync_does_not_stamp_the_cooldown(monkeypatch) -> None:
@@ -651,9 +641,8 @@ def test_a_failed_roster_sync_does_not_stamp_the_cooldown(monkeypatch) -> None:
     # Contract preserved: best-effort never blocks the launch.
     assert resp.status_code == 302
     assert "last_roster_sync_at" not in {s["column"] for s in recorded["stamped"]}
-    # The skill seed, which did NOT fail, still stamps its own window — the two
-    # cooldowns are independent, so one failing must not suppress the other.
-    assert "last_skill_seed_at" in {s["column"] for s in recorded["stamped"]}
+    # Proposal work is queued; the worker stamps only after a full pass.
+    assert "last_skill_seed_at" not in {s["column"] for s in recorded["stamped"]}
 
 
 def test_student_launch_still_skips_roster_and_seeding(monkeypatch) -> None:

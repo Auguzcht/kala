@@ -76,18 +76,10 @@ export const reviewResponseSchema = z.object({
   status: z.enum(["approved", "rejected"]),
 });
 
-// On-demand proposal trigger (POST /courses/{id}/skills/propose). Skipped
-// shape when the course already has skills; full shape when it ran.
+// On-demand proposal trigger. The worker owns the model work and the API
+// acknowledges the queue request immediately.
 export const proposeSkillsResultSchema = z.object({
-  skipped: z.boolean(),
-  reason: z.string().optional(),
-  modulesProcessed: z.number().optional(),
-  modulesSkipped: z.number().optional(),
-  proposed: z.number().optional(),
-  auto_approved: z.number().optional(),
-  flagged_possible_duplicate: z.number().optional(),
-  flagged_in_batch_duplicate: z.number().optional(),
-  insertFailed: z.number().optional(),
+  status: z.literal("queued"),
 });
 
 // Live skills inherited via cross-course auto-match (canonical_skill_id

@@ -59,6 +59,7 @@ import json
 import logging
 import time
 
+from app import skill_proposer
 from app.bank_config import CHAIN_MAX
 from app.config import get_settings
 from app.db import supabase as db  # noqa: F401 — retained for handler-level test seams
@@ -96,11 +97,16 @@ def handler(event, context):
         logger.info("job start name=%s institution_id=%s", name, institution_id or "all")
         try:
             job_kwargs = {"institution_id": institution_id}
-            if targeted_course_id and name in {"bankBuild", "tagRecompute"}:
+            if targeted_course_id and name in {"bankBuild", "tagRecompute", "skillProposer"}:
                 job_kwargs["course_id"] = targeted_course_id
                 if name == "bankBuild":
                     job_kwargs["chain_depth"] = chain_depth
             if name == "itemGeneration":
+                job_kwargs["remaining_seconds"] = max(
+                    0.0,
+                    _INVOCATION_BUDGET_SECONDS - (time.monotonic() - invocation_started),
+                )
+            if name == "skillProposer":
                 job_kwargs["remaining_seconds"] = max(
                     0.0,
                     _INVOCATION_BUDGET_SECONDS - (time.monotonic() - invocation_started),
@@ -121,8 +127,12 @@ def handler(event, context):
     if targeted_course_id and trigger:
         if trigger in {"skills_approved", "skills_changed"}:
             run_one("tagRecompute", tag_recompute)
-        run_one("bankBuild", bank_build)
-        _maybe_chain(targeted_course_id, results.get("bankBuild", {}), chain_depth, errors)
+        if trigger == "propose":
+            run_one("skillProposer", skill_proposer)
+            _maybe_chain(targeted_course_id, results.get("skillProposer", {}), chain_depth, errors, trigger)
+        else:
+            run_one("bankBuild", bank_build)
+            _maybe_chain(targeted_course_id, results.get("bankBuild", {}), chain_depth, errors, "bank")
         return {"ok": not errors, "results": results, "errors": errors}
 
     # Each job runs independently. Dependency order: ingest before embed
@@ -144,7 +154,7 @@ def handler(event, context):
     return {"ok": not errors, "results": results, "errors": errors}
 
 
-def _maybe_chain(course_id: str, result: dict, chain_depth: int, errors: dict) -> None:
+def _maybe_chain(course_id: str, result: dict, chain_depth: int, errors: dict, trigger: str = "bank") -> None:
     if not result.get("remaining") or result.get("rate_limited") or errors.get("bankBuild"):
         return
     if chain_depth >= CHAIN_MAX:
@@ -157,6 +167,6 @@ def _maybe_chain(course_id: str, result: dict, chain_depth: int, errors: dict) -
     try:
         import boto3
         boto3.client("lambda").invoke(FunctionName=arn, InvocationType="Event",
-                                       Payload=json.dumps({"trigger": "bank", "courseId": course_id, "chainDepth": chain_depth + 1}).encode())
+                                       Payload=json.dumps({"trigger": trigger, "courseId": course_id, "chainDepth": chain_depth + 1}).encode())
     except Exception as exc:  # noqa: BLE001
         logger.warning("bank chain invoke failed course_id=%s error=%s", course_id, exc)

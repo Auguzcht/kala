@@ -14,7 +14,6 @@ from app import tagging
 from app.ai import bedrock, documents
 from app.ai.chunking import chunk_text
 from app.ai.deidentify import strip_pii
-from app.ai.skill_proposer import seed_course_skills
 from app.bank.kick import kick_bank
 from app.bank.serving import bank_enabled, pick_diagnostic_item, record_exposure
 from app.db import storage
@@ -167,31 +166,14 @@ def get_assessments(
     return connector.get_assessments(_course_ref(course_id, user.institution_id))
 
 
-@router.post("/{course_id}/skills/propose")
+@router.post("/{course_id}/skills/propose", status_code=status.HTTP_202_ACCEPTED)
 def propose_course_skills(
     course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
-    connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    """On-demand trigger for AI skill proposal, standalone, no relaunch
-    needed. This was previously only ever fired as a side effect buried
-    inside the LTI launch handler, meaning re-testing or re-running it
-    required faking a fresh Blackboard launch each time. Same underlying
-    pipeline (ai/skill_proposer.seed_course_skills), same idempotency
-    behavior: if this course already has any skill rows, approved or
-    proposed, this is a no-op, delete them first (in Supabase) if you
-    genuinely want a from-scratch re-proposal, e.g. after fixing a bug in
-    the proposal logic itself, or want to re-run against changed course
-    content.
-    """
-    course_ref = _course_ref(course_id, user.institution_id)
-    # Cheap path: proposal reads bodies to suggest skills. Attachments add
-    # nothing to a skill proposal and would make this network-heavy.
-    content_items, _stats = connector.get_content(course_ref)
-    return seed_course_skills(
-        institution_id=user.institution_id, course_id=course_id,
-        content_items=content_items,
-    )
+    """Queue proposal work; the worker owns all model and content work."""
+    kick_bank(course_id, "propose")
+    return {"status": "queued"}
 
 
 @router.post("/{course_id}/ingest", status_code=status.HTTP_202_ACCEPTED)

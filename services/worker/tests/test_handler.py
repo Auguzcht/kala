@@ -1,4 +1,6 @@
 """Worker handler ordering, isolation, and item/tag contention rules."""
+import json
+
 from app import handler as handler_module
 from app.handler import handler
 from app.jobs import (
@@ -91,6 +93,34 @@ def test_handler_with_no_event_scopes_to_every_institution(monkeypatch) -> None:
     handler(None, None)  # Lambda can invoke with event=None on a schedule
 
     assert seen_institution_ids == [None, None, None, None, None, None, None]
+
+
+def test_targeted_propose_checkpoints_and_chains(monkeypatch):
+    calls = []
+    invoked = []
+
+    def fake_run(**kwargs):
+        calls.append(kwargs)
+        return {"remaining": len(calls) == 1}
+
+    monkeypatch.setattr(handler_module.skill_proposer, "run", fake_run)
+    monkeypatch.setenv("WORKER_FUNCTION_ARN", "arn:aws:lambda:local:worker")
+    handler_module.get_settings.cache_clear()
+
+    class LambdaClient:
+        def invoke(self, **kwargs):
+            invoked.append(kwargs)
+
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: LambdaClient())
+    result = handler_module.handler({"trigger": "propose", "courseId": "course-1", "chainDepth": 0}, None)
+
+    assert result["ok"] is True
+    assert calls[0]["course_id"] == "course-1"
+    assert invoked
+    assert json.loads(invoked[0]["Payload"]) == {
+        "trigger": "propose", "courseId": "course-1", "chainDepth": 1,
+    }
+    handler_module.get_settings.cache_clear()
 
 
 def test_handler_isolates_a_raising_job_from_the_others(monkeypatch) -> None:

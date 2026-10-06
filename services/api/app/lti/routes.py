@@ -19,10 +19,11 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from app.ai.skill_proposer import seed_course_skills
+from app.bank.kick import kick_bank
 from app.config import get_settings
 from app.db import supabase as db
 from app.deps import get_lms_connector
-from app.ai.skill_proposer import seed_course_skills
 from app.lti import claims as C
 from app.lti.security import build_tool_jwks, sign_state, verify_id_token, verify_state
 from app.lms.blackboard import BlackboardConnector, BlackboardRateLimitedError
@@ -343,14 +344,10 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
                         course["id"], _SKILL_SEED_COOLDOWN_SECONDS,
                     )
                 else:
-                    result = _seed_course_skills(
-                        institution_id=institution["id"], course_id=course["id"],
-                        course_ref=lms_course_id, connector=connector,
-                    )
-                    if not result.get("skipped"):
-                        db.touch_course_sync_timestamp(
-                            course_id=course["id"], column="last_skill_seed_at",
-                        )
+                    # Launches never wait for proposal/model work. The worker
+                    # owns the pass and stamps last_skill_seed_at only after
+                    # every module has completed.
+                    kick_bank(course["id"], "propose")
 
     # 4. mint the session token and hand off to the SPA (fragment is not logged)
     token = mint_session_token(

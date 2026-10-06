@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     openrouter_model_fast: str = Field(
         default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_FAST",
     )
+    openrouter_model_default: str = Field(
+        default="deepseek/deepseek-v4.1-flash:floor", alias="OPENROUTER_MODEL_DEFAULT",
+    )
 
     # The item-generation model. MUST match services/api/app/config.py's
     # openrouter_model_item. Item generation uses DeepSeek because it is the

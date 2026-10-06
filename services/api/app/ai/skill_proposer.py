@@ -1,5 +1,8 @@
 """AI skill proposal with institution-wide dedup and a human-in-the-loop gate.
 
+The worker counterpart is ``services/worker/app/skill_proposer.py``. Keep the
+prompt, grounding gates, windowing, overlap bands, and dedup behavior aligned.
+
 The problem this solves: MMCM has run a fully-digital Blackboard since 2018,
 hundreds of courses, many shared or reused across departments (an engineering
 course and an AEC course both covering Boolean logic, etc.). Hand-mapping a
