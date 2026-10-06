@@ -88,6 +88,47 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ## Current State
 
+### Session wrap-up — 2026-10-06
+
+- **Backend question-bank work is complete, deployed, and verified:** bank
+  serving is enabled on all four surfaces (study, test, diagnostic, lesson),
+  on-demand kicks and chaining are live, saturation and embedding tagging are
+  live, staff reads are course-scoped by RLS, and the skill proposer runs in
+  the worker. Instructor launch never runs model work inline. Migrations
+  0021–0024 are applied.
+- **Step 1 — proposer kickoff:** the run beginning at `12:45:40Z` did not
+  complete. It timed out twice at 120 seconds and a third retry was still
+  running at the last check. It processed windows for
+  `Module 1|Core Cloud Fundamentals`, but no module completed, no chained
+  proposer run completed, no proposal rows were committed by this kickoff,
+  and `courses.last_skill_seed_at` remained null.
+- **Step 2 — scheduler:** `kala-worker-schedule` is `ENABLED` with
+  `rate(15 minutes)` and flexible window `OFF`. The last four scheduled runs
+  were 12:07:02Z, 12:22:02Z, 12:37:02Z, and 12:52:02Z—15 minutes apart,
+  with no gap over 20 minutes. Tag recompute completed on each run with 27
+  tagged, 72 below threshold, and 4 ambiguous; the latest run had no tag
+  model calls. Bank builds completed without remaining work or embedding
+  calls; the 12:52 run inserted 16 items across 5 courses.
+
+### Next session — in order
+
+1. **Frontend overhaul:** list and fix every surface broken by the backend
+   changes, starting with study, test, diagnostic, and lesson contracts,
+   status states, set plumbing, exposures, and polling behavior.
+2. **AWS101 skill cleanup:** there are 26 proposed skills, mostly partial
+   leftovers from timed-out launches. Reject the stale batch, run one clean
+   Refresh, approve “Describe AWS global infrastructure” and “Estimate AWS
+   billing”, and reject the three logistics skills plus anything thin or
+   logistics-related.
+3. Confirm saturation fired for skills `7197c35c` and `910b1f7d`.
+
+**Deferred:** E4—delete old generation paths and `tagger.py`—after the
+frontend runs on the bank on all four surfaces.
+
+**Rules:** deploy through `make deploy` (linux/amd64) only; frontend ships
+through a push to `main` only, never the Vercel CLI; stage files by path; and
+never make model calls inside an API request.
+
 ### Latest verification — 2026-09-25
 
 - **Async lesson checks are live and verified end to end.** The API first-open
