@@ -277,6 +277,56 @@ def test_failure_counter_increments_once(monkeypatch):
     assert updates[0]["consecutive_failures"] == 2
 
 
+def test_duplicate_saturation_triggers_after_two_zero_valid_batches(monkeypatch):
+    updates = []
+    monkeypatch.setattr(bank_build.db, "update", lambda table, filters, values: updates.append(values) or [])
+    duplicate_counts = {key: 0 for key in bank_build._REJECTION_KEYS}
+    duplicate_counts.update(duplicate_hash=3, near_duplicate=1, reused_choice_set=1)
+    state = {"course_id": "c", "skill_id": "s", "depth": 4, "mcq_ready": 11,
+             "mcq_target": 20, "consecutive_failures": 0}
+    assert not bank_build._record_failure(state, bank_build.ZeroValidBatchError(duplicate_counts), duplicate_counts)
+    assert state["consecutive_failures"] == 1
+    assert bank_build._record_failure(state, bank_build.ZeroValidBatchError(duplicate_counts), duplicate_counts)
+    assert state["status"] == "ready"
+    assert state["mcq_target"] == 11
+    assert state["saturated_depth"] == 4
+    assert state["next_attempt_at"] is None
+    assert state["last_error"] is None
+    assert updates[-1]["saturated_at"]
+
+
+def test_non_duplicate_zero_valid_batches_keep_backoff(monkeypatch):
+    updates = []
+    monkeypatch.setattr(bank_build.db, "update", lambda table, filters, values: updates.append(values) or [])
+    counts = {key: 0 for key in bank_build._REJECTION_KEYS}
+    counts["schema"] = 5
+    state = {"course_id": "c", "skill_id": "s", "depth": 4, "mcq_ready": 11,
+             "mcq_target": 20, "consecutive_failures": 0}
+    bank_build._record_failure(state, bank_build.ZeroValidBatchError(counts), counts)
+    bank_build._record_failure(state, bank_build.ZeroValidBatchError(counts), counts)
+    assert state["status"] == "building"
+    assert state["consecutive_failures"] == 2
+    assert state["next_attempt_at"]
+    assert "saturated_at" not in updates[-1]
+
+
+def test_saturation_blocks_replenishment_and_depth_change_clears_it():
+    context = {"active": {"s": {"student"}}, "seen": {("student", "s"): set()}, "live_counts": {"s": 11}}
+    saturated = {"mcq_ready": 11, "mcq_target": 26, "saturated_at": "now", "saturated_depth": 4}
+    assert bank_build._target_from_context("s", 4, saturated, context) == 11
+    assert bank_build._target_from_context("s", 5, saturated, context) == 26
+
+
+def test_bank_model_log_includes_course_and_skill(caplog):
+    with caplog.at_level("INFO", logger="kala.worker.bank"):
+        bank_build._log_model_call({"course_id": "course", "skill_id": "skill", "model": "m",
+                                    "provider": "p", "latency_ms": 1, "finish_reason": "stop",
+                                    "prompt_tokens": 1, "completion_tokens": 1, "reasoning_tokens": 0,
+                                    "reasoning_chars": 0, "usage_keys": "", "cost": 0})
+    assert "course_id=course" in caplog.text
+    assert "skill_id=skill" in caplog.text
+
+
 def test_non_stop_finish_is_failure(monkeypatch):
     captured = {}
     class Response:

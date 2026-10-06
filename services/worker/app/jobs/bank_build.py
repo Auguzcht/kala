@@ -39,6 +39,8 @@ from app.bank_config import (
     MIN_USABLE,
     PER_CALL_CAP_S,
     REPLENISH_STEP,
+    SATURATION_DUP_SHARE,
+    SATURATION_FAILS,
     SIM_THRESHOLD,
 )
 from app.config import get_settings
@@ -57,6 +59,14 @@ _STOP_429 = threading.Event()
 
 class ThinContextError(RuntimeError):
     """The retrieval window is too small to support a grounded batch."""
+
+
+class ZeroValidBatchError(RuntimeError):
+    """A model batch completed, but every returned item was rejected."""
+
+    def __init__(self, rejection_counts: dict[str, int]):
+        super().__init__("zero valid bank items")
+        self.rejection_counts = rejection_counts
 
 
 _ABSOLUTE_WORDS = re.compile(r"\b(always|never|no|none|identical|every|all)\b", re.IGNORECASE)
@@ -127,12 +137,12 @@ _REJECTION_KEYS = ("schema", "choice_count", "banned_phrase", "absolute_words",
 def _log_model_call(meta: dict, rejections: dict[str, int] | None = None) -> None:
     counts = rejections or {key: 0 for key in _REJECTION_KEYS}
     logger.info(
-        "bank_model_call role=bank model=%s provider=%s latency_ms=%s max_completion_tokens=%d "
+        "bank_model_call role=bank course_id=%s skill_id=%s model=%s provider=%s latency_ms=%s max_completion_tokens=%d "
         "finish_reason=%s prompt_tokens=%s completion_tokens=%s reasoning_tokens=%s "
         "reasoning_chars=%s usage_keys=%s cost=%s rejection_schema=%d rejection_choice_count=%d "
         "rejection_banned_phrase=%d rejection_absolute_words=%d rejection_reused_choice_set=%d "
         "rejection_stem_length=%d rejection_duplicate_hash=%d rejection_near_duplicate=%d",
-        meta.get("model"), meta.get("provider"), meta.get("latency_ms"), MAX_COMPLETION_TOKENS,
+        meta.get("course_id"), meta.get("skill_id"), meta.get("model"), meta.get("provider"), meta.get("latency_ms"), MAX_COMPLETION_TOKENS,
         meta.get("finish_reason"), meta.get("prompt_tokens"), meta.get("completion_tokens"),
         meta.get("reasoning_tokens"), meta.get("reasoning_chars"), meta.get("usage_keys"),
         meta.get("cost"), *(int(counts.get(key) or 0) for key in _REJECTION_KEYS),
@@ -183,7 +193,8 @@ def _call_model(*, skill: dict, context: str, do_not_repeat: list[str], remainin
         usage_keys = ",".join(sorted((data.get("usage") or {}).keys()))
         usage = _usage(data)
         logged = True
-        meta = {"model": settings.openrouter_model_bank, "provider": _provider(data),
+        meta = {"course_id": skill.get("course_id"), "skill_id": skill.get("skill_id") or skill.get("id"),
+                "model": settings.openrouter_model_bank, "provider": _provider(data),
                 "latency_ms": latency_ms, "finish_reason": finish_reason,
                 "prompt_tokens": usage["prompt_tokens"], "completion_tokens": usage["completion_tokens"],
                 "reasoning_tokens": usage["reasoning_tokens"], "reasoning_chars": reasoning_chars,
@@ -197,7 +208,8 @@ def _call_model(*, skill: dict, context: str, do_not_repeat: list[str], remainin
     except Exception:
         if not logged:
             elapsed = round((time.perf_counter() - started) * 1000)
-            _log_model_call({"model": get_settings().openrouter_model_bank, "provider": None,
+            _log_model_call({"course_id": skill.get("course_id"), "skill_id": skill.get("skill_id") or skill.get("id"),
+                             "model": get_settings().openrouter_model_bank, "provider": None,
                              "latency_ms": elapsed, "finish_reason": "error",
                              "prompt_tokens": None, "completion_tokens": None,
                              "reasoning_tokens": None, "reasoning_chars": 0,
@@ -375,6 +387,8 @@ def _replenish_context(course_id: str) -> dict:
 
 
 def _target_from_context(skill_id: str, depth: int, current: dict | None, context: dict) -> int:
+    if (current or {}).get("saturated_at") and int((current or {}).get("saturated_depth") or 0) == depth:
+        return int((current or {}).get("mcq_ready") or 0)
     base = min(MCQ_BASE, MCQ_PER_CHUNK * depth, MCQ_MAX)
     target = max(base, int((current or {}).get("mcq_target") or 0))
     active_users = context["active"].get(skill_id, set())
@@ -414,13 +428,46 @@ def _lease(state: dict) -> dict | None:
     return rows[0] if rows else None
 
 
-def _record_failure(state: dict, exc: Exception) -> None:
+def _zero_valid_error(counts: dict[str, int]) -> str:
+    return "zero_valid:" + json.dumps(
+        {key: int(counts.get(key) or 0) for key in _REJECTION_KEYS},
+        sort_keys=True, separators=(",", ":"),
+    )
+
+
+def _previous_zero_valid_counts(error: str | None) -> dict[str, int] | None:
+    if not isinstance(error, str) or not error.startswith("zero_valid:"):
+        return None
+    try:
+        parsed = json.loads(error[len("zero_valid:"):])
+        return {key: int(parsed.get(key) or 0) for key in _REJECTION_KEYS}
+    except (TypeError, ValueError):
+        return None
+
+
+def _record_failure(state: dict, exc: Exception, rejection_counts: dict[str, int] | None = None) -> bool:
     failures = int(state.get("consecutive_failures") or 0) + 1
+    if rejection_counts is not None and failures >= SATURATION_FAILS and int(state.get("mcq_ready") or 0) >= MIN_USABLE:
+        previous = _previous_zero_valid_counts(state.get("last_error"))
+        if previous is not None:
+            combined = {key: previous.get(key, 0) + rejection_counts.get(key, 0) for key in _REJECTION_KEYS}
+            total = sum(combined.values())
+            duplicate_total = sum(combined.get(key, 0) for key in ("duplicate_hash", "near_duplicate", "reused_choice_set"))
+            if total and duplicate_total / total >= SATURATION_DUP_SHARE:
+                values = {"mcq_target": int(state.get("mcq_ready") or 0), "consecutive_failures": 0,
+                          "next_attempt_at": None, "leased_until": None, "last_error": None,
+                          "status": "ready", "saturated_at": _iso(_now()),
+                          "saturated_depth": int(state.get("depth") or 0), "updated_at": _iso(_now())}
+                db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, values)
+                state.update(values)
+                return True
     delay = BACKOFF_MIN[min(failures - 1, len(BACKOFF_MIN) - 1)]
+    error = _zero_valid_error(rejection_counts) if rejection_counts is not None else (str(exc) or type(exc).__name__)
     values = {"consecutive_failures": failures, "next_attempt_at": _iso(_now() + timedelta(minutes=delay)),
-              "leased_until": None, "last_error": str(exc) or type(exc).__name__, "status": "error" if failures >= ERROR_AFTER else "building", "updated_at": _iso(_now())}
+              "leased_until": None, "last_error": error, "status": "error" if failures >= ERROR_AFTER else "building", "updated_at": _iso(_now())}
     db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, values)
     state.update(values)
+    return False
 
 
 def _build_one(state: dict, chunks: list[dict], offset: int) -> dict:
@@ -532,10 +579,13 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
             status = "no_material" if context_status == "no_material" else ("ready" if ready >= target else "building")
             if recompute or current is None or target != int(current.get("mcq_target") or 0) or ready != int(current.get("mcq_ready") or 0) or status != current.get("status"):
                 state_started = time.perf_counter()
+                saturation_cleared = bool(current and current.get("saturated_at") and int(current.get("saturated_depth") or 0) != depth)
                 state = _upsert_state(skill, depth=depth, target=target, ready=ready, status=status,
                                       consecutive_failures=0 if status == "no_material" else (current or {}).get("consecutive_failures", 0),
                                       next_attempt_at=None if status == "no_material" else (current or {}).get("next_attempt_at"),
-                                      last_error=thin_error if status == "no_material" and depth > 0 else (None if depth == 0 else (current or {}).get("last_error")))
+                                      last_error=thin_error if status == "no_material" and depth > 0 else (None if depth == 0 else (current or {}).get("last_error")),
+                                      saturated_at=None if saturation_cleared or depth == 0 else (current or {}).get("saturated_at"),
+                                      saturated_depth=None if saturation_cleared or depth == 0 else (current or {}).get("saturated_depth"))
                 phases["state_upserts_ms"] += round((time.perf_counter() - state_started) * 1000)
                 state["_dirty"] = True
             else:
@@ -564,7 +614,7 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
                 try:
                     result = future.result()
                     if result["inserted"] < 1:
-                        raise RuntimeError("zero valid bank items")
+                        raise ZeroValidBatchError(result.get("rejection_counts") or {})
                     successes += 1
                     inserted += result["inserted"]
                     success_values = {"consecutive_failures": 0, "last_error": None, "leased_until": None, "updated_at": _iso(_now())}
@@ -574,7 +624,7 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
                     failures += 1
                     failed_this_run.add(state["skill_id"])
                     logger.exception("bank batch failed course_id=%s skill_id=%s", state["course_id"], state["skill_id"])
-                    _record_failure(state, exc)
+                    _record_failure(state, exc, getattr(exc, "rejection_counts", None))
         pending = _pending(all_states, excluded_skill_ids=failed_this_run)
     for state in all_states:
         if not state.get("_dirty"):
