@@ -396,7 +396,9 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
     deadline = started + min(JOB_BUDGET_S, remaining_seconds or JOB_BUDGET_S)
     _STOP_429.clear()
     course_params = {"select": "id,institution_id", "limit": "1000"}
-    if not course_id:
+    if course_id:
+        course_params["id"] = f"eq.{course_id}"
+    else:
         course_params["bank_serving"] = "eq.false"
     phase_started = time.perf_counter()
     courses = db.select("courses", course_params)

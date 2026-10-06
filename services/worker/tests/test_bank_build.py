@@ -66,6 +66,28 @@ def test_breadth_first_pending_ordering():
     assert [row["skill_id"] for row in bank_build._pending(rows)] == ["empty", "top-up"]
 
 
+def test_targeted_run_queries_and_touches_exactly_one_course(monkeypatch):
+    requested = "course-requested"
+    queried = []
+
+    def select(table, params):
+        if table == "courses":
+            queried.append(params)
+            assert params["id"] == f"eq.{requested}"
+            return [{"id": requested, "institution_id": "institution-1"}]
+        if table in {"skills", "skill_bank_state", "enrollments", "evidence_events",
+                     "item_exposures", "generated_items", "content_items"}:
+            return []
+        raise AssertionError(f"unexpected select: {table}")
+
+    monkeypatch.setattr(bank_build.db, "select", select)
+    monkeypatch.setattr(bank_build.db, "upsert", lambda *args, **kwargs: [])
+    monkeypatch.setattr(bank_build.db, "update", lambda *args, **kwargs: [])
+    result = bank_build.run(course_id=requested)
+    assert result["courses"] == 1
+    assert len(queried) == 1
+
+
 def test_lease_is_one_conditional_update(monkeypatch):
     calls = []
     monkeypatch.setattr(bank_build.db, "update", lambda table, filters, values: calls.append((table, filters, values)) or [{"skill_id": "s"}])
