@@ -105,6 +105,55 @@ def test_only_backoff_skills_are_not_remaining():
     assert bank_build._pending(rows) == []
 
 
+def test_scheduled_run_includes_serving_and_non_serving_courses(monkeypatch):
+    course_query = []
+    courses = [
+        {"id": "serving-course", "institution_id": "institution-1", "bank_serving": True},
+        {"id": "legacy-course", "institution_id": "institution-1", "bank_serving": False},
+    ]
+
+    def select(table, params):
+        if table == "courses":
+            course_query.append(params)
+            return courses
+        return []
+
+    monkeypatch.setattr(bank_build.db, "select", select)
+    monkeypatch.setattr(bank_build.db, "upsert", lambda *args, **kwargs: [])
+    monkeypatch.setattr(bank_build.db, "update", lambda *args, **kwargs: [])
+    result = bank_build.run()
+
+    assert result["courses"] == 2
+    assert "bank_serving" not in course_query[0]
+
+
+def test_serving_course_replenishment_runs_on_scheduled_build(monkeypatch):
+    replenished = []
+
+    def select(table, params):
+        if table == "courses":
+            return [{"id": "serving-course", "institution_id": "institution-1", "bank_serving": True}]
+        return []
+
+    monkeypatch.setattr(bank_build.db, "select", select)
+    monkeypatch.setattr(bank_build, "_replenish_context", lambda course_id: replenished.append(course_id) or {"active": {}, "seen": {}, "live_counts": {}})
+    monkeypatch.setattr(bank_build.db, "upsert", lambda *args, **kwargs: [])
+    monkeypatch.setattr(bank_build.db, "update", lambda *args, **kwargs: [])
+    bank_build.run()
+
+    assert replenished == ["serving-course"]
+
+
+def test_serving_backoff_resumes_on_first_run_after_next_attempt():
+    past = bank_build._iso(bank_build._now() - bank_build.timedelta(seconds=1))
+    future = bank_build._iso(bank_build._now() + bank_build.timedelta(minutes=5))
+    state = {"skill_id": "serving-skill", "status": "building", "depth": 1,
+             "mcq_ready": 4, "mcq_target": 5, "next_attempt_at": past}
+    assert bank_build._pending([state]) == [state]
+    state["next_attempt_at"] = future
+    assert bank_build._pending([state]) == []
+
+
 def test_targeted_run_queries_and_touches_exactly_one_course(monkeypatch):
     requested = "course-requested"
     queried = []

@@ -487,8 +487,6 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
     course_params = {"select": "id,institution_id", "limit": "1000"}
     if course_id:
         course_params["id"] = f"eq.{course_id}"
-    else:
-        course_params["bank_serving"] = "eq.false"
     phase_started = time.perf_counter()
     courses = db.select("courses", course_params)
     phases["course_select_ms"] += round((time.perf_counter() - phase_started) * 1000)
