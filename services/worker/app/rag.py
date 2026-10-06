@@ -14,6 +14,16 @@ from app.db import supabase as db
 
 def retrieve(*, institution_id: str, course_id: str, query: str, k: int = 5) -> list[dict]:
     query_embedding = embed.embed(query, input_type="search_query")
+    return retrieve_embedding(
+        institution_id=institution_id,
+        course_id=course_id,
+        query_embedding=query_embedding,
+        k=k,
+    )
+
+
+def retrieve_embedding(*, institution_id: str, course_id: str,
+                       query_embedding: list[float], k: int = 5) -> list[dict]:
     return db.rpc("match_content_items", {
         "p_institution_id": institution_id,
         "p_course_id": course_id,

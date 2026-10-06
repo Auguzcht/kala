@@ -117,6 +117,48 @@ def test_thin_context_policy_flips_to_building_when_context_grows():
     assert (status, error, chars, chunks) == ("building", None, 1200, 1)
 
 
+def test_depth_reuses_stored_skill_embedding_without_embedding_call(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(bank_build.rag, "retrieve_embedding",
+                        lambda **kwargs: captured.update(kwargs) or [])
+    monkeypatch.setattr(bank_build.rag.embed, "embed",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("embedding call")))
+    depth, chunks = bank_build._depth(
+        {"embedding": "[1.0,0.0]"}, "institution", "course",
+    )
+    assert depth == 0
+    assert chunks == []
+    assert captured["query_embedding"] == [1.0, 0.0]
+
+
+def test_new_or_retagged_content_triggers_recompute():
+    assert bank_build._needs_depth_recompute(None, [])
+    assert bank_build._content_changed(
+        [{"created_at": "2026-10-06T10:00:00+00:00", "tag_attempted_at": None}],
+        "2026-10-06T09:00:00+00:00",
+    )
+    assert bank_build._content_changed(
+        [{"created_at": "2026-10-06T08:00:00+00:00", "tag_attempted_at": "2026-10-06T10:00:01+00:00"}],
+        "2026-10-06T09:00:00+00:00",
+    )
+    assert not bank_build._content_changed(
+        [{"created_at": "2026-10-06T08:00:00+00:00", "tag_attempted_at": "2026-10-06T08:30:00+00:00"}],
+        "2026-10-06T09:00:00+00:00",
+    )
+
+
+def test_replenish_context_matches_per_skill_decision():
+    context = {
+        "active": {"skill": {"student"}},
+        "seen": {("student", "skill"): {str(i) for i in range(11)}},
+        "live_counts": {"skill": 20},
+    }
+    # The old per-skill implementation raises by one step when nine of the
+    # twenty bank items have been tested, leaving fewer than LOW_WATER unseen.
+    assert bank_build._target_from_context("skill", 4,
+                                          {"mcq_target": 20}, context) == 24
+
+
 def test_failure_counter_increments_once(monkeypatch):
     updates = []
     monkeypatch.setattr(bank_build.db, "update", lambda table, filters, values: updates.append(values) or [])

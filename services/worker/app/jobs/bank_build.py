@@ -227,8 +227,13 @@ def _context_status(depth: int, chunks: list[dict]) -> tuple[str, str | None, in
 
 
 def _depth(skill: dict, institution_id: str, course_id: str) -> tuple[int, list[dict]]:
-    matches = rag.retrieve(institution_id=institution_id, course_id=course_id,
-                           query=skill["name"], k=30)
+    embedding = skill.get("embedding")
+    if isinstance(embedding, str):
+        embedding = [float(value) for value in embedding.strip("[]").split(",")]
+    if not embedding:
+        return 0, []
+    matches = rag.retrieve_embedding(institution_id=institution_id, course_id=course_id,
+                                     query_embedding=embedding, k=30)
     by_id: dict[str, dict] = {}
     for row in matches:
         text = (row.get("chunk_text") or "").strip()
@@ -263,6 +268,64 @@ def _target(course_id: str, skill_id: str, depth: int, current: dict | None) -> 
                 target = min(MCQ_MAX, target + REPLENISH_STEP)
                 break
     return min(target, MCQ_PER_CHUNK * depth, MCQ_MAX)
+
+
+def _replenish_context(course_id: str) -> dict:
+    """Fetch the inputs for all-skill replenish decisions once per course."""
+    since = _iso(_now() - timedelta(days=ACTIVE_DAYS))
+    enrollments = db.select("enrollments", {
+        "course_id": f"eq.{course_id}", "role": "eq.student",
+        "select": "user_id", "limit": "1000",
+    })
+    enrolled = {row["user_id"] for row in enrollments}
+    evidence = db.select("evidence_events", {
+        "course_id": f"eq.{course_id}", "created_at": f"gte.{since}",
+        "select": "user_id,skill_id", "limit": "5000",
+    })
+    active: dict[str, set[str]] = {}
+    for row in evidence:
+        user_id, skill_id = row.get("user_id"), row.get("skill_id")
+        if user_id in enrolled and skill_id:
+            active.setdefault(skill_id, set()).add(user_id)
+    exposures = db.select("item_exposures", {
+        "course_id": f"eq.{course_id}", "last_tested_at": "not.is.null",
+        "select": "user_id,skill_id,item_id", "limit": "10000",
+    })
+    seen: dict[tuple[str, str], set[str]] = {}
+    for row in exposures:
+        seen.setdefault((row.get("user_id"), row.get("skill_id")), set()).add(row.get("item_id"))
+    items = db.select("generated_items", {
+        "course_id": f"eq.{course_id}", "kind": "eq.practice", "origin": "eq.bank",
+        "retired_at": "is.null", "select": "id,skill_id", "limit": "10000",
+    })
+    live_counts: dict[str, int] = {}
+    for row in items:
+        live_counts[row["skill_id"]] = live_counts.get(row["skill_id"], 0) + 1
+    return {"active": active, "seen": seen, "live_counts": live_counts}
+
+
+def _target_from_context(skill_id: str, depth: int, current: dict | None, context: dict) -> int:
+    base = min(MCQ_BASE, MCQ_PER_CHUNK * depth, MCQ_MAX)
+    target = max(base, int((current or {}).get("mcq_target") or 0))
+    active_users = context["active"].get(skill_id, set())
+    if any(context["live_counts"].get(skill_id, 0) -
+           len(context["seen"].get((user_id, skill_id), set())) < LOW_WATER
+           for user_id in active_users):
+        target = min(MCQ_MAX, target + REPLENISH_STEP)
+    return min(target, MCQ_PER_CHUNK * depth, MCQ_MAX)
+
+
+def _content_changed(rows: list[dict], updated_at: str | None) -> bool:
+    if not updated_at:
+        return True
+    return any((row.get("created_at") or "") > updated_at or
+               (row.get("tag_attempted_at") or "") > updated_at for row in rows)
+
+
+def _needs_depth_recompute(current: dict | None, content_rows: list[dict]) -> bool:
+    """New/approved skills and changed course content need a fresh depth."""
+    return (current is None or _content_changed(content_rows, current.get("updated_at")) or
+            (current.get("status") == "no_material" and int(current.get("depth") or 0) > 0))
 
 
 def _upsert_state(skill: dict, *, depth: int, target: int, ready: int, status: str, **extra) -> dict:
@@ -328,33 +391,70 @@ def _pending(states: list[dict]) -> list[dict]:
 def run(*, institution_id: str | None = None, course_id: str | None = None,
         remaining_seconds: float | None = None, chain_depth: int = 0) -> dict:
     started = time.monotonic()
+    phases = {"course_select_ms": 0, "replenish_ms": 0, "depth_ms": 0,
+              "state_upserts_ms": 0, "other_ms": 0}
     deadline = started + min(JOB_BUDGET_S, remaining_seconds or JOB_BUDGET_S)
     _STOP_429.clear()
-    courses = db.select("courses", {"select": "id,institution_id", "bank_serving": "eq.false", "limit": "1000"})
+    course_params = {"select": "id,institution_id", "limit": "1000"}
+    if not course_id:
+        course_params["bank_serving"] = "eq.false"
+    phase_started = time.perf_counter()
+    courses = db.select("courses", course_params)
+    phases["course_select_ms"] += round((time.perf_counter() - phase_started) * 1000)
     if institution_id:
         courses = [c for c in courses if c.get("institution_id") == institution_id]
     if course_id:
         courses = [c for c in courses if c.get("id") == course_id]
     all_states: list[dict] = []
     chunks_by_skill: dict[str, list[dict]] = {}
+    replenish_by_course: dict[str, dict] = {}
     for course in courses:
-        skills = db.select("skills", {"course_id": f"eq.{course['id']}", "institution_id": f"eq.{course['institution_id']}", "status": "eq.approved", "select": "id,name,bloom_level"})
+        phase_started = time.perf_counter()
+        skills = db.select("skills", {"course_id": f"eq.{course['id']}", "institution_id": f"eq.{course['institution_id']}", "status": "eq.approved", "select": "id,name,bloom_level,embedding"})
+        existing_states = db.select("skill_bank_state", {
+            "course_id": f"eq.{course['id']}", "select": "*", "limit": "1000",
+        })
+        states_by_skill = {row["skill_id"]: row for row in existing_states}
+        replenish = _replenish_context(course["id"])
+        phases["replenish_ms"] += round((time.perf_counter() - phase_started) * 1000)
+        replenish_by_course[course["id"]] = replenish
+        content_rows = db.select("content_items", {
+            "course_id": f"eq.{course['id']}", "embedding": "not.is.null",
+            "select": "created_at,tag_attempted_at", "limit": "10000",
+        })
         for skill in skills:
             skill = {**skill, "course_id": course["id"], "institution_id": course["institution_id"]}
-            existing = db.select("skill_bank_state", {"course_id": f"eq.{course['id']}", "skill_id": f"eq.{skill['id']}", "select": "*", "limit": "1"})
-            current = existing[0] if existing else None
-            depth, chunks = _depth(skill, course["institution_id"], course["id"])
-            ready = len(_live_items(course["id"], skill["id"]))
-            target = _target(course["id"], skill["id"], depth, current)
-            context_status, thin_error, _, _ = _context_status(depth, chunks)
+            existing = states_by_skill.get(skill["id"])
+            current = existing
+            recompute = _needs_depth_recompute(current, content_rows)
+            need_chunks = recompute or (current is not None and current.get("status") == "building")
+            if need_chunks:
+                depth_started = time.perf_counter()
+                depth, chunks = _depth(skill, course["institution_id"], course["id"])
+                phases["depth_ms"] += round((time.perf_counter() - depth_started) * 1000)
+                context_status, thin_error, _, _ = _context_status(depth, chunks)
+            else:
+                depth = int(current.get("depth") or 0)
+                chunks = []
+                context_status = current.get("status")
+                thin_error = current.get("last_error")
+            ready = int(replenish["live_counts"].get(skill["id"], 0))
+            target = _target_from_context(skill["id"], depth, current, replenish)
             status = "no_material" if context_status == "no_material" else ("ready" if ready >= target else "building")
-            state = _upsert_state(skill, depth=depth, target=target, ready=ready, status=status,
-                                  consecutive_failures=0 if status == "no_material" else (current or {}).get("consecutive_failures", 0),
-                                  next_attempt_at=None if status == "no_material" else (current or {}).get("next_attempt_at"),
-                                  last_error=thin_error if status == "no_material" and depth > 0 else (None if depth == 0 else (current or {}).get("last_error")))
+            if recompute or current is None or target != int(current.get("mcq_target") or 0) or ready != int(current.get("mcq_ready") or 0) or status != current.get("status"):
+                state_started = time.perf_counter()
+                state = _upsert_state(skill, depth=depth, target=target, ready=ready, status=status,
+                                      consecutive_failures=0 if status == "no_material" else (current or {}).get("consecutive_failures", 0),
+                                      next_attempt_at=None if status == "no_material" else (current or {}).get("next_attempt_at"),
+                                      last_error=thin_error if status == "no_material" and depth > 0 else (None if depth == 0 else (current or {}).get("last_error")))
+                phases["state_upserts_ms"] += round((time.perf_counter() - state_started) * 1000)
+                state["_dirty"] = True
+            else:
+                state = {**current, **skill}
             state.update(skill, deadline=deadline)
             all_states.append(state)
-            chunks_by_skill[skill["id"]] = chunks
+            if chunks:
+                chunks_by_skill[skill["id"]] = chunks
     pending = _pending(all_states)
     calls = successes = failures = inserted = 0
     while pending and time.monotonic() < deadline - PER_CALL_CAP_S and not _STOP_429.is_set():
@@ -363,6 +463,7 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
             claimed = _lease(state)
             if claimed:
                 claimed.update(state)
+                claimed["_dirty"] = True
                 claims.append(claimed)
         if not claims:
             break
@@ -383,11 +484,15 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
                     _record_failure(state, exc)
         pending = _pending(all_states)
     for state in all_states:
+        if not state.get("_dirty"):
+            continue
         if state["depth"] == 0 or state.get("status") == "no_material":
             continue
-        ready = len(_live_items(state["course_id"], state["skill_id"]))
+        ready = int(replenish_by_course[state["course_id"]]["live_counts"].get(state["skill_id"], 0)) if state["course_id"] in replenish_by_course else len(_live_items(state["course_id"], state["skill_id"]))
         final_status = "ready" if ready >= state["mcq_target"] else ("error" if int(state.get("consecutive_failures") or 0) >= ERROR_AFTER else "building")
         db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, {"mcq_ready": ready, "status": final_status, "consecutive_failures": 0 if final_status == "ready" else state.get("consecutive_failures", 0), "last_error": None if final_status == "ready" else state.get("last_error"), "leased_until": None, "updated_at": _iso(_now())})
+    phases["other_ms"] = max(0, round((time.monotonic() - started) * 1000) - sum(phases.values()))
     return {"courses": len(courses), "skills": len(all_states), "calls": calls, "successes": successes,
             "failures": failures, "inserted": inserted, "remaining": bool(_pending(all_states)),
-            "rate_limited": _STOP_429.is_set(), "chain_depth": chain_depth}
+            "rate_limited": _STOP_429.is_set(), "chain_depth": chain_depth,
+            "phase_ms": phases, "embedding_calls": 0}
