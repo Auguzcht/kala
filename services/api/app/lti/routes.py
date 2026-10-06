@@ -330,30 +330,27 @@ async def launch(request: Request, id_token: str = Form(...), state: str = Form(
                     db.touch_course_sync_timestamp(
                         course_id=course["id"], column="last_roster_sync_at",
                     )
-            # AI skill proposal (docs/SKILL_PIPELINE.md): seed the skill
-            # graph from the course's own content on first launch. Same
-            # best-effort contract — a proposal failure never blocks the
-            # 302. By the time students launch, proposals/matches are staged.
-            # Same cooldown reasoning as the roster above: propose_skills is
-            # incremental by module, so re-running is not WRONG, it is just a
-            # content walk nobody needs on a relaunch.
-            if db.course_synced_within(
-                course=course, column="last_skill_seed_at",
-                cooldown_seconds=_SKILL_SEED_COOLDOWN_SECONDS,
-            ):
-                logger.info(
-                    "skipping skill seeding for course %s: seeded within the %ds cooldown",
-                    course["id"], _SKILL_SEED_COOLDOWN_SECONDS,
-                )
-            else:
-                result = _seed_course_skills(
-                    institution_id=institution["id"], course_id=course["id"],
-                    course_ref=lms_course_id, connector=connector,
-                )
-                if not result.get("skipped"):
-                    db.touch_course_sync_timestamp(
-                        course_id=course["id"], column="last_skill_seed_at",
+            if s.skill_seed_on_launch:
+                # Optional legacy behavior. Disabled by default so an
+                # instructor launch never waits on content walking, embeddings,
+                # or the proposer/model path.
+                if db.course_synced_within(
+                    course=course, column="last_skill_seed_at",
+                    cooldown_seconds=_SKILL_SEED_COOLDOWN_SECONDS,
+                ):
+                    logger.info(
+                        "skipping skill seeding for course %s: seeded within the %ds cooldown",
+                        course["id"], _SKILL_SEED_COOLDOWN_SECONDS,
                     )
+                else:
+                    result = _seed_course_skills(
+                        institution_id=institution["id"], course_id=course["id"],
+                        course_ref=lms_course_id, connector=connector,
+                    )
+                    if not result.get("skipped"):
+                        db.touch_course_sync_timestamp(
+                            course_id=course["id"], column="last_skill_seed_at",
+                        )
 
     # 4. mint the session token and hand off to the SPA (fragment is not logged)
     token = mint_session_token(

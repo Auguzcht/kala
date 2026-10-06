@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # Frontend / session
     frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
     session_ttl_seconds: int = Field(default=3600, alias="SESSION_TTL_SECONDS")
+    skill_seed_on_launch: bool = Field(default=False, alias="SKILL_SEED_ON_LAUNCH")
 
     # AWS / Bedrock
     bedrock_model_fast: str = Field(default="", alias="BEDROCK_MODEL_FAST")

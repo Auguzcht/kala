@@ -77,6 +77,7 @@ def _patch_launch(monkeypatch, payload: dict, connector,
     # email -> existing user id. Empty by default; a test that wants to prove
     # the launch RESOLVES instead of duplicating seeds this.
     resolved_ids = resolved_ids or {}
+    monkeypatch.setattr(get_settings(), "skill_seed_on_launch", True)
     monkeypatch.setattr(lti_routes, "verify_state", lambda cookie: {"state": "state-1", "nonce": "nonce-1"})
     monkeypatch.setattr(lti_routes, "verify_id_token", lambda token: payload)
     monkeypatch.setattr(lti_routes.db, "get_or_create_institution", lambda **kw: {"id": "inst-1"})
@@ -373,6 +374,27 @@ def test_instructor_launch_seeds_skills_when_course_has_none(monkeypatch) -> Non
     # Raw content items pass through (the proposer groups by module itself).
     assert seed_calls[0]["content_items"][0]["body_or_description"] == "Module 1 content here."
     assert "course_content" not in seed_calls[0]
+
+
+def test_instructor_launch_default_off_makes_no_proposer_or_model_calls(monkeypatch) -> None:
+    connector = _fake_connector([])
+    recorded = _patch_launch(monkeypatch, _launch_payload([C._ROLE_INSTRUCTOR]), connector)
+    monkeypatch.setattr(get_settings(), "skill_seed_on_launch", False)
+    proposer_calls: list[dict] = []
+    model_calls: list[dict] = []
+    monkeypatch.setattr(lti_routes, "seed_course_skills", lambda **kw: proposer_calls.append(kw))
+    monkeypatch.setattr(lti_routes, "_seed_course_skills", lambda **kw: model_calls.append(kw))
+
+    try:
+        response = _launch(connector)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 302
+    assert connector.content_calls == 0
+    assert proposer_calls == []
+    assert model_calls == []
+    assert recorded["seed_calls"] == []
 
 
 def test_student_launch_does_not_seed_skills(monkeypatch) -> None:
