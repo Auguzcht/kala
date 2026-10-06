@@ -90,18 +90,12 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ### Session wrap-up — 2026-10-06
 
-- **Backend question-bank work is complete, deployed, and verified:** bank
+- **Backend question-bank work is deployed and verified, except for the
+  proposer:** bank
   serving is enabled on all four surfaces (study, test, diagnostic, lesson),
   on-demand kicks and chaining are live, saturation and embedding tagging are
-  live, staff reads are course-scoped by RLS, and the skill proposer runs in
-  the worker. Instructor launch never runs model work inline. Migrations
-  0021–0024 are applied.
-- **Step 1 — proposer kickoff:** the run beginning at `12:45:40Z` did not
-  complete. It timed out twice at 120 seconds and a third retry was still
-  running at the last check. It processed windows for
-  `Module 1|Core Cloud Fundamentals`, but no module completed, no chained
-  proposer run completed, no proposal rows were committed by this kickoff,
-  and `courses.last_skill_seed_at` remained null.
+  live, and staff reads are course-scoped by RLS. Instructor launch never
+  runs model work inline. Migrations 0021–0024 are applied.
 - **Step 2 — scheduler:** `kala-worker-schedule` is `ENABLED` with
   `rate(15 minutes)` and flexible window `OFF`. The last four scheduled runs
   were 12:07:02Z, 12:22:02Z, 12:37:02Z, and 12:52:02Z—15 minutes apart,
@@ -112,15 +106,24 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ### Next session — in order
 
-1. **Frontend overhaul:** list and fix every surface broken by the backend
-   changes, starting with study, test, diagnostic, and lesson contracts,
-   status states, set plumbing, exposures, and polling behavior.
+1. **P0 — Brief 4f: proposer in the worker times out.** Module 1 (4 windows)
+   exceeds the 120s worker timeout. It was killed twice on 2026-10-06, with
+   0 proposals saved and `last_skill_seed_at` still `NULL`. Fixes: (1) switch
+   proposer to the bank model config (nitro, reasoning `max_tokens=3072`),
+   (2) checkpoint per window instead of per module and check the time budget
+   before each call, (3) set the worker's async `MaximumRetryAttempts` to 0
+   in Terraform—chaining handles continuation, while Lambda's two automatic
+   retries repeat the same failing work. Do not click Refresh skills until
+   4f is deployed.
 2. **AWS101 skill cleanup:** there are 26 proposed skills, mostly partial
    leftovers from timed-out launches. Reject the stale batch, run one clean
    Refresh, approve “Describe AWS global infrastructure” and “Estimate AWS
    billing”, and reject the three logistics skills plus anything thin or
    logistics-related.
-3. Confirm saturation fired for skills `7197c35c` and `910b1f7d`.
+3. **Frontend overhaul:** list and fix every surface broken by the backend
+   changes, starting with study, test, diagnostic, and lesson contracts,
+   status states, set plumbing, exposures, and polling behavior.
+4. Confirm saturation fired for skills `7197c35c` and `910b1f7d`.
 
 **Deferred:** E4—delete old generation paths and `tagger.py`—after the
 frontend runs on the bank on all four surfaces.
