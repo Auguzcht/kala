@@ -66,6 +66,27 @@ def test_breadth_first_pending_ordering():
     assert [row["skill_id"] for row in bank_build._pending(rows)] == ["empty", "top-up"]
 
 
+def test_pending_excludes_leased_backoff_no_material_and_failed_skill():
+    now = bank_build._iso(bank_build._now())
+    rows = [
+        {"skill_id": "eligible", "status": "building", "depth": 1, "mcq_ready": 0, "mcq_target": 5},
+        {"skill_id": "leased", "status": "building", "depth": 1, "mcq_ready": 0, "mcq_target": 5,
+         "leased_until": bank_build._iso(bank_build._now() + bank_build.timedelta(minutes=5))},
+        {"skill_id": "backoff", "status": "building", "depth": 1, "mcq_ready": 0, "mcq_target": 5,
+         "next_attempt_at": bank_build._iso(bank_build._now() + bank_build.timedelta(minutes=5))},
+        {"skill_id": "no-material", "status": "no_material", "depth": 1, "mcq_ready": 0, "mcq_target": 5},
+        {"skill_id": "failed-this-run", "status": "building", "depth": 1, "mcq_ready": 0, "mcq_target": 5},
+    ]
+    assert now
+    assert [row["skill_id"] for row in bank_build._pending(rows, excluded_skill_ids={"failed-this-run"})] == ["eligible"]
+
+
+def test_only_backoff_skills_are_not_remaining():
+    rows = [{"skill_id": "backoff", "status": "building", "depth": 1, "mcq_ready": 0, "mcq_target": 5,
+             "next_attempt_at": bank_build._iso(bank_build._now() + bank_build.timedelta(minutes=5))}]
+    assert bank_build._pending(rows) == []
+
+
 def test_targeted_run_queries_and_touches_exactly_one_course(monkeypatch):
     requested = "course-requested"
     queried = []

@@ -70,6 +70,11 @@ def _iso(value: datetime) -> str:
     return value.isoformat()
 
 
+def _parse_time(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
 def _stem_hash(stem: str) -> str:
     normalized = re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", stem.lower())).strip()
     return hashlib.sha256(normalized.encode()).hexdigest()
@@ -115,6 +120,25 @@ def _usage(data: dict) -> dict[str, Any]:
     }
 
 
+_REJECTION_KEYS = ("schema", "choice_count", "banned_phrase", "absolute_words",
+                   "reused_choice_set", "stem_length", "duplicate_hash", "near_duplicate")
+
+
+def _log_model_call(meta: dict, rejections: dict[str, int] | None = None) -> None:
+    counts = rejections or {key: 0 for key in _REJECTION_KEYS}
+    logger.info(
+        "bank_model_call role=bank model=%s provider=%s latency_ms=%s max_completion_tokens=%d "
+        "finish_reason=%s prompt_tokens=%s completion_tokens=%s reasoning_tokens=%s "
+        "reasoning_chars=%s usage_keys=%s cost=%s rejection_schema=%d rejection_choice_count=%d "
+        "rejection_banned_phrase=%d rejection_absolute_words=%d rejection_reused_choice_set=%d "
+        "rejection_stem_length=%d rejection_duplicate_hash=%d rejection_near_duplicate=%d",
+        meta.get("model"), meta.get("provider"), meta.get("latency_ms"), MAX_COMPLETION_TOKENS,
+        meta.get("finish_reason"), meta.get("prompt_tokens"), meta.get("completion_tokens"),
+        meta.get("reasoning_tokens"), meta.get("reasoning_chars"), meta.get("usage_keys"),
+        meta.get("cost"), *(int(counts.get(key) or 0) for key in _REJECTION_KEYS),
+    )
+
+
 def _call_model(*, skill: dict, context: str, do_not_repeat: list[str], remaining: float,
                 batch_size: int = MCQ_BATCH) -> tuple[list[dict], dict]:
     if _STOP_429.is_set() or remaining <= PER_CALL_CAP_S:
@@ -158,46 +182,92 @@ def _call_model(*, skill: dict, context: str, do_not_repeat: list[str], remainin
         reasoning_chars = len(reasoning) if isinstance(reasoning, str) else (len(json.dumps(reasoning)) if reasoning is not None else 0)
         usage_keys = ",".join(sorted((data.get("usage") or {}).keys()))
         usage = _usage(data)
-        logger.info("bank_model_call role=bank model=%s provider=%s latency_ms=%d max_completion_tokens=%d finish_reason=%s prompt_tokens=%s completion_tokens=%s reasoning_tokens=%s reasoning_chars=%d usage_keys=%s cost=%s",
-                    settings.openrouter_model_bank, _provider(data), latency_ms, MAX_COMPLETION_TOKENS,
-                    finish_reason, usage["prompt_tokens"], usage["completion_tokens"], usage["reasoning_tokens"], reasoning_chars, usage_keys, usage["cost"])
         logged = True
+        meta = {"model": settings.openrouter_model_bank, "provider": _provider(data),
+                "latency_ms": latency_ms, "finish_reason": finish_reason,
+                "prompt_tokens": usage["prompt_tokens"], "completion_tokens": usage["completion_tokens"],
+                "reasoning_tokens": usage["reasoning_tokens"], "reasoning_chars": reasoning_chars,
+                "usage_keys": usage_keys, "cost": usage["cost"]}
         if finish_reason != "stop":
+            _log_model_call(meta)
             raise RuntimeError(f"non-stop finish_reason={finish_reason}")
         parsed = json.loads(_content(data))
         items = parsed.get("items") if isinstance(parsed, dict) else []
-        return [item for item in (items or []) if isinstance(item, dict)], {"status": "success", **usage}
+        return [item for item in (items or []) if isinstance(item, dict)], {"status": "success", **usage, "_meta": meta}
     except Exception:
         if not logged:
             elapsed = round((time.perf_counter() - started) * 1000)
-            logger.info("bank_model_call role=bank model=%s provider=%s latency_ms=%d max_completion_tokens=%d finish_reason=error prompt_tokens=null completion_tokens=null reasoning_tokens=null cost=null",
-                        get_settings().openrouter_model_bank, None, elapsed, MAX_COMPLETION_TOKENS)
+            _log_model_call({"model": get_settings().openrouter_model_bank, "provider": None,
+                             "latency_ms": elapsed, "finish_reason": "error",
+                             "prompt_tokens": None, "completion_tokens": None,
+                             "reasoning_tokens": None, "reasoning_chars": 0,
+                             "usage_keys": None, "cost": None})
         raise
 
 
-def _valid_items(items: list[dict], live_stems: list[str]) -> list[dict]:
+def _validated_items(items: list[dict], live_stems: list[str],
+                     live_choice_sets: list[set[str]] | None = None) -> tuple[list[dict], dict[str, int], list[str]]:
     accepted: list[dict] = []
     seen = list(live_stems)
+    seen_hashes: set[str] = set()
+    known_choice_sets = live_choice_sets or []
+    counts = {key: 0 for key in _REJECTION_KEYS}
+    absolute_examples: list[str] = []
     for item in items:
+        if not isinstance(item, dict):
+            counts["schema"] += 1
+            continue
+        prompt = item.get("prompt")
+        choices_raw = item.get("choices")
+        if not isinstance(prompt, str) or not isinstance(choices_raw, list):
+            counts["schema"] += 1
+            continue
+        if len(choices_raw) != 4 or {c.get("id") for c in choices_raw if isinstance(c, dict)} != {"a", "b", "c", "d"}:
+            counts["choice_count"] += 1
+            continue
+        text_fields = [prompt] + [c.get("label", "") for c in choices_raw if isinstance(c, dict)]
+        if any(any(phrase in str(text).lower() for phrase in _BANNED_STEM_PHRASES) for text in text_fields):
+            counts["banned_phrase"] += 1
+            continue
+        if not 20 <= len(prompt.strip()) <= 400:
+            counts["stem_length"] += 1
+            continue
+        correct = item.get("correct_choice_id")
+        wrong = [c.get("label", "") for c in choices_raw if isinstance(c, dict) and c.get("id") != correct]
+        if sum(bool(_ABSOLUTE_WORDS.search(str(label))) for label in wrong) >= 2:
+            counts["absolute_words"] += 1
+            absolute_examples.extend(str(label) for label in wrong if _ABSOLUTE_WORDS.search(str(label)))
+            continue
+        choice_set = {str(c.get("label", "")).strip().lower() for c in choices_raw}
+        if choice_set in known_choice_sets:
+            counts["reused_choice_set"] += 1
+            continue
         try:
             stem, choices, correct, explanation = _validated_mcq(json.dumps(item))
             lowered = stem.lower()
-            if not 20 <= len(stem) <= 400 or any(p in lowered for p in _BANNED_STEM_PHRASES):
-                continue
             labels = [str(c["label"]).strip().lower() for c in choices]
             if len(set(labels)) != 4 or any(x in {"all of the above", "none of the above"} for x in labels):
+                counts["choice_count"] += 1
                 continue
-            wrong = [choice["label"] for choice in choices if choice["id"] != correct]
-            if sum(bool(_ABSOLUTE_WORDS.search(label)) for label in wrong) >= 2:
+            stem_hash = _stem_hash(stem)
+            if stem_hash in seen_hashes:
+                counts["duplicate_hash"] += 1
                 continue
             if any(_jaccard(stem, old) > 0.8 for old in seen):
+                counts["near_duplicate"] += 1
                 continue
             accepted.append({"prompt": stem, "choices": choices, "correct_choice_id": correct,
-                             "explanation": explanation, "stem_hash": _stem_hash(stem)})
+                             "explanation": explanation, "stem_hash": stem_hash})
             seen.append(stem)
+            seen_hashes.add(stem_hash)
         except Exception:
+            counts["schema"] += 1
             continue
-    return accepted
+    return accepted, counts, absolute_examples
+
+
+def _valid_items(items: list[dict], live_stems: list[str]) -> list[dict]:
+    return _validated_items(items, live_stems)[0]
 
 
 def _rotated_window(chunks: list[dict], offset: int) -> list[dict]:
@@ -350,12 +420,14 @@ def _record_failure(state: dict, exc: Exception) -> None:
     values = {"consecutive_failures": failures, "next_attempt_at": _iso(_now() + timedelta(minutes=delay)),
               "leased_until": None, "last_error": str(exc) or type(exc).__name__, "status": "error" if failures >= ERROR_AFTER else "building", "updated_at": _iso(_now())}
     db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, values)
+    state.update(values)
 
 
 def _build_one(state: dict, chunks: list[dict], offset: int) -> dict:
     live = _live_items(state["course_id"], state["skill_id"])
     live_stems = [r.get("prompt") or "" for r in live[:30]]
     do_not_repeat = [{"stem": r.get("prompt") or "", "choices": r.get("choices") or []} for r in live[:30]]
+    live_choice_sets = [{str(c.get("label", "")).strip().lower() for c in (r.get("choices") or [])} for r in live[:30]]
     window, context_chars = _context_snapshot(chunks, offset)
     context = "\n---\n".join(row["text"] for row in window)
     if context_chars < MIN_CONTEXT_CHARS:
@@ -368,7 +440,10 @@ def _build_one(state: dict, chunks: list[dict], offset: int) -> dict:
         return {"inserted": 0, "returned": 0, "usage": {}}
     items, usage = _call_model(skill=state, context=context, do_not_repeat=do_not_repeat,
                                remaining=state["deadline"] - time.monotonic(), batch_size=batch_size)
-    valid = _valid_items(items, live_stems)
+    valid, rejection_counts, absolute_examples = _validated_items(items, live_stems, live_choice_sets)
+    meta = usage.pop("_meta", None)
+    if meta:
+        _log_model_call(meta, rejection_counts)
     inserted = 0
     for item in valid:
         try:
@@ -380,11 +455,25 @@ def _build_one(state: dict, chunks: list[dict], offset: int) -> dict:
             if exc.response.status_code == 409:
                 continue
             raise
-    return {"inserted": inserted, "returned": len(items), "usage": usage}
+    return {"inserted": inserted, "returned": len(items), "usage": usage,
+            "rejection_counts": rejection_counts, "absolute_examples": absolute_examples}
 
 
-def _pending(states: list[dict]) -> list[dict]:
-    return sorted((s for s in states if s.get("status") != "no_material" and s["depth"] > 0 and int(s.get("mcq_ready") or 0) < int(s["mcq_target"] or 0)),
+def _pending(states: list[dict], *, excluded_skill_ids: set[str] | None = None) -> list[dict]:
+    excluded = excluded_skill_ids or set()
+    now = _now()
+
+    def eligible(state: dict) -> bool:
+        leased_until = _parse_time(state.get("leased_until")) if state.get("leased_until") else None
+        next_attempt_at = _parse_time(state.get("next_attempt_at")) if state.get("next_attempt_at") else None
+        return (state.get("status") != "no_material" and
+                state.get("skill_id") not in excluded and
+                int(state.get("depth") or 0) > 0 and
+                int(state.get("mcq_ready") or 0) < int(state.get("mcq_target") or 0) and
+                (leased_until is None or leased_until <= now) and
+                (next_attempt_at is None or next_attempt_at <= now))
+
+    return sorted((s for s in states if eligible(s)),
                   key=lambda s: (int(s.get("mcq_ready") or 0) >= MIN_USABLE, int(s.get("mcq_ready") or 0)))
 
 
@@ -457,14 +546,15 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
             all_states.append(state)
             if chunks:
                 chunks_by_skill[skill["id"]] = chunks
-    pending = _pending(all_states)
+    failed_this_run: set[str] = set()
+    pending = _pending(all_states, excluded_skill_ids=failed_this_run)
     calls = successes = failures = inserted = 0
     while pending and time.monotonic() < deadline - PER_CALL_CAP_S and not _STOP_429.is_set():
         claims = []
         for state in pending[:BANK_CONCURRENCY]:
             claimed = _lease(state)
             if claimed:
-                claimed.update(state)
+                claimed = {**state, **claimed}
                 claimed["_dirty"] = True
                 claims.append(claimed)
         if not claims:
@@ -479,12 +569,15 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
                         raise RuntimeError("zero valid bank items")
                     successes += 1
                     inserted += result["inserted"]
-                    db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, {"consecutive_failures": 0, "last_error": None, "leased_until": None, "updated_at": _iso(_now())})
+                    success_values = {"consecutive_failures": 0, "last_error": None, "leased_until": None, "updated_at": _iso(_now())}
+                    db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, success_values)
+                    state.update(success_values)
                 except Exception as exc:
                     failures += 1
+                    failed_this_run.add(state["skill_id"])
                     logger.exception("bank batch failed course_id=%s skill_id=%s", state["course_id"], state["skill_id"])
                     _record_failure(state, exc)
-        pending = _pending(all_states)
+        pending = _pending(all_states, excluded_skill_ids=failed_this_run)
     for state in all_states:
         if not state.get("_dirty"):
             continue
@@ -495,6 +588,6 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
         db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, {"mcq_ready": ready, "status": final_status, "consecutive_failures": 0 if final_status == "ready" else state.get("consecutive_failures", 0), "last_error": None if final_status == "ready" else state.get("last_error"), "leased_until": None, "updated_at": _iso(_now())})
     phases["other_ms"] = max(0, round((time.monotonic() - started) * 1000) - sum(phases.values()))
     return {"courses": len(courses), "skills": len(all_states), "calls": calls, "successes": successes,
-            "failures": failures, "inserted": inserted, "remaining": bool(_pending(all_states)),
+            "failures": failures, "inserted": inserted, "remaining": bool(_pending(all_states, excluded_skill_ids=failed_this_run)),
             "rate_limited": _STOP_429.is_set(), "chain_depth": chain_depth,
             "phase_ms": phases, "embedding_calls": 0}
