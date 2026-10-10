@@ -28,7 +28,8 @@ export const Route = createFileRoute("/course/skill/$skillId")({
 function SkillHubPage() {
   const courseId = useSession()?.courseId ?? "";
   const { skillId } = Route.useParams();
-  const { tab, setId, start, repeats } = Route.useSearch();
+  const { tab: searchTab, setId, start, repeats } = Route.useSearch();
+  const tab = searchTab ?? "study";
   const navigate = useNavigate();
   const to = "/course/skill/$skillId" as const;
 
@@ -36,7 +37,7 @@ function SkillHubPage() {
     <SkillHub
       courseId={courseId}
       skillId={skillId}
-      tab={tab as SkillTab | undefined}
+      tab={tab as SkillTab}
       setId={setId}
       includesRepeats={repeats}
       start={start}
@@ -53,8 +54,8 @@ function SkillHubPage() {
           search: nextSetId ? { tab: "test", setId: nextSetId, repeats: includesRepeats || undefined } : { tab: "test" },
         })
       }
-      // Commit to the running session for the active tab. Study and Test share
-      // this switch; each reads `start` only for its own tab.
+      // Commit to the running session for the active tab. A bare skill URL
+      // defaults to Study so the deck action always enters the Study session.
       onStart={() =>
         navigate({ to, params: { skillId }, search: { tab, setId, start: true } })
       }
@@ -65,7 +66,7 @@ function SkillHubPage() {
         navigate({
           to,
           params: { skillId },
-          search: { tab: tab === "lesson" || !tab ? "study" : tab },
+          search: { tab: tab === "lesson" ? "study" : tab },
         })
       }
     />
