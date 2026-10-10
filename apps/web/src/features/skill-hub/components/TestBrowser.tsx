@@ -110,14 +110,14 @@ export function TestBrowser({
 function AttemptPill({ attempt }: { attempt: PracticeSetAttempt }) {
   if (attempt.attemptedCount === null) {
     return (
-      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+      <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
         Not attempted
       </span>
     );
   }
   const correct = attempt.correctCount ?? 0;
   return (
-    <span className="inline-flex items-center rounded-full bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
+    <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
       {correct}/{attempt.attemptedCount} correct
     </span>
   );
@@ -202,7 +202,7 @@ function SetList({
         what's in it before you start.
       </p>
 
-      {sets.length === 0 ? (
+      {sets.length === 0 && !isNoMaterial ? (
         <div className="border border-dashed bg-card px-5 py-4">
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -312,7 +312,7 @@ function SetList({
             generate.isPending && "cursor-wait border-brand-orange/40"
           )}
         >
-          <div className="grid size-9 place-items-center rounded-full border border-dashed border-muted-foreground/40">
+          <div className="grid size-9 place-items-center rounded-sm border border-dashed border-muted-foreground/40">
             {generate.isPending ? (
               <Spinner className="size-4 text-brand-orange" />
             ) : (
@@ -335,7 +335,7 @@ function SetList({
           <p className="text-xs leading-relaxed text-muted-foreground">
             Fresh questions. Choose 5, 10, or 20 at a time.
           </p>
-          {generate.isError ? (
+          {generate.isError && !isNoMaterial ? (
             <p className="text-xs text-destructive">
               We could not load this set. Please try again.
             </p>

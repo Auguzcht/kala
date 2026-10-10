@@ -16,9 +16,7 @@ export const Route = createFileRoute("/course/flashcards")({
 function FlashcardsPage() {
   const courseId = useSession()?.courseId ?? "";
   const { data: twin, isLoading } = useTwin(courseId);
-  // limit=0: a cheap peek at stats.due for the recommended card, without
-  // triggering the deck's top-up generation (which only runs when the
-  // fetched card count is below the requested limit — 0 is never below 0).
+  // limit=0 returns the course-wide review counts without fetching cards.
   const { data: peek } = useFlashcardDeck(courseId, 0);
   const [session, setSession] = useState<{ skillId?: string } | null>(null);
 
@@ -60,11 +58,11 @@ function FlashcardsPage() {
                 {peek
                   ? peek.stats.due > 0
                     ? `${peek.stats.due} due for review`
-                    : "Nothing due — review fresh cards"
+                    : "Nothing due. Review fresh cards"
                   : "Review what's due"}
               </p>
               <p className="mt-1 text-[13px] text-primary-foreground/70">
-                Across every topic, whatever's due now — missed cards resurface sooner.
+                Across every topic, whatever is due now. Missed cards resurface sooner.
               </p>
             </div>
             <ArrowRightIcon size={18} className="shrink-0 text-primary-foreground/70" />

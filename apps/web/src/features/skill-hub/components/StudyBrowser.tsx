@@ -1,12 +1,13 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { motion, useReducedMotion } from "motion/react";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck } from "@/features/flashcards";
-import { apiErrorReason } from "@/lib/api-error";
 import type { FlashcardCard } from "@/features/flashcards";
+import { useBankStatus } from "@/features/bank";
 
 // The Study tab's browse view — the materials list that sits in front of the
 // sequential flip session, the same browse-then-commit shape the Test tab
@@ -14,10 +15,8 @@ import type { FlashcardCard } from "@/features/flashcards";
 // so each row shows BOTH sides of the card. That is the point of a materials
 // list — you can see what you're about to review.
 //
-// Data comes from the existing deck endpoint (same assembly the session uses,
-// just rendered as a list instead of one card at a time). The deck's top-up
-// generation is what seeds a skill with no cards yet, so a first visit shows
-// the freshly written cards rather than an empty screen with no way forward.
+// Data comes from the deck endpoint (the same database-backed assembly the
+// session uses), rendered as a list instead of one card at a time.
 //
 // The browse view is not study mode: it makes no scheduling writes and shows
 // no flip UI. "Study deck" is what enters the session, which then owns the
@@ -37,11 +36,16 @@ export function StudyBrowser({
   /** Enter the sequential flip session. */
   onStart: () => void;
 }) {
-  const { data, isLoading, isError, error, refetch } = useFlashcardDeck(
+  const { data, isLoading, isError, refetch } = useFlashcardDeck(
     courseId,
     BROWSE_LIMIT,
     skillId,
   );
+  const bank = useBankStatus(courseId);
+  const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
+  const isNoMaterial = bank.data?.bankServing === true && bankSkill?.status === "no_material";
+  const isPreparing = bank.data?.bankServing === true &&
+    !isNoMaterial && !bankSkill?.usable;
   const reduceMotion = useReducedMotion();
 
   if (isLoading) {
@@ -57,7 +61,7 @@ export function StudyBrowser({
     return (
       <EmptyState
         title="We could not load your cards"
-        description={apiErrorReason(error) ?? "Check your connection and try again."}
+        description="Check your connection and try again."
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
@@ -66,25 +70,47 @@ export function StudyBrowser({
   const cards = data?.cards ?? [];
   const stats = data?.stats;
 
-  // Zero cards is a real state, not a loading artifact: either the skill has
-  // nothing tracked yet (and the deck's top-up could not write any), or the
-  // student has genuinely nothing left to review. Either way the list is empty
-  // and the copy below says which, rather than landing on a dead end.
+  // An empty response can mean a bank build is still below its usable threshold,
+  // the skill has no course material, or the student's SRS queue is empty.
   if (cards.length === 0) {
+    if (bank.isLoading) {
+      return <LoadingPanel label="Checking card availability…" lines={3} />;
+    }
+    if (isNoMaterial) {
+      return (
+        <EmptyState
+          title="No course material yet"
+          description="This skill doesn&apos;t have course material yet."
+        />
+      );
+    }
+    if (isPreparing) {
+      return (
+        <LoadingPanel
+          label={`Preparing questions (${bankSkill?.mcqReady ?? 0} of ${bankSkill?.mcqTarget ?? 0})`}
+          lines={3}
+        />
+      );
+    }
+    if (bank.isError) {
+      return (
+        <EmptyState
+          title="We could not check card availability"
+          description="Reload this page to try again."
+          action={<Button variant="outline" onClick={() => refetch()}>Reload deck</Button>}
+        />
+      );
+    }
     const allCaughtUp = (stats?.tracked ?? 0) > 0;
     return (
       <EmptyState
         title={allCaughtUp ? "All caught up" : "No cards yet"}
         description={
           allCaughtUp
-            ? "Nothing is due for review on this skill right now. Missed cards resurface sooner — check back later, or take a test to keep your mastery moving."
-            : "Kala couldn't write cards for this skill yet. Try again in a moment."
+            ? "Nothing is due for review on this skill right now. Missed cards resurface sooner. Check back later or take a test to keep your mastery moving."
+            : "No cards are available for this skill right now."
         }
-        action={
-          <Button variant="outline" onClick={() => refetch()}>
-            Refresh
-          </Button>
-        }
+        action={allCaughtUp ? <Button variant="outline" onClick={() => refetch()}>Reload deck</Button> : undefined}
       />
     );
   }
@@ -98,18 +124,10 @@ export function StudyBrowser({
             {cards.length} {cards.length === 1 ? "card" : "cards"}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Recall each answer, then mark it yourself — Kala brings back what you miss.
+            Recall each answer, then mark it yourself. Missed cards return sooner.
           </p>
-          {/* States the design decision out loud. Cards here are a
-              spaced-repetition queue, seeded automatically, NOT a set you
-              generate on demand — so the missing "generate more" button reads
-              as intended rather than as an oversight. Generating cards would
-              also raise a question the schedule can't answer: what due date
-              does a brand-new card get, and should it jump ahead of cards that
-              are actually due? */}
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Cards are added automatically for this skill as you study — this isn't a set you
-            generate.
+            Cards are added to your review queue as you study.
           </p>
         </div>
         <Button variant="orange" onClick={onStart} className="shrink-0">
@@ -136,7 +154,7 @@ export function StudyBrowser({
                 Answer
               </span>
               <p className="min-w-0 text-sm text-muted-foreground">
-                {card.back.label ?? "—"}
+              {card.back.label ?? "No answer label"}
               </p>
             </div>
           </motion.li>
@@ -154,7 +172,7 @@ function StateBadge({ state, box }: { state: "due" | "new"; box: number }) {
     <span className="flex shrink-0 items-center gap-1.5">
       <span
         className={cn(
-          "rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+          "rounded-sm px-2 py-0.5 text-[10.5px] font-semibold",
           state === "due"
             ? "bg-brand-orange/15 text-foreground"
             : "bg-muted text-muted-foreground"

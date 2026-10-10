@@ -20,7 +20,7 @@ import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
 import { useFlashcardDeck, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
 import { useCreateSetFromItems } from "@/features/practice";
-import { apiErrorReason } from "@/lib/api-error";
+import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
 import type {
@@ -38,7 +38,7 @@ import type {
 //
 // The contrast with PracticePanel is the whole point of the split: practice is
 // a graded MCQ (server decides correctness, moves mastery), study is a flip
-// (student decides, moves only the schedule). Same generated item underneath,
+// (student decides, moves only the schedule). Same question underneath,
 // two honest modes.
 //
 // One topic choice per session (Stage 3 of the AI overhaul,
@@ -69,7 +69,7 @@ function StateBadge({ state }: { state: "due" | "new" }) {
     >
       <span
         className={cn(
-          "size-1.5 rounded-full",
+          "size-1.5 rounded-sm",
           state === "due" ? "bg-brand-orange" : "bg-muted-foreground/60"
         )}
       />
@@ -89,7 +89,8 @@ export function FlashcardDeck({
 }) {
   const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
-  const { data, isLoading, isError, error, refetch } = useFlashcardDeck(courseId, 10, skillId);
+  const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
+  const bank = useBankStatus(courseId);
   const review = useReviewFlashcard(courseId);
   const testMe = useCreateSetFromItems(courseId);
   const hint = useTutorAsk(courseId);
@@ -119,16 +120,58 @@ export function FlashcardDeck({
   }, [index, data?.courseId]);
 
   if (isLoading)
-    return <LoadingPanel label="Building your deck — Kala is writing the first cards…" lines={4} />;
+    return <LoadingPanel label="Loading your cards…" lines={4} />;
   if (isError)
     return (
       <EmptyState
         title="We could not load flashcards"
-        description={apiErrorReason(error) ?? "Check your connection and try again."}
+        description="Check your connection and try again."
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
   if (!data || data.cards.length === 0) {
+    const visibleSkills = bank.data?.skills.filter((entry) => !skillId || entry.skillId === skillId) ?? [];
+    const selectedSkill = skillId
+      ? visibleSkills[0]
+      : visibleSkills.find((entry) => !entry.usable && entry.status !== "no_material");
+    const noMaterial = bank.data?.bankServing === true && (
+      skillId
+        ? selectedSkill?.status === "no_material"
+        : visibleSkills.length > 0 && visibleSkills.every((entry) => entry.status === "no_material")
+    );
+    const preparing = bank.data?.bankServing === true && !noMaterial && (
+      !selectedSkill || !selectedSkill.usable
+    );
+    if (bank.isLoading) {
+      return <LoadingPanel label="Checking card availability…" lines={4} />;
+    }
+    if (noMaterial) {
+      return (
+        <EmptyState
+          title="No course material yet"
+          description={skillId
+            ? "This skill doesn&apos;t have course material yet."
+            : "No mapped skill has course material yet."}
+        />
+      );
+    }
+    if (preparing) {
+      return (
+        <LoadingPanel
+          label={`Preparing questions (${selectedSkill?.mcqReady ?? 0} of ${selectedSkill?.mcqTarget ?? 0})`}
+          lines={4}
+        />
+      );
+    }
+    if (bank.isError) {
+      return (
+        <EmptyState
+          title="We could not check card availability"
+          description="Check your connection and reload the deck."
+          action={<Button variant="outline" onClick={() => refetch()}>Reload deck</Button>}
+        />
+      );
+    }
     const allCaughtUp = data ? data.stats.tracked > 0 : false;
     return (
       <EmptyState
@@ -136,16 +179,14 @@ export function FlashcardDeck({
         description={
           allCaughtUp
             ? skillId
-              ? "Nothing is due for review on this skill right now. Missed cards resurface sooner — come back later, or choose another topic."
-              : "Nothing is due for review right now. Missed cards resurface sooner — come back later."
+              ? "Nothing is due for review on this skill right now. Missed cards resurface sooner. Come back later or choose another topic."
+              : "Nothing is due for review right now. Missed cards resurface sooner. Come back later."
             : skillId
-              ? "This skill hasn't been mapped for flashcards yet."
-              : "Skills for this course haven't been mapped yet."
+              ? "No cards are available for this skill right now."
+              : "No cards are available for this course right now."
         }
         action={
-          <Button variant="outline" onClick={() => refetch()}>
-            Refresh
-          </Button>
+          <Button variant="outline" onClick={() => refetch()}>Reload deck</Button>
         }
       />
     );
@@ -196,7 +237,7 @@ export function FlashcardDeck({
             {canTest ? (
               <p className="mt-3 text-sm text-muted-foreground">
                 Ready to prove it? A test on these same cards is graded, and it moves your
-                mastery — studying alone doesn't.
+                mastery. Studying alone does not.
               </p>
             ) : null}
             <div className="mt-4">
@@ -288,7 +329,7 @@ export function FlashcardDeck({
           "You are Kala helping a student study one flashcard.",
           "The card is a term/prompt with a definition/answer on the back. Guide recall without simply stating the back while they are still on the front; explain the concept clearly once they have flipped.",
           `Card prompt: ${card.prompt}`,
-          `Card back: ${card.back.label ?? "—"}`,
+          `Card back: ${card.back.label ?? "No answer label"}`,
           `Side shown: ${phase}.`,
           `Student question: ${question}`,
         ].join("\n\n"),
@@ -415,7 +456,7 @@ export function FlashcardDeck({
                     Answer
                   </p>
                   <p className="mt-0.5 text-base font-semibold text-foreground">
-                    {card.back.label ?? "—"}
+                    {card.back.label ?? "No answer label"}
                   </p>
                 </div>
                 {card.back.explanation ? (
@@ -459,7 +500,7 @@ export function FlashcardDeck({
                     >
                       {result?.remembered
                         ? "Marked as remembered."
-                        : "Marked for review — this card comes back sooner."}
+                        : "Marked for review. This card comes back sooner."}
                     </p>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-xs text-muted-foreground">
                       <span>

@@ -84,15 +84,17 @@ export function PracticePanel({
   const savedQuery = usePracticeSetById(courseId, setId ?? null);
   const { isLoading, isError, isFetching, refetch } = usingSaved ? savedQuery : generatedQuery;
   const data = usingSaved ? savedQuery.data : generatedQuery.data;
+  const preparingResponse = generatedQuery.data?.status === "preparing";
+  const refetchGeneratedSet = generatedQuery.refetch;
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
 
   useEffect(() => {
-    if (!usingSaved && generatedQuery.data?.status === "preparing" && bankUsable) {
-      void generatedQuery.refetch();
+    if (!usingSaved && preparingResponse && bankUsable) {
+      void refetchGeneratedSet();
     }
-  }, [usingSaved, generatedQuery.data?.status, bankUsable, generatedQuery.refetch]);
+  }, [usingSaved, preparingResponse, bankUsable, refetchGeneratedSet]);
 
   // Position within the fetched batch. Local state, not part of the query:
   // the set is immutable for the session, only the cursor over it moves.
