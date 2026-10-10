@@ -77,6 +77,21 @@ def test_card_state_uses_outcome_and_interval_from_box_and_ease():
     assert srs.card_state(reps=5, last_outcome="good", lapses=1, box=4, ease_milli=2500) == "known"
 
 
+def test_next_state_holds_early_success_but_counts_a_miss():
+    current = CardState(box=3, ease_milli=2600, streak=2, reps=5, lapses=1)
+    early = srs.next_state(current, outcome="good", mode="flashcard", was_due=False)
+    assert (early.box, early.ease_milli, early.streak, early.reps, early.lapses) == (3, 2600, 2, 5, 1)
+    assert early.interval_hours == srs.interval_hours(box=3, ease_milli=2600)
+    missed = srs.next_state(current, outcome="again", mode="quiz", was_due=False)
+    assert (missed.box, missed.streak, missed.reps, missed.lapses) == (0, 0, 6, 2)
+
+
+def test_next_state_advances_due_success_for_either_mode():
+    current = CardState(box=0, ease_milli=2500, streak=0, reps=0, lapses=0)
+    assert srs.next_state(current, outcome="good", mode="flashcard", was_due=True).box == 1
+    assert srs.next_state(current, outcome="good", mode="quiz", was_due=True).box == 1
+
+
 # ---- persistence wrappers -------------------------------------------------
 
 def test_review_reads_prior_state_then_persists_next_due(monkeypatch):

@@ -1,6 +1,6 @@
 import itertools
 import threading
-from types import SimpleNamespace
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from app.deps import CurrentUser, get_current_user
@@ -256,24 +256,26 @@ def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch)
     advances the spaced-repetition schedule, but NEVER calls the tracer —
     mastery must not move on a self-report."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    evidence_rows = []
-    srs_calls = []
+    rpc_calls = []
 
     monkeypatch.setattr(
         flashcards.db, "select",
         lambda table, params: [{"id": "card-1", "skill_id": "00000000-0000-4000-8000-000000000010"}],
     )
-    monkeypatch.setattr(flashcards.db, "insert_evidence", lambda rows: evidence_rows.extend(rows) or rows)
     # The module must not even import the tracer any more — that is the
     # strongest form of "study never moves mastery": there is no code path
     # that could call it, not merely a path that happens not to.
     assert not hasattr(flashcards, "tracer")
+    due_at = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
     monkeypatch.setattr(
-        flashcards.srs, "review",
-        lambda **kwargs: srs_calls.append(kwargs) or SimpleNamespace(
-            graduated=False, interval_hours=4.0, box=0,
-        ),
+        flashcards.db, "rpc",
+        lambda fn, args: rpc_calls.append((fn, args)) or [{
+            "counted": True, "was_due": True, "box": 0, "ease_milli": 2300,
+            "streak": 0, "reps": 1, "lapses": 1, "last_outcome": "again",
+            "due_at": due_at, "graduated": False, "replayed": False,
+        }],
     )
+    monkeypatch.setattr(flashcards, "record_exposure", lambda **kwargs: None)
     monkeypatch.setattr(
         flashcards.xp, "summary",
         lambda **kwargs: {"xp": 12, "streakDays": 1, "badges": [], "attempts": 6, "correct": 3},
@@ -292,18 +294,51 @@ def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch)
     body = response.json()
     assert body["remembered"] is False
     assert body["graduated"] is False
-    assert body["dueInHours"] == 4.0
+    assert body["dueInHours"] == 9.2
     assert body["reward"]["xp"] == 12
     # No `correct`/`mastery` in the response — study does not grade.
     assert "correct" not in body
     assert "mastery" not in body
-    # The research-visible evidence row is written with the self-mark...
-    assert evidence_rows[0]["type"] == "flashcard"
-    assert evidence_rows[0]["correct"] is False
-    assert evidence_rows[0]["latency_ms"] == 900
-    # ...the schedule advances on the self-mark...
-    assert srs_calls[0]["correct"] is False
+    # The legacy request still maps its rating into the atomic service RPC.
+    assert rpc_calls[0][0] == "review_flashcard"
+    assert rpc_calls[0][1]["p_outcome"] == "again"
+    assert rpc_calls[0][1]["p_latency_ms"] == 900
+    assert rpc_calls[0][1]["p_mode"] == "flashcard"
+    assert rpc_calls[0][1]["p_session_id"] is None
+    assert rpc_calls[0][1]["p_idempotency_key"]
     # ...and the twin is never touched (no tracer import exists to call).
+
+
+def test_flashcard_review_accepts_additive_memory_fields(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    rpc_calls = []
+    due_at = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+    monkeypatch.setattr(flashcards.db, "select", lambda table, params: [{
+        "id": "card-1", "skill_id": "00000000-0000-4000-8000-000000000010",
+    }])
+    monkeypatch.setattr(flashcards.db, "rpc", lambda fn, args: rpc_calls.append(args) or [{
+        "counted": True, "was_due": True, "box": 1, "ease_milli": 2560,
+        "streak": 1, "reps": 1, "lapses": 0, "last_outcome": "good",
+        "due_at": due_at, "graduated": False, "replayed": False,
+    }])
+    monkeypatch.setattr(flashcards, "record_exposure", lambda **kwargs: None)
+    monkeypatch.setattr(flashcards.xp, "summary", lambda **kwargs: {"xp": 12})
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/flashcards/00000000-0000-4000-8000-000000000001/review",
+                json={"item_id": "card-1", "outcome": "good", "session_id": "00000000-0000-4000-8000-000000000099",
+                      "idempotency_key": "attempt-1", "mode": "flashcard"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["remembered"] is True
+    assert response.json()["counted"] is True
+    assert response.json()["state"] == "learning"
+    assert rpc_calls[0]["p_outcome"] == "good"
+    assert rpc_calls[0]["p_session_id"] == "00000000-0000-4000-8000-000000000099"
+    assert rpc_calls[0]["p_idempotency_key"] == "attempt-1"
 
 
 # ---- POST /practice/{course_id}/set (batched practice) --------------------

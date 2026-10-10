@@ -122,6 +122,29 @@ def schedule_after(state: CardState, *, correct: bool) -> ScheduleResult:
     )
 
 
+def next_state(current_state: CardState, *, outcome: str, mode: str,
+               was_due: bool, reviewed_at: datetime | None = None) -> ScheduleResult:
+    """Scheduler boundary used by transactional review writers.
+
+    The database RPC performs the same transition while holding the schedule
+    row lock. Early successes are logged by the caller but leave this state
+    unchanged; misses always lapse.
+    """
+    if outcome not in ("again", "good"):
+        raise ValueError("outcome must be 'again' or 'good'")
+    if mode not in ("flashcard", "quiz"):
+        raise ValueError("mode must be 'flashcard' or 'quiz'")
+    if outcome == "good" and not was_due:
+        return ScheduleResult(
+            box=current_state.box, ease_milli=current_state.ease_milli,
+            streak=current_state.streak, reps=current_state.reps,
+            lapses=current_state.lapses,
+            interval_hours=interval_hours(box=current_state.box, ease_milli=current_state.ease_milli),
+            graduated=is_mastered(box=current_state.box, streak=current_state.streak),
+        )
+    return schedule_after(current_state, correct=outcome == "good")
+
+
 def is_mastered(*, box: int, streak: int) -> bool:
     """Row-level graduation predicate, matching schedule_after's rule. Used by
     read queries to exclude mastered cards from normal review without encoding

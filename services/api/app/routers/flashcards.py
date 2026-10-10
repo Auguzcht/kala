@@ -28,10 +28,12 @@ inform, they do not grade, and they do not touch the schedule.
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone
+from typing import Literal
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.bank.serving import bank_enabled, pick_bank_items, record_exposure
 from app.db import supabase as db
@@ -274,8 +276,26 @@ def deck(
 
 class ReviewBody(BaseModel):
     item_id: str
-    remembered: bool
+    remembered: bool | None = None
     latency_ms: int = 0
+    session_id: UUID | None = None
+    idempotency_key: str | None = None
+    outcome: Literal["again", "good"] | None = None
+    mode: Literal["flashcard"] = "flashcard"
+
+    @model_validator(mode="after")
+    def outcome_matches_legacy_rating(self):
+        if self.remembered is None and self.outcome is None:
+            raise ValueError("remembered or outcome is required")
+        if self.remembered is not None and self.outcome is not None:
+            expected = "good" if self.remembered else "again"
+            if self.outcome != expected:
+                raise ValueError("remembered and outcome disagree")
+        return self
+
+    @property
+    def resolved_outcome(self) -> str:
+        return self.outcome or ("good" if self.remembered else "again")
 
 
 @router.post("/{course_id}/review")
@@ -311,29 +331,42 @@ def review(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "card not found")
     skill_id = rows[0].get("skill_id")
 
-    db.insert_evidence([{
-        "institution_id": user.institution_id, "user_id": user.user_id,
-        "course_id": course_id, "skill_id": skill_id, "type": "flashcard",
-        "correct": body.remembered, "latency_ms": body.latency_ms,
-        "hints_used": 0,
-    }])
-    # Deliberately NO tracer.apply_evidence here — see the docstring. Self-mark
-    # is not assessment; mastery moves on graded evidence only.
-    sched = srs.review(
-        institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, item_id=body.item_id, skill_id=skill_id,
-        correct=body.remembered,
+    outcome = body.resolved_outcome
+    rows = db.rpc("review_flashcard", {
+        "p_institution_id": user.institution_id,
+        "p_user_id": user.user_id,
+        "p_course_id": course_id,
+        "p_item_id": body.item_id,
+        "p_outcome": outcome,
+        "p_mode": body.mode,
+        "p_session_id": str(body.session_id) if body.session_id else None,
+        "p_idempotency_key": body.idempotency_key or str(uuid4()),
+        "p_latency_ms": body.latency_ms,
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "card not found")
+    sched = rows[0] if isinstance(rows, list) else rows
+    due_in_hours = srs.interval_hours(
+        box=int(sched["box"]), ease_milli=int(sched["ease_milli"]),
     )
     record_exposure(
         institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
-        skill_id=skill_id, item_id=body.item_id, answered=True, correct=body.remembered,
+        skill_id=skill_id, item_id=body.item_id, answered=True, correct=(outcome == "good"),
     )
 
     return {
-        "remembered": body.remembered,
-        "graduated": sched.graduated,
-        "dueInHours": round(sched.interval_hours, 1),
-        "box": sched.box,
+        "remembered": outcome == "good",
+        "graduated": sched["graduated"],
+        "dueInHours": round(due_in_hours, 1),
+        "box": sched["box"],
+        "outcome": outcome,
+        "counted": sched["counted"],
+        "dueAt": sched["due_at"],
+        "state": srs.card_state(
+            reps=int(sched["reps"]), last_outcome=sched.get("last_outcome"),
+            lapses=int(sched["lapses"]), box=int(sched["box"]),
+            ease_milli=int(sched["ease_milli"]),
+        ),
         "reward": xp.summary(
             institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
         ),

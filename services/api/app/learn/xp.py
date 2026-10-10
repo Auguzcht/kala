@@ -64,10 +64,19 @@ def summary(*, institution_id: str, user_id: str, course_id: str) -> dict:
     and earned badges. All derived, no writes."""
     events = db.select("evidence_events", {
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
-        "select": "correct,created_at",
+        "select": "type,correct,created_at",
     })
-    attempts = len(events)
-    correct = sum(1 for e in events if e.get("correct") is True)
+    flashcard_reviews = db.select("item_reviews", {
+        "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
+        "mode": "eq.flashcard", "counted": "eq.true",
+        "select": "outcome,created_at",
+    })
+    other_events = [e for e in events if e.get("type") != "flashcard"]
+    attempts = len(other_events) + len(flashcard_reviews)
+    correct = (
+        sum(1 for e in other_events if e.get("correct") is True)
+        + sum(1 for r in flashcard_reviews if r.get("outcome") == "good")
+    )
     xp = correct * _XP_CORRECT + attempts * _XP_ATTEMPT
     streak = _streak_days([e["created_at"] for e in events if e.get("created_at")])
 
