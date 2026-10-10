@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -34,7 +35,6 @@ from app.deps import (
 )
 from app.learn import items as item_gen
 from app.routers.item_generation_jobs import enqueue_practice, practice_jobs
-from app.twin import tracer
 
 logger = logging.getLogger(__name__)
 
@@ -409,6 +409,8 @@ class SubmitBody(BaseModel):
     choice_id: str
     latency_ms: int = 0
     set_id: str | None = None
+    session_id: UUID | None = None
+    idempotency_key: str | None = None
 
 
 def _attempts_by_set(*, institution_id: str, user_id: str, set_ids: list[str]) -> dict[str, dict]:
@@ -601,9 +603,8 @@ def _record_set_attempt(*, institution_id: str, user_id: str, course_id: str,
     meaningful concurrent-writer race in practice; if that ever changes, this
     is the function that becomes an RPC.
 
-    This is intentionally separate from the evidence/tracer writes in
-    submit() — those are the mastery signal, this is just "did you take this
-    set and how did you do", and neither depends on the other.
+    This remains separate from submit()'s atomic review RPC — it records only
+    "did you take this set and how did you do", not the mastery signal.
     """
     existing = db.select("quiz_set_attempts", {
         "institution_id": f"eq.{institution_id}", "user_id": f"eq.{user_id}",
@@ -645,32 +646,38 @@ def submit(
         if not valid:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "item is not in this set")
 
-    db.insert_evidence([{
-        "institution_id": user.institution_id, "user_id": user.user_id,
-        "course_id": course_id, "skill_id": graded["skillId"], "type": "practice",
-        "correct": graded["correct"], "latency_ms": body.latency_ms,
-    }])
-    state = tracer.apply_evidence(
-        institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, skill_id=graded["skillId"], correct=graded["correct"],
-    )
+    rows = db.rpc("review_flashcard", {
+        "p_institution_id": user.institution_id,
+        "p_user_id": user.user_id,
+        "p_course_id": course_id,
+        "p_item_id": body.item_id,
+        "p_outcome": "good" if graded["correct"] else "again",
+        "p_mode": "quiz",
+        "p_session_id": str(body.session_id or body.set_id) if (body.session_id or body.set_id) else None,
+        "p_idempotency_key": body.idempotency_key or str(uuid4()),
+        "p_latency_ms": body.latency_ms,
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "could not record practice review")
+    review_result = rows[0] if isinstance(rows, list) else rows
     # Attempt bookkeeping is explicit. An ungrouped item (/next, no set)
     # touches nothing here — same as it touches
     # nothing in quiz_sets. Grading, evidence, and mastery above are all
     # unchanged; this is purely the per-student "have I taken this set"
     # counter the Test tab badge reads.
-    if body.set_id:
+    if body.set_id and not review_result.get("replayed"):
         _record_set_attempt(
             institution_id=user.institution_id, user_id=user.user_id,
             course_id=course_id, set_id=body.set_id, correct=graded["correct"],
         )
-    record_exposure(
-        institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
-        skill_id=graded["skillId"], item_id=body.item_id, tested=bool(body.set_id),
-        answered=True, correct=graded["correct"],
-    )
+    if not review_result.get("replayed"):
+        record_exposure(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            skill_id=graded["skillId"], item_id=body.item_id, tested=bool(body.set_id),
+            answered=True, correct=graded["correct"],
+        )
     return {
         "correct": graded["correct"],
         "explanation": graded["explanation"],
-        "mastery": state.get("estimate"),
+        "mastery": review_result.get("mastery_estimate"),
     }

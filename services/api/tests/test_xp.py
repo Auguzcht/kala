@@ -26,7 +26,7 @@ def test_xp_rewards_correct_over_attempts(monkeypatch):
     assert out["correct"] == 2
 
 
-def test_flashcard_xp_uses_counted_item_reviews_not_research_events(monkeypatch):
+def test_xp_uses_counted_item_reviews_not_flashcard_or_practice_evidence(monkeypatch):
     now = _iso(datetime.now(timezone.utc))
     def fake_select(table, params):
         if table == "evidence_events":
@@ -34,16 +34,17 @@ def test_flashcard_xp_uses_counted_item_reviews_not_research_events(monkeypatch)
                 {"type": "flashcard", "correct": True, "created_at": now},
                 {"type": "flashcard", "correct": False, "created_at": now},
                 {"type": "practice", "correct": True, "created_at": now},
+                {"type": "tutor", "correct": False, "created_at": now},
             ]
         if table == "item_reviews":
-            assert params["mode"] == "eq.flashcard" and params["counted"] == "eq.true"
-            return [{"outcome": "good", "created_at": now}]
+            assert params["counted"] == "eq.true"
+            return [{"outcome": "good", "created_at": now}, {"outcome": "again", "created_at": now}]
         return []
     monkeypatch.setattr(xp.db, "select", fake_select)
     out = xp.summary(institution_id="inst-1", user_id="u-1", course_id="c-1")
-    assert out["xp"] == 24
-    assert out["attempts"] == 2
-    assert out["correct"] == 2
+    assert out["xp"] == 16
+    assert out["attempts"] == 3
+    assert out["correct"] == 1
 
 
 def test_streak_counts_consecutive_days_up_to_today():

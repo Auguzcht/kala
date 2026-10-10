@@ -88,15 +88,17 @@ def test_practice_next_returns_safe_502_when_generation_is_invalid(monkeypatch) 
     }
 
 
-def test_practice_submit_writes_evidence_and_updates_the_tracer(monkeypatch) -> None:
+def test_practice_submit_uses_transactional_quiz_review_with_legacy_body(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    evidence_rows = []
+    rpc_calls = []
     monkeypatch.setattr(
         practice.item_gen, "grade",
         lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001", "correct": True, "explanation": "why"},
     )
-    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: evidence_rows.extend(rows) or rows)
-    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.65})
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
+        "mastery_estimate": 0.65, "replayed": False,
+    }])
+    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
 
     try:
         with TestClient(app) as client:
@@ -109,8 +111,12 @@ def test_practice_submit_writes_evidence_and_updates_the_tracer(monkeypatch) -> 
 
     assert response.status_code == 200
     assert response.json() == {"correct": True, "explanation": "why", "mastery": 0.65}
-    assert evidence_rows[0]["type"] == "practice"
-    assert evidence_rows[0]["correct"] is True
+    assert rpc_calls[0][0] == "review_flashcard"
+    assert rpc_calls[0][1]["p_mode"] == "quiz"
+    assert rpc_calls[0][1]["p_outcome"] == "good"
+    assert rpc_calls[0][1]["p_latency_ms"] == 1200
+    assert rpc_calls[0][1]["p_session_id"] is None
+    assert rpc_calls[0][1]["p_idempotency_key"]
 
 
 def test_practice_submit_404s_on_unknown_item(monkeypatch) -> None:
@@ -852,17 +858,20 @@ def test_get_set_404s_for_another_course(monkeypatch) -> None:
 
 def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) -> None:
     """A graded item grouped under a set must bump this student's attempt
-    counters, while grading/evidence/tracer stay exactly as they were."""
+    counters, while the atomic grading/evidence/mastery RPC remains separate."""
     app.dependency_overrides[get_current_user] = authenticated_user
     upserted = []
+    rpc_calls = []
 
     monkeypatch.setattr(
         practice.item_gen, "grade",
         lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
                           "correct": True, "explanation": "ok"},
     )
-    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
-    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.5})
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append(args) or [{
+        "mastery_estimate": 0.5, "replayed": False,
+    }])
+    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
     # Existing row: 3 attempts / 1 correct before this answer.
     monkeypatch.setattr(
         practice.db, "select",
@@ -878,7 +887,8 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
             response = client.post(
                 "/practice/00000000-0000-4000-8000-000000000001/submit",
                 json={"item_id": "item-1", "choice_id": "a", "latency_ms": 100,
-                      "set_id": "00000000-0000-4000-8000-000000000020"},
+                      "set_id": "00000000-0000-4000-8000-000000000020",
+                      "idempotency_key": "attempt-set-1"},
             )
     finally:
         app.dependency_overrides.clear()
@@ -888,6 +898,9 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
     assert upserted[0]["correct_count"] == 2
     assert upserted[0]["set_id"] == "00000000-0000-4000-8000-000000000020"
     assert "last_attempted_at" in upserted[0]
+    assert rpc_calls[0]["p_session_id"] == "00000000-0000-4000-8000-000000000020"
+    assert rpc_calls[0]["p_idempotency_key"] == "attempt-set-1"
+    assert rpc_calls[0]["p_mode"] == "quiz"
 
 
 def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> None:
@@ -898,8 +911,8 @@ def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> Non
         lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
                           "correct": False, "explanation": "no", "setId": "set-9"},
     )
-    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
-    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.2})
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: [{"mastery_estimate": 0.2, "replayed": False}])
+    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
     def no_attempt_but_valid_set(table, params):
         if table == "quiz_set_items":
             return [{"set_id": "00000000-0000-4000-8000-000000000020"}]
@@ -934,8 +947,8 @@ def test_submit_of_an_ungrouped_item_touches_no_attempt_row(monkeypatch) -> None
         lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
                           "correct": True, "explanation": "ok", "setId": None},
     )
-    monkeypatch.setattr(practice.db, "insert_evidence", lambda rows: rows)
-    monkeypatch.setattr(practice.tracer, "apply_evidence", lambda **kwargs: {"estimate": 0.5})
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: [{"mastery_estimate": 0.5, "replayed": False}])
+    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
     monkeypatch.setattr(
         practice.db, "upsert",
         lambda *a, **k: touched.append(a) or [],

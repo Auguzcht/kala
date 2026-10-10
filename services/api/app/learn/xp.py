@@ -66,16 +66,16 @@ def summary(*, institution_id: str, user_id: str, course_id: str) -> dict:
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
         "select": "type,correct,created_at",
     })
-    flashcard_reviews = db.select("item_reviews", {
+    counted_reviews = db.select("item_reviews", {
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
-        "mode": "eq.flashcard", "counted": "eq.true",
+        "counted": "eq.true",
         "select": "outcome,created_at",
     })
-    other_events = [e for e in events if e.get("type") != "flashcard"]
-    attempts = len(other_events) + len(flashcard_reviews)
+    other_events = [e for e in events if e.get("type") not in {"flashcard", "practice"}]
+    attempts = len(other_events) + len(counted_reviews)
     correct = (
         sum(1 for e in other_events if e.get("correct") is True)
-        + sum(1 for r in flashcard_reviews if r.get("outcome") == "good")
+        + sum(1 for r in counted_reviews if r.get("outcome") == "good")
     )
     xp = correct * _XP_CORRECT + attempts * _XP_ATTEMPT
     streak = _streak_days([e["created_at"] for e in events if e.get("created_at")])
