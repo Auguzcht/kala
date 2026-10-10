@@ -15,9 +15,11 @@ export function useDiagnostic(courseId: string) {
     // worker is resolving queue rows; once ready/failed, the fixed item bank
     // can go back to a long cache window.
     staleTime: (query) =>
-      query.state.data?.status === "generating" ? 0 : 5 * 60_000,
+      query.state.data?.status === "generating" ||
+      (query.state.data?.pendingSkillIds.length ?? 0) > 0 ? 0 : 5 * 60_000,
     refetchInterval: (query) =>
-      query.state.data?.status === "generating" ? 5_000 : false,
+      query.state.data?.status === "generating" ||
+      (query.state.data?.pendingSkillIds.length ?? 0) > 0 ? 10_000 : false,
   });
 }
 

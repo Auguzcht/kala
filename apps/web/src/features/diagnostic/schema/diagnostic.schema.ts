@@ -11,7 +11,7 @@ export const questionSchema = z.object({
     "analyze",
     "evaluate",
     "create",
-  ]),
+  ]).nullable(),
   prompt: z.string(),
   choices: z.array(z.object({ id: z.string(), label: z.string() })),
 });

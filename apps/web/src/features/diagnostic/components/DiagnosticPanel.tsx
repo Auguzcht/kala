@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
 import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
+import { useBankStatus } from "@/features/bank";
 import { ComposeDock } from "@/components/study/ComposeDock";
 import { SessionBar } from "@/components/study/SessionBar";
 import { StudySurface } from "@/components/study/StudySurface";
@@ -72,6 +73,7 @@ const REVEAL_VARIANTS_REDUCED = {
 
 export function DiagnosticPanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError } = useDiagnostic(courseId);
+  const bank = useBankStatus(courseId);
   const submit = useSubmitDiagnostic(courseId);
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
@@ -88,6 +90,15 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   // Same for `submitted`: the reveal guard below reads it, so it has to be
   // defined before the empty-state early return, not after it.
   const submitted = submit.isSuccess;
+  const allFailedSkillsHaveNoMaterial = Boolean(
+    data && data.questions.length === 0 && data.failedSkillIds.length > 0 &&
+    data.failedSkillIds.every((skillId) =>
+      bank.data?.skills.find((entry) => entry.skillId === skillId)?.status === "no_material"
+    )
+  );
+  const hasNoMaterialSkills = Boolean(data?.failedSkillIds.some((skillId) =>
+    bank.data?.skills.find((entry) => entry.skillId === skillId)?.status === "no_material"
+  ));
   const masteryDeltaRows = useMemo(
     () =>
       (submit.data?.masteryDelta ?? []).map((d) => ({
@@ -114,11 +125,20 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         action={<Button variant="outline">Retry</Button>}
       />
     );
-  if (data?.status === "generating")
+  if (data?.status === "generating" && data.questions.length === 0)
     return (
       <LoadingPanel
-        label={`Building your baseline — ${data.readyCount} question${data.readyCount === 1 ? "" : "s"} ready…`}
+        label={`Preparing your baseline. ${data.readyCount} question${data.readyCount === 1 ? " is" : "s are"} ready.`}
         lines={4}
+      />
+    );
+  if (data?.status === "failed" && data.failedSkillIds.length > 0 && bank.isLoading)
+    return <LoadingPanel label="Checking course material…" lines={4} />;
+  if (allFailedSkillsHaveNoMaterial)
+    return (
+      <EmptyState
+        title="No course material yet"
+        description="These skills don’t have course material yet."
       />
     );
   if (data?.status === "failed")
@@ -215,9 +235,14 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
             <CornerBrackets />
 
             <StudyStream height="h-[55vh]">
-              {data.failedSkillIds.length > 0 ? (
+              {hasNoMaterialSkills ? (
                 <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-                  {data.readyCount} of {data.readyCount + data.failedSkillIds.length} topics are ready. A topic without course material was left out.
+                  Topics without course material are not included.
+                </p>
+              ) : null}
+              {data.pendingSkillIds.length > 0 ? (
+                <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+                  Preparing questions for {data.pendingSkillIds.length} more {data.pendingSkillIds.length === 1 ? "topic" : "topics"}. Ready questions are below.
                 </p>
               ) : null}
               {data.questions.map((q, qi) => (
