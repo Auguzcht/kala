@@ -150,8 +150,9 @@ def deck(
     """
     # An omitted mode preserves the original route contract and selection
     # size. New modes are bounded to one 20-card session batch.
-    page_size = min(20, 10 if limit is None else limit) if mode is None else min(20, 20 if limit is None else limit)
-    page_size = max(1, page_size)
+    page_size = 10 if limit is None else max(1, limit)
+    if mode is not None:
+        page_size = min(20, 20 if limit is None else max(1, limit))
     offset = max(0, offset)
     if skill_id is not None:
         # Same validation practice.py does for its own explicit skill_id —
@@ -251,12 +252,13 @@ def deck(
         items_by_id = {r["id"]: r for r in rows}
 
     cards: list[dict] = []
-    due.sort(key=lambda d: (
-        0 if srs.card_state(reps=int(d.get("reps", 0)), last_outcome=d.get("last_outcome"),
-                            lapses=int(d.get("lapses", 0)), box=int(d["box"]),
-                            ease_milli=int(d.get("ease_milli", 2500))) == "slipping" else 1,
-        d.get("due_at", ""),
-    ))
+    if mode == "review":
+        due.sort(key=lambda d: (
+            0 if srs.card_state(reps=int(d.get("reps", 0)), last_outcome=d.get("last_outcome"),
+                                lapses=int(d.get("lapses", 0)), box=int(d["box"]),
+                                ease_milli=int(d.get("ease_milli", 2500))) == "slipping" else 1,
+            d.get("due_at", ""),
+        ))
     for d in due:
         if len(cards) >= page_size:
             break

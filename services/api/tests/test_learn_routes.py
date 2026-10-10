@@ -295,6 +295,40 @@ def test_flashcards_study_all_is_capped_to_twenty_and_uses_atomic_daily_claim(mo
     assert rpc_calls[0][1]["p_daily_new_cap"] == 20
 
 
+def test_flashcards_review_mode_puts_slipping_before_most_overdue(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    skill_id = "00000000-0000-4000-8000-000000000010"
+    due = [
+        {"item_id": "older-learning", "skill_id": skill_id, "box": 1, "ease_milli": 2500,
+         "streak": 1, "reps": 2, "lapses": 0, "last_outcome": "good", "due_at": "2020-01-01T00:00:00Z"},
+        {"item_id": "slipping", "skill_id": skill_id, "box": 0, "ease_milli": 2500,
+         "streak": 0, "reps": 3, "lapses": 1, "last_outcome": "again", "due_at": "2026-01-01T00:00:00Z"},
+        {"item_id": "recent-learning", "skill_id": skill_id, "box": 1, "ease_milli": 2500,
+         "streak": 1, "reps": 1, "lapses": 0, "last_outcome": "good", "due_at": "2025-01-01T00:00:00Z"},
+    ]
+    items = [{"id": row["item_id"], "skill_id": skill_id, "prompt": row["item_id"],
+              "choices": [{"id": "a", "label": "Answer"}]} for row in due]
+    monkeypatch.setattr(flashcards, "_skill_map", lambda **kwargs: {skill_id: {"name": "Recursion"}})
+    monkeypatch.setattr(flashcards.srs, "due_cards", lambda **kwargs: due)
+    monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {"due": 3})
+    monkeypatch.setattr(flashcards, "pick_bank_items", lambda *args, **kwargs: [])
+    monkeypatch.setattr(flashcards, "record_exposure", lambda **kwargs: None)
+    monkeypatch.setattr(flashcards.db, "select", lambda table, params: (
+        [{"id": "course", "bank_serving": True}] if table == "courses" else
+        items if table == "generated_items" else
+        [{"timezone": "Asia/Manila"}] if table == "institutions" else []
+    ))
+    try:
+        with TestClient(app) as client:
+            response = client.get("/flashcards/00000000-0000-4000-8000-000000000001/deck?mode=review&limit=3")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert [card["itemId"] for card in response.json()["cards"]] == [
+        "slipping", "older-learning", "recent-learning",
+    ]
+
+
 def test_course_memory_summary_counts_membership_without_writing(monkeypatch) -> None:
     from app.routers import courses
 

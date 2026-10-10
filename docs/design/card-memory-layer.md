@@ -1,6 +1,6 @@
 # Card memory layer: adaptive review on top of the question bank
 
-Status: architecture verified; Phase 0 deployed on 2026-10-11. Phase 1 is next.
+Status: Phases 0–5 deployed or verified on 2026-10-11. XP-only Phase 5 verification is complete.
 
 Builds on: `docs/design/question-bank-design.md` (section 0 amendments win). This doc does not
 change ingestion, bank building, or skill mastery.
@@ -15,6 +15,8 @@ change ingestion, bank building, or skill mastery.
   review only” must change; `reps = 0` distinguishes shown-but-unreviewed cards.
 - Graduation excludes a card from the normal due queue, not from the bank or a future membership
   view. Existing rows remain and the stats endpoint counts them as mastered.
+- The original deck endpoint remains a session queue. A separate membership endpoint now lists all
+  live cards for a skill, and the course memory summary reports per-skill counts.
 - Existing practice submissions are repeatable and not idempotent. The current API performs
   several independent PostgREST writes, so the proposed atomic schedule/log/idempotency behavior
   needs a database RPC called through FastAPI with the service-role client.
@@ -351,12 +353,17 @@ overlaps them.
 
 ### 10.2 Session selection: existing deck endpoint
 
-`GET /flashcards/{course_id}/deck?skill_id=&mode=review|all&limit=`
+`GET /flashcards/{course_id}/deck?skill_id=&mode=review|all&limit=&offset=`
 
 | Mode | Selection |
 |---|---|
-| `review` (default) | Slipping first, then due cards most overdue first, then New up to the daily new-card cap. Capped at `limit` (recommend default 20). Shuffle within tiers after ordering due cards by overdue time. |
-| `all` | Every eligible live card in the skill, shuffled, with pagination or session chunking when the set exceeds one response. Reviews are recorded as early reviews where not due. |
+| `review` (default) | Slipping first, then due cards most overdue first, then New up to the daily new-card cap. New mode requests are capped at 20 cards per session. |
+| `all` | Every eligible live card in stable shuffled order, in 20-card chunks selected with `offset`. Reviews are recorded as early reviews where not due. |
+
+Omitting `mode` keeps the old due-first request and response contract; the old default size is 10.
+The new-card cap is enforced atomically by `claim_study_cards`: no more than 20 cards first tracked
+for one course during the institution-local day. The RPC serializes competing requests for the
+same student, course, and local date.
 
 `srs.ensure_tracked` keeps its current role for session selection (database only). The membership
 endpoint must not call it. Today it creates a row on first serve, before review
@@ -364,13 +371,14 @@ endpoint must not call it. Today it creates a row on first serve, before review
 
 ### 10.3 Due today
 
-Store timestamps in UTC. There is no institution timezone field or API timezone resolution.
-Recommendation: add `institutions.timezone` and seed the pilot to `Asia/Manila`; do not hard-code
-that zone globally. Compute the institution-local end-of-day boundary, then compare in UTC.
+Store timestamps in UTC. `institutions.timezone` stores an explicit IANA time zone and the pilot
+institution is seeded to `Asia/Manila`; do not hard-code that zone globally. Compute the
+institution-local end-of-day boundary, then compare in UTC.
 
 ### 10.4 Course summary (phase 4)
 
-`GET /courses/{course_id}/memory/summary`: per skill counts for the Skills page.
+`GET /courses/{course_id}/memory/summary`: read-only per-skill counts for New, Learning, Slipping,
+Known, and due today. Missing schedule rows count as New.
 
 ---
 
@@ -393,17 +401,19 @@ layers are never confused.
 
 ## 12. XP
 
-Today XP is derived from every `evidence_events` row in the course: 10 points per correct event
-plus 2 per attempt. `GET /gamification/{course_id}/summary` exposes it. See
+Other assessment XP is derived from non-flashcard/non-practice `evidence_events`; counted card
+reviews earn 10 points per good answer plus 2 per counted attempt. Flashcard evidence rows remain
+in `evidence_events` for research and streak history, but do not add XP. `GET
+/gamification/{course_id}/summary` exposes it. See
 [`xp.py`, lines 62–82](../../services/api/app/learn/xp.py#L62) and
 [`gamification.py`, lines 14–21](../../services/api/app/routers/gamification.py#L14).
 
 MVP rule: **only reviews that count earn XP.** Counted means first rating of a card in a
 session, on a due or new card, plus first quiz attempts. Requeued repeats and early reviews earn
-nothing. Implement by deriving flashcard XP from counted reviews in `item_reviews`, while leaving
-flashcard `evidence_events` intact for research. `xp.summary` must not count those flashcard rows
-twice; other event types can retain the existing formula. This changes XP semantics, not mastery or
-the evidence ledger.
+nothing. Derive card XP from counted reviews in `item_reviews`, while leaving flashcard
+`evidence_events` intact for research. `xp.summary` excludes flashcard and practice evidence so
+those attempts cannot be counted twice; other event types keep the existing formula. This changes
+XP semantics, not mastery or the evidence ledger. This rule is implemented and verified.
 
 Deferred, needs a product decision: a course leaderboard. Constraints if built: course-scoped,
 weekly reset, pseudonymous by default, opt-in to real names, instructor can switch it off. PDPA
@@ -431,7 +441,7 @@ applies.
 | 14 | Time zone change | Schedule stored in UTC. Due today uses institution timezone. | 10.3 |
 | 15 | All due reviews done | "All caught up" with Study all offered | Frontend |
 | 16 | Cramming before an exam | Study all, logged as early reviews | Mode `all` |
-| 17 | Wrong AI answer key | "Report this card" sends to staff, who retire the item | Phase 5, existing retire |
+| 17 | Wrong AI answer key | Reporting from Study is deferred. Staff can still retire an item through the existing review process. | Deferred |
 | 18 | Same card in different views | One schedule per student per item | PK |
 | 19 | New user, thousands of cards | No eager rows. Missing row means New. Counts by aggregate query. | Read path |
 | 20 | Retired item in history | `item_reviews` keeps it. Excluded from membership and counts. | FK no action, filters |
@@ -465,17 +475,19 @@ Each phase is local commits only. Nothing is pushed until the whole set is verif
 - Acceptance: a wrong quiz answer turns a Known card into Slipping. A right answer on a not-due
   card doesn't advance it. Skill mastery results are identical before and after.
 
-### Phase 4: session modes and summaries
+### Phase 4: session modes and summaries — deployed
 
-- Review due and Study all, caps, due today timezone.
-- Course memory summary endpoint and Skills page.
+- Review due and Study all, caps, institution-local due today.
+- Course memory summary endpoint. The frontend Skills and Study views use the separate membership read.
 - Acceptance: Review due serves Slipping, then most overdue, then New within the cap. Study all
-  serves every live card.
+  serves every live card in chunks. `make deploy` succeeded; live rollback testing of
+  `claim_study_cards` admitted exactly 20 of 21 new cards.
 
-### Phase 5: XP and reporting
+### Phase 5: XP only — verified
 
-- XP from counted reviews only.
-- "Report this card" to staff retire.
+- XP from counted `item_reviews` only; flashcard evidence remains available for research and is
+  excluded from XP so it is not counted twice.
+- "Report this card" is deferred. No reporting UI or endpoint is part of this phase.
 
 ### Deferred
 
@@ -503,16 +515,16 @@ lesson checks feeding card memory, due cards as a Test picking tier.
 ## 16. Verification checklist
 
 - **Changed — deck selection explains the symptom, but the exact 20-to-15 count is not independently reproduced.** Due tracked cards are selected first and fresh items top them up; bank mode picks untracked bank cards, while legacy generation considers only untracked skills. A successful rating reschedules a card away from “due.” The endpoint is a session queue, not membership. [`flashcards.py`, lines 56–158](../../services/api/app/routers/flashcards.py#L56); [`srs.py`, lines 209–237](../../services/api/app/learn/srs.py#L209); [`serving.py`, lines 40–67](../../services/api/app/bank/serving.py#L40).
-- **Verified — `srs_state` has no `last_outcome`; PK is (`user_id`, `item_id`).** It stores institution, user, course, item, skill, box, ease, streak, reps, lapses, module, due, last-reviewed, created. [`0008_learn_loop_v2.sql`, lines 51–83](../../packages/db/migrations/0008_learn_loop_v2.sql#L51).
-- **Changed — scheduler facts and state derivation.** Leitner base intervals are 4, 24, 72, 168, 384, and 840 hours before ease. Each review increments `reps`; every miss increments `lapses`; success promotes one box and increments streak; a miss resets box/streak. Graduation is box 5 with streak at least 3. Current successful reviews always advance, even early; the proposed early-success hold is a deliberate behavior change. Derive current interval from box/ease, not due minus last-reviewed after early review. [`srs.py`, lines 44–128](../../services/api/app/learn/srs.py#L44); [`srs.py`, lines 94–120](../../services/api/app/learn/srs.py#L94).
+- **Changed and implemented — `srs_state` has `last_outcome`; PK remains (`user_id`, `item_id`).** Migration 0026 backfilled it exactly from `reps`/`streak`. [`0026_card_memory.sql`](../../packages/db/migrations/0026_card_memory.sql).
+- **Changed and implemented — scheduler facts and state derivation.** Leitner base intervals are 4, 24, 72, 168, 384, and 840 hours before ease. Reviews increment `reps`; misses increment `lapses` and reset box/streak; graduation is box 5 with streak at least 3. Early successful reviews are recorded without advancing. Derive interval from box/ease. [`srs.py`](../../services/api/app/learn/srs.py); RPC migrations 0027–0028.
 - **Changed — graduated cards are excluded from the normal due queue only.** `due_cards` filters them; `stats` counts them as mastered. They remain in the bank and should stay visible to membership/Study all. [`srs.py`, lines 209–266](../../services/api/app/learn/srs.py#L209).
 - **Changed — `ensure_tracked` inserts on first serve, not membership listing or first review.** It is an idempotent select-then-insert and silently tolerates write failure. Keep membership reads side-effect-free; distinguish served/unreviewed rows with `reps = 0`. [`srs.py`, lines 137–166](../../services/api/app/learn/srs.py#L137); call site: [`flashcards.py`, lines 140–158](../../services/api/app/routers/flashcards.py#L140).
-- **Changed — current flashcard review contract and response.** Request: `item_id`, `remembered`, optional `latency_ms`; response: `remembered`, `graduated`, `dueInHours`, `box`, and the full XP summary. No current idempotency key or session id. [`flashcards.py`, lines 232–297](../../services/api/app/routers/flashcards.py#L232).
+- **Changed and implemented — review contract.** Legacy `remembered` and `latency_ms` remain valid; optional `outcome`, `session_id`, `idempotency_key`, and `mode` are additive. Existing response fields remain. [`flashcards.py`](../../services/api/app/routers/flashcards.py).
 - **Changed — practice resubmits are not deduplicated.** Body has `item_id`, `choice_id`, optional latency and `set_id`; each valid call writes evidence, applies mastery, increments set counters when set-scoped, and records exposure. Set membership is validated. [`practice.py`, lines 404–408 and 602–655](../../services/api/app/routers/practice.py#L404).
-- **Changed — XP source is verified.** XP reads `evidence_events`, awarding 10 per correct and 2 per event; gamification exposes `xp.summary`. Preserve the research event log and switch the flashcard XP component to counted `item_reviews`. [`xp.py`, lines 62–82](../../services/api/app/learn/xp.py#L62); [`gamification.py`, lines 14–21](../../services/api/app/routers/gamification.py#L14); [`0003_research.sql`](../../packages/db/migrations/0003_research.sql).
+- **Changed and implemented — XP source.** Counted `item_reviews` award card XP; flashcard/practice evidence is excluded from that calculation and remains append-only for research. Tests cover the no-double-count rule. [`xp.py`](../../services/api/app/learn/xp.py); [`test_xp.py`](../../services/api/tests/test_xp.py).
 - **Verified — mastery readers and write boundary.** Readers: [`twin.py`, lines 41–45](../../services/api/app/routers/twin.py#L41), [`dashboard.py`, lines 77–83](../../services/api/app/routers/dashboard.py#L77), [`items.py`, lines 477–481](../../services/api/app/learn/items.py#L477), [`readiness.py`, lines 8–16](../../services/api/app/twin/readiness.py#L8), [`summary.py`, lines 35–48](../../services/api/app/twin/summary.py#L35), [`cohort.py`, lines 140–147](../../services/api/app/twin/cohort.py#L140), and XP badges at [`xp.py`, lines 85–99](../../services/api/app/learn/xp.py#L85). Existing graded practice, diagnostic and lesson checks call `tracer.apply_evidence`; flashcard ratings do not. Card-memory changes must not change those assessment writes or add a mastery write to flashcard ratings. [`tracer.py`, lines 11–25](../../services/api/app/twin/tracer.py#L11); [`practice.py`, lines 648–665](../../services/api/app/routers/practice.py#L648); [`diagnostic.py`, lines 693–697](../../services/api/app/routers/diagnostic.py#L693); [`lessons.py`, lines 109–123](../../services/api/app/routers/lessons.py#L109); [`flashcards.py`, lines 271–283](../../services/api/app/routers/flashcards.py#L271).
 - **Verified — Study filter and no-model constraint.** Bank selection uses `origin='bank'`, `kind='practice'`, approved skill and `retired_at is null`; question-bank section 0/A2 retains legacy `kind='flashcard'` during cutover. The model-backed fallback is removed. The endpoint preserves existing due cards, never generates on click, and returns additive `bankStatus: no_material` when bank serving is off. [`serving.py`, lines 17–29](../../services/api/app/bank/serving.py#L17); [`flashcards.py`, lines 128–200](../../services/api/app/routers/flashcards.py#L128); regression coverage: [`test_learn_routes.py`](../../services/api/tests/test_learn_routes.py).
-- **Verified — next migration is `0026_card_memory.sql`.** Current latest is `0024_bank_saturation.sql`; see [`packages/db/migrations`](../../packages/db/migrations/).
-- **Changed — timezone.** Institutions currently have no timezone column, and API date logic uses UTC; the Manila setting is not implemented. Recommend an institution IANA timezone column and Manila pilot seed. [`0001_init.sql`, lines 63–73](../../packages/db/migrations/0001_init.sql#L63); [`srs.py`, lines 133–135](../../services/api/app/learn/srs.py#L133); [`xp.py`, lines 42–59](../../services/api/app/learn/xp.py#L42).
+- **Changed and implemented — migrations 0026–0029.** `last_outcome`, item reviews, review RPCs, and capped session tracking are present in [`packages/db/migrations`](../../packages/db/migrations/).
+- **Changed and implemented — timezone.** `institutions.timezone` is seeded for the pilot, and due-today/daily-new calculations use its local date. [`0026_card_memory.sql`](../../packages/db/migrations/0026_card_memory.sql); [`flashcards.py`](../../services/api/app/routers/flashcards.py); [`courses.py`](../../services/api/app/routers/courses.py).
 - **Verified — FSRS package and license.** `fsrs` is published on PyPI; upstream `py-fsrs` identifies the package and its repository license is MIT. It is not a dependency in this repository. [PyPI `fsrs`](https://pypi.org/project/fsrs/); [upstream repository](https://github.com/open-spaced-repetition/py-fsrs); [MIT license](https://github.com/open-spaced-repetition/py-fsrs/blob/main/LICENSE).
-- **Blocked — query-plan verification.** No live database/EXPLAIN was available for the proposed 80-item skill membership and 1,000-item course summary queries. Existing candidates include `srs_state_due_idx`, `srs_state_skill_idx`, `generated_items_bank_pick_idx`, and `item_exposures_user_course_skill_idx`; validate actual plans and add indexes only if the plan shows a need. [`0008_learn_loop_v2.sql`, lines 78–83](../../packages/db/migrations/0008_learn_loop_v2.sql#L78); [`0021_question_bank.sql`, lines 26–28, 79–80](../../packages/db/migrations/0021_question_bank.sql#L26).
+- **Blocked — EXPLAIN output.** Live timing and reads are available; no query-plan output was captured. Phase 1 membership timing on the largest AWS101 skill (21 cards) was 2.98s cold, then 525ms and 382ms warm. No index change was made from timing alone.

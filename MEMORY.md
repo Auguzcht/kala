@@ -88,7 +88,7 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ## Current State
 
-- Active architecture and implementation: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (card memory Phases 0–4 deployed; Phase 5 verification/documentation is next).
+- Active architecture and implementation: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (card memory Phases 0–5 completed; manual smoke checklist is in `docs/TESTING.md`).
 
 ### Card memory Phase 0 — 2026-10-11
 
@@ -196,10 +196,29 @@ on its own**, because attempted rows are excluded from the pending query.
   state totals and due-today counts using `institutions.timezone`. A live read
   returned 14 approved skills and 167 New cards for the test course; no rows
   were written. Old `remembered` review bodies remain covered by an API test.
-- API suite: **347 passed** (51 existing dependency warnings). `make deploy`
+- API suite: **348 passed** (51 existing dependency warnings). `make deploy`
   succeeded; API CodeSha256
-  `3d1217b079ac7f1b943f3cdc72d862e244f356b0906b6534f90b3374007ae436`,
+  `363729b30cd7d2a34deda44a0a77f968c2a7b88f762cd7c28727778ee99fd131`,
   worker `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
+
+### Card memory Phase 5 — 2026-10-11
+
+- XP-only verification: `xp.summary` awards card XP from `item_reviews` where
+  `counted=true`, and excludes flashcard/practice evidence rows from the same
+  calculation. Flashcard evidence remains stored for research and streak history.
+  The test covers counted `good`/`again` reviews alongside flashcard, practice,
+  and tutor evidence to prove there is no double count.
+- Live AWS101 read: one learner had 11 flashcard evidence events and zero
+  counted item reviews; the XP summary returned 1,086 XP (87 correct and 108
+  other attempts), matching the remaining evidence events. The flashcard events
+  remained in the research ledger and added no XP.
+- No new RPC or migration was needed. “Report this card” remains deferred and
+  is recorded as such in the architecture doc. Added the approximately
+  one-hour student/instructor smoke checklist at `docs/TESTING.md`.
+- The final Phase 4 compatibility build was redeployed with the same XP code;
+  API CodeSha256 is `363729b30cd7d2a34deda44a0a77f968c2a7b88f762cd7c28727778ee99fd131`
+  and worker CodeSha256 remains
+  `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
 
 ### Brief 4f proposer timeout fix — 2026-10-10
 
