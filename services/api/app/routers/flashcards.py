@@ -30,12 +30,12 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.bank.serving import bank_enabled, pick_bank_items, record_exposure
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user, require_valid_course_id
+from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_skill_id
 from app.learn import items as item_gen
 from app.learn import srs, xp
 
@@ -45,7 +45,7 @@ router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 @router.get("/{course_id}/skills/{skill_id}/cards")
 def skill_cards(
     course_id: str = Depends(require_valid_course_id),
-    skill_id: str = Path(...),
+    skill_id: str = Depends(require_valid_skill_id),
     user: CurrentUser = Depends(get_current_user),
 ):
     """Read the complete live card membership for one approved skill.
