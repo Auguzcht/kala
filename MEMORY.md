@@ -101,6 +101,41 @@ on its own**, because attempted rows are excluded from the pending query.
 - `make deploy` succeeded. API Lambda is Active/Successful at CodeSha256
   `054fae4d62ac9c3901bb92d76535b38c1657c2721df9e2e5245fcb40fb7a8f3c`;
   worker is Active/Successful at `ddc078ff10b40c6ae9f9fb213187318a44cf311a0635fd53841c32c5dab118eb`.
+
+### Approved-skill readiness correction — 2026-10-11
+
+- The live `reject_approved_skill(uuid,uuid,uuid,text)` function exactly matches
+  migration 0025's qualified `skills s` / `generated_items g` implementation.
+  A temporary approved skill plus bank item passed an RPC dry run (status changed,
+  one bank item retired) inside a transaction that was rolled back. No 0025 edit
+  or re-apply was needed.
+- Readiness API, cohort roster/stats, and worker snapshots now calculate only
+  over approved skills. Historical `mastery_state` rows remain untouched.
+  AWS101 cohort readiness: **0.480 before**, **0.465 after**, across 4 learners.
+  API tests: 22 passed; worker tests: 9 passed. Commit `b2fa3f4`.
+- Both Lambdas deployed successfully: API
+  `d6a2e49b1ac02838abb0c27dfae93727c64d4239cafb0ca68e6c9e75e9dc469b`, worker
+  `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
+
+### Card memory Phase 1 — 2026-10-11
+
+- Migration `0026_card_memory.sql` is applied. `last_outcome` backfill is exact:
+  55 `reps=0` rows are null, 21 rows with positive streak are `good`, and 5
+  reviewed rows with zero streak are `again`; zero mismatches. The pilot
+  institution is seeded to `Asia/Manila`.
+- Added side-effect-free
+  `GET /flashcards/{course_id}/skills/{skill_id}/cards`. It returns live bank
+  MCQs plus legacy flashcards, schedule-derived state/counts, and institution-local
+  due-today count. Existing review writes now keep `last_outcome` current pending
+  the Phase 2 RPC. State names derive from box/ease and outcome; no mastery writes.
+- API suite: **341 passed**. Legacy review request (`item_id`, `remembered`,
+  optional `latency_ms`) remains valid and returns HTTP 200. Commit `a2a1635`
+  plus path-validation follow-up `907e3a9`.
+- `make deploy` succeeded: API CodeSha256
+  `2764912959efaf6a6486a1ff25fd309387661ddb15ab1ffd73a909e805fb94f3`, worker
+  `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
+  Largest AWS101 skill has 21 eligible cards; live endpoint returned all 21.
+  Timing: 2.98s cold, then 525ms and 382ms warm.
   The worker image was redeployed by the shared `make deploy` target without worker source changes.
 
 ### Brief 4f proposer timeout fix — 2026-10-10
