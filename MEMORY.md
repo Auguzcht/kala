@@ -88,7 +88,7 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ## Current State
 
-- Active architecture and implementation: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (card memory Phase 0 deployed; Phase 1 is next).
+- Active architecture and implementation: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (card memory Phases 0–4 deployed; Phase 5 verification/documentation is next).
 
 ### Card memory Phase 0 — 2026-10-11
 
@@ -178,6 +178,28 @@ on its own**, because attempted rows are excluded from the pending query.
   `06231a6a68cf43f3907b43cd11f1eb356df72fe50a46799d5653b9e1860f0e24`; worker
   `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
   The worker image was redeployed by the shared `make deploy` target without worker source changes.
+
+### Card memory Phase 4 — 2026-10-11
+
+- Migration `0029_card_memory_session_modes.sql` adds service-role-only
+  `claim_study_cards`, which serializes each user/course/institution-local day
+  and atomically tracks at most 20 first-served cards per course/day. A live
+  dry run as `service_role` inside a rolled-back transaction offered 21 eligible
+  new cards and returned exactly 20; no SRS rows persisted.
+- The deck endpoint accepts optional `mode=review|all`. With no `mode`, the old
+  request and default 10-card behavior remain intact. New mode responses are
+  capped at 20 and include a session ID; Review due prioritizes Slipping, then
+  most overdue, then allowed New cards. Study all selects live cards in stable
+  shuffled order and supports chunks through `offset`. No bank serving returns
+  `no_material` without a model call.
+- Added read-only `GET /courses/{course_id}/memory/summary`, with per-skill
+  state totals and due-today counts using `institutions.timezone`. A live read
+  returned 14 approved skills and 167 New cards for the test course; no rows
+  were written. Old `remembered` review bodies remain covered by an API test.
+- API suite: **347 passed** (51 existing dependency warnings). `make deploy`
+  succeeded; API CodeSha256
+  `3d1217b079ac7f1b943f3cdc72d862e244f356b0906b6534f90b3374007ae436`,
+  worker `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
 
 ### Brief 4f proposer timeout fix — 2026-10-10
 

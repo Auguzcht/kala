@@ -27,6 +27,7 @@ inform, they do not grade, and they do not touch the schedule.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, time, timedelta, timezone
 from typing import Literal
 from uuid import UUID, uuid4
@@ -37,7 +38,12 @@ from pydantic import BaseModel, model_validator
 
 from app.bank.serving import bank_enabled, pick_bank_items, record_exposure
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_skill_id
+from app.deps import (
+    CurrentUser,
+    get_current_user,
+    require_valid_course_id,
+    require_valid_skill_id,
+)
 from app.learn import items as item_gen
 from app.learn import srs, xp
 
@@ -129,9 +135,11 @@ def _skill_map(*, institution_id: str, course_id: str,
 @router.get("/{course_id}/deck")
 def deck(
     course_id: str = Depends(require_valid_course_id),
-    limit: int = 10,
+    limit: int | None = None,
     module_ref: str | None = None,
     skill_id: str | None = None,
+    mode: Literal["review", "all"] | None = None,
+    offset: int = 0,
     user: CurrentUser = Depends(get_current_user),
 ):
     """The review queue: due scheduled cards first, topped up with fresh cards
@@ -140,6 +148,11 @@ def deck(
     deck (due cards AND fresh top-up) scopes to that one skill instead of the
     course-wide due-first mix, same "auto vs chosen" pattern as practice.
     """
+    # An omitted mode preserves the original route contract and selection
+    # size. New modes are bounded to one 20-card session batch.
+    page_size = min(20, 10 if limit is None else limit) if mode is None else min(20, 20 if limit is None else limit)
+    page_size = max(1, page_size)
+    offset = max(0, offset)
     if skill_id is not None:
         # Same validation practice.py does for its own explicit skill_id —
         # this is client input, not server-derived, so an id from another
@@ -168,10 +181,61 @@ def deck(
     })
     use_bank = bool(course_rows and bank_enabled(course_rows[0], "study"))
 
+    if mode == "all":
+        if not use_bank:
+            return {"courseId": course_id, "cards": [], "stats": srs.stats(
+                institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+                skill_id=skill_id,
+            ), "bankStatus": {"status": "no_material", "mcqReady": 0}, "mode": "all"}
+        pool = _study_pool(
+            institution_id=user.institution_id, course_id=course_id, skill_id=skill_id,
+        )
+        pool.sort(key=lambda item: hashlib.sha256(
+            f"{user.user_id}:{course_id}:{item['id']}".encode(),
+        ).hexdigest())
+        selected = pool[offset:offset + page_size]
+        if selected:
+            claimed = db.rpc("claim_study_cards", {
+                "p_institution_id": user.institution_id, "p_user_id": user.user_id,
+                "p_course_id": course_id, "p_item_ids": [item["id"] for item in selected],
+                "p_daily_new_cap": 20,
+            })
+            allowed_ids = {r["item_id"] for r in claimed}
+            selected = [item for item in selected if item["id"] in allowed_ids]
+        cards = []
+        selected_schedules = db.select("srs_state", {
+            "user_id": f"eq.{user.user_id}", "course_id": f"eq.{course_id}",
+            "item_id": f"in.({','.join(item['id'] for item in selected)})",
+            "select": "item_id,box,ease_milli,streak,reps,lapses,last_outcome,due_at",
+        }) if selected else []
+        schedule_by_id = {row["item_id"]: row for row in selected_schedules}
+        for item in selected:
+            skill = skills.get(item["skill_id"], {})
+            row = schedule_by_id.get(item["id"])
+            state = "new" if row is None else srs.card_state(
+                reps=int(row["reps"]), last_outcome=row.get("last_outcome"),
+                lapses=int(row["lapses"]), box=int(row["box"]),
+                ease_milli=int(row["ease_milli"]),
+            )
+            cards.append({"itemId": item["id"], "skillId": item["skill_id"],
+                          "skillName": skill.get("name"), "prompt": item.get("front") or item["prompt"],
+                          "state": state, "box": int(row["box"]) if row else 0,
+                          "dueAt": row.get("due_at") if row else None})
+            record_exposure(
+                institution_id=user.institution_id, user_id=user.user_id,
+                course_id=course_id, skill_id=item["skill_id"], item_id=item["id"], studied=True,
+            )
+        return _deck_response(
+            course_id=course_id, cards=cards, institution_id=user.institution_id,
+            user_id=user.user_id, skill_id=skill_id, use_bank=use_bank,
+            mode="all", offset=offset, page_size=page_size, total=len(pool),
+            session_id=str(uuid4()),
+        )
+
     # 1) Due, already-scheduled cards (most overdue first, mastered excluded).
     due = srs.due_cards(
         institution_id=user.institution_id, user_id=user.user_id,
-        course_id=course_id, limit=limit, module_ref=module_ref, skill_id=skill_id,
+        course_id=course_id, limit=page_size * 3, module_ref=module_ref, skill_id=skill_id,
     )
     due_item_ids = [d["item_id"] for d in due]
     items_by_id: dict[str, dict] = {}
@@ -187,7 +251,15 @@ def deck(
         items_by_id = {r["id"]: r for r in rows}
 
     cards: list[dict] = []
+    due.sort(key=lambda d: (
+        0 if srs.card_state(reps=int(d.get("reps", 0)), last_outcome=d.get("last_outcome"),
+                            lapses=int(d.get("lapses", 0)), box=int(d["box"]),
+                            ease_milli=int(d.get("ease_milli", 2500))) == "slipping" else 1,
+        d.get("due_at", ""),
+    ))
     for d in due:
+        if len(cards) >= page_size:
+            break
         it = items_by_id.get(d["item_id"])
         if not it or not it.get("choices"):
             continue
@@ -204,12 +276,23 @@ def deck(
     # 2) Top up from the bank when enabled. Courses without bank serving may
     # continue to serve already-scheduled due cards above, but never generate
     # new cards from a student request.
-    if use_bank and len(cards) < limit:
+    daily_remaining = _new_cards_remaining(
+        institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+    )
+    if use_bank and len(cards) < page_size and daily_remaining > 0:
         bank_items = pick_bank_items(
-            user.user_id, course_id, skill_id, limit - len(cards), "study",
+            user.user_id, course_id, skill_id, min(page_size - len(cards), daily_remaining), "study",
             institution_id=user.institution_id,
         )
+        claimed = db.rpc("claim_study_cards", {
+            "p_institution_id": user.institution_id, "p_user_id": user.user_id,
+            "p_course_id": course_id, "p_item_ids": [item["id"] for item in bank_items],
+            "p_daily_new_cap": 20,
+        }) if bank_items else []
+        claimed_ids = {r["item_id"] for r in claimed}
         for item in bank_items:
+            if item["id"] not in claimed_ids:
+                continue
             skill = skills.get(item["skill_id"], {})
             srs.ensure_tracked(
                 institution_id=user.institution_id, user_id=user.user_id,
@@ -271,7 +354,62 @@ def deck(
             }
     elif not use_bank:
         result["bankStatus"] = {"status": "no_material", "mcqReady": 0}
+    if mode is not None:
+        result["mode"] = "review"
+        result["sessionId"] = str(uuid4())
+        result["newCardsRemainingToday"] = max(0, daily_remaining - sum(1 for c in cards if c["state"] == "new"))
     return result
+
+
+def _study_pool(*, institution_id: str, course_id: str, skill_id: str | None) -> list[dict]:
+    params = {
+        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+        "retired_at": "is.null", "or": "(and(kind.eq.practice,origin.eq.bank),kind.eq.flashcard)",
+        "skills.status": "eq.approved",
+        "select": "id,skill_id,kind,prompt,front,choices,skills!inner(status)",
+    }
+    if skill_id:
+        params["skill_id"] = f"eq.{skill_id}"
+    return db.select("generated_items", params)
+
+
+def _new_cards_remaining(*, institution_id: str, user_id: str, course_id: str) -> int:
+    institution = db.select("institutions", {
+        "id": f"eq.{institution_id}", "select": "timezone", "limit": "1",
+    })
+    zone = ZoneInfo(institution[0].get("timezone") or "UTC") if institution else ZoneInfo("UTC")
+    now = datetime.now(timezone.utc)
+    local_start = datetime.combine(now.astimezone(zone).date(), time.min, zone).astimezone(timezone.utc)
+    rows = db.select("srs_state", {
+        "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
+        "created_at": f"gte.{local_start.isoformat()}", "select": "item_id", "limit": "1000",
+    })
+    return max(0, 20 - len(rows))
+
+
+def _deck_response(*, course_id: str, cards: list[dict], institution_id: str, user_id: str,
+                   skill_id: str | None, use_bank: bool, mode: str, offset: int,
+                   page_size: int, total: int, session_id: str) -> dict:
+    ids = [c["itemId"] for c in cards]
+    backs = db.select("generated_items", {
+        "id": f"in.({','.join(ids)})", "institution_id": f"eq.{institution_id}",
+        "course_id": f"eq.{course_id}", "retired_at": "is.null",
+        "select": "id,kind,back,correct_choice_id,choices,explanation",
+    }) if ids else []
+    back_by_id = {r["id"]: {
+        "label": r.get("back") if r["kind"] == "flashcard" else item_gen.correct_label(r),
+        "explanation": r.get("explanation") or "",
+    } for r in backs}
+    for card in cards:
+        card["back"] = back_by_id.get(card["itemId"], {"label": None, "explanation": ""})
+    return {
+        "courseId": course_id, "cards": cards,
+        "stats": srs.stats(institution_id=institution_id, user_id=user_id,
+                            course_id=course_id, skill_id=skill_id),
+        "mode": mode, "sessionId": session_id, "offset": offset, "limit": page_size, "totalCards": total,
+        "hasMore": offset + len(cards) < total,
+        "bankStatus": {"status": "ready" if use_bank else "no_material", "mcqReady": total},
+    }
 
 
 class ReviewBody(BaseModel):

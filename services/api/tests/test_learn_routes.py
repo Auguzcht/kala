@@ -256,6 +256,85 @@ def test_flashcards_deck_bank_status_omits_usable(monkeypatch) -> None:
     assert response.json()["bankStatus"] == {"status": "ready", "mcqReady": 8}
 
 
+def test_flashcards_study_all_is_capped_to_twenty_and_uses_atomic_daily_claim(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    skill_id = "00000000-0000-4000-8000-000000000010"
+    items = [{"id": f"item-{n}", "skill_id": skill_id, "kind": "practice", "prompt": f"P{n}",
+              "choices": [], "origin": "bank"} for n in range(25)]
+    rpc_calls = []
+    monkeypatch.setattr(flashcards, "_skill_map", lambda **kwargs: {skill_id: {"name": "Recursion"}})
+    monkeypatch.setattr(flashcards, "_study_pool", lambda **kwargs: items)
+    monkeypatch.setattr(flashcards.db, "select", lambda table, params: (
+        [{"id": "course", "bank_serving": True}] if table == "courses" else
+        [{"item_id": item_id, "box": 0, "ease_milli": 2500, "streak": 0, "reps": 0,
+          "lapses": 0, "last_outcome": None, "due_at": datetime.now(timezone.utc).isoformat()}
+         for item_id in params.get("item_id", "").removeprefix("in.(").removesuffix(")").split(",") if item_id]
+        if table == "srs_state" and params.get("item_id", "").startswith("in.") else
+        [{"id": item["id"], "kind": "practice", "correct_choice_id": None,
+          "choices": [], "explanation": ""} for item in items]
+        if table == "generated_items" else []
+    ))
+    monkeypatch.setattr(flashcards.db, "rpc", lambda name, args: rpc_calls.append((name, args)) or
+                        [{"item_id": item["id"], "is_new": True} for item in items[:20]])
+    monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {"due": 0})
+    monkeypatch.setattr(flashcards, "record_exposure", lambda **kwargs: None)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/flashcards/00000000-0000-4000-8000-000000000001/deck?mode=all&limit=40")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["cards"]) == 20
+    assert body["mode"] == "all"
+    assert body["limit"] == 20
+    assert body["hasMore"] is True
+    assert body["sessionId"]
+    assert rpc_calls[0][0] == "claim_study_cards"
+    assert len(rpc_calls[0][1]["p_item_ids"]) == 20
+    assert rpc_calls[0][1]["p_daily_new_cap"] == 20
+
+
+def test_course_memory_summary_counts_membership_without_writing(monkeypatch) -> None:
+    from app.routers import courses
+
+    app.dependency_overrides[get_current_user] = authenticated_user
+    skill = "00000000-0000-4000-8000-000000000010"
+    items = [
+        {"id": "new", "skill_id": skill},
+        {"id": "slipping", "skill_id": skill},
+        {"id": "learning", "skill_id": skill},
+        {"id": "known", "skill_id": skill},
+    ]
+    schedules = [
+        {"item_id": "slipping", "box": 0, "ease_milli": 2500, "streak": 0, "reps": 2,
+         "lapses": 1, "last_outcome": "again", "due_at": "2020-01-01T00:00:00Z"},
+        {"item_id": "learning", "box": 0, "ease_milli": 2500, "streak": 0, "reps": 1,
+         "lapses": 1, "last_outcome": "again", "due_at": "2020-01-01T00:00:00Z"},
+        {"item_id": "known", "box": 5, "ease_milli": 2500, "streak": 3, "reps": 3,
+         "lapses": 0, "last_outcome": "good", "due_at": "2099-01-01T00:00:00Z"},
+    ]
+    monkeypatch.setattr(courses.db, "select", lambda table, params: (
+        [{"id": skill, "name": "Recursion"}] if table == "skills" else
+        items if table == "generated_items" else
+        schedules if table == "srs_state" else
+        [{"timezone": "Asia/Manila"}] if table == "institutions" else []
+    ))
+    def no_writes(*args, **kwargs):
+        raise AssertionError("memory summary must be read-only")
+    monkeypatch.setattr(courses.db, "rpc", no_writes)
+    monkeypatch.setattr(courses.db, "insert", no_writes)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/courses/00000000-0000-4000-8000-000000000001/memory/summary")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["totals"] == {
+        "new": 1, "learning": 1, "slipping": 1, "known": 1, "dueToday": 2,
+    }
+
+
 def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch) -> None:
     """Study mode is not assessment. Review writes a flashcard evidence_event
     (correct=remembered, so the research export still sees study behavior) and

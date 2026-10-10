@@ -264,7 +264,7 @@ def due_cards(*, institution_id: str, user_id: str, course_id: str,
         "user_id": f"eq.{user_id}",
         "course_id": f"eq.{course_id}",
         "due_at": f"lte.{_now().isoformat()}",
-        "select": "item_id,skill_id,box,streak,due_at",
+        "select": "item_id,skill_id,box,ease_milli,streak,reps,lapses,last_outcome,due_at",
         "order": "due_at.asc",
         "limit": str(max(1, limit) * 3),  # over-fetch, then drop mastered below
     }
