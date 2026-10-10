@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import { parseApiResponse } from "@/lib/api/parse-response";
 import {
   practiceNextSchema,
   practiceBridgeSetSchema,
@@ -17,7 +18,7 @@ import {
 export async function fetchNextPracticeItem(courseId: string, skillId?: string): Promise<PracticeNext> {
   const query = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
   const data = await api<unknown>(`/practice/${courseId}/next${query}`);
-  return practiceNextSchema.parse(data);
+  return parseApiResponse(practiceNextSchema, data, `/practice/${courseId}/next`);
 }
 
 // Enqueue a batch of N items for one skill, grouped under a quiz_sets row.
@@ -35,7 +36,7 @@ export async function fetchPracticeSet(
     { method: "POST" },
     15_000
   );
-  return practiceSetSchema.parse(data);
+  return parseApiResponse(practiceSetSchema, data, `/practice/${courseId}/set`);
 }
 
 // The study -> test bridge: group ALREADY-GENERATED items (the ones the
@@ -52,7 +53,7 @@ export async function createPracticeSetFromItems(
     { method: "POST", body: JSON.stringify({ item_ids: itemIds }) },
     15_000
   );
-  return practiceBridgeSetSchema.parse(data);
+  return parseApiResponse(practiceBridgeSetSchema, data, `/practice/${courseId}/set/from-items`);
 }
 
 // Load a saved set by id, so test mode can run it instead of generating.
@@ -61,7 +62,7 @@ export async function fetchPracticeSetById(
   setId: string
 ): Promise<PracticeSavedSet> {
   const data = await api<unknown>(`/practice/${courseId}/sets/${setId}`);
-  return practiceSavedSetSchema.parse(data);
+  return parseApiResponse(practiceSavedSetSchema, data, `/practice/${courseId}/sets/${setId}`);
 }
 
 // The retake list for a skill (or the whole course when skillId is omitted).
@@ -71,7 +72,7 @@ export async function fetchPracticeSets(
 ): Promise<PracticeSetList> {
   const query = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
   const data = await api<unknown>(`/practice/${courseId}/sets${query}`);
-  return practiceSetListSchema.parse(data);
+  return parseApiResponse(practiceSetListSchema, data, `/practice/${courseId}/sets`);
 }
 
 export async function submitPracticeAttempt(
@@ -87,5 +88,5 @@ export async function submitPracticeAttempt(
       ...(args.setId ? { set_id: args.setId } : {}),
     }),
   });
-  return practiceSubmitResultSchema.parse(data);
+  return parseApiResponse(practiceSubmitResultSchema, data, `/practice/${courseId}/submit`);
 }

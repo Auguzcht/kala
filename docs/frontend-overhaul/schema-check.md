@@ -1,6 +1,6 @@
 # Practice, flashcard, and bank status schema check
 
-Compared the current API router return values against the frontend Zod schemas. `Strict` means the Zod object now rejects unexpected response fields instead of stripping them. Status values for `skill_bank_state` come from migration 0021: `waiting_content`, `building`, `ready`, `no_material`, and `error`.
+Compared the current API router return values against the frontend Zod schemas. `Strict` means the Zod object now rejects unexpected response fields instead of stripping them. Parse failures throw in all environments and log the Zod error with the endpoint in development. Status values for `skill_bank_state` come from migration 0021: `waiting_content`, `building`, `ready`, `no_material`, and `error`.
 
 ## Practice router
 

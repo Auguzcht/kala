@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import { parseApiResponse } from "@/lib/api/parse-response";
 import {
   flashcardDeckSchema,
   flashcardReviewResultSchema,
@@ -14,7 +15,7 @@ export async function fetchFlashcardDeck(
   const params = new URLSearchParams({ limit: String(limit) });
   if (skillId) params.set("skill_id", skillId);
   const data = await api<unknown>(`/flashcards/${courseId}/deck?${params.toString()}`);
-  return flashcardDeckSchema.parse(data);
+  return parseApiResponse(flashcardDeckSchema, data, `/flashcards/${courseId}/deck`);
 }
 
 // Self-mark one studied card. `remembered` is the student's own call; the
@@ -32,5 +33,5 @@ export async function reviewFlashcard(
       latency_ms: args.latencyMs,
     }),
   });
-  return flashcardReviewResultSchema.parse(data);
+  return parseApiResponse(flashcardReviewResultSchema, data, `/flashcards/${courseId}/review`);
 }
