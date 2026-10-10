@@ -135,7 +135,7 @@ on its own**, because attempted rows are excluded from the pending query.
 - Bank-status, flashcard response, and proposal-status contract items shipped.
   Active architecture draft remains
   [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (Session C is verifying it).
-- Full verification: API **334 passed**, worker **102 passed**. `make deploy`
+- Full verification: API **335 passed**, worker **102 passed**. `make deploy`
   completed; API CodeSha256/ECR digest `872bfc24dff269b762b1ec4a90833be9407674a94ce9b5331bf32c3a855531c2`,
   worker `ddc078ff10b40c6ae9f9fb213187318a44cf311a0635fd53841c32c5dab118eb`.
 
