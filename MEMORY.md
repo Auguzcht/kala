@@ -137,7 +137,7 @@ on its own**, because attempted rows are excluded from the pending query.
   [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (Session C is verifying it).
 - Full verification: API **334 passed**, worker **102 passed**. `make deploy`
   completed; API CodeSha256/ECR digest `872bfc24dff269b762b1ec4a90833be9407674a94ce9b5331bf32c3a855531c2`,
-  worker `16aed8a7b0c0927880961c34c7547a3763de51e622f2fd957cbccab16a47dd3c`.
+  worker `ddc078ff10b40c6ae9f9fb213187318a44cf311a0635fd53841c32c5dab118eb`.
 
 ### Session wrap-up — 2026-10-06
 
