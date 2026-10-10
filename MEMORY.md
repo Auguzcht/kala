@@ -157,6 +157,26 @@ on its own**, because attempted rows are excluded from the pending query.
 - `make deploy` succeeded. API CodeSha256
   `58f07b2a87fc256b74defcfd2198013705a44f94287050b5118d24bd49571ffe`; worker
   `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
+
+### Card memory Phase 3 — 2026-10-11
+
+- Migration `0028_practice_item_reviews.sql` extends the service-role review RPC
+  for quiz submissions. In one transaction it writes the card schedule,
+  `item_reviews`, practice evidence, and the existing mastery update. The
+  mastery transition retains the tracer's default prior (0.5), 0.15 update,
+  attempts increment, and last-seen behavior. Optional `idempotency_key` and
+  `session_id` are accepted; old submit bodies remain valid. Idempotent replays
+  skip repeated mastery/evidence/set-attempt/exposure writes.
+- XP now reads counted review rows for both flashcard and quiz reviews; practice
+  and flashcard evidence remain append-only for research/streak history and are
+  excluded from duplicate XP.
+- A live rolled-back SQL test applied the same `good, again, good` inputs to the
+  existing tracer formula and RPC; after each input both the estimate and
+  `mastery_state.attempts` matched. The Phase 2 RPC dry run still passes.
+  API suite: **345 passed**. Commit `bd42e72`.
+- `make deploy` succeeded. API CodeSha256
+  `06231a6a68cf43f3907b43cd11f1eb356df72fe50a46799d5653b9e1860f0e24`; worker
+  `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
   The worker image was redeployed by the shared `make deploy` target without worker source changes.
 
 ### Brief 4f proposer timeout fix — 2026-10-10
