@@ -212,8 +212,10 @@ deferring the swap. Migration seeds FSRS state from current boxes.
 
 ## 8. Data model
 
-All additions in one migration. The latest migration is `0024_bank_saturation.sql`, so the next
-number is `0026_card_memory.sql` ([migration list](../../packages/db/migrations/)).
+All additions in one migration. `0024_bank_saturation.sql` is the latest committed migration,
+but the parallel shared-tree change already occupies `0025` with
+`0025_reject_approved_skill_retire_bank_items.sql`; use `0026_card_memory.sql` for this design.
+([migration directory](../../packages/db/migrations/)).
 
 ### 8.1 `srs_state` (extend)
 
