@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import courses, twin
+from app.twin import readiness
 
 
 def authenticated_user() -> CurrentUser:
@@ -91,6 +92,28 @@ def test_twin_empty_when_course_has_no_skills(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"courseId": "00000000-0000-4000-8000-000000000001", "readiness": None, "skills": [], "evidence": []}
+
+
+def test_readiness_uses_approved_skills_only(monkeypatch) -> None:
+    approved = "00000000-0000-4000-8000-000000000010"
+    calls = []
+    def fake_select(table, params):
+        calls.append((table, params))
+        if table == "skills":
+            return [{"id": approved}]
+        assert params["skill_id"] == f"in.({approved})"
+        return [{"estimate": 0.6}]
+    monkeypatch.setattr(readiness.db, "select", fake_select)
+    assert readiness.compute(user_id="student", course_id="course") == 0.6
+    assert calls[0][1]["status"] == "eq.approved"
+    assert calls[1][1]["skill_id"] == f"in.({approved})"
+
+
+def test_readiness_without_approved_skills_is_zero_without_mastery_query(monkeypatch) -> None:
+    tables = []
+    monkeypatch.setattr(readiness.db, "select", lambda table, params: tables.append(table) or [])
+    assert readiness.compute(user_id="student", course_id="course") == 0.0
+    assert tables == ["skills"]
 
 
 def test_next_up_picks_weakest_skill_with_reason(monkeypatch) -> None:

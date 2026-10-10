@@ -41,12 +41,22 @@ def run(*, institution_id: str | None = None) -> dict:
         return {"snapshots": 0}
 
     course_ids = list({e["course_id"] for e in enrollments})
+    skills = db.select("skills", {
+        "course_id": f"in.({','.join(course_ids)})",
+        "status": "eq.approved",
+        "select": "id,course_id",
+    })
+    approved_by_course: dict[str, set[str]] = {}
+    for skill in skills:
+        approved_by_course.setdefault(skill["course_id"], set()).add(skill["id"])
     mastery = db.select("mastery_state", {
         "course_id": f"in.({','.join(course_ids)})",
-        "select": "user_id,course_id,estimate",
+        "select": "user_id,course_id,skill_id,estimate",
     })
     by_pair: dict[tuple[str, str], list[float]] = {}
     for m in mastery:
+        if m["skill_id"] not in approved_by_course.get(m["course_id"], set()):
+            continue
         by_pair.setdefault((m["user_id"], m["course_id"]), []).append(float(m["estimate"]))
 
     rows = []

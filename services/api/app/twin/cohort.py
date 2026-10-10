@@ -137,12 +137,14 @@ def load_identities(*, institution_id: str, user_ids: list[str]) -> dict[str, di
     return out
 
 
-def _mastery(*, institution_id: str, course_id: str, user_ids: list[str]) -> list[dict]:
-    if not user_ids:
+def _mastery(*, institution_id: str, course_id: str, user_ids: list[str],
+             skill_ids: list[str]) -> list[dict]:
+    if not user_ids or not skill_ids:
         return []
     return db.select("mastery_state", {
         "course_id": f"eq.{course_id}", "institution_id": f"eq.{institution_id}",
         "user_id": f"in.({','.join(user_ids)})",
+        "skill_id": f"in.({','.join(skill_ids)})",
         "select": "user_id,skill_id,estimate,attempts,last_seen",
     })
 
@@ -195,7 +197,8 @@ def roster(*, institution_id: str, course_id: str) -> dict:
     identities = load_identities(institution_id=institution_id, user_ids=uids)
     skills = _approved_skills(institution_id=institution_id, course_id=course_id)
     skill_names = {s["id"]: s["name"] for s in skills}
-    mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=uids)
+    mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=uids,
+                       skill_ids=list(skill_names))
     evidence = _evidence(institution_id=institution_id, course_id=course_id, user_ids=uids)
 
     by_user_mastery: dict[str, list[dict]] = {}
@@ -288,7 +291,8 @@ def _daily_series(events: list[dict], *, days: int) -> list[dict]:
 def stats(*, institution_id: str, course_id: str) -> dict:
     uids = student_ids(institution_id=institution_id, course_id=course_id)
     skills = _approved_skills(institution_id=institution_id, course_id=course_id)
-    mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=uids)
+    mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=uids,
+                       skill_ids=[s["id"] for s in skills])
     evidence = _evidence(institution_id=institution_id, course_id=course_id, user_ids=uids)
 
     # --- per-learner rollups (readiness distribution, activity) ---
@@ -444,7 +448,9 @@ def learner_record(*, institution_id: str, course_id: str, user_id: str) -> dict
         return None
 
     skills = _approved_skills(institution_id=institution_id, course_id=course_id)
-    mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=[user_id])
+    approved_ids = [s["id"] for s in skills]
+    mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=[user_id],
+                       skill_ids=approved_ids)
     est = {m["skill_id"]: m for m in mastery}
 
     events = db.select("evidence_events", {
@@ -473,7 +479,8 @@ def learner_record(*, institution_id: str, course_id: str, user_id: str) -> dict
     # about one learner is where they sit relative to everyone else, and it
     # costs one extra query.
     peers = student_ids(institution_id=institution_id, course_id=course_id)
-    peer_mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=peers)
+    peer_mastery = _mastery(institution_id=institution_id, course_id=course_id, user_ids=peers,
+                            skill_ids=approved_ids)
     peer_by_user: dict[str, list[float]] = {}
     for m in peer_mastery:
         peer_by_user.setdefault(m["user_id"], []).append(float(m["estimate"]))
