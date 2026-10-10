@@ -5,10 +5,16 @@ import {
   reviewFlashcard,
 } from "@/features/flashcards/api/flashcards.api";
 
-export function useFlashcardDeck(courseId: string, limit = 10, skillId?: string) {
+export function useFlashcardDeck(
+  courseId: string,
+  limit = 10,
+  skillId?: string,
+  mode?: "review" | "all",
+  offset = 0,
+) {
   return useQuery({
-    queryKey: ["flashcards", courseId, limit, skillId ?? "auto"],
-    queryFn: () => fetchFlashcardDeck(courseId, limit, skillId),
+    queryKey: ["flashcards", courseId, limit, skillId ?? "auto", mode ?? "legacy", offset],
+    queryFn: () => fetchFlashcardDeck(courseId, limit, skillId, mode, offset),
   });
 }
 
@@ -16,6 +22,7 @@ export function useFlashcardMembership(courseId: string, skillId: string) {
   return useQuery({
     queryKey: ["flashcards", courseId, "membership", skillId],
     queryFn: () => fetchFlashcardMembership(courseId, skillId),
+    enabled: Boolean(courseId && skillId),
   });
 }
 

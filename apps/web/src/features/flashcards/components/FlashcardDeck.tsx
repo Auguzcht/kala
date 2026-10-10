@@ -19,7 +19,11 @@ import { RotateCCWIcon } from "@/components/ui/rotate-ccw";
 import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
-import { useFlashcardDeck, useReviewFlashcard } from "@/features/flashcards/hooks/use-flashcards";
+import {
+  useFlashcardDeck,
+  useFlashcardMembership,
+  useReviewFlashcard,
+} from "@/features/flashcards/hooks/use-flashcards";
 import { useCreateSetFromItems } from "@/features/practice";
 import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
@@ -66,7 +70,8 @@ const ReviewSpinnerIcon = forwardRef<ReviewIconHandle, { size?: number }>(functi
   return <Spinner aria-label="Saving review" style={{ width: size, height: size }} />;
 });
 
-function StateBadge({ state }: { state: "due" | "new" }) {
+function StateBadge({ state }: { state: FlashcardCard["state"] }) {
+  const label = state === "due" ? "Due" : state[0].toUpperCase() + state.slice(1);
   return (
     <span
       className={cn(
@@ -80,7 +85,7 @@ function StateBadge({ state }: { state: "due" | "new" }) {
           state === "due" ? "bg-brand-orange" : "bg-muted-foreground/60"
         )}
       />
-      {state === "due" ? "Due" : "New"}
+      {label}
     </span>
   );
 }
@@ -88,17 +93,21 @@ function StateBadge({ state }: { state: "due" | "new" }) {
 export function FlashcardDeck({
   courseId,
   skillId,
+  mode = "review",
   onExit,
 }: {
   courseId: string;
   skillId?: string;
+  mode?: "review" | "all";
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
   const replySessionId = useId();
   const [reviewSessionId] = useState(() => crypto.randomUUID());
+  const [offset, setOffset] = useState(0);
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
+  const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 20, skillId, mode, offset);
+  const membership = useFlashcardMembership(courseId, skillId ?? "");
   const bank = useBankStatus(courseId);
   const review = useReviewFlashcard(courseId);
   const testMe = useCreateSetFromItems(courseId);
@@ -191,6 +200,9 @@ export function FlashcardDeck({
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
+  const remainingToday = data?.newRemainingToday ?? data?.newCardsRemainingToday;
+  const dailyNewCapReached = mode === "review" && remainingToday === 0 &&
+    (membership.data?.counts.new ?? 0) > 0;
   if (!data || data.cards.length === 0) {
     const visibleSkills = bank.data?.skills.filter((entry) => !skillId || entry.skillId === skillId) ?? [];
     const selectedSkill = skillId
@@ -231,6 +243,17 @@ export function FlashcardDeck({
           title="We could not check card availability"
           description="Check your connection and reload the deck."
           action={<Button variant="outline" onClick={() => refetch()}>Reload deck</Button>}
+        />
+      );
+    }
+    if (mode === "review" && remainingToday === 0 && skillId && membership.isLoading) {
+      return <LoadingPanel label="Checking your review cards…" lines={3} />;
+    }
+    if (dailyNewCapReached) {
+      return (
+        <EmptyState
+          title="Daily new card limit reached"
+          description="You've started 20 new cards today. Come back tomorrow, or use Study all."
         />
       );
     }
@@ -309,6 +332,16 @@ export function FlashcardDeck({
               <Button variant="outline" size="sm" onClick={reloadDeck}>
                 Reload deck
               </Button>
+              {mode === "all" && data.hasMore ? (
+                <Button
+                  variant="orange"
+                  size="sm"
+                  className="ml-2"
+                  onClick={continueNextGroup}
+                >
+                  Continue with next 20
+                </Button>
+              ) : null}
             </div>
           </div>
         </StudyStream>
@@ -338,7 +371,7 @@ export function FlashcardDeck({
         itemId: card.itemId,
         remembered,
         latencyMs: Date.now() - startedAtRef.current,
-        sessionId: reviewSessionId,
+        sessionId: data?.sessionId ?? reviewSessionId,
         idempotencyKey: reviewIdempotencyRef.current.key,
       },
       {
@@ -380,6 +413,17 @@ export function FlashcardDeck({
     setPendingFollowUp(null);
     setReviewCounts({ gotIt: 0, reviewAgain: 0 });
     refetch();
+  }
+
+  function continueNextGroup() {
+    setDeckDone(false);
+    setIndex(0);
+    setPhase("front");
+    setHintText(null);
+    setExplainText(null);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
+    setOffset((current) => current + 20);
   }
 
   // The study -> test bridge. Groups the exact cards just studied into a quiz
@@ -490,6 +534,11 @@ export function FlashcardDeck({
       }
     >
       <StudyStream>
+        {dailyNewCapReached ? (
+          <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+            You&apos;ve started 20 new cards today. Come back tomorrow, or use Study all.
+          </p>
+        ) : null}
         {/* Deck state is session context, not a second panel header. */}
         <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-xs text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2.5">

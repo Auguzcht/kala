@@ -21,7 +21,7 @@ export const flashcardCardSchema = z.object({
   skillName: z.string().nullable(),
   prompt: z.string(),
   back: flashcardBackSchema,
-  state: z.enum(["due", "new"]),
+  state: z.enum(["due", "new", "learning", "slipping", "known"]),
   box: z.number(),
 });
 
@@ -77,6 +77,15 @@ export const flashcardDeckSchema = z.object({
   cards: z.array(flashcardCardSchema),
   stats: srsStatsSchema,
   bankStatus: flashcardBankStatusSchema.optional(),
+  mode: z.enum(["review", "all"]).optional(),
+  sessionId: z.string().optional(),
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+  totalCards: z.number().int().nonnegative().optional(),
+  hasMore: z.boolean().optional(),
+  newRemainingToday: z.number().int().nonnegative().optional(),
+  // Compatibility with the Phase 4 response name before it was standardized.
+  newCardsRemainingToday: z.number().int().nonnegative().optional(),
 });
 
 // POST /flashcards/{course_id}/review — self-marking one studied card.

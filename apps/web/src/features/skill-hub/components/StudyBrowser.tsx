@@ -30,7 +30,7 @@ export function StudyBrowser({
   courseId: string;
   skillId: string;
   /** Enter the sequential flip session. */
-  onStart: () => void;
+  onStart: (mode: "review" | "all") => void;
 }) {
   const { data, isLoading, isError, refetch } = useFlashcardMembership(courseId, skillId);
   const bank = useBankStatus(courseId);
@@ -108,7 +108,7 @@ export function StudyBrowser({
 
   return (
     <div className="space-y-4">
-      {/* The one action this view exists to lead to. */}
+      {/* Review the due queue or open the full skill deck. */}
       <div className="flex flex-wrap items-center justify-between gap-3 border bg-card px-5 py-4">
         <div className="min-w-0 space-y-2">
           <p className="text-sm font-semibold text-foreground">
@@ -130,9 +130,19 @@ export function StudyBrowser({
             Cards are added to your review queue as you study.
           </p>
         </div>
-        <Button variant="orange" onClick={onStart} className="shrink-0">
-          Study deck <ArrowRightIcon size={16} />
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="orange"
+            onClick={() => onStart("review")}
+            disabled={data?.counts.dueToday === 0}
+          >
+            {data?.counts.dueToday === 0 ? "All caught up" : `Review due (${data?.counts.dueToday ?? 0})`}
+            <ArrowRightIcon size={16} />
+          </Button>
+          <Button variant="outline" onClick={() => onStart("all")}>
+            Study all
+          </Button>
+        </div>
       </div>
 
       {bank.data?.bankServing && bankSkill?.status === "building" && bankSkill.usable ? (

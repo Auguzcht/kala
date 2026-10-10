@@ -18,6 +18,7 @@ const skillSearchSchema = z.object({
   setId: z.string().optional(),
   repeats: z.coerce.boolean().optional(),
   start: z.coerce.boolean().optional(),
+  mode: z.enum(["review", "all"]).optional(),
 });
 
 export const Route = createFileRoute("/course/skill/$skillId")({
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/course/skill/$skillId")({
 function SkillHubPage() {
   const courseId = useSession()?.courseId ?? "";
   const { skillId } = Route.useParams();
-  const { tab: searchTab, setId, start, repeats } = Route.useSearch();
+  const { tab: searchTab, setId, start, repeats, mode } = Route.useSearch();
   const tab = searchTab ?? "study";
   const navigate = useNavigate();
   const to = "/course/skill/$skillId" as const;
@@ -41,6 +42,7 @@ function SkillHubPage() {
       setId={setId}
       includesRepeats={repeats}
       start={start}
+      studyMode={mode ?? "review"}
       // Switch panes in place. Dropping `start`/`setId` means switching tabs
       // always lands on the new tab's browse pane, never mid-session.
       onSelectTab={(nextTab) =>
@@ -56,8 +58,12 @@ function SkillHubPage() {
       }
       // Commit to the running session for the active tab. A bare skill URL
       // defaults to Study so the deck action always enters the Study session.
-      onStart={() =>
-        navigate({ to, params: { skillId }, search: { tab, setId, repeats, start: true } })
+      onStart={(studyMode) =>
+        navigate({
+          to,
+          params: { skillId },
+          search: { tab, setId, repeats, mode: studyMode, start: true },
+        })
       }
       // Leaving a session returns to that tab's browse pane (keeps `tab`,
       // drops `start`). Lesson has no browse pane, so it exits to Study —

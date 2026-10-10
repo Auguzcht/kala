@@ -12,10 +12,14 @@ import {
 export async function fetchFlashcardDeck(
   courseId: string,
   limit = 10,
-  skillId?: string
+  skillId?: string,
+  mode?: "review" | "all",
+  offset = 0,
 ): Promise<FlashcardDeck> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (skillId) params.set("skill_id", skillId);
+  if (mode) params.set("mode", mode);
+  if (offset > 0) params.set("offset", String(offset));
   const data = await api<unknown>(`/flashcards/${courseId}/deck?${params.toString()}`);
   return parseApiResponse(flashcardDeckSchema, data, `/flashcards/${courseId}/deck`);
 }
