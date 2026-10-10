@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { BrainIcon } from "@/components/ui/brain";
 import { SparklesIcon } from "@/components/ui/sparkles";
@@ -32,7 +32,7 @@ import type { FlashcardCard } from "@/features/flashcards/schema/flashcards.sche
 
 // Study mode: a flip card, not a quiz. Front shows the prompt, tapping flips
 // to the back (answer label + explanation), and the student marks it "Got it"
-// or "Review again" themselves. That self-mark advances the spaced-repetition
+// or "Still learning" themselves. That self-mark advances the spaced-repetition
 // schedule so weak cards resurface sooner, but it does NOT feed the twin —
 // self-report is not assessment (see routers/flashcards.py). To turn what you
 // studied into a mastery signal, "Test me on these" hands the same skill to
@@ -117,9 +117,10 @@ export function FlashcardDeck({
   const { data: twin } = useTwin(courseId);
 
   const [index, setIndex] = useState(0);
+  const [sessionCards, setSessionCards] = useState<FlashcardCard[] | null>(null);
   const [phase, setPhase] = useState<Phase>("front");
   const [deckDone, setDeckDone] = useState(false);
-  const [reviewCounts, setReviewCounts] = useState({ gotIt: 0, reviewAgain: 0 });
+  const [reviewCounts, setReviewCounts] = useState({ gotIt: 0, stillLearning: 0 });
   const [showReviewSpinner, setShowReviewSpinner] = useState(false);
   const [pendingRemembered, setPendingRemembered] = useState<boolean | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
@@ -131,12 +132,28 @@ export function FlashcardDeck({
   const startedAtRef = useRef(Date.now());
   const replySequenceRef = useRef(0);
   const reviewInFlightRef = useRef(false);
+  const postedRatingIdsRef = useRef(new Set<string>());
+  const requeuedIdsRef = useRef(new Set<string>());
   const reviewIdempotencyRef = useRef<{
     itemId: string;
     remembered: boolean;
     key: string;
   } | null>(null);
+  const initializedSessionRef = useRef<string | null>(null);
   const markRef = useRef<((remembered: boolean) => void) | null>(null);
+  const responseSessionKey = data?.sessionId ?? (data
+    ? `${courseId}:${offset}:${data.cards.map((item) => item.itemId).join(",")}`
+    : null);
+
+  useEffect(() => {
+    if (!data || responseSessionKey === initializedSessionRef.current) return;
+    initializedSessionRef.current = responseSessionKey;
+    setSessionCards(data.cards);
+    setIndex(0);
+    setDeckDone(false);
+    postedRatingIdsRef.current.clear();
+    requeuedIdsRef.current.clear();
+  }, [data, responseSessionKey]);
 
   useEffect(() => {
     if (!review.isPending) {
@@ -160,13 +177,14 @@ export function FlashcardDeck({
   }, [index, data?.courseId]);
 
   useEffect(() => {
-    setReviewCounts({ gotIt: 0, reviewAgain: 0 });
+    setReviewCounts({ gotIt: 0, stillLearning: 0 });
   }, [courseId, skillId]);
 
-  const activeItemId = data?.cards[index]?.itemId;
+  const deckCards = sessionCards ?? data?.cards ?? [];
+  const activeItemId = deckCards[index]?.itemId;
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (!activeItemId || event.repeat || event.altKey || event.ctrlKey || event.metaKey || deckDone) return;
+      if (!activeItemId || event.repeat || event.altKey || event.ctrlKey || event.metaKey || deckDone || review.isPending) return;
       const target = event.target;
       if (target instanceof HTMLElement && (
         target.isContentEditable || target.closest("input, textarea, select, [contenteditable='true']")
@@ -277,7 +295,7 @@ export function FlashcardDeck({
     );
   }
 
-  const total = data.cards.length;
+  const total = deckCards.length;
 
   if (deckDone) {
     const canTest = Boolean(skillId) && data.cards.length > 0;
@@ -320,7 +338,7 @@ export function FlashcardDeck({
               you need.
             </p>
             <p className="mt-3 text-sm font-medium text-foreground">
-              {reviewCounts.gotIt} got it, {reviewCounts.reviewAgain} coming back sooner.
+              {reviewCounts.gotIt} got it, {reviewCounts.stillLearning} still learning.
             </p>
             {canTest ? (
               <p className="mt-3 text-sm text-muted-foreground">
@@ -349,11 +367,31 @@ export function FlashcardDeck({
     );
   }
 
-  const card: FlashcardCard = data.cards[index];
+  const card: FlashcardCard = deckCards[index];
   const band = twin?.skills.find((s) => s.skillId === card.skillId)?.band;
 
   function mark(remembered: boolean) {
     if (reviewInFlightRef.current) return;
+    const alreadyPosted = postedRatingIdsRef.current.has(card.itemId);
+    const shouldRequeue = !remembered && !requeuedIdsRef.current.has(card.itemId);
+    const queueBeforeRating = deckCards;
+    const ratingIndex = index;
+    const nextQueue = shouldRequeue ? [...queueBeforeRating, card] : queueBeforeRating;
+
+    setReviewCounts((counts) => remembered
+      ? { ...counts, gotIt: counts.gotIt + 1 }
+      : { ...counts, stillLearning: counts.stillLearning + 1 });
+    if (shouldRequeue) {
+      requeuedIdsRef.current.add(card.itemId);
+      setSessionCards(nextQueue);
+    }
+    advanceToNext(ratingIndex, nextQueue.length);
+
+    // The session contract records only the first rating for a card. A card
+    // requeued after "Still learning" can be rated again locally without
+    // writing a second item_reviews row.
+    if (alreadyPosted) return;
+
     reviewInFlightRef.current = true;
     setPendingRemembered(remembered);
     if (
@@ -378,27 +416,32 @@ export function FlashcardDeck({
         onSuccess: () => {
           reviewInFlightRef.current = false;
           setPendingRemembered(null);
+          postedRatingIdsRef.current.add(card.itemId);
           reviewIdempotencyRef.current = null;
-          setReviewCounts((counts) => remembered
-            ? { ...counts, gotIt: counts.gotIt + 1 }
-            : { ...counts, reviewAgain: counts.reviewAgain + 1 });
-          nextCard();
         },
         onError: () => {
           reviewInFlightRef.current = false;
           setPendingRemembered(null);
+          setSessionCards(queueBeforeRating);
+          setIndex(ratingIndex);
+          setDeckDone(false);
+          setPhase("back");
+          if (shouldRequeue) requeuedIdsRef.current.delete(card.itemId);
+          setReviewCounts((counts) => remembered
+            ? { ...counts, gotIt: Math.max(0, counts.gotIt - 1) }
+            : { ...counts, stillLearning: Math.max(0, counts.stillLearning - 1) });
           toast.error("Could not save your review. Try again.");
         },
       }
     );
   }
 
-  function nextCard() {
-    if (index + 1 >= total) {
+  function advanceToNext(currentIndex: number, queueLength: number) {
+    if (currentIndex + 1 >= queueLength) {
       setDeckDone(true);
       return;
     }
-    setIndex((i) => i + 1);
+    setIndex(currentIndex + 1);
   }
 
   function reloadDeck() {
@@ -411,7 +454,10 @@ export function FlashcardDeck({
     setExplainText(null);
     setFollowUpTurns([]);
     setPendingFollowUp(null);
-    setReviewCounts({ gotIt: 0, reviewAgain: 0 });
+    setReviewCounts({ gotIt: 0, stillLearning: 0 });
+    setSessionCards(data?.cards ?? []);
+    postedRatingIdsRef.current.clear();
+    requeuedIdsRef.current.clear();
     refetch();
   }
 
@@ -506,7 +552,7 @@ export function FlashcardDeck({
       };
   const dockSecondary: ComposeDockPrimary | undefined = phase === "back"
     ? {
-        label: "Review again",
+        label: "Still learning",
         onClick: () => mark(false),
         disabled: review.isPending,
         icon: showReviewSpinner && pendingRemembered === false ? ReviewSpinnerIcon : RotateCCWIcon,
@@ -550,7 +596,15 @@ export function FlashcardDeck({
           </div>
         </div>
 
-        <div className="relative border bg-card">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`${card.itemId}:${index}`}
+            initial={reduceMotion ? false : { opacity: 0, x: 28 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={reduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: -28 }}
+            transition={{ duration: reduceMotion ? 0 : 0.22, ease: "easeOut" }}
+            className="relative border bg-card"
+          >
           <CornerBrackets />
 
           {/* A real 3D flip, not a content swap. The wrapper supplies the
@@ -629,7 +683,8 @@ export function FlashcardDeck({
               </button>
             </div>
           </div>
-        </div>
+          </motion.div>
+        </AnimatePresence>
         {/* Ask-for-help row. These stay as plain text affordances rather than
             buttons competing with the dock's primary action, because they
             trigger distinct TUTOR STYLES (a nudge, a deep explanation) that
@@ -637,8 +692,8 @@ export function FlashcardDeck({
             bubble in the thread below — see the thread block — instead of
             inside the card, so this reads as one conversation with Kala rather
             than a card with a text dump stuffed into it. */}
-        {phase === "back" || hintText || explainText || hint.isPending || explain.isPending ? (
-          <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-4 text-xs">
+          {phase === "front" ? (
             <button
               type="button"
               onClick={askHint}
@@ -648,6 +703,8 @@ export function FlashcardDeck({
               <BrainIcon size={14} aria-hidden />
               {hint.isPending ? "Thinking…" : "Give me a hint"}
             </button>
+          ) : null}
+          {phase === "back" ? (
             <button
               type="button"
               onClick={askExplain}
@@ -657,8 +714,8 @@ export function FlashcardDeck({
               <SparklesIcon size={14} aria-hidden />
               {explain.isPending ? "Thinking…" : "Explain more"}
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
 
         {/* Kala's thread for this card: the hint/explanation turn, then any
             free-text follow-ups from the dock. Rendered as the same
