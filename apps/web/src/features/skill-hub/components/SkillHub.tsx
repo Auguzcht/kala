@@ -178,6 +178,7 @@ export function SkillHub({
         courseId={courseId}
         skillId={skillId}
         setId={setId || null}
+        includesRepeats={includesRepeats}
         onExit={onExitSession}
       />
     );

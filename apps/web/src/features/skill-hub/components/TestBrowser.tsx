@@ -2,12 +2,10 @@ import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { apiErrorReason } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { useBankStatus } from "@/features/bank";
 import {
@@ -152,9 +150,16 @@ function SetList({
   const { data, isLoading, isError, refetch } = usePracticeSets(courseId, skillId);
   const generate = useGenerateSet(courseId);
   const [size, setSize] = useState<number>(5);
-  const [preparing, setPreparing] = useState(false);
-  const [noMaterial, setNoMaterial] = useState(false);
   const bank = useBankStatus(courseId);
+  const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
+  const bankStatus = bankSkill?.status ?? "waiting_content";
+  const isNoMaterial = bank.data?.bankServing === true && bankStatus === "no_material";
+  const isBuilding = bank.data?.bankServing === true &&
+    ["waiting_content", "building", "error"].includes(bankStatus);
+  const isUsable = bank.data?.bankServing !== true || bankSkill?.usable === true;
+  const isPreparing = isBuilding && !isUsable && !isNoMaterial;
+  const isBuildingUsable = isBuilding && isUsable;
+  const canGenerate = bank.data !== undefined && isUsable && !isNoMaterial;
   const reduceMotion = useReducedMotion();
   const sets = data?.sets ?? [];
   const allSets = sets;
@@ -185,10 +190,7 @@ function SetList({
       { skillId, size },
       { onSuccess: (set) => {
           if (set.setId) onSelectSet(set.setId, Boolean(set.includesRepeats));
-          else {
-            setPreparing(set.status === "preparing");
-            setNoMaterial(set.status === "no_material");
-          }
+          else void bank.refetch();
         } }
     );
   };
@@ -196,7 +198,7 @@ function SetList({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        A graded check on this skill — it moves your mastery. Pick a set to see
+        A graded check on this skill. It moves your mastery. Pick a set to see
         what's in it before you start.
       </p>
 
@@ -204,10 +206,31 @@ function SetList({
         <div className="border border-dashed bg-card px-5 py-4">
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Generate one below, or study these cards and hit "Test me on these" —
+            Generate one below, or study these cards and hit "Test me on these".
             saved sets land here to retake.
           </p>
         </div>
+      ) : null}
+
+      {isBuildingUsable ? (
+        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+          More questions on the way.
+        </p>
+      ) : null}
+      {isPreparing ? (
+        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+          Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0}).
+        </p>
+      ) : null}
+      {isNoMaterial ? (
+        <p className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
+          This skill doesn&apos;t have course material yet.
+        </p>
+      ) : null}
+      {bank.isError ? (
+        <p className="text-sm text-muted-foreground">
+          Question availability could not be checked. Reload this tab to try again.
+        </p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -217,7 +240,7 @@ function SetList({
             key={option}
             type="button"
             onClick={() => setSize(option)}
-            disabled={generate.isPending || preparing}
+            disabled={generate.isPending || isPreparing || isNoMaterial || !canGenerate}
             aria-pressed={size === option}
             className={cn(
               "border px-3 py-1.5 text-xs font-semibold transition-colors",
@@ -226,12 +249,6 @@ function SetList({
           >{option}</button>
         ))}
       </div>
-
-      {noMaterial ? (
-        <div className="border border-dashed bg-card px-5 py-4 text-sm text-muted-foreground">
-          This skill doesn&apos;t have course material yet.
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {/* Real sets. The card's BORDER is tinted to match its own header bar,
@@ -287,7 +304,7 @@ function SetList({
         <button
           type="button"
           onClick={onGenerate}
-          disabled={generate.isPending || preparing || noMaterial}
+          disabled={generate.isPending || isPreparing || isNoMaterial || !canGenerate}
           className={cn(
             "group flex min-h-[116px] flex-col items-center justify-center gap-2 border-2 border-dashed border-muted-foreground/40 bg-card/50 p-4 text-center",
             "transition-[border-color,background-color] hover:border-foreground/40 hover:bg-accent/40",
@@ -302,30 +319,25 @@ function SetList({
               <PlusIcon size={18} className="text-muted-foreground" />
             )}
           </div>
-          {noMaterial ? (
+          {isNoMaterial ? (
             <p className="text-sm font-semibold text-muted-foreground">No course material yet</p>
-          ) : preparing ? (
+          ) : isPreparing ? (
             <p className="text-sm font-semibold text-foreground">
-              Preparing questions ({bank.data?.skills.find((s) => s.skillId === skillId)?.mcqReady ?? 0}/{bank.data?.skills.find((s) => s.skillId === skillId)?.mcqTarget ?? 0})
+              Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0})
             </p>
+          ) : !bank.data ? (
+            <p className="text-sm font-semibold text-muted-foreground">Checking question availability</p>
           ) : generate.isPending ? (
-            <Shimmer className="text-sm font-semibold">Writing your questions…</Shimmer>
+            <span className="text-sm font-semibold text-foreground">Loading your questions…</span>
           ) : (
             <p className="text-sm font-semibold text-foreground">Generate new set</p>
           )}
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Fresh questions — choose 5, 10, or 20 at a time.
+            Fresh questions. Choose 5, 10, or 20 at a time.
           </p>
           {generate.isError ? (
             <p className="text-xs text-destructive">
-              {/* Surface the SERVER's message when it has one. A missing-
-                  content skill must not say "try again" — retrying will never
-                  help, and telling a student to retry a permanently
-                  unconfigured thing is worse than saying nothing. The API
-                  returns a specific, student-facing detail for exactly this
-                  case (NoCourseContentError). */}
-              {apiErrorReason(generate.error) ??
-                "Kala could not write questions just now. Try again."}
+              We could not load this set. Please try again.
             </p>
           ) : null}
         </button>

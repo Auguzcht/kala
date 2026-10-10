@@ -12,7 +12,7 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { usePracticeSet, usePracticeSetById, useSubmitPractice } from "@/features/practice/hooks/use-practice";
-import { apiErrorReason } from "@/lib/api-error";
+import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
@@ -53,6 +53,7 @@ export function PracticePanel({
   courseId,
   skillId,
   setId,
+  includesRepeats,
   onExit,
 }: {
   courseId: string;
@@ -61,22 +62,37 @@ export function PracticePanel({
    * bridge handoff and the retake list both enter test mode this way. The set
    * is per-skill, so skillId still identifies the topic for the bar/copy. */
   setId?: string | null;
+  includesRepeats?: boolean;
   onExit: () => void;
 }) {
   const usingSaved = Boolean(setId);
+  const bank = useBankStatus(courseId, !usingSaved);
+  const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
+  const bankStatus = bankSkill?.status ?? "waiting_content";
+  const isBankCourse = bank.data?.bankServing === true;
+  const bankNoMaterial = isBankCourse && bankStatus === "no_material";
+  const bankUsable = !isBankCourse || bankSkill?.usable === true;
+  const skillBuilding = ["waiting_content", "building", "error"].includes(bankStatus);
+  const bankBuilding = isBankCourse && !bankNoMaterial && skillBuilding && !bankUsable;
+  const bankBuildingUsable = isBankCourse && skillBuilding && bankUsable;
   // Both hooks are always called (Rules of Hooks), but only the active path is
   // enabled. A saved set must never also trigger the POST that creates a new
   // set when the test session mounts.
   const generatedQuery = usePracticeSet(courseId, skillId, SET_SIZE, {
-    enabled: !usingSaved,
+    enabled: !usingSaved && bank.data !== undefined && bankUsable,
   });
   const savedQuery = usePracticeSetById(courseId, setId ?? null);
   const { isLoading, isError, isFetching, refetch } = usingSaved ? savedQuery : generatedQuery;
-  const queryError = usingSaved ? savedQuery.error : generatedQuery.error;
   const data = usingSaved ? savedQuery.data : generatedQuery.data;
   const submit = useSubmitPractice(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
+
+  useEffect(() => {
+    if (!usingSaved && generatedQuery.data?.status === "preparing" && bankUsable) {
+      void generatedQuery.refetch();
+    }
+  }, [usingSaved, generatedQuery.data?.status, bankUsable, generatedQuery.refetch]);
 
   // Position within the fetched batch. Local state, not part of the query:
   // the set is immutable for the session, only the cursor over it moves.
@@ -164,10 +180,33 @@ export function PracticePanel({
     if (!reduceMotion) celebrate();
   }, [total, setIndex, lastResult, data?.setId, reduceMotion]);
 
+  if (!usingSaved && bank.isLoading)
+    return <LoadingPanel label="Checking question availability…" lines={4} />;
+  if (!usingSaved && bank.isError)
+    return (
+      <EmptyState
+        title="We could not check question availability"
+        description="Reload this page to try again."
+      />
+    );
+  if (!usingSaved && bankNoMaterial)
+    return (
+      <EmptyState
+        title="No course material yet"
+        description="This skill doesn&apos;t have course material yet."
+      />
+    );
+  if (!usingSaved && bankBuilding)
+    return (
+      <LoadingPanel
+        label={`Preparing questions (${bankSkill?.mcqReady ?? 0} of ${bankSkill?.mcqTarget ?? 0})`}
+        lines={4}
+      />
+    );
   if (isLoading)
     return (
       <LoadingPanel
-        label={usingSaved ? "Loading your set…" : "Generating your practice set…"}
+        label="Loading your practice set…"
         lines={4}
       />
     );
@@ -175,25 +214,36 @@ export function PracticePanel({
     return (
       <EmptyState
         title="We could not load practice"
-        description={
-          apiErrorReason(queryError) ??
-          "Check your connection and try again."
-        }
+        description="Check your connection and try again."
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
   if (data?.status === "generating")
     return (
       <LoadingPanel
-        label={`Building your practice set — ${data.readyCount}/${data.requestedSize} ready…`}
+        label={`Loading your set (${data.readyCount} of ${data.requestedSize} ready)`}
         lines={4}
+      />
+    );
+  if (data?.status === "preparing")
+    return (
+      <LoadingPanel
+        label={`Preparing questions (${bankSkill?.mcqReady ?? 0} of ${bankSkill?.mcqTarget ?? 0})`}
+        lines={4}
+      />
+    );
+  if (data?.status === "no_material")
+    return (
+      <EmptyState
+        title="No course material yet"
+        description="This skill doesn&apos;t have course material yet."
       />
     );
   if (data?.status === "failed")
     return (
       <EmptyState
-        title="This practice set could not be built"
-        description="No question became ready for this set. Please try generating another set."
+        title="No questions are ready yet"
+        description="Questions for this skill are still being prepared."
         action={<Button variant="outline" onClick={() => refetch()}>Try again</Button>}
       />
     );
@@ -201,7 +251,7 @@ export function PracticePanel({
     return (
       <EmptyState
         title="Nothing to practice yet"
-        description="This skill isn't set up for practice yet."
+        description="No questions are available right now."
       />
     );
 
@@ -284,7 +334,7 @@ export function PracticePanel({
             label: !lastResult
               ? "Choose an answer to continue"
               : isFetching
-                ? "Generating a new set…"
+                ? "Loading a new set…"
                 : atSetEnd
                   ? "Generate another set"
                   : "Next question",
@@ -301,6 +351,16 @@ export function PracticePanel({
       }
     >
       <StudyStream>
+        {bankBuildingUsable ? (
+          <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+            More questions on the way.
+          </p>
+        ) : null}
+        {includesRepeats || data?.includesRepeats ? (
+          <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
+            You&apos;ve seen every question for this skill. Here are the ones worth another look.
+          </div>
+        ) : null}
         <div id="tour-practice-card" className="border bg-card px-5 py-6 sm:px-6">
           <AnswerableCard
             prompt={item.prompt}

@@ -57,7 +57,7 @@ function SkillHubPage() {
       // Commit to the running session for the active tab. A bare skill URL
       // defaults to Study so the deck action always enters the Study session.
       onStart={() =>
-        navigate({ to, params: { skillId }, search: { tab, setId, start: true } })
+        navigate({ to, params: { skillId }, search: { tab, setId, repeats, start: true } })
       }
       // Leaving a session returns to that tab's browse pane (keeps `tab`,
       // drops `start`). Lesson has no browse pane, so it exits to Study —
