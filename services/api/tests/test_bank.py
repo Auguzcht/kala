@@ -1,9 +1,8 @@
 import pytest
-from fastapi import HTTPException
-
 from app.bank import kick as kick_module
 from app.deps import CurrentUser
 from app.routers import bank as bank_router
+from fastapi import HTTPException
 
 
 def test_kick_bank_debounces_second_call(monkeypatch):
@@ -25,15 +24,22 @@ def test_kick_bank_debounces_second_call(monkeypatch):
 
 def test_student_status_hides_last_error_and_other_course_is_404(monkeypatch):
     user = CurrentUser("u", "i", "student")
-    monkeypatch.setattr(bank_router.db, "select", lambda table, params: (
-        [{"id": "c", "institution_id": "i"}] if table == "courses" else
-        ([{"user_id": "u"}] if table == "enrollments" else
-         [{"skill_id": "s", "status": "error", "mcq_ready": 0, "mcq_target": 5, "depth": 2, "last_error": "secret"}])
-    ))
+    def select(table, params):
+        if table == "courses": return [{"id": "c", "institution_id": "i"}]
+        if table == "enrollments": return [{"user_id": "u"}]
+        if table == "skills": return [{"id": "s"}, {"id": "missing"}]
+        if table == "skill_bank_state": return [{"skill_id": "s", "status": "error", "mcq_ready": 0,
+            "mcq_target": 5, "depth": 2, "last_error": "secret"}]
+        return []
+    monkeypatch.setattr(bank_router.db, "select", select)
     monkeypatch.setattr(bank_router, "kick_bank", lambda *args: False)
     result = bank_router.bank_status("c", user)
     assert "lastError" not in result["skills"][0]
     assert result["skills"][0]["usable"] is False
+    missing = result["skills"][1]
+    assert missing == {"skillId": "missing", "status": "waiting_content", "mcqReady": 0,
+                       "mcqTarget": 0, "depth": 0, "usable": False}
+    assert result["building"] is True
 
     def other_course(table, params):
         if table == "courses":

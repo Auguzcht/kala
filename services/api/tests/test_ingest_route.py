@@ -1,8 +1,7 @@
-from fastapi.testclient import TestClient
-
 from app.deps import CurrentUser, get_current_user, get_lms_connector
 from app.main import app
 from app.routers import diagnostic, ingest_jobs
+from fastapi.testclient import TestClient
 
 
 class IngestConnector:
@@ -214,8 +213,9 @@ def test_propose_skills_endpoint_queues_without_model_or_content_calls(monkeypat
         diagnostic.db, "select",
         lambda table, params: [{"lms_course_id": "_4_1"}] if table == "courses" else [],
     )
-    kick_calls = []
-    monkeypatch.setattr(diagnostic, "kick_bank", lambda course_id, trigger: kick_calls.append((course_id, trigger)))
+    queue_calls = []
+    monkeypatch.setattr(diagnostic.db, "upsert", lambda table, rows, **kwargs: queue_calls.append(("queued", rows[0]["value"]["status"])))
+    monkeypatch.setattr(diagnostic, "kick_bank", lambda course_id, trigger: queue_calls.append(("invoke", course_id, trigger)))
 
     try:
         with TestClient(app) as client:
@@ -225,7 +225,7 @@ def test_propose_skills_endpoint_queues_without_model_or_content_calls(monkeypat
 
     assert response.status_code == 202
     assert response.json() == {"status": "queued"}
-    assert kick_calls == [("00000000-0000-4000-8000-000000000001", "propose")]
+    assert queue_calls == [("queued", "queued"), ("invoke", "00000000-0000-4000-8000-000000000001", "propose")]
 
 
 def test_retag_runs_embedding_recompute_and_returns_counts(monkeypatch) -> None:

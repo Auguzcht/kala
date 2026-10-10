@@ -1,8 +1,7 @@
-from fastapi.testclient import TestClient
-
 from app.deps import CurrentUser, get_current_user
 from app.main import app
-from app.routers import dashboard
+from app.routers import dashboard, diagnostic
+from fastapi.testclient import TestClient
 
 
 def instructor_user() -> CurrentUser:
@@ -214,3 +213,31 @@ def test_detach_404s_when_skill_is_not_auto_matched(monkeypatch) -> None:
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 404
+
+
+def test_proposed_skills_returns_persisted_proposal_status(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = instructor_user
+    def select(table, params):
+        if table == "skills": return [{"id": "sk-1", "name": "Apply routing"}]
+        if table == "worker_state": return [{"value": {"status": "running"}}]
+        return []
+    monkeypatch.setattr(dashboard.db, "select", select)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/skills/proposed")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["proposalStatus"] == "running"
+
+
+def test_propose_persists_queued_before_worker_invoke(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(diagnostic.db, "upsert", lambda table, rows, **kwargs: calls.append(("status", rows[0]["value"]["status"])))
+    monkeypatch.setattr(diagnostic, "kick_bank", lambda *args: calls.append(("invoke", args)))
+    result = diagnostic.propose_course_skills(
+        "00000000-0000-4000-8000-000000000001", instructor_user(),
+    )
+    assert result == {"status": "queued"}
+    assert calls[0] == ("status", "queued")
+    assert calls[1][0] == "invoke"

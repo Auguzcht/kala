@@ -44,3 +44,8 @@ resource "aws_lambda_function" "worker" {
 
   depends_on = [aws_cloudwatch_log_group.worker]
 }
+
+resource "aws_lambda_function_event_invoke_config" "worker" {
+  function_name                = aws_lambda_function.worker.function_name
+  maximum_retry_attempts      = 0
+}

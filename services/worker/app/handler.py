@@ -62,7 +62,7 @@ import time
 from app import skill_proposer
 from app.bank_config import CHAIN_MAX
 from app.config import get_settings
-from app.db import supabase as db  # noqa: F401 — retained for handler-level test seams
+from app.db import supabase as db
 from app.jobs import (
     bank_build,
     embed_backfill,
@@ -91,14 +91,15 @@ def handler(event, context):
     results: dict[str, dict] = {}
     errors: dict[str, str] = {}
 
-    def run_one(name, job) -> None:
+    def run_one(name, job, course_id_override: str | None = None) -> dict:
         """Run one isolated job and record structured timing/result."""
         started = time.monotonic()
         logger.info("job start name=%s institution_id=%s", name, institution_id or "all")
         try:
             job_kwargs = {"institution_id": institution_id}
-            if targeted_course_id and name in {"bankBuild", "tagRecompute", "skillProposer"}:
-                job_kwargs["course_id"] = targeted_course_id
+            job_course_id = targeted_course_id or course_id_override
+            if job_course_id and name in {"bankBuild", "tagRecompute", "skillProposer"}:
+                job_kwargs["course_id"] = job_course_id
                 if name == "bankBuild":
                     job_kwargs["chain_depth"] = chain_depth
             if name == "itemGeneration":
@@ -111,18 +112,28 @@ def handler(event, context):
                     0.0,
                     _INVOCATION_BUDGET_SECONDS - (time.monotonic() - invocation_started),
                 )
+            if name == "bankBuild" and not (targeted_course_id and trigger):
+                # Scheduled resumes share the Lambda wall clock with every
+                # other job. Pass a positive remainder so bank_build keeps its
+                # own deadline instead of falling back to the full 100s slice.
+                job_kwargs["remaining_seconds"] = max(
+                    1.0,
+                    _INVOCATION_BUDGET_SECONDS - (time.monotonic() - invocation_started),
+                )
             result = job.run(**job_kwargs)
             results[name] = result
             duration_ms = round((time.monotonic() - started) * 1000)
             logger.info(
                 "job done name=%s duration_ms=%d result=%s", name, duration_ms, result,
             )
+            return result
         except Exception as exc:  # noqa: BLE001 — surface loudly; don't crash the whole run
             duration_ms = round((time.monotonic() - started) * 1000)
             logger.error(
                 "job failed name=%s duration_ms=%d error=%s", name, duration_ms, exc,
             )
             errors[name] = str(exc)
+            return {}
 
     if targeted_course_id and trigger:
         if trigger in {"skills_approved", "skills_changed"}:
@@ -149,24 +160,86 @@ def handler(event, context):
 
     run_one("itemGeneration", item_generation)
     run_one("tagRecompute", tag_recompute)
+
+    # A Refresh can hit its bounded async chain limit with a durable partial
+    # window cursor. Resume those courses on the next scheduled worker run.
+    for course_id in _incomplete_proposal_courses():
+        remaining_seconds = max(
+            0.0,
+            _INVOCATION_BUDGET_SECONDS - (time.monotonic() - invocation_started),
+        )
+        if remaining_seconds < 50.0:
+            logger.info("skillProposer scheduled resume deferred course_id=%s reason=budget", course_id)
+            continue
+        result = run_one("skillProposer", skill_proposer, course_id)
+        _maybe_chain(course_id, result, chain_depth, errors, "propose")
+
     run_one("bankBuild", bank_build)
 
     return {"ok": not errors, "results": results, "errors": errors}
 
 
+def _incomplete_proposal_courses() -> list[str]:
+    try:
+        rows = db.select("worker_state", {
+            "key": "like.proposer:%", "select": "key,value", "limit": "10000",
+        })
+    except Exception as exc:  # noqa: BLE001 — other scheduled jobs still run
+        logger.warning("proposer resume scan failed error=%s", exc)
+        return []
+    course_ids = set()
+    for row in rows:
+        key = row.get("key") or ""
+        parts = key.split(":", 2)
+        if len(parts) != 3 or parts[0] != "proposer":
+            continue
+        value = row.get("value") or {}
+        completed = int(value.get("windows_completed") or 0)
+        total = value.get("windows_total")
+        if total is None or completed < int(total):
+            course_ids.add(parts[1])
+    return sorted(course_ids)
+
+
 def _maybe_chain(course_id: str, result: dict, chain_depth: int, errors: dict, trigger: str = "bank") -> None:
-    if not result.get("remaining") or result.get("rate_limited") or errors.get("bankBuild"):
+    job_name = "skillProposer" if trigger == "propose" else "bankBuild"
+    if result.get("permanent_error"):
+        logger.error("%s chain stopped course_id=%s reason=permanent_error status=%s detail=%s",
+                     job_name, course_id, result.get("error_status"), result.get("error_reason"))
+        return
+    if result.get("rate_limited"):
+        logger.warning("%s chain stopped course_id=%s reason=throttle", job_name, course_id)
+        return
+    if result.get("stop_reason") == "permanent_error":
+        logger.error("%s chain stopped course_id=%s reason=permanent_error status=%s detail=%s",
+                     job_name, course_id, result.get("error_status"), result.get("error_reason"))
+        return
+    if result.get("retry_deferred"):
+        logger.info("%s chain stopped course_id=%s reason=transient_backoff", job_name, course_id)
+        return
+    if errors.get(job_name):
+        logger.error("%s chain stopped course_id=%s reason=permanent_error detail=%s",
+                     job_name, course_id, errors[job_name])
+        return
+    if not result.get("remaining"):
+        logger.info("%s chain stopped course_id=%s reason=done", job_name, course_id)
         return
     if chain_depth >= CHAIN_MAX:
-        logger.warning("bank chain stopped course_id=%s reason=chain_max depth=%d", course_id, chain_depth)
+        logger.warning("%s chain stopped course_id=%s reason=depth_limit depth=%d "
+                       "handing off to schedule remaining=%s",
+                       job_name, course_id, chain_depth,
+                       result.get("modulesRemaining", result.get("remaining")))
         return
+    if result.get("budget_exhausted"):
+        logger.info("%s continuation course_id=%s reason=budget depth=%d", job_name, course_id, chain_depth)
     arn = get_settings().worker_function_arn
     if not arn:
-        logger.warning("bank chain skipped course_id=%s reason=missing_worker_function_arn", course_id)
+        logger.warning("%s chain stopped course_id=%s reason=budget missing_worker_function_arn",
+                       job_name, course_id)
         return
     try:
         import boto3
         boto3.client("lambda").invoke(FunctionName=arn, InvocationType="Event",
                                        Payload=json.dumps({"trigger": trigger, "courseId": course_id, "chainDepth": chain_depth + 1}).encode())
     except Exception as exc:  # noqa: BLE001
-        logger.warning("bank chain invoke failed course_id=%s error=%s", course_id, exc)
+        logger.warning("%s chain stopped course_id=%s reason=budget invoke_error=%s", job_name, course_id, exc)

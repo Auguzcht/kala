@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -172,6 +173,10 @@ def propose_course_skills(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Queue proposal work; the worker owns all model and content work."""
+    now = datetime.now(UTC).isoformat()
+    db.upsert("worker_state", [{"key": f"proposal:{course_id}", "value": {
+        "status": "queued", "queued_at": now, "updated_at": now, "last_error": None,
+    }}], on_conflict="key")
     kick_bank(course_id, "propose")
     return {"status": "queued"}
 

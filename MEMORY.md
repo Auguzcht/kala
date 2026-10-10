@@ -88,6 +88,33 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ## Current State
 
+- Active architecture draft: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (Session C is verifying it).
+
+### Brief 4f proposer timeout fix — 2026-10-10
+
+- Worker proposer now uses the `bank` model (`deepseek/deepseek-v4.1-flash:nitro`),
+  low reasoning effort capped at 3072, `max_completion_tokens: 8192`, and a 45s
+  request timeout. Response parsing was exercised with the proposal JSON shape.
+- Progress is stored in existing `worker_state` under
+  `proposer:{course_id}:{module_ref}`. The cursor records completed windows and a
+  content freshness hash (IDs, timestamps, and text). Each window's proposals
+  are written before advancing the cursor; later windows compare against those
+  persisted rows and retain the 0.60 course-overlap hint. Calls start only when
+  at least 50s remain; otherwise the job returns `remaining` for async chaining.
+  `last_skill_seed_at` is updated only after all pending module windows finish.
+- Added per-window model latency logging (`latency_ms`). No live per-window
+  durations are available yet: deployment and the AWS101 Refresh were explicitly
+  deferred for the stale proposal cleanup. Measure those durations on the first
+  clean Refresh before claiming the 4-window run is within budget.
+- Terraform plan: **1 add, 0 change, 0 destroy** — created
+  `aws_lambda_function_event_invoke_config.worker` with
+  `maximum_retry_attempts = 0`. Terraform apply completed successfully. No
+  Lambda image was deployed.
+- Validation: worker suite **92 passed**; API suite **324 passed**. The read-only
+  saturation lookup for `7197c35c` and `910b1f7d` could not run because local
+  Supabase URL configuration is absent; check `skill_bank_state` after access is
+  available.
+
 ### Session wrap-up — 2026-10-06
 
 - **Backend question-bank work is deployed and verified, except for the

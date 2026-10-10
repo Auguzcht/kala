@@ -303,7 +303,13 @@ def list_proposed_skills(
         "select": "id,name,bloom_level,blueprint_weight,proposed_source",
         "order": "name.asc",
     })
-    return {"courseId": course_id, "proposed": rows}
+    state = db.select("worker_state", {
+        "key": f"eq.proposal:{course_id}", "select": "value", "limit": "1",
+    })
+    proposal_status = ((state[0].get("value") or {}).get("status") if state else None)
+    if proposal_status not in {"queued", "running", "done", "failed"}:
+        proposal_status = "done"
+    return {"courseId": course_id, "proposed": rows, "proposalStatus": proposal_status}
 
 
 @router.get("/{course_id}/skills/auto-matched")

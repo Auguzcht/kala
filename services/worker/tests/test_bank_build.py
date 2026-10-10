@@ -331,6 +331,7 @@ def test_non_stop_finish_is_failure(monkeypatch):
     captured = {}
     class Response:
         status_code = 200
+        is_success = True
         def raise_for_status(self):
             return None
         def json(self):
@@ -351,3 +352,16 @@ def test_non_stop_finish_is_failure(monkeypatch):
     else:
         raise AssertionError("non-stop response must fail")
     assert captured["json"]["reasoning"] == {"max_tokens": 3072}
+
+
+def test_permanent_model_error_is_recorded_without_retry(monkeypatch):
+    updates = []
+    monkeypatch.setattr(bank_build.db, "update", lambda table, filters, values: updates.append(values) or [])
+    state = {"course_id": "course", "skill_id": "skill", "consecutive_failures": 0}
+    from app.model_errors import ModelCallError
+    assert bank_build._record_failure(state, ModelCallError(400, '{"message":"invalid reasoning"}')) is False
+    assert updates[0]["status"] == "error"
+    assert updates[0]["next_attempt_at"].startswith("9999-")
+    assert '"status": 400' in updates[0]["last_error"]
+    assert "invalid reasoning" in updates[0]["last_error"]
+    assert state["_permanent_error"] is True

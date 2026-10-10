@@ -51,6 +51,7 @@ from app.item_gen import (
     _MCQ_SYSTEM,
     _validated_mcq,
 )
+from app.model_errors import ModelCallError, error_reason
 
 logger = logging.getLogger("kala.worker.bank")
 
@@ -180,6 +181,12 @@ def _call_model(*, skill: dict, context: str, do_not_repeat: list[str], remainin
         }, timeout=min(PER_CALL_CAP_S, max(1.0, remaining - 1.0))) as client:
             response = client.post("/chat/completions", json=payload)
             status_code = response.status_code
+            if not response.is_success:
+                reason = error_reason(response, (context, user))
+                logger.error("model request failed role=bank status=%d error_body=%s", status_code, reason)
+                if status_code == 429:
+                    _STOP_429.set()
+                raise ModelCallError(status_code, reason)
             if status_code == 429:
                 _STOP_429.set()
             response.raise_for_status()
@@ -446,6 +453,17 @@ def _previous_zero_valid_counts(error: str | None) -> dict[str, int] | None:
 
 
 def _record_failure(state: dict, exc: Exception, rejection_counts: dict[str, int] | None = None) -> bool:
+    if isinstance(exc, ModelCallError) and exc.permanent:
+        error = json.dumps({"status": exc.status_code, "reason": exc.reason}, ensure_ascii=False)[:500]
+        values = {"consecutive_failures": int(state.get("consecutive_failures") or 0) + 1,
+                  "next_attempt_at": "9999-12-31T00:00:00+00:00", "leased_until": None, "last_error": error,
+                  "status": "error", "updated_at": _iso(_now())}
+        db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, values)
+        state.update(values)
+        state["_permanent_error"] = True
+        logger.error("bank batch stopped course_id=%s skill_id=%s reason=permanent_error status=%d detail=%s",
+                     state["course_id"], state["skill_id"], exc.status_code, exc.reason)
+        return False
     failures = int(state.get("consecutive_failures") or 0) + 1
     if rejection_counts is not None and failures >= SATURATION_FAILS and int(state.get("mcq_ready") or 0) >= MIN_USABLE:
         previous = _previous_zero_valid_counts(state.get("last_error"))
@@ -595,6 +613,7 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
             if chunks:
                 chunks_by_skill[skill["id"]] = chunks
     failed_this_run: set[str] = set()
+    permanent_error: ModelCallError | None = None
     pending = _pending(all_states, excluded_skill_ids=failed_this_run)
     calls = successes = failures = inserted = 0
     while pending and time.monotonic() < deadline - PER_CALL_CAP_S and not _STOP_429.is_set():
@@ -625,6 +644,8 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
                     failed_this_run.add(state["skill_id"])
                     logger.exception("bank batch failed course_id=%s skill_id=%s", state["course_id"], state["skill_id"])
                     _record_failure(state, exc, getattr(exc, "rejection_counts", None))
+                    if isinstance(exc, ModelCallError) and exc.permanent:
+                        permanent_error = exc
         pending = _pending(all_states, excluded_skill_ids=failed_this_run)
     for state in all_states:
         if not state.get("_dirty"):
@@ -632,10 +653,23 @@ def run(*, institution_id: str | None = None, course_id: str | None = None,
         if state["depth"] == 0 or state.get("status") == "no_material":
             continue
         ready = int(replenish_by_course[state["course_id"]]["live_counts"].get(state["skill_id"], 0)) if state["course_id"] in replenish_by_course else len(_live_items(state["course_id"], state["skill_id"]))
-        final_status = "ready" if ready >= state["mcq_target"] else ("error" if int(state.get("consecutive_failures") or 0) >= ERROR_AFTER else "building")
+        final_status = "error" if state.get("_permanent_error") else (
+            "ready" if ready >= state["mcq_target"] else
+            ("error" if int(state.get("consecutive_failures") or 0) >= ERROR_AFTER else "building"))
         db.update("skill_bank_state", {"course_id": f"eq.{state['course_id']}", "skill_id": f"eq.{state['skill_id']}"}, {"mcq_ready": ready, "status": final_status, "consecutive_failures": 0 if final_status == "ready" else state.get("consecutive_failures", 0), "last_error": None if final_status == "ready" else state.get("last_error"), "leased_until": None, "updated_at": _iso(_now())})
     phases["other_ms"] = max(0, round((time.monotonic() - started) * 1000) - sum(phases.values()))
+    if permanent_error:
+        logger.error("bank build stopped course_id=%s reason=permanent_error status=%d detail=%s",
+                     course_id or "all", permanent_error.status_code, permanent_error.reason)
+    elif _STOP_429.is_set():
+        logger.warning("bank build stopped course_id=%s reason=throttle", course_id or "all")
+    elif time.monotonic() >= deadline - PER_CALL_CAP_S and _pending(all_states, excluded_skill_ids=failed_this_run):
+        logger.info("bank build stopped course_id=%s reason=budget", course_id or "all")
+    else:
+        logger.info("bank build stopped course_id=%s reason=done", course_id or "all")
     return {"courses": len(courses), "skills": len(all_states), "calls": calls, "successes": successes,
             "failures": failures, "inserted": inserted, "remaining": bool(_pending(all_states, excluded_skill_ids=failed_this_run)),
-            "rate_limited": _STOP_429.is_set(), "chain_depth": chain_depth,
+            "rate_limited": _STOP_429.is_set(), "permanent_error": permanent_error is not None,
+            "error_status": permanent_error.status_code if permanent_error else None,
+            "error_reason": permanent_error.reason if permanent_error else None, "chain_depth": chain_depth,
             "phase_ms": phases, "embedding_calls": 0}

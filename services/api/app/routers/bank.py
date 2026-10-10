@@ -26,24 +26,35 @@ def _course_for_user(course_id: str, user: CurrentUser) -> dict:
 @router.get("/{course_id}/bank/status")
 def bank_status(course_id: str = Depends(require_valid_course_id), user: CurrentUser = Depends(get_current_user)):
     course = _course_for_user(course_id, user)
+    approved = db.select("skills", {
+        "course_id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
+        "status": "eq.approved", "select": "id", "order": "id.asc",
+    })
     fields = "skill_id,status,mcq_ready,mcq_target,depth"
     if user.app_role in {"instructor", "admin"}:
         fields += ",last_error"
     rows = db.select("skill_bank_state", {"course_id": f"eq.{course_id}", "select": fields, "order": "skill_id.asc"})
+    by_skill = {row["skill_id"]: row for row in rows}
     skills = []
-    for row in rows:
+    missing = False
+    for skill in approved:
+        row = by_skill.get(skill["id"])
+        if row is None:
+            missing = True
+            row = {"skill_id": skill["id"], "status": "waiting_content",
+                   "mcq_ready": 0, "mcq_target": 0, "depth": 0}
         usable = int(row.get("mcq_ready") or 0) >= MIN_USABLE
-        item = {"skillId": row["skill_id"], "status": row.get("status"), "mcqReady": row.get("mcq_ready", 0),
-                "mcqTarget": row.get("mcq_target", 0), "depth": row.get("depth", 0), "usable": usable}
+        item = {"skillId": skill["id"], "status": row.get("status") or "waiting_content",
+                "mcqReady": row.get("mcq_ready", 0), "mcqTarget": row.get("mcq_target", 0),
+                "depth": row.get("depth", 0), "usable": usable}
         if user.app_role in {"instructor", "admin"} and "last_error" in row:
             item["lastError"] = row.get("last_error")
         skills.append(item)
-    if any(not row["usable"] for row in skills):
+    if missing or any(not row["usable"] for row in skills):
         pending = db.select("skill_bank_state", {"course_id": f"eq.{course_id}", "status": "not.in.(ready,no_material)", "leased_until": "is.null", "next_attempt_at": "is.null", "select": "skill_id", "limit": "1"})
         if pending:
             kick_bank(course_id, "status")
     return {"courseId": course_id, "building": any(
-                row["status"] not in {"ready", "no_material"} and not row["usable"]
-                for row in skills
+                row["status"] in {"waiting_content", "building"} for row in skills
             ), "skills": skills,
             "bankServing": bank_enabled(course, "study")}

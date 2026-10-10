@@ -222,7 +222,6 @@ def deck(
             row = state[0]
             result["bankStatus"] = {
                 "status": row.get("status"), "mcqReady": row.get("mcq_ready", 0),
-                "usable": row.get("status") == "ready" and int(row.get("mcq_ready") or 0) >= int(row.get("mcq_target") or 0),
             }
     return result
 

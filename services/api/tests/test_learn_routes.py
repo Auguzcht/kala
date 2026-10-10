@@ -3,12 +3,11 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.deps import CurrentUser, get_current_user
 from app.learn.items import ItemGenerationError
 from app.main import app
 from app.routers import flashcards, practice
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
@@ -184,6 +183,29 @@ def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> Non
     assert "choices" not in card
     assert "correct_choice_id" not in card
     assert body["stats"]["due"] == 0
+
+
+def test_flashcards_deck_bank_status_omits_usable(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    def fake_select(table, params):
+        if table == "skills":
+            return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Recursion",
+                     "bloom_level": "apply", "module_ref": "Module 1"}]
+        if table == "courses": return [{"id": "c", "bank_serving": True}]
+        if table == "srs_state": return []
+        if table == "skill_bank_state": return [{"status": "ready", "mcq_ready": 8, "mcq_target": 10}]
+        return []
+    monkeypatch.setattr(flashcards.db, "select", fake_select)
+    monkeypatch.setattr(flashcards.srs, "due_cards", lambda **kwargs: [])
+    monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {})
+    monkeypatch.setattr(flashcards, "pick_bank_items", lambda *args, **kwargs: [])
+    try:
+        with TestClient(app) as client:
+            response = client.get("/flashcards/00000000-0000-4000-8000-000000000001/deck?skill_id=00000000-0000-4000-8000-000000000010")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["bankStatus"] == {"status": "ready", "mcqReady": 8}
 
 
 def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch) -> None:
