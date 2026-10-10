@@ -71,6 +71,34 @@ def test_submit_diagnostic_returns_mastery_delta_per_skill(monkeypatch) -> None:
     assert delta_by_skill["00000000-0000-4000-8000-000000000011"]["posteriorBand"] == "developing"
 
 
+def test_saved_diagnostic_items_filter_retired_rows_on_both_reads(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    generated_queries = []
+    monkeypatch.setattr(diagnostic, "_skills_needing_diagnostic", lambda **kw: [
+        {"id": "00000000-0000-4000-8000-000000000010", "name": "Skill", "bloom_level": "apply"}
+    ])
+
+    def select(table, params):
+        if table == "courses":
+            return [{"id": _COURSE, "bank_serving": False}]
+        if table == "generated_items":
+            generated_queries.append(params)
+            return []
+        return []
+
+    monkeypatch.setattr(diagnostic.db, "select", select)
+    monkeypatch.setattr(diagnostic, "enqueue_diagnostic", lambda **kw: ({"status": "pending"}, True))
+    try:
+        with TestClient(app) as client:
+            response = client.get(f"/courses/{_COURSE}/diagnostic")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["status"] == "generating"
+    assert len(generated_queries) == 2
+    assert all(q["retired_at"] == "is.null" for q in generated_queries)
+
+
 # ---------------------------------------------------------------------------
 # Partial tolerance: one bad skill must shorten the sitting, never 503 it.
 #
