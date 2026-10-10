@@ -121,7 +121,7 @@ export function StudyBrowser({
       <div className="flex flex-wrap items-center justify-between gap-3 border bg-card px-5 py-4">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
-            {cards.length} {cards.length === 1 ? "card" : "cards"}
+            {cards.length} to review
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Recall each answer, then mark it yourself. Missed cards return sooner.
