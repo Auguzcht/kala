@@ -96,6 +96,7 @@ export function FlashcardDeck({
 }) {
   const reduceMotion = useReducedMotion();
   const replySessionId = useId();
+  const [reviewSessionId] = useState(() => crypto.randomUUID());
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
   const bank = useBankStatus(courseId);
@@ -121,6 +122,11 @@ export function FlashcardDeck({
   const startedAtRef = useRef(Date.now());
   const replySequenceRef = useRef(0);
   const reviewInFlightRef = useRef(false);
+  const reviewIdempotencyRef = useRef<{
+    itemId: string;
+    remembered: boolean;
+    key: string;
+  } | null>(null);
   const markRef = useRef<((remembered: boolean) => void) | null>(null);
 
   useEffect(() => {
@@ -317,16 +323,29 @@ export function FlashcardDeck({
     if (reviewInFlightRef.current) return;
     reviewInFlightRef.current = true;
     setPendingRemembered(remembered);
+    if (
+      reviewIdempotencyRef.current?.itemId !== card.itemId ||
+      reviewIdempotencyRef.current.remembered !== remembered
+    ) {
+      reviewIdempotencyRef.current = {
+        itemId: card.itemId,
+        remembered,
+        key: crypto.randomUUID(),
+      };
+    }
     review.mutate(
       {
         itemId: card.itemId,
         remembered,
         latencyMs: Date.now() - startedAtRef.current,
+        sessionId: reviewSessionId,
+        idempotencyKey: reviewIdempotencyRef.current.key,
       },
       {
         onSuccess: () => {
           reviewInFlightRef.current = false;
           setPendingRemembered(null);
+          reviewIdempotencyRef.current = null;
           setReviewCounts((counts) => remembered
             ? { ...counts, gotIt: counts.gotIt + 1 }
             : { ...counts, reviewAgain: counts.reviewAgain + 1 });

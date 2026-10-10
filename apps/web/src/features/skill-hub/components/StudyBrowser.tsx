@@ -5,8 +5,8 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useFlashcardDeck } from "@/features/flashcards";
-import type { FlashcardCard } from "@/features/flashcards";
+import { useFlashcardMembership } from "@/features/flashcards/hooks/use-flashcards";
+import type { FlashcardMembershipCard } from "@/features/flashcards/schema/flashcards.schema";
 import { useBankStatus } from "@/features/bank";
 
 // The Study tab's browse view — the materials list that sits in front of the
@@ -15,16 +15,12 @@ import { useBankStatus } from "@/features/bank";
 // so each row shows BOTH sides of the card. That is the point of a materials
 // list — you can see what you're about to review.
 //
-// Data comes from the deck endpoint (the same database-backed assembly the
-// session uses), rendered as a list instead of one card at a time.
+// Data comes from the membership endpoint, independent of the session queue.
+// That keeps Known cards visible while session selection stays due-first.
 //
 // The browse view is not study mode: it makes no scheduling writes and shows
 // no flip UI. "Study deck" is what enters the session, which then owns the
 // viewport as its own takeover.
-
-// A generous cap so the list shows the whole tracked deck for one skill rather
-// than the session's session-sized window of 10.
-const BROWSE_LIMIT = 50;
 
 export function StudyBrowser({
   courseId,
@@ -36,11 +32,7 @@ export function StudyBrowser({
   /** Enter the sequential flip session. */
   onStart: () => void;
 }) {
-  const { data, isLoading, isError, refetch } = useFlashcardDeck(
-    courseId,
-    BROWSE_LIMIT,
-    skillId,
-  );
+  const { data, isLoading, isError, refetch } = useFlashcardMembership(courseId, skillId);
   const bank = useBankStatus(courseId);
   const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
   const isNoMaterial = bank.data?.bankServing === true && bankSkill?.status === "no_material";
@@ -68,7 +60,6 @@ export function StudyBrowser({
   }
 
   const cards = data?.cards ?? [];
-  const stats = data?.stats;
 
   // An empty response can mean a bank build is still below its usable threshold,
   // the skill has no course material, or the student's SRS queue is empty.
@@ -101,7 +92,7 @@ export function StudyBrowser({
         />
       );
     }
-    const allCaughtUp = (stats?.tracked ?? 0) > 0;
+    const allCaughtUp = data?.isFallback === true && (data.fallbackTracked ?? 0) > 0;
     return (
       <EmptyState
         title={allCaughtUp ? "All caught up" : "No cards yet"}
@@ -119,10 +110,19 @@ export function StudyBrowser({
     <div className="space-y-4">
       {/* The one action this view exists to lead to. */}
       <div className="flex flex-wrap items-center justify-between gap-3 border bg-card px-5 py-4">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-2">
           <p className="text-sm font-semibold text-foreground">
-            {cards.length} to review
+            {data?.isFallback ? `${cards.length} to review` : `${cards.length} ${cards.length === 1 ? "card" : "cards"}`}
           </p>
+          {!data?.isFallback ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Card memory summary">
+              <span>{data?.counts.new ?? 0} new</span>
+              <span>{data?.counts.learning ?? 0} learning</span>
+              <span>{data?.counts.slipping ?? 0} slipping</span>
+              <span>{data?.counts.known ?? 0} known</span>
+              <span>{data?.counts.dueToday ?? 0} due today</span>
+            </div>
+          ) : null}
           <p className="mt-0.5 text-xs text-muted-foreground">
             Recall each answer, then mark it yourself. Missed cards return sooner.
           </p>
@@ -135,9 +135,22 @@ export function StudyBrowser({
         </Button>
       </div>
 
+      {bank.data?.bankServing && bankSkill?.status === "building" && bankSkill.usable ? (
+        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+          More questions on the way.
+        </p>
+      ) : null}
+      {bank.data?.bankServing &&
+      ["waiting_content", "building", "error"].includes(bankSkill?.status ?? "waiting_content") &&
+      !bankSkill?.usable ? (
+        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+          Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0}).
+        </p>
+      ) : null}
+
       {/* Both sides shown: Study never grades, so there is nothing to hide. */}
       <ol className="divide-y divide-border border bg-card">
-        {cards.map((card: FlashcardCard, i: number) => (
+        {cards.map((card: FlashcardMembershipCard, i: number) => (
           <motion.li
             key={card.itemId}
             initial={reduceMotion ? false : { opacity: 0, y: 6 }}
@@ -147,7 +160,7 @@ export function StudyBrowser({
           >
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 text-sm font-medium text-foreground">{card.prompt}</p>
-              <StateBadge state={card.state} box={card.box} />
+              <StateBadge state={card.state} due={card.due} />
             </div>
             <div className="flex items-start gap-2">
               <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-brand-slate">
@@ -164,23 +177,24 @@ export function StudyBrowser({
   );
 }
 
-/** Small status pill: due vs new, plus the Leitner box. Mirrors the session
- * card's StateBadge language (orange = due, muted = new) so the list and the
- * session read as the same object. */
-function StateBadge({ state, box }: { state: "due" | "new"; box: number }) {
+/** Card memory state is separate from the skill mastery band shown above. */
+function StateBadge({ state, due }: { state: FlashcardMembershipCard["state"]; due: boolean }) {
+  const label = state === "due" ? "Due" : state[0].toUpperCase() + state.slice(1);
   return (
     <span className="flex shrink-0 items-center gap-1.5">
       <span
         className={cn(
           "rounded-sm px-2 py-0.5 text-[10.5px] font-semibold",
-          state === "due"
+          due
             ? "bg-brand-orange/15 text-foreground"
             : "bg-muted text-muted-foreground"
         )}
       >
-        {state === "due" ? "Due" : "New"}
+        {label}
       </span>
-      <span className="font-mono text-[10.5px] text-muted-foreground">box {box}</span>
+      {due && state !== "due" ? (
+        <span className="text-[10.5px] text-brand-orange">Due</span>
+      ) : null}
     </span>
   );
 }

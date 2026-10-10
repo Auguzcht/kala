@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchFlashcardDeck,
+  fetchFlashcardMembership,
   reviewFlashcard,
 } from "@/features/flashcards/api/flashcards.api";
 
@@ -8,6 +9,13 @@ export function useFlashcardDeck(courseId: string, limit = 10, skillId?: string)
   return useQuery({
     queryKey: ["flashcards", courseId, limit, skillId ?? "auto"],
     queryFn: () => fetchFlashcardDeck(courseId, limit, skillId),
+  });
+}
+
+export function useFlashcardMembership(courseId: string, skillId: string) {
+  return useQuery({
+    queryKey: ["flashcards", courseId, "membership", skillId],
+    queryFn: () => fetchFlashcardMembership(courseId, skillId),
   });
 }
 
@@ -26,9 +34,12 @@ export function useReviewFlashcard(courseId: string) {
       itemId: string;
       remembered: boolean;
       latencyMs: number;
+      sessionId: string;
+      idempotencyKey: string;
     }) => reviewFlashcard(courseId, args),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gamification", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["flashcards", courseId, "membership"] });
     },
   });
 }

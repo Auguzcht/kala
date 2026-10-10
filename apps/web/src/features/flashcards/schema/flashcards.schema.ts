@@ -25,6 +25,31 @@ export const flashcardCardSchema = z.object({
   box: z.number(),
 });
 
+export const flashcardMemoryStateSchema = z.enum(["new", "learning", "slipping", "known", "due"]);
+
+export const flashcardMembershipCardSchema = z.object({
+  itemId: z.string(),
+  prompt: z.string(),
+  back: flashcardBackSchema,
+  state: flashcardMemoryStateSchema,
+  due: z.boolean(),
+  dueAt: z.string().nullable(),
+});
+
+export const flashcardMembershipCountsSchema = z.object({
+  new: z.number().int().nonnegative(),
+  learning: z.number().int().nonnegative(),
+  slipping: z.number().int().nonnegative(),
+  known: z.number().int().nonnegative(),
+  dueToday: z.number().int().nonnegative(),
+});
+
+export const flashcardMembershipSchema = z.object({
+  skillId: z.string(),
+  counts: flashcardMembershipCountsSchema,
+  cards: z.array(flashcardMembershipCardSchema),
+});
+
 export const srsStatsSchema = z.object({
   tracked: z.number().int().nonnegative(),
   due: z.number().int().nonnegative(),
@@ -67,6 +92,13 @@ export const flashcardReviewResultSchema = z.object({
 
 export type FlashcardBack = z.infer<typeof flashcardBackSchema>;
 export type FlashcardCard = z.infer<typeof flashcardCardSchema>;
+export type FlashcardMembershipCard = z.infer<typeof flashcardMembershipCardSchema>;
+export type FlashcardMembership = z.infer<typeof flashcardMembershipSchema> & {
+  /** True only when the membership endpoint is unavailable and the legacy
+   * review deck was used as a safe fallback. */
+  isFallback?: boolean;
+  fallbackTracked?: number;
+};
 export type SrsStats = z.infer<typeof srsStatsSchema>;
 export type Reward = z.infer<typeof rewardSchema>;
 export type FlashcardDeck = z.infer<typeof flashcardDeckSchema>;
