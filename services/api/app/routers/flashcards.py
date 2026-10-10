@@ -200,6 +200,7 @@ def deck(
                 "p_institution_id": user.institution_id, "p_user_id": user.user_id,
                 "p_course_id": course_id, "p_item_ids": [item["id"] for item in selected],
                 "p_daily_new_cap": 20,
+                "p_exempt_daily_new_cap": True,
             })
             allowed_ids = {r["item_id"] for r in claimed}
             selected = [item for item in selected if item["id"] in allowed_ids]
@@ -290,6 +291,7 @@ def deck(
             "p_institution_id": user.institution_id, "p_user_id": user.user_id,
             "p_course_id": course_id, "p_item_ids": [item["id"] for item in bank_items],
             "p_daily_new_cap": 20,
+            "p_exempt_daily_new_cap": False,
         }) if bank_items else []
         claimed_ids = {r["item_id"] for r in claimed}
         for item in bank_items:
@@ -360,6 +362,7 @@ def deck(
         result["mode"] = "review"
         result["sessionId"] = str(uuid4())
         result["newCardsRemainingToday"] = max(0, daily_remaining - sum(1 for c in cards if c["state"] == "new"))
+        result["newRemainingToday"] = result["newCardsRemainingToday"]
     return result
 
 
@@ -376,17 +379,9 @@ def _study_pool(*, institution_id: str, course_id: str, skill_id: str | None) ->
 
 
 def _new_cards_remaining(*, institution_id: str, user_id: str, course_id: str) -> int:
-    institution = db.select("institutions", {
-        "id": f"eq.{institution_id}", "select": "timezone", "limit": "1",
-    })
-    zone = ZoneInfo(institution[0].get("timezone") or "UTC") if institution else ZoneInfo("UTC")
-    now = datetime.now(timezone.utc)
-    local_start = datetime.combine(now.astimezone(zone).date(), time.min, zone).astimezone(timezone.utc)
-    rows = db.select("srs_state", {
-        "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
-        "created_at": f"gte.{local_start.isoformat()}", "select": "item_id", "limit": "1000",
-    })
-    return max(0, 20 - len(rows))
+    return srs.new_remaining_today(
+        institution_id=institution_id, user_id=user_id, course_id=course_id,
+    )
 
 
 def _deck_response(*, course_id: str, cards: list[dict], institution_id: str, user_id: str,

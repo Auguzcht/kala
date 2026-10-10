@@ -196,9 +196,16 @@ on its own**, because attempted rows are excluded from the pending query.
   state totals and due-today counts using `institutions.timezone`. A live read
   returned 14 approved skills and 167 New cards for the test course; no rows
   were written. Old `remembered` review bodies remain covered by an API test.
+- Follow-up: Study all now tracks every served card without charging the Review
+  due daily allowance. Review due and the course summary expose additive
+  `newRemainingToday`. Migration `0030_card_memory_daily_cap_accounting.sql`
+  records which first claims consume the allowance.
+- Live rollback check: with 21 eligible cards, Review due claimed 20 and then
+  Study all returned all 21; exactly 20 rows counted toward the cap. Rollback
+  left zero test rows. The live remaining-count query returned 20.
 - API suite: **348 passed** (51 existing dependency warnings). `make deploy`
   succeeded; API CodeSha256
-  `363729b30cd7d2a34deda44a0a77f968c2a7b88f762cd7c28727778ee99fd131`,
+  `3be3119acac64f6b09576a974e74d96f0401a5b4d10610816f870fedf3012691`,
   worker `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
 
 ### Card memory Phase 5 — 2026-10-11
@@ -215,6 +222,9 @@ on its own**, because attempted rows are excluded from the pending query.
 - No new RPC or migration was needed. “Report this card” remains deferred and
   is recorded as such in the architecture doc. Added the approximately
   one-hour student/instructor smoke checklist at `docs/TESTING.md`.
+- Test-account XP can drop after Phase 5 because old flashcard reviews no longer
+  count toward XP; this is expected. Handover: if real students have pre-Phase-5
+  flashcard history, decide whether to grandfather their old flashcard XP.
 - The final Phase 4 compatibility build was redeployed with the same XP code;
   API CodeSha256 is `363729b30cd7d2a34deda44a0a77f968c2a7b88f762cd7c28727778ee99fd131`
   and worker CodeSha256 remains

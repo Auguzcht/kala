@@ -47,7 +47,9 @@ def memory_summary(
     if not by_skill:
         return {"courseId": course_id, "skills": [], "totals": {
             "new": 0, "learning": 0, "slipping": 0, "known": 0, "dueToday": 0,
-        }}
+        }, "newRemainingToday": srs.new_remaining_today(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+        )}
 
     items = db.select("generated_items", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
@@ -84,4 +86,9 @@ def memory_summary(
             bucket["counts"]["dueToday"] += 1
     totals = {key: sum(row["counts"][key] for row in by_skill.values())
               for key in ("new", "learning", "slipping", "known", "dueToday")}
-    return {"courseId": course_id, "skills": list(by_skill.values()), "totals": totals}
+    return {
+        "courseId": course_id, "skills": list(by_skill.values()), "totals": totals,
+        "newRemainingToday": srs.new_remaining_today(
+            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+        ),
+    }

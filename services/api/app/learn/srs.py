@@ -37,7 +37,8 @@ it is unit-tested directly, which is where the risk lives.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.db import supabase as db
 
@@ -205,6 +206,26 @@ def ensure_tracked(*, institution_id: str, user_id: str, course_id: str,
         # Losing a tracking row just means the card is created on first review
         # instead of first show; harmless. Never surface to the student.
         pass
+
+
+def new_remaining_today(*, institution_id: str, user_id: str, course_id: str,
+                        daily_cap: int = 20) -> int:
+    """Count only first claims that spent the institution-local daily allowance."""
+    institutions = db.select("institutions", {
+        "id": f"eq.{institution_id}", "select": "timezone", "limit": "1",
+    })
+    zone = ZoneInfo(institutions[0].get("timezone") or "UTC") if institutions else ZoneInfo("UTC")
+    now = datetime.now(timezone.utc)
+    local_date = now.astimezone(zone).date()
+    day_start = datetime.combine(local_date, time.min, zone).astimezone(timezone.utc)
+    day_end = datetime.combine(local_date + timedelta(days=1), time.min, zone).astimezone(timezone.utc)
+    rows = db.select("srs_state", {
+        "institution_id": f"eq.{institution_id}", "user_id": f"eq.{user_id}",
+        "course_id": f"eq.{course_id}", "daily_new_claimed": "eq.true",
+        "and": f"(created_at.gte.{day_start.isoformat()},created_at.lt.{day_end.isoformat()})",
+        "select": "item_id", "limit": "1000",
+    })
+    return max(0, daily_cap - len(rows))
 
 
 def review(*, institution_id: str, user_id: str, course_id: str,

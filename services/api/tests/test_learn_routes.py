@@ -293,6 +293,7 @@ def test_flashcards_study_all_is_capped_to_twenty_and_uses_atomic_daily_claim(mo
     assert rpc_calls[0][0] == "claim_study_cards"
     assert len(rpc_calls[0][1]["p_item_ids"]) == 20
     assert rpc_calls[0][1]["p_daily_new_cap"] == 20
+    assert rpc_calls[0][1]["p_exempt_daily_new_cap"] is True
 
 
 def test_flashcards_review_mode_puts_slipping_before_most_overdue(monkeypatch) -> None:
@@ -327,6 +328,7 @@ def test_flashcards_review_mode_puts_slipping_before_most_overdue(monkeypatch) -
     assert [card["itemId"] for card in response.json()["cards"]] == [
         "slipping", "older-learning", "recent-learning",
     ]
+    assert response.json()["newRemainingToday"] == 20
 
 
 def test_course_memory_summary_counts_membership_without_writing(monkeypatch) -> None:
@@ -351,6 +353,7 @@ def test_course_memory_summary_counts_membership_without_writing(monkeypatch) ->
     monkeypatch.setattr(courses.db, "select", lambda table, params: (
         [{"id": skill, "name": "Recursion"}] if table == "skills" else
         items if table == "generated_items" else
+        [] if table == "srs_state" and params.get("daily_new_claimed") == "eq.true" else
         schedules if table == "srs_state" else
         [{"timezone": "Asia/Manila"}] if table == "institutions" else []
     ))
@@ -367,6 +370,7 @@ def test_course_memory_summary_counts_membership_without_writing(monkeypatch) ->
     assert response.json()["totals"] == {
         "new": 1, "learning": 1, "slipping": 1, "known": 1, "dueToday": 2,
     }
+    assert response.json()["newRemainingToday"] == 20
 
 
 def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch) -> None:
