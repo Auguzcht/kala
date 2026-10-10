@@ -5,7 +5,6 @@ import {
   fetchPracticeSet,
   fetchPracticeSetById,
   fetchPracticeSets,
-  fetchBankStatus,
   submitPracticeAttempt,
 } from "@/features/practice/api/practice.api";
 import type { PracticeSavedSet, PracticeSet } from "@/features/practice/schema/practice.schema";
@@ -75,18 +74,6 @@ export function usePracticeSets(courseId: string, skillId?: string) {
   return useQuery({
     queryKey: ["practice", courseId, "sets", skillId ?? "all"],
     queryFn: () => fetchPracticeSets(courseId, skillId),
-  });
-}
-
-export function useBankStatus(courseId: string, skillId: string, enabled: boolean) {
-  return useQuery({
-    queryKey: ["bank", courseId, "status"],
-    queryFn: () => fetchBankStatus(courseId),
-    enabled,
-    refetchInterval: (query) => {
-      const skill = query.state.data?.skills.find((item) => item.skillId === skillId);
-      return skill?.usable ? false : 10_000;
-    },
   });
 }
 

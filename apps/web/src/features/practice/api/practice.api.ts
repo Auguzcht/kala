@@ -1,5 +1,4 @@
 import { api } from "@/lib/api/client";
-import { bankStatusSchema, type BankStatus } from "@/features/bank/schema/bank-status.schema";
 import {
   practiceNextSchema,
   practiceBridgeSetSchema,
@@ -73,11 +72,6 @@ export async function fetchPracticeSets(
   const query = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
   const data = await api<unknown>(`/practice/${courseId}/sets${query}`);
   return practiceSetListSchema.parse(data);
-}
-
-export async function fetchBankStatus(courseId: string): Promise<BankStatus> {
-  const data = await api<unknown>(`/courses/${courseId}/bank/status`);
-  return bankStatusSchema.parse(data);
 }
 
 export async function submitPracticeAttempt(

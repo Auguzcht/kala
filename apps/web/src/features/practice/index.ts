@@ -6,7 +6,6 @@ export {
   usePracticeSet,
   usePracticeSetById,
   usePracticeSets,
-  useBankStatus,
   useSubmitPractice,
 } from "@/features/practice/hooks/use-practice";
 export type {
@@ -17,6 +16,5 @@ export type {
   PracticeSetAttempt,
   PracticeSetList,
   PracticeSetSummary,
-  PracticeBankStatus,
   PracticeSubmitResult,
 } from "@/features/practice/schema/practice.schema";

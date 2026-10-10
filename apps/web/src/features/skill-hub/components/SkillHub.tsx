@@ -9,6 +9,7 @@ import { MasteryBand } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTwin } from "@/features/twin";
+import { useBankStatus } from "@/features/bank";
 import { LessonChat } from "@/features/lessons";
 import { FlashcardDeck } from "@/features/flashcards";
 import { PracticePanel } from "@/features/practice";
@@ -155,6 +156,10 @@ export function SkillHub({
    * so a refresh doesn't re-enter it). */
   onExitSession: () => void;
 }) {
+  // Prime the shared cache on hub entry. Study and Test consume this same
+  // course-level status, which polls only while the backend says it is building.
+  useBankStatus(courseId, tab !== "lesson");
+
   // Lesson has nothing to browse: entering the tab IS entering the session.
   // Its exit returns to the hub with the Study pane active (see the route),
   // because a bare `tab=lesson` would immediately re-enter the session.

@@ -9,11 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { apiErrorReason } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
+import { useBankStatus } from "@/features/bank";
 import {
   useGenerateSet,
   usePracticeSetById,
   usePracticeSets,
-  useBankStatus,
 } from "@/features/practice";
 import type { PracticeSetAttempt, PracticeSetSummary } from "@/features/practice";
 
@@ -154,7 +154,7 @@ function SetList({
   const [size, setSize] = useState<number>(5);
   const [preparing, setPreparing] = useState(false);
   const [noMaterial, setNoMaterial] = useState(false);
-  const bank = useBankStatus(courseId, skillId, preparing);
+  const bank = useBankStatus(courseId);
   const reduceMotion = useReducedMotion();
   const sets = data?.sets ?? [];
   const allSets = sets;
