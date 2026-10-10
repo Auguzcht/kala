@@ -32,6 +32,7 @@ import { pageWindow } from "@/lib/pagination";
 // Same pagination as the roster: 8 per page, windowed page links, and a
 // "1–8 of 32" range line so the queue length is always visible.
 const PAGE_SIZE = 8;
+const PROPOSAL_STATUS_FALLBACK_MS = 15 * 60 * 1_000;
 
 // HITL skill proposals (docs/SKILL_PIPELINE.md). AI proposes skills from
 // the course's content, one module at a time; nothing proposed reaches
@@ -46,6 +47,7 @@ function RefreshStatus({
   data,
   proposalStatus,
   isPolling,
+  fallbackExpired,
 }: {
   isPending: boolean;
   isError: boolean;
@@ -53,6 +55,7 @@ function RefreshStatus({
   data?: ProposeSkillsResult;
   proposalStatus?: "queued" | "running" | "done" | "failed";
   isPolling: boolean;
+  fallbackExpired: boolean;
 }) {
   if (isPending) {
     return (
@@ -83,6 +86,9 @@ function RefreshStatus({
   }
   if (isSuccess && data?.status === "queued" && isPolling) {
     return <p className="mt-3 text-xs text-muted-foreground">Refreshing proposals. This can take a few minutes.</p>;
+  }
+  if (isSuccess && data?.status === "queued" && fallbackExpired) {
+    return <p className="mt-3 text-xs text-muted-foreground">Refresh may still be processing. Check this list again later.</p>;
   }
   return null;
 }
@@ -139,6 +145,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
   const propose = useProposeSkills(courseId);
   const [page, setPage] = useState(0);
   const [polling, setPolling] = useState(false);
+  const [pollFallbackExpired, setPollFallbackExpired] = useState(false);
   // Animated icons: the check/x/sparkle draw when their BUTTON is hovered
   // (controlled-mode handlers), same as the decision buttons elsewhere.
   const refreshRef = useRef<SparklesIconHandle | null>(null);
@@ -148,7 +155,17 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
     const timer = window.setInterval(() => {
       void refetch();
     }, 10_000);
-    return () => window.clearInterval(timer);
+    if (data?.proposalStatus !== undefined) {
+      return () => window.clearInterval(timer);
+    }
+    const fallbackTimer = window.setTimeout(() => {
+      setPolling(false);
+      setPollFallbackExpired(true);
+    }, PROPOSAL_STATUS_FALLBACK_MS);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(fallbackTimer);
+    };
   }, [polling, data?.proposalStatus, refetch]);
 
   useEffect(() => {
@@ -204,7 +221,12 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           variant="orange"
           size="sm"
           disabled={propose.isPending || polling}
-          onClick={() => propose.mutate(undefined, { onSuccess: () => setPolling(true) })}
+          onClick={() => propose.mutate(undefined, {
+            onSuccess: () => {
+              setPollFallbackExpired(false);
+              setPolling(true);
+            },
+          })}
           onMouseEnter={() => refreshRef.current?.startAnimation()}
           onMouseLeave={() => refreshRef.current?.stopAnimation()}
           className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
@@ -233,6 +255,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
             data={propose.data}
             proposalStatus={data?.proposalStatus}
             isPolling={polling}
+            fallbackExpired={pollFallbackExpired}
           />
         </div>
       ) : (
@@ -245,6 +268,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
               data={propose.data}
               proposalStatus={data?.proposalStatus}
               isPolling={polling}
+              fallbackExpired={pollFallbackExpired}
             />
           </div>
           {/* Roster-scale table: same Table primitives, cell padding, and
