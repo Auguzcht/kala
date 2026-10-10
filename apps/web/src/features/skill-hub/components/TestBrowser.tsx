@@ -285,6 +285,9 @@ function SetList({
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-2">
                 <AttemptPill attempt={set} />
+                {set.status === "unavailable" ? (
+                  <span className="text-[11px] text-muted-foreground">Questions unavailable</span>
+                ) : null}
                 {set.lastAttemptedAt ? (
                   <span className="text-[11px] text-muted-foreground">
                     last {fmtDate(set.lastAttemptedAt)}
@@ -438,6 +441,11 @@ function SetDetail({
         <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
           You&apos;ve seen every question for this skill. Here are the ones worth another look.
         </div>
+      ) : null}
+      {data.status === "unavailable" ? (
+        <p className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
+          The questions in this set are no longer part of the current course material.
+        </p>
       ) : null}
 
       {/* Prompts only — no choices or answers, by design. Grading is

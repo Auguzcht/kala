@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { TopicLanding } from "@/components/study/TopicLanding";
 import { PracticePanel } from "@/features/practice";
 import { useTwin, useNextUp } from "@/features/twin";
+import { useBankStatus } from "@/features/bank";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { ZapIcon } from "@/components/ui/zap";
 import { z } from "zod";
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/course/practice")({
 function PracticePage() {
   const courseId = useSession()?.courseId ?? "";
   const { data: twin, isLoading } = useTwin(courseId);
+  const { data: bankStatus } = useBankStatus(courseId);
   const { data: nextUp } = useNextUp(courseId);
   const { skillId: searchSkillId, setId: searchSetId } = Route.useSearch();
   const navigate = useNavigate();
@@ -67,6 +69,7 @@ function PracticePage() {
       <TopicLanding
         isLoading={isLoading}
         skills={twin?.skills ?? []}
+        bankStatus={bankStatus}
         onChoose={setSkillId}
         caption="quick, graded reps"
         gridId="tour-practice-picker"

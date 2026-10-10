@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { groupByModule } from "@/features/twin";
 import type { TwinSkill } from "@/features/twin";
+import type { BankStatus } from "@/features/bank/schema/bank-status.schema";
 
 // The shared topic-choice landing — extracted from routes/course/lessons.tsx
 // (Stage 3 of the AI overhaul, docs/AI_OVERHAUL_TODO.md): Practice and
@@ -29,6 +30,7 @@ export function TopicLanding({
   caption,
   gridId,
   firstCardId,
+  bankStatus,
 }: {
   isLoading: boolean;
   skills: TwinSkill[];
@@ -45,6 +47,7 @@ export function TopicLanding({
   /** Tour anchor for the very first skill card — only relevant where the
    * tour clicks a grid card directly rather than the recommended card. */
   firstCardId?: string;
+  bankStatus?: BankStatus;
 }) {
   if (isLoading) {
     return (
@@ -116,6 +119,18 @@ export function TopicLanding({
                         ) : null}
                         {caption ? <span>{caption}</span> : null}
                       </p>
+                      <TopicBankState
+                        entry={bankStatus?.bankServing
+                          ? bankStatus.skills.find((entry) => entry.skillId === s.skillId) ?? {
+                              skillId: s.skillId,
+                              status: "waiting_content",
+                              mcqReady: 0,
+                              mcqTarget: 0,
+                              depth: 0,
+                              usable: false,
+                            }
+                          : undefined}
+                      />
                     </button>
                   ))}
                 </div>
@@ -125,5 +140,25 @@ export function TopicLanding({
         </Accordion>
       </InView>
     </div>
+  );
+}
+
+function TopicBankState({
+  entry,
+}: {
+  entry: BankStatus["skills"][number] | undefined;
+}) {
+  if (!entry) return null;
+  if (entry.status === "ready") return null;
+  if (entry.status === "building" && entry.usable) {
+    return <p className="mt-2 text-xs text-muted-foreground">More questions on the way.</p>;
+  }
+  if (entry.status === "no_material") {
+    return <p className="mt-2 text-xs text-muted-foreground">This skill doesn&apos;t have course material yet.</p>;
+  }
+  return (
+    <p className="mt-2 text-xs text-muted-foreground">
+      Preparing questions ({entry.mcqReady} of {entry.mcqTarget}).
+    </p>
   );
 }

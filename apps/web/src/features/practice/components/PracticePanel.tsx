@@ -103,6 +103,8 @@ export function PracticePanel({
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [fallbackSessionId] = useState(() => crypto.randomUUID());
+  const submitKeysRef = useRef(new Map<string, string>());
   const [streak, setStreak] = useState(0);
   const [gain, setGain] = useState<{ xp: number } | null>(null);
   const [bandTransition, setBandTransition] = useState<{ from: string; to: string } | null>(null);
@@ -242,6 +244,14 @@ export function PracticePanel({
         description="This skill doesn&apos;t have course material yet."
       />
     );
+  if (data?.status === "unavailable")
+    return (
+      <EmptyState
+        title="This test is no longer available"
+        description="Its questions are no longer part of the current course material. Choose another test to continue."
+        action={<Button variant="outline" onClick={onExit}>Choose another test</Button>}
+      />
+    );
   if (data?.status === "failed")
     return (
       <EmptyState
@@ -275,10 +285,25 @@ export function PracticePanel({
 
   function handleAnswer(choiceId: string) {
     setSelectedChoice(choiceId);
+    const sessionId = data?.setId ?? setId ?? fallbackSessionId;
+    const attemptKey = `${sessionId}:${item.id}:${choiceId}`;
+    let idempotencyKey = submitKeysRef.current.get(attemptKey);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      submitKeysRef.current.set(attemptKey, idempotencyKey);
+    }
     submit.mutate(
-      { itemId: item.id, choiceId, latencyMs: Date.now() - startedAt, setId: data?.setId },
+      {
+        itemId: item.id,
+        choiceId,
+        latencyMs: Date.now() - startedAt,
+        setId: data?.setId,
+        sessionId,
+        idempotencyKey,
+      },
       {
         onSuccess: (result) => {
+          submitKeysRef.current.delete(attemptKey);
           setLastResult(result);
           setStreak((s) => (result.correct ? s + 1 : 0));
           const prev = prevEstimateRef.current;

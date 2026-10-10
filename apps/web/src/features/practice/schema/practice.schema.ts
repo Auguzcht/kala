@@ -34,7 +34,7 @@ const practiceBankStatusSchema = z.object({
 });
 
 export const practiceSetProgressSchema = z.object({
-  status: z.enum(["generating", "ready", "failed", "preparing", "no_material"]),
+  status: z.enum(["generating", "ready", "failed", "preparing", "no_material", "unavailable"]),
   requestedSize: z.number().int().nonnegative(),
   readyCount: z.number().int().nonnegative(),
   pendingCount: z.number().int().nonnegative(),
@@ -90,6 +90,7 @@ export const practiceSetSummarySchema = z.object({
   kind: z.string(),
   size: z.number().int().nonnegative(),
   createdAt: z.string(),
+  status: z.enum(["available", "unavailable"]).optional(),
 }).merge(practiceSetAttemptSchema);
 
 export const practiceSetListSchema = z.object({

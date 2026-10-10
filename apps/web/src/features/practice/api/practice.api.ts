@@ -77,7 +77,14 @@ export async function fetchPracticeSets(
 
 export async function submitPracticeAttempt(
   courseId: string,
-  args: { itemId: string; choiceId: string; latencyMs: number; setId?: string | null }
+  args: {
+    itemId: string;
+    choiceId: string;
+    latencyMs: number;
+    setId?: string | null;
+    sessionId: string;
+    idempotencyKey: string;
+  }
 ): Promise<PracticeSubmitResult> {
   const data = await api<unknown>(`/practice/${courseId}/submit`, {
     method: "POST",
@@ -86,6 +93,8 @@ export async function submitPracticeAttempt(
       choice_id: args.choiceId,
       latency_ms: args.latencyMs,
       ...(args.setId ? { set_id: args.setId } : {}),
+      session_id: args.sessionId,
+      idempotency_key: args.idempotencyKey,
     }),
   });
   return parseApiResponse(practiceSubmitResultSchema, data, `/practice/${courseId}/submit`);

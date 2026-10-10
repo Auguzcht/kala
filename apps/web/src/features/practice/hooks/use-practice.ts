@@ -109,7 +109,14 @@ export function useGenerateSet(courseId: string) {
 export function useSubmitPractice(courseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { itemId: string; choiceId: string; latencyMs: number; setId?: string | null }) =>
+    mutationFn: (args: {
+      itemId: string;
+      choiceId: string;
+      latencyMs: number;
+      setId?: string | null;
+      sessionId: string;
+      idempotencyKey: string;
+    }) =>
       submitPracticeAttempt(courseId, args),
     onSuccess: () => {
       // refetchType: "none" — mark stale, but do NOT auto-refetch. The
