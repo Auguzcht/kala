@@ -136,6 +136,27 @@ on its own**, because attempted rows are excluded from the pending query.
   `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
   Largest AWS101 skill has 21 eligible cards; live endpoint returned all 21.
   Timing: 2.98s cold, then 525ms and 382ms warm.
+
+### Card memory Phase 2 — 2026-10-11
+
+- Migration `0027_item_reviews.sql` adds the append-only review log, own/course
+  staff/admin read policy, service-only transactional RPC, idempotency uniqueness,
+  and a partial unique first-counted-review-per-session index. Update/delete is
+  blocked by `public.forbid_mutation()`.
+- Flashcard review now writes schedule, `item_reviews`, and its research
+  `evidence_events` in `review_flashcard` under one row lock. Same-key retries
+  do not add rows; repeated session ratings and early successes are logged with
+  `counted=false`; a miss still lapses immediately. The old `remembered` request
+  and existing response fields remain compatible; optional memory fields and
+  additive response fields are covered. Flashcard XP uses counted review rows,
+  while flashcard evidence remains for research and streak history.
+- Live SQL dry run passed in a rolled-back transaction: due success, idempotent
+  replay, same-session duplicate, early-success hold, miss lapse, matching
+  evidence log, RLS policy, and immutable trigger. API suite: **345 passed**.
+  Commit `d4bb5c9`.
+- `make deploy` succeeded. API CodeSha256
+  `58f07b2a87fc256b74defcfd2198013705a44f94287050b5118d24bd49571ffe`; worker
+  `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
   The worker image was redeployed by the shared `make deploy` target without worker source changes.
 
 ### Brief 4f proposer timeout fix — 2026-10-10
