@@ -20,6 +20,7 @@ import { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-less
 import { apiErrorReason } from "@/lib/api-error";
 import type { LessonCheckResult } from "@/features/lessons/schema/lessons.schema";
 import { useTutorAsk } from "@/features/tutor";
+import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
 
 type FollowUpTurn = { question: string; answer: string };
@@ -39,6 +40,7 @@ export function LessonChat({
   const reduceMotion = useReducedMotion();
   const replySessionId = useId();
   const { data, isLoading, isError, error, refetch } = useLesson(courseId, skillId);
+  const bank = useBankStatus(courseId);
   const submit = useSubmitStepCheck(courseId);
   const checkAsk = useTutorAsk(courseId);
   const checkFollowUp = useTutorAsk(courseId);
@@ -139,6 +141,9 @@ export function LessonChat({
   const total = data.steps.length;
   const done = stepIndex >= total;
   const current = done ? null : data.steps[stepIndex];
+  const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
+  const skillQuestionsBuilding = bank.data?.bankServing === true &&
+    ["waiting_content", "building", "error"].includes(bankSkill?.status ?? "waiting_content");
   const hasGradedCheck = checkOpen && result !== null;
 
   function openCheck() {
@@ -511,6 +516,11 @@ export function LessonChat({
               {current ? (
                 <div className="space-y-3">
                   <TeachingBlock step={current} id="tour-lesson-explain" />
+                  {!current.check && skillQuestionsBuilding ? (
+                    <p className="border-l-2 border-border px-3 py-2 text-xs text-muted-foreground">
+                      Check coming. Questions for this skill are still being prepared.
+                    </p>
+                  ) : null}
                   {followUpTurns.map((turn, index) => (
                     <div key={`${turn.question}-${index}`} className="space-y-3">
                       <UserBlock text={turn.question} />
