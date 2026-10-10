@@ -366,6 +366,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
                 // thread look like the whole conversation is being
                 // regenerated.
                 animate={m.id === lastMessage?.id}
+                animationKey={m.id === lastMessage?.id ? `${courseId}:tutor:${m.id}` : undefined}
               />
             )
           )

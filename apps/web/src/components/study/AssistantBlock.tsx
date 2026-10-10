@@ -18,12 +18,14 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 export function AssistantBlock({
   text,
   id,
+  animationKey,
   animate = true,
   pending = false,
   pendingLabel = "Kala is thinking…",
 }: {
   text?: string;
   id?: string;
+  animationKey?: string;
   /** Reveal the answer as it arrives. On for replies to a student's question
    * (they just asked something and expect it to be written out); off for
    * reference text that should simply be present, e.g. a graded explanation. */
@@ -47,7 +49,7 @@ export function AssistantBlock({
           {showPending ? (
             <Shimmer className="text-sm">{pendingLabel}</Shimmer>
           ) : (
-            <MarkdownText animate={animate}>{text ?? ""}</MarkdownText>
+            <MarkdownText animate={animate} animationKey={animationKey}>{text ?? ""}</MarkdownText>
           )}
         </MessageContent>
       </Message>

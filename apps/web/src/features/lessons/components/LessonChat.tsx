@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrainIcon } from "@/components/ui/brain";
 import { GraduationCapIcon } from "@/components/ui/graduation-cap";
@@ -37,6 +37,7 @@ export function LessonChat({
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const replySessionId = useId();
   const { data, isLoading, isError, error, refetch } = useLesson(courseId, skillId);
   const submit = useSubmitStepCheck(courseId);
   const checkAsk = useTutorAsk(courseId);
@@ -49,6 +50,7 @@ export function LessonChat({
   const [result, setResult] = useState<LessonCheckResult | null>(null);
   const [checkThreadOpen, setCheckThreadOpen] = useState(false);
   const [checkExplanation, setCheckExplanation] = useState<string | null>(null);
+  const [checkReplyAnimationKey, setCheckReplyAnimationKey] = useState<string | undefined>();
   // True once this check has been graded at least once. Keeps the dock mounted
   // through a retry: docking the check takes over the lane only while the
   // student is answering for the FIRST time. After a miss they have just used
@@ -71,6 +73,7 @@ export function LessonChat({
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
   const [pendingCheckFollowUp, setPendingCheckFollowUp] = useState<string | null>(null);
   const checkThreadRef = useRef<HTMLDivElement | null>(null);
+  const checkReplySequenceRef = useRef(0);
   const hintsUsedRef = useRef(0);
   const startedAtRef = useRef(Date.now());
 
@@ -80,6 +83,7 @@ export function LessonChat({
     setResult(null);
     setCheckThreadOpen(false);
     setCheckExplanation(null);
+    setCheckReplyAnimationKey(undefined);
     setCheckThreadKind("hint");
     setCheckFollowUpTurns([]);
     setFollowUpTurns([]);
@@ -147,6 +151,7 @@ export function LessonChat({
     setResult(null);
     setCheckThreadOpen(false);
     setCheckExplanation(null);
+    setCheckReplyAnimationKey(undefined);
     setCheckThreadKind("hint");
     setAnsweredKinds(new Set());
     setCheckFollowUpTurns([]);
@@ -209,6 +214,8 @@ export function LessonChat({
     if (checkAsk.isPending || answeredKinds.has(kind)) return;
 
     setCheckThreadKind(kind);
+    const replyAnimationKey = `${courseId}:${replySessionId}:${skillId}:${current.id}:check:${kind}:${++checkReplySequenceRef.current}`;
+    setCheckReplyAnimationKey(replyAnimationKey);
     checkAsk.mutate(
       {
         question: checkContext(
@@ -282,6 +289,7 @@ export function LessonChat({
     // hint on the retry rather than finding the button permanently dead.
     setCheckThreadOpen(false);
     setCheckExplanation(null);
+    setCheckReplyAnimationKey(undefined);
     setAnsweredKinds(new Set());
     setPendingCheckFollowUp(null);
     setCheckFollowUpTurns([]);
@@ -456,15 +464,15 @@ export function LessonChat({
                     pendingLabel={
                       hintPending ? "Kala is preparing a hint…" : "Kala is preparing an explanation…"
                     }
-                    // The graded explanation is reference text the student
-                    // reads after answering, not a live reply — it should be
-                    // there the moment it arrives, not type itself out.
-                    animate={false}
+                    animationKey={checkReplyAnimationKey}
                   />
                   {checkFollowUpTurns.map((turn, index) => (
                     <div key={`${turn.question}-${index}`} className="mt-5 space-y-3">
                       <UserBlock text={turn.question} />
-                      <AssistantBlock text={turn.answer} />
+                      <AssistantBlock
+                        text={turn.answer}
+                        animationKey={`${courseId}:${replySessionId}:${skillId}:${current?.id ?? stepIndex}:check-follow-up:${index}`}
+                      />
                     </div>
                   ))}
                   {/* In-flight question: the student's turn and a pending Kala
@@ -506,7 +514,10 @@ export function LessonChat({
                   {followUpTurns.map((turn, index) => (
                     <div key={`${turn.question}-${index}`} className="space-y-3">
                       <UserBlock text={turn.question} />
-                      <AssistantBlock text={turn.answer} />
+                      <AssistantBlock
+                        text={turn.answer}
+                        animationKey={`${courseId}:${replySessionId}:${skillId}:${current?.id ?? stepIndex}:follow-up:${index}`}
+                      />
                     </div>
                   ))}
                   {/* In-flight question: the student's turn and a pending

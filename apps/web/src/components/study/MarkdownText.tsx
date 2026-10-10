@@ -3,6 +3,8 @@ import { MessageResponse } from "@/components/ai-elements/message";
 import { useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 
+const startedReplyAnimations = new Set<string>();
+
 // One markdown recipe for every place Kala's model output is rendered as
 // prose. The model answers in markdown (bold, lists, code, headings,
 // blockquotes); Streamdown turns that into real elements, but without this
@@ -68,6 +70,7 @@ export function MarkdownText({
   className,
   animate = true,
   streaming = false,
+  animationKey,
 }: {
   children: string;
   className?: string;
@@ -77,10 +80,17 @@ export function MarkdownText({
   /** True when `children` is genuinely arriving in pieces (real token
    * streaming). Disables the local reveal so the two don't compound. */
   streaming?: boolean;
+  /** Stable identity for a reply that may unmount and reopen. */
+  animationKey?: string;
 }) {
   const reduceMotion = useReducedMotion();
-  const shouldReveal = animate && !streaming && !reduceMotion;
-  const { visible, isRevealing } = useRevealText(children, shouldReveal);
+  // Decide once for this reply. The reveal effect records animationKey in the
+  // shared set, which causes a render; recomputing this condition on every
+  // render would mistake the in-progress reply for a previously seen one and
+  // expose the full text immediately.
+  const [shouldReveal] = useState(() => animate && !streaming && !reduceMotion &&
+    (!animationKey || !startedReplyAnimations.has(animationKey)));
+  const { visible, isRevealing } = useRevealText(children, shouldReveal, animationKey);
 
   return (
     <MessageResponse
@@ -118,11 +128,13 @@ export function MarkdownText({
  */
 function useRevealText(
   text: string,
-  reveal: boolean
+  reveal: boolean,
+  animationKey?: string,
 ): { visible: string; isRevealing: boolean } {
   const [visibleLength, setVisibleLength] = useState(reveal ? 0 : text.length);
   const [isRevealing, setIsRevealing] = useState(reveal);
   const rafRef = useRef<number | null>(null);
+  const startedKeyRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
@@ -133,6 +145,18 @@ function useRevealText(
       setIsRevealing(false);
       return;
     }
+    if (
+      animationKey && startedReplyAnimations.has(animationKey) &&
+      startedKeyRef.current !== animationKey
+    ) {
+      setVisibleLength(text.length);
+      setIsRevealing(false);
+      return;
+    }
+    if (animationKey) {
+      startedReplyAnimations.add(animationKey);
+      startedKeyRef.current = animationKey;
+    }
 
     // End-of-word offsets: the only positions the reveal is allowed to pause
     // at. Falls back to the whole length when the text has no spaces.
@@ -142,6 +166,7 @@ function useRevealText(
     }
     if (wordEnds.length === 0) wordEnds.push(text.length);
 
+    setVisibleLength(0);
     setIsRevealing(true);
     const startedAt = performance.now();
     // Scale duration with length, but only gently: a wall of text shouldn't
@@ -172,7 +197,7 @@ function useRevealText(
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [text, reveal]);
+  }, [text, reveal, animationKey]);
 
   return { visible: reveal ? text.slice(0, visibleLength) : text, isRevealing };
 }

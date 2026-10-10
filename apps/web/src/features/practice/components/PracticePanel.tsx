@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
@@ -65,6 +65,7 @@ export function PracticePanel({
   includesRepeats?: boolean;
   onExit: () => void;
 }) {
+  const replySessionId = useId();
   const usingSaved = Boolean(setId);
   const bank = useBankStatus(courseId, !usingSaved);
   const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
@@ -398,7 +399,10 @@ export function PracticePanel({
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">
             <UserBlock text={turn.question} />
-            <AssistantBlock text={turn.answer} />
+            <AssistantBlock
+              text={turn.answer}
+              animationKey={`${courseId}:${replySessionId}:${skillId}:${data?.setId ?? setId ?? "session"}:follow-up:${index}`}
+            />
           </div>
         ))}
         {pendingFollowUp ? (
