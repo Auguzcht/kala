@@ -152,7 +152,7 @@ outcome ([migration 0008, lines 51–76](../../packages/db/migrations/0008_learn
 
 | Column | Type | Notes |
 |---|---|---|
-| `last_outcome` | text, nullable, check in (`again`, `good`) | Null for rows never reviewed |
+| `last_outcome` | text, nullable, check in (`again`, `good`) | Backfill: `reps = 0` → null; `streak > 0` → `good`; `streak = 0 AND reps > 0` → `again`. In `srs.py`, only the miss branch resets streak; successful reviews increment it. |
 
 Prior success exists when `reps - lapses > 0`: `reps` increments on every review and `lapses`
 increments on misses ([srs.py, lines 94–120](../../services/api/app/learn/srs.py#L94)). This count cannot identify the last outcome by itself.
@@ -444,9 +444,8 @@ Each phase is local commits only. Nothing is pushed until the whole set is verif
 
 ### Phase 1: membership and states (fixes the bug)
 
-- Migration: add `srs_state.last_outcome`; do not infer it from aggregate `reps` and `lapses`.
-  Existing schedules have no event history, so backfill to `NULL` and show a conservative legacy
-  state until the next review (or adopt an explicit “legacy unknown” rule).
+- Migration: add `srs_state.last_outcome` and backfill exactly from `reps`/`streak`: `reps = 0`
+  → `NULL`; `streak > 0` → `good`; `streak = 0 AND reps > 0` → `again`.
 - Membership endpoint 10.1.
 - Frontend browse list and counters.
 - Acceptance: the list count equals live items in the skill and never changes as cards are
@@ -485,16 +484,19 @@ lesson checks feeding card memory, due cards as a Test picking tier.
 
 ---
 
-## 15. Open decisions
+## 15. Accepted decisions
 
-1. Card state names: New, Learning, Slipping, Known. **Recommend approve**; they distinguish a per-card recall state from the skill mastery bands.
-2. Known threshold: 21-day scheduled interval. **Recommend approve provisionally**; derive the Leitner interval from box/ease, and review against student use before FSRS adoption.
-3. New-card and session caps. **Recommend 20 new cards per course per institution-local day and 20 cards per session**, rather than per-skill daily caps that multiply across a large course.
-4. Quiz weighting and early-review behavior: correct advances only when due; wrong lapses. **Recommend approve**; record an early success but leave box/due unchanged, for both quiz answers and flashcard ratings in Study all. This intentionally changes current early flashcard success behavior. Preserve the existing mastery update exactly.
-5. Timezone: config default `Asia/Manila`, or add an `institutions.timezone` column. **Recommend add the column now**, seed the pilot to `Asia/Manila`, and use an explicit IANA zone for every institution.
-6. Should diagnostic answers and lesson checks feed card memory later? **Recommend defer**; keep MVP inputs limited to flashcard ratings and practice quiz submissions.
-7. Leaderboard: **recommend defer and revisit only with a separate product/privacy decision**.
-8. Instructor visibility into card memory: **recommend none for MVP**; keep per-item memory student-only until an instructor use case and course-scoped access rules are defined.
+1. **Card state names accepted:** New, Learning, Slipping, Known.
+2. **Known threshold accepted:** 21-day scheduled interval, derived from the Leitner box/ease calculation.
+3. **Caps accepted:** 20 new cards per course per institution-local day and 20 cards per session.
+4. **Quiz weighting and early-review behavior accepted:** correct advances only when due; wrong lapses. Early success records the review but leaves box/due unchanged, for quiz and Study all. This intentionally changes current early flashcard success behavior; existing mastery updates stay unchanged.
+5. **Timezone accepted:** add `institutions.timezone`, seed the pilot institution to `Asia/Manila`, and use an explicit IANA zone per institution.
+6. **Diagnostic and lesson-check answers deferred** from card memory; MVP inputs remain flashcard ratings and practice quiz submissions.
+7. **Leaderboard deferred** pending a separate product/privacy decision.
+8. **Instructor visibility deferred:** card memory remains student-only for MVP.
+9. **Remove the model-backed flashcard fallback:** when bank serving is unavailable, return the existing no-material state; Study must never make a model call.
+
+**Backfill correction accepted:** `reps = 0` → `last_outcome = NULL`; `streak > 0` → `good`; `streak = 0 AND reps > 0` → `again`. `srs.py` confirms streak increments on success and resets only on a miss (lines 101–113).
 
 ---
 
