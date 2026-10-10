@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
+import { toast } from "sonner";
 import { BrainIcon } from "@/components/ui/brain";
 import { SparklesIcon } from "@/components/ui/sparkles";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
-import { ComposeDock } from "@/components/study/ComposeDock";
+import { ComposeDock, type ComposeDockPrimary } from "@/components/study/ComposeDock";
 import { SessionBar } from "@/components/study/SessionBar";
 import { StudyStream } from "@/components/study/StudyStream";
 import { StudySurface } from "@/components/study/StudySurface";
@@ -23,10 +24,7 @@ import { useCreateSetFromItems } from "@/features/practice";
 import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
-import type {
-  FlashcardCard,
-  FlashcardReviewResult,
-} from "@/features/flashcards/schema/flashcards.schema";
+import type { FlashcardCard } from "@/features/flashcards/schema/flashcards.schema";
 
 // Study mode: a flip card, not a quiz. Front shows the prompt, tapping flips
 // to the back (answer label + explanation), and the student marks it "Got it"
@@ -58,6 +56,15 @@ import type {
 
 type Phase = "front" | "back";
 type FollowUpTurn = { question: string; answer: string };
+type ReviewIconHandle = { startAnimation: () => void; stopAnimation: () => void };
+
+const ReviewSpinnerIcon = forwardRef<ReviewIconHandle, { size?: number }>(function ReviewSpinnerIcon(
+  { size = 16 },
+  ref,
+) {
+  useImperativeHandle(ref, () => ({ startAnimation: () => undefined, stopAnimation: () => undefined }), []);
+  return <Spinner aria-label="Saving review" style={{ width: size, height: size }} />;
+});
 
 function StateBadge({ state }: { state: "due" | "new" }) {
   return (
@@ -88,6 +95,7 @@ export function FlashcardDeck({
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const replySessionId = useId();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 10, skillId);
   const bank = useBankStatus(courseId);
@@ -101,23 +109,71 @@ export function FlashcardDeck({
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("front");
   const [deckDone, setDeckDone] = useState(false);
-  const [result, setResult] = useState<FlashcardReviewResult | null>(null);
+  const [reviewCounts, setReviewCounts] = useState({ gotIt: 0, reviewAgain: 0 });
+  const [showReviewSpinner, setShowReviewSpinner] = useState(false);
+  const [pendingRemembered, setPendingRemembered] = useState<boolean | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
   const [explainText, setExplainText] = useState<string | null>(null);
+  const [hintAnimationKey, setHintAnimationKey] = useState<string | undefined>();
+  const [explainAnimationKey, setExplainAnimationKey] = useState<string | undefined>();
   const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
   const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
   const startedAtRef = useRef(Date.now());
+  const replySequenceRef = useRef(0);
+  const reviewInFlightRef = useRef(false);
+  const markRef = useRef<((remembered: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    if (!review.isPending) {
+      setShowReviewSpinner(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowReviewSpinner(true), 200);
+    return () => window.clearTimeout(timer);
+  }, [review.isPending]);
 
   useEffect(() => {
     setPhase("front");
     setDeckDone(false);
-    setResult(null);
     setHintText(null);
     setExplainText(null);
+    setHintAnimationKey(undefined);
+    setExplainAnimationKey(undefined);
     setFollowUpTurns([]);
     setPendingFollowUp(null);
     startedAtRef.current = Date.now();
   }, [index, data?.courseId]);
+
+  useEffect(() => {
+    setReviewCounts({ gotIt: 0, reviewAgain: 0 });
+  }, [courseId, skillId]);
+
+  const activeItemId = data?.cards[index]?.itemId;
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!activeItemId || event.repeat || event.altKey || event.ctrlKey || event.metaKey || deckDone) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (
+        target.isContentEditable || target.closest("input, textarea, select, [contenteditable='true']")
+      )) return;
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        setPhase((current) => current === "front" ? "back" : "front");
+        return;
+      }
+      if (phase !== "back" || review.isPending || reviewInFlightRef.current) return;
+      if (event.key === "1") {
+        event.preventDefault();
+        markRef.current?.(false);
+      } else if (event.key === "2") {
+        event.preventDefault();
+        markRef.current?.(true);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeItemId, deckDone, phase, review.isPending]);
 
   if (isLoading)
     return <LoadingPanel label="Loading your cards…" lines={4} />;
@@ -234,6 +290,9 @@ export function FlashcardDeck({
               Missed cards resurface sooner, so your next pass is exactly what your schedule says
               you need.
             </p>
+            <p className="mt-3 text-sm font-medium text-foreground">
+              {reviewCounts.gotIt} got it, {reviewCounts.reviewAgain} coming back sooner.
+            </p>
             {canTest ? (
               <p className="mt-3 text-sm text-muted-foreground">
                 Ready to prove it? A test on these same cards is graded, and it moves your
@@ -255,20 +314,36 @@ export function FlashcardDeck({
   const band = twin?.skills.find((s) => s.skillId === card.skillId)?.band;
 
   function mark(remembered: boolean) {
+    if (reviewInFlightRef.current) return;
+    reviewInFlightRef.current = true;
+    setPendingRemembered(remembered);
     review.mutate(
       {
         itemId: card.itemId,
         remembered,
         latencyMs: Date.now() - startedAtRef.current,
       },
-      { onSuccess: (r) => setResult(r) }
+      {
+        onSuccess: () => {
+          reviewInFlightRef.current = false;
+          setPendingRemembered(null);
+          setReviewCounts((counts) => remembered
+            ? { ...counts, gotIt: counts.gotIt + 1 }
+            : { ...counts, reviewAgain: counts.reviewAgain + 1 });
+          nextCard();
+        },
+        onError: () => {
+          reviewInFlightRef.current = false;
+          setPendingRemembered(null);
+          toast.error("Could not save your review. Try again.");
+        },
+      }
     );
   }
 
   function nextCard() {
     if (index + 1 >= total) {
       setDeckDone(true);
-      refetch();
       return;
     }
     setIndex((i) => i + 1);
@@ -279,6 +354,12 @@ export function FlashcardDeck({
     // would not rerun the reset effect. Clear the terminal state explicitly.
     setDeckDone(false);
     setIndex(0);
+    setPhase("front");
+    setHintText(null);
+    setExplainText(null);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
+    setReviewCounts({ gotIt: 0, reviewAgain: 0 });
     refetch();
   }
 
@@ -304,6 +385,7 @@ export function FlashcardDeck({
 
   function askHint() {
     setHintText(null);
+    setHintAnimationKey(`${courseId}:${replySessionId}:${card.itemId}:hint:${++replySequenceRef.current}`);
     hint.mutate(
       {
         question: `Give me a hint for this recall card without revealing the answer: "${card.prompt}"`,
@@ -315,6 +397,7 @@ export function FlashcardDeck({
 
   function askExplain() {
     setExplainText(null);
+    setExplainAnimationKey(`${courseId}:${replySessionId}:${card.itemId}:explain:${++replySequenceRef.current}`);
     explain.mutate(
       { question: `Explain this in more detail: ${card.prompt}`, style: "detail" },
       { onSuccess: (r) => setExplainText(r.answer) }
@@ -344,20 +427,28 @@ export function FlashcardDeck({
     );
   }
 
-  const marked = result !== null;
-  const atEnd = index + 1 >= total;
-  const dockPrimary = !marked
+  markRef.current = mark;
+
+  const dockPrimary: ComposeDockPrimary = phase === "front"
     ? {
-        label: phase === "front" ? "Show answer" : "Mark it to continue",
-        onClick: phase === "front" ? () => setPhase("back") : () => {},
-        disabled: phase === "back",
+        label: "Show answer",
+        onClick: () => setPhase("back"),
         icon: ArrowRightIcon,
       }
     : {
-        label: atEnd ? "See recap" : "Next card",
-        onClick: nextCard,
-        icon: ArrowRightIcon,
+        label: "Got it",
+        onClick: () => mark(true),
+        disabled: review.isPending,
+        icon: showReviewSpinner && pendingRemembered === true ? ReviewSpinnerIcon : CheckIcon,
       };
+  const dockSecondary: ComposeDockPrimary | undefined = phase === "back"
+    ? {
+        label: "Review again",
+        onClick: () => mark(false),
+        disabled: review.isPending,
+        icon: showReviewSpinner && pendingRemembered === false ? ReviewSpinnerIcon : RotateCCWIcon,
+      }
+    : undefined;
 
   return (
     <StudySurface
@@ -372,6 +463,7 @@ export function FlashcardDeck({
       dock={
         <ComposeDock
           primary={dockPrimary}
+          secondary={dockSecondary}
           onAsk={phase === "back" ? askAboutCard : undefined}
           askPending={followUp.isPending}
           placeholder="Ask Kala about this card…"
@@ -388,9 +480,6 @@ export function FlashcardDeck({
             {band ? <MasteryBand band={band} /> : null}
             <StateBadge state={card.state} />
           </div>
-          <span className="shrink-0 font-mono text-xs text-muted-foreground">
-            box {card.box}
-          </span>
         </div>
 
         <div className="relative border bg-card">
@@ -441,11 +530,15 @@ export function FlashcardDeck({
                 </div>
               </button>
 
-              {/* back — the answer, then the self-mark. This is the study move:
-                  the student decides, and that decision drives the schedule. */}
-              <div
+              {/* The back shows the answer; grading lives in the persistent dock. */}
+              <button
+                type="button"
                 aria-hidden={phase !== "back"}
-                className="space-y-4 [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)]"
+                tabIndex={phase === "back" ? 0 : -1}
+                aria-label="Flip to question"
+                disabled={phase !== "back"}
+                onClick={() => setPhase("front")}
+                className="block w-full space-y-4 text-left [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <p className="text-sm text-muted-foreground">{card.prompt}</p>
                 <div className="rounded-sm border border-brand-green/40 bg-brand-green/10 px-3 py-2.5">
@@ -465,62 +558,10 @@ export function FlashcardDeck({
                   </p>
                 ) : null}
 
-                {!marked ? (
-                  <div className="flex flex-wrap gap-2.5 border-t pt-4">
-                    <Button
-                      variant="orange"
-                      size="sm"
-                      onClick={() => mark(true)}
-                      disabled={review.isPending}
-                    >
-                      {review.isPending ? (
-                        <Spinner className="size-3.5" />
-                      ) : (
-                        <CheckIcon size={15} aria-hidden />
-                      )}
-                      Got it
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => mark(false)}
-                      disabled={review.isPending}
-                    >
-                      <RotateCCWIcon size={15} aria-hidden />
-                      Review again
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <p
-                      className={cn(
-                        "border-t pt-4 text-sm font-semibold",
-                        result?.remembered ? "text-brand-green" : "text-brand-orange",
-                      )}
-                    >
-                      {result?.remembered
-                        ? "Marked as remembered."
-                        : "Marked for review. This card comes back sooner."}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-xs text-muted-foreground">
-                      <span>
-                        next review in{" "}
-                        {result && result.dueInHours < 24
-                          ? `${result.dueInHours}h`
-                          : `${Math.round((result?.dueInHours ?? 0) / 24)}d`}
-                      </span>
-                      <span>box {result?.box}</span>
-                      {result?.graduated ? (
-                        <span className="text-brand-green">graduated ✓</span>
-                      ) : null}
-                    </div>
-                  </>
-                )}
-              </div>
+              </button>
             </div>
           </div>
         </div>
-
         {/* Ask-for-help row. These stay as plain text affordances rather than
             buttons competing with the dock's primary action, because they
             trigger distinct TUTOR STYLES (a nudge, a deep explanation) that
@@ -528,7 +569,7 @@ export function FlashcardDeck({
             bubble in the thread below — see the thread block — instead of
             inside the card, so this reads as one conversation with Kala rather
             than a card with a text dump stuffed into it. */}
-        {phase === "back" ? (
+        {phase === "back" || hintText || explainText || hint.isPending || explain.isPending ? (
           <div className="flex items-center gap-4 text-xs">
             <button
               type="button"
@@ -551,33 +592,38 @@ export function FlashcardDeck({
           </div>
         ) : null}
 
-        {result ? (
-          <p className="text-right font-mono text-xs text-muted-foreground">
-            {result.reward.streakDays}-day streak · {result.reward.xp} XP
-          </p>
-        ) : null}
-
         {/* Kala's thread for this card: the hint/explanation turn, then any
             free-text follow-ups from the dock. Rendered as the same
             UserBlock/AssistantBlock bubbles LessonChat uses, so every surface
             talks the same way. */}
-        {hintText || explainText || hint.isPending || explain.isPending ? (
-          <div className="border-t pt-5">
-            <AssistantBlock
-              text={hintText ?? explainText ?? undefined}
-              pending={hint.isPending || explain.isPending}
-              pendingLabel={
-                hint.isPending ? "Kala is preparing a hint…" : "Kala is preparing an explanation…"
-              }
-              animate={false}
-            />
+        {hintText || hint.isPending || explainText || explain.isPending ? (
+          <div className="space-y-5 border-t pt-5">
+            {hintText || hint.isPending ? (
+              <AssistantBlock
+                text={hintText ?? undefined}
+                pending={hint.isPending}
+                pendingLabel="Kala is preparing a hint…"
+                animationKey={hintAnimationKey}
+              />
+            ) : null}
+            {explainText || explain.isPending ? (
+              <AssistantBlock
+                text={explainText ?? undefined}
+                pending={explain.isPending}
+                pendingLabel="Kala is preparing an explanation…"
+                animationKey={explainAnimationKey}
+              />
+            ) : null}
           </div>
         ) : null}
 
         {followUpTurns.map((turn, turnIndex) => (
           <div key={`${turn.question}-${turnIndex}`} className="space-y-3">
             <UserBlock text={turn.question} />
-            <AssistantBlock text={turn.answer} />
+            <AssistantBlock
+              text={turn.answer}
+              animationKey={`${courseId}:${replySessionId}:${card.itemId}:follow-up:${turnIndex}`}
+            />
           </div>
         ))}
         {pendingFollowUp ? (

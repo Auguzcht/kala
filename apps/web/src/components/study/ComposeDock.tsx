@@ -36,6 +36,7 @@ export type ComposeDockPrimary = {
 // follow-up input. The two states are intentionally never visible together.
 export function ComposeDock({
   primary,
+  secondary,
   onAsk,
   askDisabled,
   askPending,
@@ -45,6 +46,7 @@ export function ComposeDock({
   inputId,
 }: {
   primary?: ComposeDockPrimary | null;
+  secondary?: ComposeDockPrimary;
   onAsk?: (text: string) => void;
   askDisabled?: boolean;
   askPending?: boolean;
@@ -63,6 +65,7 @@ export function ComposeDock({
   // forwarding). Declared unconditionally so hook order is stable across mode
   // flips, which unmount the button.
   const primaryIcon = useIconHover<AnimatedIconHandle>();
+  const secondaryIcon = useIconHover<AnimatedIconHandle>();
   const toggleIcon = useIconHover<AnimatedIconHandle>();
   const ToggleIcon = userMode === "action" ? MessageCircleIcon : XIcon;
   const PrimaryIcon = primary?.icon;
@@ -82,28 +85,73 @@ export function ComposeDock({
           ) : null}
 
           {mode === "action" && primary ? (
-            <button
-              type="button"
-              id={primary.id}
-              onClick={primary.onClick}
-              disabled={primary.disabled}
-              onMouseEnter={primaryIcon.play}
-              onMouseLeave={primaryIcon.stop}
-              onFocus={primaryIcon.play}
-              onBlur={primaryIcon.stop}
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-full",
-                DOCK_HEIGHT,
-                "bg-brand-orange px-5 text-sm font-semibold text-brand-orange-foreground",
-                "shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              )}
-            >
-              {PrimaryIcon ? (
-                <PrimaryIcon ref={primaryIcon.ref} size={16} aria-hidden />
-              ) : null}
-              {primary.label}
-            </button>
+            secondary ? (
+              <div className="flex w-full gap-2">
+                <button
+                  type="button"
+                  id={secondary.id}
+                  onClick={secondary.onClick}
+                  disabled={secondary.disabled}
+                  onMouseEnter={secondaryIcon.play}
+                  onMouseLeave={secondaryIcon.stop}
+                  onFocus={secondaryIcon.play}
+                  onBlur={secondaryIcon.stop}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full",
+                    DOCK_HEIGHT,
+                    "border border-border bg-card px-3 text-sm font-semibold text-foreground",
+                    "transition-colors hover:bg-accent disabled:opacity-40",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  )}
+                >
+                  {secondary.icon ? <secondary.icon ref={secondaryIcon.ref} size={16} aria-hidden /> : null}
+                  {secondary.label}
+                </button>
+                <button
+                  type="button"
+                  id={primary.id}
+                  onClick={primary.onClick}
+                  disabled={primary.disabled}
+                  onMouseEnter={primaryIcon.play}
+                  onMouseLeave={primaryIcon.stop}
+                  onFocus={primaryIcon.play}
+                  onBlur={primaryIcon.stop}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full",
+                    DOCK_HEIGHT,
+                    "bg-brand-orange px-3 text-sm font-semibold text-brand-orange-foreground",
+                    "shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  )}
+                >
+                  {PrimaryIcon ? <PrimaryIcon ref={primaryIcon.ref} size={16} aria-hidden /> : null}
+                  {primary.label}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                id={primary.id}
+                onClick={primary.onClick}
+                disabled={primary.disabled}
+                onMouseEnter={primaryIcon.play}
+                onMouseLeave={primaryIcon.stop}
+                onFocus={primaryIcon.play}
+                onBlur={primaryIcon.stop}
+                className={cn(
+                  "flex w-full items-center justify-center gap-2 rounded-full",
+                  DOCK_HEIGHT,
+                  "bg-brand-orange px-5 text-sm font-semibold text-brand-orange-foreground",
+                  "shadow-sm transition-opacity hover:opacity-90 disabled:opacity-40",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                )}
+              >
+                {PrimaryIcon ? (
+                  <PrimaryIcon ref={primaryIcon.ref} size={16} aria-hidden />
+                ) : null}
+                {primary.label}
+              </button>
+            )
           ) : (
             <PromptInput
               id={inputId}
