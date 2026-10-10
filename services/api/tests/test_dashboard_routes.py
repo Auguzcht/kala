@@ -8,6 +8,36 @@ def instructor_user() -> CurrentUser:
     return CurrentUser(user_id="inst-1", institution_id="institution-1", app_role="instructor")
 
 
+def test_reject_approved_skill_is_course_staff_only_and_uses_atomic_rpc(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = instructor_user
+    selected, called = [], []
+    monkeypatch.setattr(dashboard.db, "select", lambda table, params: selected.append((table, params)) or [{"course_id": params["course_id"]}])
+    monkeypatch.setattr(dashboard.db, "rpc", lambda fn, args: called.append((fn, args)) or [{"skill_id": args["p_skill_id"], "retired_items": 23}])
+    monkeypatch.setattr(dashboard, "kick_bank", lambda *args: None)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/dashboard/00000000-0000-4000-8000-000000000001/skills/00000000-0000-4000-8000-000000000010/reject-approved")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json() == {"skillId": "00000000-0000-4000-8000-000000000010", "status": "rejected", "retiredItems": 23}
+    assert selected[0][0] == "enrollments"
+    assert selected[0][1]["role"] == "eq.instructor"
+    assert called[0][0] == "reject_approved_skill"
+    assert called[0][1]["p_reviewed_by"] == "inst-1"
+
+
+def test_reject_approved_skill_requires_staff_role() -> None:
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        user_id="stu-1", institution_id="institution-1", app_role="student")
+    try:
+        with TestClient(app) as client:
+            response = client.post("/dashboard/00000000-0000-4000-8000-000000000001/skills/00000000-0000-4000-8000-000000000010/reject-approved")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
 def test_heatmap_requires_instructor(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="stu-1", institution_id="institution-1", app_role="student")

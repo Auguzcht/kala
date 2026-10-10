@@ -485,16 +485,18 @@ def test_set_from_items_groups_existing_items_without_generating(monkeypatch) ->
     inserted_sets = []
     updated = []
     generated = []
+    selected_params = []
 
-    monkeypatch.setattr(
-        practice.db, "select",
-        lambda table, params: [
+    def select_items(table, params):
+        selected_params.append((table, params))
+        return [
             {"id": "item-1", "skill_id": "00000000-0000-4000-8000-000000000010", "prompt": "Q1",
              "choices": [{"id": "a", "label": "A"}], "bloom_level": "apply"},
             {"id": "item-2", "skill_id": "00000000-0000-4000-8000-000000000010", "prompt": "Q2",
              "choices": [{"id": "b", "label": "B"}], "bloom_level": "apply"},
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(practice.db, "select", select_items)
     monkeypatch.setattr(
         practice.db, "insert",
         lambda table, rows, prefer="return=representation": inserted_sets.extend(rows)
@@ -530,6 +532,9 @@ def test_set_from_items_groups_existing_items_without_generating(monkeypatch) ->
        {"set_id": "00000000-0000-4000-8000-000000000020", "item_id": "item-2", "position": 1}]
     assert updated == []
     assert generated == []
+    _, filter_params = selected_params[0]
+    assert filter_params["retired_at"] == "is.null"
+    assert filter_params["skills.status"] == "eq.approved"
 
 
 def test_set_from_items_404s_when_no_items_belong_here(monkeypatch) -> None:
@@ -674,6 +679,81 @@ def test_get_set_returns_its_items_in_order(monkeypatch) -> None:
     for item in body["items"]:
         assert "correct_choice_id" not in item
         assert "explanation" not in item
+
+
+def test_saved_set_with_only_retired_items_is_unavailable(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    generated_filters = []
+    def fake_select(table, params):
+        if table == "quiz_sets":
+            return [{"id": "00000000-0000-4000-8000-000000000020", "skill_id": "skill-1",
+                     "kind": "practice", "size": 1, "created_at": "2026-02-01T00:00:00Z"}]
+        if table == "quiz_set_items":
+            return [{"item_id": "retired-1", "position": 0}]
+        if table == "generated_items":
+            generated_filters.append(params)
+            return []
+        return []
+    monkeypatch.setattr(practice.db, "select", fake_select)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["available"] is False
+    assert response.json()["items"] == []
+    assert generated_filters[0]["retired_at"] == "is.null"
+    assert generated_filters[0]["skills.status"] == "eq.approved"
+
+
+def test_saved_set_counts_only_live_approved_items(monkeypatch) -> None:
+    calls = []
+    def select(table, params):
+        calls.append((table, params))
+        if table == "quiz_set_items":
+            return [{"set_id": "set-1", "item_id": "live"},
+                    {"set_id": "set-1", "item_id": "retired"}]
+        if table == "generated_items":
+            return [{"id": "live"}]
+        return []
+    monkeypatch.setattr(practice.db, "select", select)
+    assert practice._item_counts_by_set(institution_id="inst", set_ids=["set-1"]) == {"set-1": 1}
+    item_params = calls[-1][1]
+    assert item_params["retired_at"] == "is.null"
+    assert item_params["skills.status"] == "eq.approved"
+
+
+def test_flashcard_due_rows_cannot_reintroduce_retired_items(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    item_queries = []
+    def select(table, params):
+        if table == "skills":
+            return [{"id": "skill-1", "name": "Skill", "bloom_level": "apply"}]
+        if table == "courses":
+            return [{"id": "course", "bank_serving": False}]
+        if table == "srs_state":
+            return [{"item_id": "tracked", "skill_id": "skill-1"}]
+        if table == "generated_items":
+            item_queries.append(params)
+            return []
+        return []
+    monkeypatch.setattr(flashcards.db, "select", select)
+    monkeypatch.setattr(flashcards.srs, "due_cards", lambda **kwargs: [
+        {"item_id": "retired-1", "skill_id": "skill-1", "box": 2}
+    ])
+    monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {})
+    monkeypatch.setattr(flashcards.srs, "_active_item_ids", lambda **kwargs: {"tracked"})
+    try:
+        with TestClient(app) as client:
+            response = client.get("/flashcards/00000000-0000-4000-8000-000000000001/deck?skill_id=skill-1")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["cards"] == []
+    assert item_queries[0]["retired_at"] == "is.null"
+    assert item_queries[0]["skills.status"] == "eq.approved"
 
 
 def test_get_set_404s_for_another_course(monkeypatch) -> None:

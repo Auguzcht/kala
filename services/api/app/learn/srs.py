@@ -231,6 +231,8 @@ def due_cards(*, institution_id: str, user_id: str, course_id: str,
     if skill_id is not None:
         params["skill_id"] = f"eq.{skill_id}"
     rows = db.select("srs_state", params)
+    active_ids = _active_item_ids(institution_id=institution_id, course_id=course_id, rows=rows)
+    rows = [r for r in rows if r["item_id"] in active_ids]
 
     fresh = [r for r in rows if not is_mastered(box=int(r["box"]), streak=int(r["streak"]))]
     return fresh[:limit]
@@ -252,6 +254,8 @@ def stats(*, institution_id: str, user_id: str, course_id: str,
     if skill_id is not None:
         params["skill_id"] = f"eq.{skill_id}"
     rows = db.select("srs_state", params)
+    active_ids = _active_item_ids(institution_id=institution_id, course_id=course_id, rows=rows)
+    rows = [r for r in rows if r["item_id"] in active_ids]
     now_iso = _now().isoformat()
     due = sum(1 for r in rows if r["due_at"] <= now_iso
               and not is_mastered(box=int(r["box"]), streak=int(r["streak"])))
@@ -264,3 +268,18 @@ def stats(*, institution_id: str, user_id: str, course_id: str,
         "learning": learning,
         "mastered": mastered,
     }
+
+
+def _active_item_ids(*, institution_id: str, course_id: str, rows: list[dict]) -> set[str]:
+    """Retired or rejected-skill SRS rows are historical scheduling state,
+    not live cards. Resolve them through the canonical active-item filter."""
+    item_ids = list(dict.fromkeys(r["item_id"] for r in rows if r.get("item_id")))
+    if not item_ids:
+        return set()
+    active = db.select("generated_items", {
+        "id": f"in.({','.join(item_ids)})", "institution_id": f"eq.{institution_id}",
+        "course_id": f"eq.{course_id}", "retired_at": "is.null",
+        "skills.status": "eq.approved",
+        "select": "id,skills!inner(status)",
+    })
+    return {item["id"] for item in active}

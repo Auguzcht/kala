@@ -29,6 +29,7 @@ REVIEW_HINT = 0.82
 # begin at 0.905. A 0.90 cutoff avoids merging the 0.859 database pair, whose
 # Bloom levels and assessable tasks differ.
 INBATCH_DUP = 0.90
+APPROVED_OVERLAP_DROP = INBATCH_DUP
 COURSE_OVERLAP = 0.60
 SIM_THRESHOLD = 0.544
 MIN_CHUNK_CHARS = 200
@@ -331,6 +332,7 @@ def run(*, course_id: str, institution_id: str | None = None,
                                 except ValueError: pass
                         merged_count = old_count + int(candidate.get("merged_count", 1))
                         if (candidate["context_chars"], candidate["depth"]) > (old_chars, old_depth):
+                            dropped_name = previous.get("name")
                             source = str(ref)
                             if candidate["context_chars"] < MIN_CONTEXT_CHARS:
                                 source += f"; thin material: {candidate['context_chars']} chars"
@@ -343,7 +345,7 @@ def run(*, course_id: str, institution_id: str | None = None,
                             previous.update({"name": p["name"], "embedding": candidate["embedding"],
                                              "bloom_level": p["bloom_level"], "module_ref": ref,
                                              "proposed_source": source})
-                            logger.info("skill proposal dropped name=%s reason=deduped keeper=%s", previous.get("name"), p["name"])
+                            logger.info("skill proposal dropped name=%s reason=deduped keeper=%s", dropped_name, p["name"])
                         else:
                             source = str(previous.get("proposed_source") or "")
                             source = "; ".join(x for x in source.split(";") if not x.strip().startswith("merged_count="))
@@ -351,6 +353,15 @@ def run(*, course_id: str, institution_id: str | None = None,
                             db.update("skills", {"id": f"eq.{previous['id']}"}, {"proposed_source": source})
                             previous["proposed_source"] = source
                             logger.info("skill proposal dropped name=%s reason=deduped keeper=%s", p["name"], previous.get("name"))
+                        continue
+                    approved_overlap = max((
+                        _cosine(candidate["embedding"], old["embedding"])
+                        for old in existing
+                        if old.get("status") == "approved" and old.get("embedding")
+                    ), default=0.0)
+                    if approved_overlap >= APPROVED_OVERLAP_DROP:
+                        logger.info("skill proposal dropped name=%s reason=approved_overlap similarity=%.3f",
+                                    candidate["p"]["name"], approved_overlap)
                         continue
                     sim = float(match.get("similarity") or 0.0) if match else 0.0
                     same_course = max((_cosine(candidate["embedding"], e.get("embedding"))

@@ -229,6 +229,20 @@ def test_within_window_near_duplicates_merge_and_log_dropped_name(monkeypatch, c
     assert "reason=deduped" in caplog.text
 
 
+def test_proposal_overlapping_approved_course_skill_is_dropped(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    approved = {"id": "approved-1", "name": "Existing approved skill",
+                "status": "approved", "embedding": [1.0, 0.0],
+                "created_at": "2025-01-01T00:00:00+00:00"}
+    inserts, _, _ = _setup(monkeypatch, _rows(), existing=[approved])
+    monkeypatch.setattr(skill_proposer, "_model", lambda _: ([
+        {"name": "Apply the same approved skill", "bloom_level": "apply"}
+    ], []))
+    skill_proposer.run(course_id="c", institution_id="i", remaining_seconds=100)
+    assert inserts == []
+    assert "name=Apply the same approved skill reason=approved_overlap similarity=1.000" in caplog.text
+
+
 def _mock_status(monkeypatch, status):
     class Response:
         status_code = status

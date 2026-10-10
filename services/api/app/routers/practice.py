@@ -133,6 +133,7 @@ def _bank_set_response(*, course_id: str, skill_id: str, requested_size: int,
 
 def _practice_set_view(
     *, course_id: str, set_row: dict, jobs: list[dict], items: list[dict],
+    unavailable: bool = False,
 ) -> dict:
     requested_size = int(set_row.get("size") or 0)
     pending_count = sum(job["status"] in {"pending", "in_progress"} for job in jobs)
@@ -146,7 +147,7 @@ def _practice_set_view(
     # No queue rows means this is a legacy synchronous/from-items set created
     # before 0019, not a current async set that silently lost its queue.
     # Current create_set rejects that latter condition before returning.
-    status_value = (
+    status_value = "unavailable" if unavailable else (
         ("ready" if ready_count else "failed") if not jobs else
         ("generating" if pending_count or resolved_count < requested_size
          else ("ready" if ready_count else "failed"))
@@ -157,6 +158,7 @@ def _practice_set_view(
         "skillId": set_row["skill_id"],
         "kind": set_row["kind"],
         "status": status_value,
+        "available": not unavailable,
         "requestedSize": requested_size,
         "readyCount": ready_count,
         "pendingCount": pending_count,
@@ -353,7 +355,8 @@ def create_set_from_items(
         "id": f"in.({','.join(item_ids)})",
         "institution_id": f"eq.{user.institution_id}",
         "course_id": f"eq.{course_id}",
-        "select": "id,skill_id,prompt,choices,bloom_level",
+        "retired_at": "is.null", "skills.status": "eq.approved",
+        "select": "id,skill_id,prompt,choices,bloom_level,skills!inner(status)",
     })
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such items in this course")
@@ -447,15 +450,28 @@ def _item_counts_by_set(*, institution_id: str, set_ids: list[str]) -> dict[str,
     """
     if not set_ids:
         return {}
-    rows = db.select("quiz_set_items", {
+    links = db.select("quiz_set_items", {
         "set_id": f"in.({','.join(set_ids)})",
-        "select": "set_id",
+        "select": "set_id,item_id",
     })
-    if not rows or any("set_id" not in r for r in rows):
-        rows = db.select("generated_items", {
+    if not links or any("item_id" not in r for r in links):
+        active_rows = db.select("generated_items", {
             "set_id": f"in.({','.join(set_ids)})", "institution_id": f"eq.{institution_id}",
-            "select": "set_id",
+            "retired_at": "is.null", "skills.status": "eq.approved",
+            "select": "set_id,skills!inner(status)",
         })
+        return _count_set_rows(active_rows)
+    item_ids = list(dict.fromkeys(r["item_id"] for r in links))
+    active = db.select("generated_items", {
+        "id": f"in.({','.join(item_ids)})", "institution_id": f"eq.{institution_id}",
+        "retired_at": "is.null", "skills.status": "eq.approved",
+        "select": "id,skills!inner(status)",
+    }) if item_ids else []
+    active_ids = {r["id"] for r in active}
+    return _count_set_rows(r for r in links if r["item_id"] in active_ids)
+
+
+def _count_set_rows(rows) -> dict[str, int]:
     counts: dict[str, int] = {}
     for r in rows:
         counts[r["set_id"]] = counts.get(r["set_id"], 0) + 1
@@ -501,6 +517,7 @@ def list_sets(
         "sets": [{
             "setId": r["id"], "skillId": r["skill_id"], "kind": r["kind"],
             "size": counts.get(r["id"], 0), "createdAt": r["created_at"],
+            "status": "available" if counts.get(r["id"], 0) else "unavailable",
             **_attempt_view(attempts.get(r["id"])),
         } for r in rows],
     }
@@ -540,14 +557,16 @@ def get_set(
     if not links or any("item_id" not in row for row in links):
         legacy = db.select("generated_items", {
             "set_id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
-            "select": "id,created_at", "order": "created_at.asc",
+            "retired_at": "is.null", "skills.status": "eq.approved",
+            "select": "id,created_at,skills!inner(status)", "order": "created_at.asc",
         })
         links = [{"item_id": row["id"], "position": index} for index, row in enumerate(legacy)]
     item_ids = [r["item_id"] for r in links]
     items = db.select("generated_items", {
         "id": f"in.({','.join(item_ids)})" if item_ids else "in.(00000000-0000-0000-0000-000000000000)",
         "institution_id": f"eq.{user.institution_id}",
-        "select": "id,skill_id,prompt,choices,bloom_level",
+        "retired_at": "is.null", "skills.status": "eq.approved",
+        "select": "id,skill_id,prompt,choices,bloom_level,skills!inner(status)",
     })
     items_by_id = {r["id"]: r for r in items}
     items = [items_by_id[r["item_id"]] for r in links if r["item_id"] in items_by_id]
@@ -560,11 +579,13 @@ def get_set(
         institution_id=user.institution_id, course_id=course_id, set_id=set_id,
     )
     s = sets[0]
+    unavailable = bool(links) and not items
     attempts = _attempts_by_set(
         institution_id=user.institution_id, user_id=user.user_id, set_ids=[s["id"]],
     )
     return {
-        **_practice_set_view(course_id=course_id, set_row=s, jobs=jobs, items=items),
+        **_practice_set_view(course_id=course_id, set_row=s, jobs=jobs, items=items,
+                             unavailable=unavailable),
         **_attempt_view(attempts.get(s["id"])),
     }
 

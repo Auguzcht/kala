@@ -571,6 +571,7 @@ def get_diagnostic(
     existing_rows = db.select("generated_items", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
         "kind": "eq.diagnostic",
+        "retired_at": "is.null",
         "skill_id": f"in.({','.join(skill_ids)})",
         "select": "id,skill_id,bloom_level,prompt,choices",
     })
@@ -602,6 +603,7 @@ def get_diagnostic(
         existing_rows = db.select("generated_items", {
             "institution_id": f"eq.{user.institution_id}",
             "course_id": f"eq.{course_id}", "kind": "eq.diagnostic",
+            "retired_at": "is.null",
             "skill_id": f"in.({','.join(skill_ids)})",
             "select": "id,skill_id,bloom_level,prompt,choices",
         })

@@ -108,6 +108,7 @@ def deck(
             "institution_id": f"eq.{user.institution_id}",
             "course_id": f"eq.{course_id}", "retired_at": "is.null",
             "kind": "in.(practice,flashcard)",
+            "skills.status": "eq.approved",
             "select": "id,skill_id,prompt,choices,origin,skills!inner(status)",
         })
         items_by_id = {r["id"]: r for r in rows}
@@ -132,9 +133,12 @@ def deck(
     if len(cards) < limit:
         tracked = db.select("srs_state", {
             "user_id": f"eq.{user.user_id}", "course_id": f"eq.{course_id}",
-            "select": "skill_id",
+            "select": "item_id,skill_id",
         })
-        tracked_skill_ids = {t["skill_id"] for t in tracked}
+        active_tracked_ids = srs._active_item_ids(
+            institution_id=user.institution_id, course_id=course_id, rows=tracked,
+        )
+        tracked_skill_ids = {t["skill_id"] for t in tracked if t.get("item_id") in active_tracked_ids}
         fresh_skills = [s for sid, s in skills.items() if sid not in tracked_skill_ids]
 
         if use_bank:
@@ -193,7 +197,9 @@ def deck(
         back_rows = db.select("generated_items", {
             "id": f"in.({','.join(item_ids)})",
             "institution_id": f"eq.{user.institution_id}",
-            "select": "id,correct_choice_id,explanation,choices",
+            "course_id": f"eq.{course_id}", "retired_at": "is.null",
+            "skills.status": "eq.approved",
+            "select": "id,correct_choice_id,explanation,choices,skills!inner(status)",
         })
         backs = {
             r["id"]: {
@@ -257,7 +263,9 @@ def review(
     """
     rows = db.select("generated_items", {
         "id": f"eq.{body.item_id}", "institution_id": f"eq.{user.institution_id}",
-        "select": "id,skill_id", "limit": "1",
+        "course_id": f"eq.{course_id}", "retired_at": "is.null",
+        "skills.status": "eq.approved",
+        "select": "id,skill_id,skills!inner(status)", "limit": "1",
     })
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "card not found")

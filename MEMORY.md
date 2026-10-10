@@ -115,6 +115,30 @@ on its own**, because attempted rows are excluded from the pending query.
   Supabase URL configuration is absent; check `skill_bank_state` after access is
   available.
 
+### Retired bank items and final proposer hardening — 2026-10-11
+
+- 4f proposer is complete. Same-run near-duplicates merge at cosine `>= 0.90`;
+  approved skills in the same course also hard-drop proposals at `>= 0.90`.
+  The AWS101 batch measured 1,081 pairs: min `0.070`, median `0.476`, p90
+  `0.619`, max `0.975`; six pairs were `>= 0.90`, while the top distinct pair
+  was `0.859`. The existing `0.60` same-course overlap remains a hint.
+- All student bank-item reads now exclude retired items, including saved-set
+  reads/counts, SRS due cards and counts, diagnostics, lesson checks, and the
+  study-to-test bridge. Empty saved sets return `unavailable`. Grading also
+  refuses retired or non-approved-skill items.
+- Added an instructor-of-course/admin API that atomically rejects an approved
+  skill and retires its live bank items with `reviewed_by`/`reviewed_at`; it
+  does not touch mastery or evidence. Migration 0025 is applied to Supabase.
+  AWS101 logistics skills rejected: badge deliverables (25 newly retired),
+  certification readiness (20), certification pathways (20), total **65**.
+  Student deck reads for each skill return 404, and none remains in heatmap.
+- Bank-status, flashcard response, and proposal-status contract items shipped.
+  Active architecture draft remains
+  [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (Session C is verifying it).
+- Full verification: API **334 passed**, worker **102 passed**. `make deploy`
+  completed; API CodeSha256/ECR digest `872bfc24dff269b762b1ec4a90833be9407674a94ce9b5331bf32c3a855531c2`,
+  worker `16aed8a7b0c0927880961c34c7547a3763de51e622f2fd957cbccab16a47dd3c`.
+
 ### Session wrap-up — 2026-10-06
 
 - **Backend question-bank work is deployed and verified, except for the

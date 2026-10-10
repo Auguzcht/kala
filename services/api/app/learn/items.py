@@ -418,7 +418,8 @@ def grade(*, institution_id: str, item_id: str, choice_id: str) -> dict:
     """Look up the stored answer key and grade server-side."""
     rows = db.select("generated_items", {
         "id": f"eq.{item_id}", "institution_id": f"eq.{institution_id}",
-        "select": "id,skill_id,course_id,correct_choice_id,explanation", "limit": "1",
+        "retired_at": "is.null", "skills.status": "eq.approved",
+        "select": "id,skill_id,course_id,correct_choice_id,explanation,skills!inner(status)", "limit": "1",
     })
     if not rows:
         raise ValueError(f"item {item_id} not found")

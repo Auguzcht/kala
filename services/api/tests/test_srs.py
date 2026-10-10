@@ -129,10 +129,14 @@ def test_ensure_tracked_inserts_when_absent(monkeypatch):
 
 
 def test_due_cards_excludes_mastered(monkeypatch):
-    monkeypatch.setattr(srs.db, "select", lambda table, params: [
-        {"item_id": "a", "skill_id": "s1", "box": 5, "streak": 5, "due_at": "2020-01-01T00:00:00+00:00"},
-        {"item_id": "b", "skill_id": "s2", "box": 1, "streak": 0, "due_at": "2020-01-01T00:00:00+00:00"},
-    ])
+    def select(table, params):
+        if table == "srs_state":
+            return [
+                {"item_id": "a", "skill_id": "s1", "box": 5, "streak": 5, "due_at": "2020-01-01T00:00:00+00:00"},
+                {"item_id": "b", "skill_id": "s2", "box": 1, "streak": 0, "due_at": "2020-01-01T00:00:00+00:00"},
+            ]
+        return [{"id": "a"}, {"id": "b"}]
+    monkeypatch.setattr(srs.db, "select", select)
     out = srs.due_cards(institution_id="inst-1", user_id="u-1", course_id="c-1", limit=10)
     ids = [c["item_id"] for c in out]
     assert ids == ["b"]  # the mastered card 'a' is filtered out

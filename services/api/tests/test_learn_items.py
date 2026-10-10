@@ -123,6 +123,18 @@ def test_grade_raises_when_item_is_missing_or_out_of_tenant(monkeypatch) -> None
         pass
 
 
+def test_grade_refuses_retired_items(monkeypatch) -> None:
+    query = {}
+    monkeypatch.setattr(item_gen.db, "select", lambda table, params: query.update(params) or [])
+    try:
+        item_gen.grade(institution_id="inst-1", item_id="retired", choice_id="a")
+        assert False, "retired items must not be graded or echoed"
+    except ValueError:
+        pass
+    assert query["retired_at"] == "is.null"
+    assert query["skills.status"] == "eq.approved"
+
+
 def test_weakest_skill_prefers_never_attempted_over_low_mastery(monkeypatch) -> None:
     def fake_select(table, params):
         if table == "skills":

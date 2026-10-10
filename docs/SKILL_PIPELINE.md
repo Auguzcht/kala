@@ -31,7 +31,11 @@ not a per-student value that drifts like mastery. (Mastery lives in
 
 ## The pipeline
 
-1. **Propose** — one reasoning-tier model call per module reads that module's
+1. **Propose** — the worker makes one bank-configured model call per content
+   window from each module. A persisted `worker_state` cursor checkpoints each
+   completed window, so a timeout resumes at the next unfinished window;
+   continuation chains stay within the worker's chain-depth/time guard. The
+   worker reads that module's
    persisted, embedded `content_items` (including qualifying PDF chunks) and
    proposes a small set of canonical, assessable skills,
    each with a Bloom level and a blueprint weight. Guardrails live in the
@@ -46,8 +50,9 @@ not a per-student value that drifts like mastery. (Mastery lives in
    proposals; its Blackboard description is not a fallback. Model input is
    capped at 12,000 content characters per window. Larger modules are split
    into at most four windows, with PDF chunks and longer chunks preferred;
-   proposal counts and any content left after the fourth window are logged.
-   Proposals from all windows are merged before same-batch duplicate checks.
+   every window's proposals are persisted immediately and its cursor advances
+   only after the save. Proposals from later windows compare against saved
+   earlier-window proposals.
    The proposal is then grounded against the course's embedded chunks using
    the bank's thresholds: similarity `>= 0.544` and chunk length `>= 200`.
    Depth zero is dropped as `ungrounded`; otherwise context under 1,000
@@ -65,27 +70,34 @@ not a per-student value that drifts like mastery. (Mastery lives in
      "possible duplicate of X" note for the reviewer.
    - `< REVIEW_HINT` — genuinely novel. Create as `proposed`.
 
-   Separately, same-course overlap is a reviewer hint, not an institution-wide
-   dedup decision. New proposals are compared with the course's existing
-   approved and proposed skills and with earlier proposals in the same batch.
-   At cosine similarity `>= 0.60`, the row remains `proposed` and
-   `proposed_source` includes `possible overlap with ...`. Institution-wide
+   Separately, same-course overlap uses two cutoffs. A proposal with cosine
+   similarity `>= 0.90` to an already-approved skill in that course is dropped
+   and logged by name. The same `0.90` cutoff merges near-duplicates within
+   one Refresh run; the best-grounded candidate is kept, and its
+   `proposed_source` records `merged_count`. The cutoff was measured from
+   1,081 pairwise similarities among the AWS101 batch: min `0.070`, median
+   `0.476`, p90 `0.619`, max `0.975`; six near-duplicate pairs were at or
+   above `0.90`, while the top non-duplicate pair was `0.859`.
+
+   The existing `0.60` same-course overlap check remains a reviewer hint for
+   proposed skills; it does not drop them. Institution-wide
    `AUTO_MATCH = 0.92` and `REVIEW_HINT = 0.82` remain unchanged; when both
-   kinds of hint apply, both notes are retained. The threshold was tuned from
-   the AWS101 matrix: the three genuine overlaps score 0.61+, while most
-   pairs in the 0.55-0.60 band are related but distinct skills.
+   kinds of hint apply, both notes are retained.
 
    A module is re-proposed only when its newest qualifying content is newer
-   than its newest skill row. On such refreshes, proposals overlapping an
-   existing approved skill at `>= 0.60` are dropped; first-time modules keep
-   the overlap hint and remain reviewable.
+   than its saved cursor's content-freshness marker. A module is complete only
+   after every window is checkpointed; `last_skill_seed_at` is written after
+   every module in the course is complete.
 
 3. **Human-in-the-loop** — anything `proposed` waits for a human. Only
    `approved` skills feed the twin, heatmap, diagnostic, practice, flashcards
    (every learner-facing read now filters `status = approved`). Review is via
    `GET /dashboard/{course}/skills/proposed` +
-   `PATCH /dashboard/{course}/skills/{id}/review` (approve/reject, with
-   optional inline edits), or straight in Supabase for the demo.
+   `PATCH /dashboard/{course}/skills/{id}/review` handles proposed skills.
+   Approved-skill retirement uses the instructor-of-course/admin-only
+   `POST /dashboard/{course}/skills/{id}/reject-approved` path. It writes the
+   status audit and retires the skill's live bank items in one database
+   transaction; mastery and evidence history remain unchanged.
 
 ## The leverage
 
@@ -113,7 +125,6 @@ learner-facing reads just gained a `status = approved` filter.
 
 ## What is NOT built yet (deferred, same bucket as module curation UI)
 
-A polished in-app review screen. For the demo, reviewing in Supabase's table
-editor (flip `status`, edit name/weight inline) is sufficient. The real review
-UI is post-Sept-1 work and should be designed together with the module
-curation screen from `UI_AND_MODULES.md` §3 — they're the same surface.
+A polished in-app review screen remains deferred. Approved skills are rejected
+through the audited API path so their bank items cannot be served after the
+transaction commits.

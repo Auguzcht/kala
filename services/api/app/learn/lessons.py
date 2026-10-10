@@ -417,7 +417,8 @@ def _assemble_lesson(*, lesson_row: dict, institution_id: str, course_id: str | 
         in_list = ",".join(check_ids)
         check_rows = db.select("generated_items", {
             "id": f"in.({in_list})", "institution_id": f"eq.{institution_id}",
-            "select": "id,prompt,choices,bloom_level",
+            "retired_at": "is.null", "skills.status": "eq.approved",
+            "select": "id,prompt,choices,bloom_level,skills!inner(status)",
         })
         checks_by_id = {r["id"]: r for r in check_rows}
 

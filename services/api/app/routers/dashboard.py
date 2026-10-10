@@ -374,6 +374,33 @@ def review_proposed_skill(
     return {"skillId": skill_id, "status": body.status}
 
 
+@router.post("/{course_id}/skills/{skill_id}/reject-approved")
+def reject_approved_skill(
+    course_id: str = Depends(require_valid_course_id),
+    skill_id: str = Depends(require_valid_skill_id),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
+):
+    """Retire an approved skill's bank items atomically with its rejection."""
+    if user.app_role != "admin":
+        enrollment = db.select("enrollments", {
+            "institution_id": f"eq.{user.institution_id}",
+            "user_id": f"eq.{user.user_id}", "course_id": f"eq.{course_id}",
+            "role": "eq.instructor", "select": "course_id", "limit": "1",
+        })
+        if not enrollment:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "course not found")
+    result = db.rpc("reject_approved_skill", {
+        "p_institution_id": user.institution_id,
+        "p_course_id": course_id,
+        "p_skill_id": skill_id,
+        "p_reviewed_by": user.user_id,
+    }) or []
+    if not result:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "approved skill not found")
+    return {"skillId": skill_id, "status": "rejected",
+            "retiredItems": int(result[0].get("retired_items") or 0)}
+
+
 @router.patch("/{course_id}/skills/{skill_id}/detach")
 def detach_auto_matched_skill(
     course_id: str = Depends(require_valid_course_id),
