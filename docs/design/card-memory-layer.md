@@ -1,6 +1,6 @@
 # Card memory layer: adaptive review on top of the question bank
 
-Status: architecture verified against the repository on 2026-10-11. Planning only; no code changes.
+Status: architecture verified; Phase 0 deployed on 2026-10-11. Phase 1 is next.
 
 Builds on: `docs/design/question-bank-design.md` (section 0 amendments win). This doc does not
 change ingestion, bank building, or skill mastery.

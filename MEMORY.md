@@ -88,7 +88,20 @@ on its own**, because attempted rows are excluded from the pending query.
 
 ## Current State
 
-- Active architecture draft: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (Session C is verifying it).
+- Active architecture and implementation: [docs/design/card-memory-layer.md](docs/design/card-memory-layer.md) (card memory Phase 0 deployed; Phase 1 is next).
+
+### Card memory Phase 0 — 2026-10-11
+
+- Removed the synchronous model-backed fallback from the flashcard deck. Bank-served
+  cards still top up from stored items; already-scheduled due cards remain available
+  when bank serving is off. No study request generates questions inline.
+- Empty decks without bank serving return additive `bankStatus: no_material`.
+  Existing response fields and the old GET contract are unchanged.
+- Verification: API suite **335 passed**. Commit `bfc452a`.
+- `make deploy` succeeded. API Lambda is Active/Successful at CodeSha256
+  `054fae4d62ac9c3901bb92d76535b38c1657c2721df9e2e5245fcb40fb7a8f3c`;
+  worker is Active/Successful at `ddc078ff10b40c6ae9f9fb213187318a44cf311a0635fd53841c32c5dab118eb`.
+  The worker image was redeployed by the shared `make deploy` target without worker source changes.
 
 ### Brief 4f proposer timeout fix — 2026-10-10
 
