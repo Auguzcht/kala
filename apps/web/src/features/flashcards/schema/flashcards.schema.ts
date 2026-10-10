@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bankSkillStatusSchema } from "@/features/bank/schema/bank-status.schema";
 
 // Flashcard contract (study mode): a card is a FLIP, not an MCQ. The front
 // shows the prompt, tapping reveals the back (answer label + explanation), and
@@ -12,24 +13,24 @@ import { z } from "zod";
 export const flashcardBackSchema = z.object({
   label: z.string().nullable(),
   explanation: z.string(),
-});
+}).strict();
 
 export const flashcardCardSchema = z.object({
   itemId: z.string(),
   skillId: z.string(),
-  skillName: z.string().nullable().optional(),
+  skillName: z.string().nullable(),
   prompt: z.string(),
   back: flashcardBackSchema,
   state: z.enum(["due", "new"]),
   box: z.number(),
-});
+}).strict();
 
 export const srsStatsSchema = z.object({
-  tracked: z.number(),
-  due: z.number(),
-  learning: z.number(),
-  mastered: z.number(),
-});
+  tracked: z.number().int().nonnegative(),
+  due: z.number().int().nonnegative(),
+  learning: z.number().int().nonnegative(),
+  mastered: z.number().int().nonnegative(),
+}).strict();
 
 export const rewardSchema = z.object({
   xp: z.number(),
@@ -37,15 +38,22 @@ export const rewardSchema = z.object({
   correct: z.number(),
   streakDays: z.number(),
   badges: z.array(
-    z.object({ kind: z.string(), label: z.string(), tier: z.string() })
+    z.object({ kind: z.string(), label: z.string(), tier: z.string() }).strict()
   ),
-});
+}).strict();
+
+const flashcardBankStatusSchema = z.object({
+  status: bankSkillStatusSchema,
+  mcqReady: z.number().int().nonnegative(),
+  usable: z.boolean(),
+}).strict();
 
 export const flashcardDeckSchema = z.object({
   courseId: z.string(),
   cards: z.array(flashcardCardSchema),
   stats: srsStatsSchema,
-});
+  bankStatus: flashcardBankStatusSchema.optional(),
+}).strict();
 
 // POST /flashcards/{course_id}/review — self-marking one studied card.
 // `remembered` is the student's own call; the server advances the schedule
@@ -56,7 +64,7 @@ export const flashcardReviewResultSchema = z.object({
   dueInHours: z.number(),
   box: z.number(),
   reward: rewardSchema,
-});
+}).strict();
 
 export type FlashcardBack = z.infer<typeof flashcardBackSchema>;
 export type FlashcardCard = z.infer<typeof flashcardCardSchema>;

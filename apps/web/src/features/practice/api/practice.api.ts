@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/client";
-import { z } from "zod";
+import { bankStatusSchema, type BankStatus } from "@/features/bank/schema/bank-status.schema";
 import {
   practiceNextSchema,
   practiceBridgeSetSchema,
@@ -12,7 +12,6 @@ import {
   type PracticeSavedSet,
   type PracticeSet,
   type PracticeSetList,
-  type PracticeBankStatus,
   type PracticeSubmitResult,
 } from "@/features/practice/schema/practice.schema";
 
@@ -76,22 +75,9 @@ export async function fetchPracticeSets(
   return practiceSetListSchema.parse(data);
 }
 
-const bankStatusResponseSchema = z.object({
-  courseId: z.string(),
-  building: z.boolean(),
-  skills: z.array(z.object({
-    skillId: z.string(), status: z.string(), mcqReady: z.number(),
-    mcqTarget: z.number(), depth: z.number(), usable: z.boolean(),
-  })),
-});
-
-export async function fetchBankStatus(courseId: string): Promise<{
-  courseId: string;
-  building: boolean;
-  skills: Array<PracticeBankStatus & { skillId: string; depth: number }>;
-}> {
+export async function fetchBankStatus(courseId: string): Promise<BankStatus> {
   const data = await api<unknown>(`/courses/${courseId}/bank/status`);
-  return bankStatusResponseSchema.parse(data);
+  return bankStatusSchema.parse(data);
 }
 
 export async function submitPracticeAttempt(
