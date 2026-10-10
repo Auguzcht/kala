@@ -358,7 +358,7 @@ export function PracticePanel({
             More questions on the way.
           </p>
         ) : null}
-        {includesRepeats || data?.includesRepeats ? (
+        {includesRepeats ? (
           <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
             You&apos;ve seen every question for this skill. Here are the ones worth another look.
           </div>

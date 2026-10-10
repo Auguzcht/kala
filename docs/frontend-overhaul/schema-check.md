@@ -1,6 +1,6 @@
 # Practice, flashcard, and bank status schema check
 
-Compared the current API router return values against the frontend Zod schemas. `Strict` means the Zod object now rejects unexpected response fields instead of stripping them. Parse failures throw in all environments and log the Zod error with the endpoint in development. Status values for `skill_bank_state` come from migration 0021: `waiting_content`, `building`, `ready`, `no_material`, and `error`.
+Compared the current API router return values against the frontend Zod schemas. Zod strips unknown response fields so additive backend fields do not break clients. In development, unknown fields are logged with the endpoint. Missing required fields and wrong-typed fields still throw, with the Zod error logged in development. Status values for `skill_bank_state` come from migration 0021: `waiting_content`, `building`, `ready`, `no_material`, and `error`.
 
 ## Practice router
 
@@ -39,7 +39,7 @@ Router: `services/api/app/routers/flashcards.py`.
 | Card `state`: `due` or `new` | enum | Yes | |
 | Card `back`: nullable `label`, `explanation` | `flashcardBack` | Yes | |
 | Stats: `tracked`, `due`, `learning`, `mastered` | `srsStats` | Yes | |
-| Optional deck `bankStatus`: `status`, `mcqReady`, `usable` | `flashcardDeck.bankStatus` | Shape yes | The endpoint’s `usable` calculation differs from the shared bank status endpoint; see backend handoff. |
+| Optional deck `bankStatus`: `status`, `mcqReady` | `flashcardDeck.bankStatus` | Yes | `usable` is being removed by the backend; frontend state uses the shared bank status endpoint. |
 | `POST /{course}/review`: `remembered`, `graduated`, `dueInHours`, `box`, `reward` | `flashcardReviewResult` | Yes | |
 | Reward: `xp`, `attempts`, `correct`, `streakDays`, `badges[]` | `rewardSchema` | Yes | |
 | Badge: `kind`, `label`, `tier` | badge object | Yes | |
@@ -54,10 +54,10 @@ Router: `services/api/app/routers/bank.py`; allowed status values are constraine
 |---|---|---:|---|
 | `courseId` | `bankStatus.courseId` | Yes | |
 | top-level `building` | `bankStatus.building` | Yes | Shared hook polls at 10 seconds only while this is true. |
-| `skills[]`: `skillId`, `status`, `mcqReady`, `mcqTarget`, `depth`, `usable` | `bankSkillStatusEntry` | Yes | `usable` is accepted from the API; it is never computed in the client. |
+| `skills[]`: `skillId`, `status`, `mcqReady`, `mcqTarget`, `depth`, `usable` | `bankSkillStatusEntry` | Yes | `usable` comes from the API; it is never computed in the client. Missing rows are represented by the backend as `waiting_content`. |
 | Instructor/admin-only `lastError` | optional nullable `lastError` | Yes | Student endpoint omits it. |
 | `bankServing` | `bankStatus.bankServing` | Yes | |
 
 ## Backend handoff items
 
-See `docs/frontend-overhaul/backend-handoff.md` for the three contract/product questions held outside the frontend implementation: “all unseen” set size, repeat metadata on saved sets, and flashcard deck `bankStatus.usable` semantics.
+See `docs/frontend-overhaul/backend-handoff.md` for the decisions and the remaining proposal worker completion contract.

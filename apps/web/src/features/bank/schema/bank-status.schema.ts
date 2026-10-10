@@ -16,14 +16,14 @@ export const bankSkillStatusEntrySchema = z.object({
   depth: z.number().int().nonnegative(),
   usable: z.boolean(),
   lastError: z.string().nullable().optional(),
-}).strict();
+});
 
 export const bankStatusSchema = z.object({
   courseId: z.string(),
   building: z.boolean(),
   skills: z.array(bankSkillStatusEntrySchema),
   bankServing: z.boolean(),
-}).strict();
+});
 
 export type BankSkillStatus = z.infer<typeof bankSkillStatusSchema>;
 export type BankSkillStatusEntry = z.infer<typeof bankSkillStatusEntrySchema>;

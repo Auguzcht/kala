@@ -383,7 +383,7 @@ Write exposure rows for every served item in the same request. Retired items are
 ### 7.2 Per surface
 
 **Test, `POST /practice/{course_id}/set?size=N`**
-Sync, no model. Allowed sizes 5, 10, 20, or "all unseen". Creates `quiz_sets` plus `quiz_set_items`. If the skill has at least `MIN_USABLE` items, returns `status: "ready"` with up to N items (fewer if that's all there is, with `readyCount` telling the truth). Below `MIN_USABLE` returns `status: "preparing"` with no set created.
+Sync, no model. Allowed sizes 5, 10, or 20. Creates `quiz_sets` plus `quiz_set_items`. If the skill has at least `MIN_USABLE` items, returns `status: "ready"` with up to N items (fewer if that's all there is, with `readyCount` telling the truth). Below `MIN_USABLE` returns `status: "preparing"` with no set created.
 
 **Study, `GET /flashcards/{course_id}/deck`**
 Due cards first (existing SRS), then fills with untracked bank cards via `srs.ensure_tracked` (database only). Top-up generation is removed. This also solves parked item #19: a fully graduated queue now pulls fresh bank cards instead of going empty.
