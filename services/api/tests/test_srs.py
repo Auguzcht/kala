@@ -69,6 +69,14 @@ def test_is_mastered_predicate_matches_transition():
     assert srs.is_mastered(box=4, streak=10) is False
 
 
+def test_card_state_uses_outcome_and_interval_from_box_and_ease():
+    assert srs.card_state(reps=0, last_outcome=None, lapses=0, box=0, ease_milli=2500) == "new"
+    assert srs.card_state(reps=1, last_outcome="again", lapses=1, box=0, ease_milli=2500) == "learning"
+    assert srs.card_state(reps=3, last_outcome="again", lapses=1, box=0, ease_milli=2500) == "slipping"
+    assert srs.card_state(reps=4, last_outcome="good", lapses=1, box=3, ease_milli=2500) == "learning"
+    assert srs.card_state(reps=5, last_outcome="good", lapses=1, box=4, ease_milli=2500) == "known"
+
+
 # ---- persistence wrappers -------------------------------------------------
 
 def test_review_reads_prior_state_then_persists_next_due(monkeypatch):
@@ -87,6 +95,7 @@ def test_review_reads_prior_state_then_persists_next_due(monkeypatch):
     assert captured["box"] == 3                 # persisted
     assert "due_at" in captured                 # next due time written
     assert "last_reviewed_at" in captured       # review timestamp stamped
+    assert captured["last_outcome"] == "good"
 
 
 def test_review_starts_from_default_when_no_row_exists(monkeypatch):
@@ -98,6 +107,17 @@ def test_review_starts_from_default_when_no_row_exists(monkeypatch):
     )
     assert result.box == 1
     assert result.reps == 1
+    # Phase 1 keeps the newly added outcome column current until the review
+    # write moves into the atomic RPC in Phase 2.
+
+
+def test_review_persists_miss_as_again(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(srs.db, "select", lambda table, params: [])
+    monkeypatch.setattr(srs.db, "upsert", lambda table, rows, on_conflict: captured.update(rows[0]) or rows)
+    srs.review(institution_id="inst-1", user_id="u-1", course_id="c-1",
+               item_id="item-1", skill_id="s-1", correct=False)
+    assert captured["last_outcome"] == "again"
 
 
 def test_ensure_tracked_does_not_overwrite_existing_progress(monkeypatch):

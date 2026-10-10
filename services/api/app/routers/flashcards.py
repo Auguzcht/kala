@@ -27,7 +27,10 @@ inform, they do not grade, and they do not touch the schedule.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel
 
 from app.bank.serving import bank_enabled, pick_bank_items, record_exposure
@@ -37,6 +40,75 @@ from app.learn import items as item_gen
 from app.learn import srs, xp
 
 router = APIRouter(prefix="/flashcards", tags=["flashcards"])
+
+
+@router.get("/{course_id}/skills/{skill_id}/cards")
+def skill_cards(
+    course_id: str = Depends(require_valid_course_id),
+    skill_id: str = Path(...),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Read the complete live card membership for one approved skill.
+
+    This is a browse list, not a session selector. It never creates schedule,
+    exposure, review, or mastery rows.
+    """
+    skills = db.select("skills", {
+        "id": f"eq.{skill_id}", "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}", "status": "eq.approved",
+        "select": "id", "limit": "1",
+    })
+    if not skills:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "skill not found")
+
+    items = db.select("generated_items", {
+        "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill_id}",
+        "retired_at": "is.null",
+        "or": "(and(kind.eq.practice,origin.eq.bank),kind.eq.flashcard)",
+        "skills.status": "eq.approved",
+        "select": "id,kind,prompt,front,back,choices,correct_choice_id,explanation,created_at,skills!inner(status)",
+        "order": "created_at.asc", "limit": "1000",
+    })
+    item_ids = [item["id"] for item in items]
+    schedules = db.select("srs_state", {
+        "institution_id": f"eq.{user.institution_id}", "user_id": f"eq.{user.user_id}",
+        "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill_id}",
+        "select": "item_id,box,ease_milli,streak,reps,lapses,due_at,last_outcome",
+    }) if item_ids else []
+    by_item = {row["item_id"]: row for row in schedules if row["item_id"] in set(item_ids)}
+
+    institution = db.select("institutions", {
+        "id": f"eq.{user.institution_id}", "select": "timezone", "limit": "1",
+    })
+    zone = ZoneInfo(institution[0].get("timezone") or "UTC") if institution else ZoneInfo("UTC")
+    now = datetime.now(timezone.utc)
+    local_tomorrow = datetime.combine(now.astimezone(zone).date() + timedelta(days=1), time.min, zone)
+    day_end_utc = local_tomorrow.astimezone(timezone.utc)
+
+    counts = {state: 0 for state in ("new", "learning", "slipping", "known")}
+    due_today = 0
+    cards = []
+    for item in items:
+        row = by_item.get(item["id"])
+        state = "new" if row is None else srs.card_state(
+            reps=int(row["reps"]), last_outcome=row.get("last_outcome"),
+            lapses=int(row["lapses"]), box=int(row["box"]),
+            ease_milli=int(row["ease_milli"]),
+        )
+        counts[state] += 1
+        due_at = row.get("due_at") if row else None
+        due_dt = datetime.fromisoformat(due_at.replace("Z", "+00:00")) if due_at else None
+        due = due_dt is not None and due_dt <= now
+        if due_dt is not None and due_dt < day_end_utc:
+            due_today += 1
+        label = item.get("back") if item["kind"] == "flashcard" else item_gen.correct_label(item)
+        cards.append({
+            "itemId": item["id"], "prompt": item.get("front") or item["prompt"],
+            "back": {"label": label, "explanation": item.get("explanation") or ""},
+            "state": state, "due": due, "dueAt": due_at,
+        })
+    return {"skillId": skill_id, "counts": {**counts, "dueToday": due_today}, "cards": cards}
 
 
 def _skill_map(*, institution_id: str, course_id: str,

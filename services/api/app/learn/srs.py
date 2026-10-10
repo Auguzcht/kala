@@ -53,6 +53,7 @@ _BOX_BASE_HOURS: dict[int, float] = {
     5: 840.0,    # ~35 days
 }
 _MAX_BOX = 5
+KNOWN_INTERVAL_HOURS = 21 * 24
 
 _EASE_MIN = 1300
 _EASE_MAX = 3000
@@ -128,6 +129,23 @@ def is_mastered(*, box: int, streak: int) -> bool:
     return box >= _MAX_BOX and streak >= GRADUATE_STREAK
 
 
+def interval_hours(*, box: int, ease_milli: int) -> float:
+    """Current scheduled interval from the stored scheduler parameters."""
+    return _BOX_BASE_HOURS[box] * (ease_milli / 1000.0)
+
+
+def card_state(*, reps: int, last_outcome: str | None, lapses: int,
+               box: int, ease_milli: int) -> str:
+    """Derive the student-facing memory state without storing a second state."""
+    if reps == 0:
+        return "new"
+    if last_outcome == "again":
+        return "slipping" if reps > lapses else "learning"
+    if last_outcome == "good" and interval_hours(box=box, ease_milli=ease_milli) >= KNOWN_INTERVAL_HOURS:
+        return "known"
+    return "learning"
+
+
 # ---- persistence ----------------------------------------------------------
 
 def _now() -> datetime:
@@ -199,6 +217,7 @@ def review(*, institution_id: str, user_id: str, course_id: str,
         "streak": result.streak,
         "reps": result.reps,
         "lapses": result.lapses,
+        "last_outcome": "good" if correct else "again",
         "due_at": due_at.isoformat(),
         "last_reviewed_at": _now().isoformat(),
     }], on_conflict="user_id,item_id")

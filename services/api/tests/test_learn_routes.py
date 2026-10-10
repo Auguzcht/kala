@@ -172,6 +172,61 @@ def test_flashcards_deck_without_bank_returns_no_material_without_model_call(mon
     assert body["stats"]["due"] == 0
 
 
+def test_flashcard_membership_is_read_only_and_includes_eligible_live_cards(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    skill_id = "00000000-0000-4000-8000-000000000010"
+    bank_item = "00000000-0000-4000-8000-000000000021"
+    legacy_item = "00000000-0000-4000-8000-000000000022"
+    new_item = "00000000-0000-4000-8000-000000000023"
+    selected = []
+    items = [
+        {"id": bank_item, "kind": "practice", "prompt": "Bank prompt", "choices": [{"id": "a", "label": "Answer"}],
+         "correct_choice_id": "a", "explanation": "Because", "created_at": "2026-01-01T00:00:00Z"},
+        {"id": legacy_item, "kind": "flashcard", "prompt": "Legacy prompt", "front": "Legacy front", "back": "Legacy back",
+         "created_at": "2026-01-02T00:00:00Z"},
+        {"id": new_item, "kind": "practice", "prompt": "New prompt", "choices": [{"id": "a", "label": "Answer"}],
+         "correct_choice_id": "a", "created_at": "2026-01-03T00:00:00Z"},
+    ]
+    schedules = [
+        {"item_id": bank_item, "box": 0, "ease_milli": 2500, "streak": 0, "reps": 1,
+         "lapses": 1, "due_at": "2020-01-01T00:00:00Z", "last_outcome": "again"},
+        {"item_id": legacy_item, "box": 4, "ease_milli": 2500, "streak": 4, "reps": 5,
+         "lapses": 1, "due_at": "2099-01-01T00:00:00Z", "last_outcome": "good"},
+    ]
+
+    def fake_select(table, params):
+        selected.append((table, params))
+        if table == "skills": return [{"id": skill_id}]
+        if table == "generated_items": return items
+        if table == "srs_state": return schedules
+        if table == "institutions": return [{"timezone": "Asia/Manila"}]
+        return []
+
+    monkeypatch.setattr(flashcards.db, "select", fake_select)
+    def unexpected_write(*args, **kwargs):
+        raise AssertionError("membership must be read-only")
+    monkeypatch.setattr(flashcards.db, "insert", unexpected_write)
+    monkeypatch.setattr(flashcards.db, "insert_evidence", unexpected_write)
+    monkeypatch.setattr(flashcards.db, "rpc", unexpected_write)
+    try:
+        with TestClient(app) as client:
+            response = client.get(f"/flashcards/00000000-0000-4000-8000-000000000001/skills/{skill_id}/cards")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["counts"]["new"] == 1
+    assert body["counts"]["learning"] == 1
+    assert body["counts"]["known"] == 1
+    assert body["counts"]["slipping"] == 0
+    assert len(body["cards"]) == 3
+    assert body["cards"][0]["back"] == {"label": "Answer", "explanation": "Because"}
+    assert body["cards"][1]["back"]["label"] == "Legacy back"
+    assert selected[1][1]["or"] == "(and(kind.eq.practice,origin.eq.bank),kind.eq.flashcard)"
+    assert all(table not in ("evidence_events", "item_exposures") for table, _ in selected)
+
+
 def test_flashcards_deck_bank_status_omits_usable(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     def fake_select(table, params):
