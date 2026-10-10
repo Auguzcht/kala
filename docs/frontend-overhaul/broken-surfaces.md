@@ -1,15 +1,15 @@
 # Frontend question-bank audit
 
-Read-only audit against `docs/design/question-bank-design.md` (section 0 amendments take precedence; section 9 is the student contract), `apps/web/src/styles/DESIGN.md`, and the current FastAPI routers. This records the current frontend/backend differences before changes.
+Read-only audit against `docs/design/question-bank-design.md` (section 0 amendments take precedence; section 9 is the student contract), `apps/web/src/styles/DESIGN.md`, and the current FastAPI routers. The numbered findings are the pre-fix audit; resolution notes are recorded below.
 
 ## Summary
 
-The backend bank path is present on Study, Test, Diagnostic, and lesson checks, but the frontend has not completed the bank-status migration. Test has a partial, local status flow; Study and Diagnostic still treat empty or pending content as old generation states; lesson checks do not use bank status. The backend routes generally expose the expected data, with the exception that `GET /practice/{course_id}/next` and the non-bank branches remain as legacy generation paths. The currently linked skill hub routes students to the newer combined surfaces, but the older `/course/lessons`, `/course/practice`, and `/course/flashcards` routes remain registered and reachable.
+At the time of this audit, the frontend had not completed the bank-status migration. The numbered findings below preserve that pre-fix comparison; see the progress notes at the end for current status.
 
 ## Instructor skill proposals
 
 1. `services/api/app/routers/dashboard.py:292-306` returns proposed skills with `id`, `name`, `bloom_level`, `blueprint_weight`, and `proposed_source`. The Zod shape in `apps/web/src/features/instructor/schema/instructor.schema.ts:61-72` matches those fields. Review at `services/api/app/routers/dashboard.py:334-368` accepts approve/reject and returns `{skillId, status}`; the UI mutation shape is consistent.
-2. Proposal enqueue is now asynchronous: `services/api/app/routers/diagnostic.py:169-177` returns `202 {status: "queued"}` and `apps/web/src/features/instructor/schema/instructor.schema.ts:79-83` matches it. `SkillReviewPanel` says the queue is polled at `apps/web/src/features/instructor/components/SkillReviewPanel.tsx:36-40`, polls for three minutes at `:133-143`, and shows generic queued copy at `:53-72`. It does not distinguish “queued” from completed work or show a bounded wait/finished state; a fixed three-minute polling window can end while worker work is still queued or chained.
+2. Proposal enqueue is asynchronous: `services/api/app/routers/diagnostic.py:169-177` returns `202 {status: "queued"}` and `apps/web/src/features/instructor/schema/instructor.schema.ts:79-83` matches it. At audit time, `SkillReviewPanel` polled for three minutes and showed generic queued copy. It did not distinguish queued from completed work, and the fixed window could end while worker work was still queued or chained. The current implementation and status contract are recorded in the instructor follow-up below.
 3. The proposer records source notes including “possible overlap with this course”, “thin material: N chars”, and “possible duplicate of …” (worker implementation; API review list returns `proposed_source` unchanged). `SkillReviewPanel` only recognizes a source starting with `possible duplicate` or a warning glyph at `apps/web/src/features/instructor/components/SkillReviewPanel.tsx:256-265`. Thus plain overlap and thin-material notes do not get warning treatment. The source cell truncates the string at `:289-308`, so the full reason is only available through the native title tooltip.
 4. The empty-state text at `apps/web/src/features/instructor/components/SkillReviewPanel.tsx:209-214` says a launch may have produced a partial result, although launch no longer runs proposals. Refresh is correctly the explicit action; update the explanation to describe worker-queued proposals and avoid implying a launch kicks the proposer.
 
@@ -63,11 +63,22 @@ Backend reference: `services/api/app/routers/lessons.py:28-46` and `services/api
 ### Fixed in the approved Study and Test pass
 
 - **Skill hub entry:** bare skill URLs now default to Study, and session start preserves the selected tab. The source path confirmed the suspected `tab === "study" && start` mismatch. Chrome access was denied, so the click repro could not be confirmed live.
-- **Response schemas:** practice, flashcard, and bank status responses now use strict Zod objects; bank status values share one enum schema. See `schema-check.md` for the field-by-field contract table.
+- **Response schemas:** required fields and types are validated; unknown fields are stripped and logged with the endpoint in development. Bank status values share one enum schema. See `schema-check.md` for the field-by-field contract table.
 - **Shared bank status:** the hook is loaded on SkillHub entry and shared by Study and Test. It polls at 10 seconds only while the backend's top-level `building` flag is true.
 - **Test:** bank states drive generation gating and status copy. `preparing` and `no_material` no longer fall through to “Nothing to practice yet”. The repeat banner is carried into the active session for a newly generated repeat set.
 - **Study:** stale generation copy and top-up comments are removed. Empty decks now distinguish no material, a bank still preparing, and an empty SRS queue. “Test me on these” still posts the studied item IDs to the bridge endpoint, which records `quiz_set_items` before opening the saved set.
+- **Product decisions:** “all unseen” was dropped, section 7.2 now lists only 5, 10, and 20. Saved-set repeat banners were dropped; generated-set metadata is not expected when reopening a set. The flashcard deck `bankStatus.usable` field is no longer modeled or read. Backend will represent approved skills without state rows as `waiting_content`.
+
+### Instructor proposal review
+
+- Warning labels cover possible overlap, thin material, and possible duplicate reasons; the full reason remains visible. Empty-state copy no longer implies a launch starts proposals.
+- The fixed three-minute stop was removed. Polling continues until worker status reports done or failed. If the current API omits status, a 15-minute safety fallback stops polling with a message that does not claim completion; Refresh stays enabled. See `backend-handoff.md`.
+
+### Instructor proposal review follow-up
+
+- Warning labels now cover possible overlap, thin material, and possible duplicate sources, with the full reason visible in the row. Empty-state copy no longer says launch runs proposals.
+- The panel polls for the worker's proposal status and shows a finished state. The current backend only returns `queued` from the trigger and has no completion status on the proposed-skills read, so a fallback is needed for pre-status responses. See `backend-handoff.md`.
 
 ### Deferred to the next pass
 
-Diagnostic states, lesson check states, instructor proposal review, and the independent legacy routes remain unaudited for fixes in this pass. Backend contract decisions are listed in `backend-handoff.md`.
+Diagnostic states, lesson check states, and the independent legacy routes remain. Backend contract decisions are listed in `backend-handoff.md`.
