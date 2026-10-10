@@ -37,39 +37,52 @@ const PAGE_SIZE = 8;
 // the course's content, one module at a time; nothing proposed reaches
 // learners until a human approves here. The "Refresh skills" button in the
 // header is the on-demand trigger. It queues worker proposal work and polls
-// the review queue briefly so newly completed modules appear automatically.
+// the review queue until the worker reports that its run is done.
 
 function RefreshStatus({
   isPending,
   isError,
   isSuccess,
   data,
+  proposalStatus,
+  isPolling,
 }: {
   isPending: boolean;
   isError: boolean;
   isSuccess: boolean;
   data?: ProposeSkillsResult;
+  proposalStatus?: "queued" | "running" | "done" | "failed";
+  isPolling: boolean;
 }) {
   if (isPending) {
     return (
       <p className="mt-3 text-xs text-muted-foreground">
-        Kala is reviewing your course content. New proposals will appear here.
+        Refreshing proposals. This can take a few minutes.
       </p>
     );
   }
   if (isError) {
     return (
       <p className="mt-3 text-xs text-destructive">
-        Refresh failed — check the API log and try again.
+        Refresh failed. Try again later.
       </p>
     );
   }
-  if (isSuccess && data?.status === "queued") {
+  if (isSuccess && data?.status === "queued" && proposalStatus === "done") {
     return (
       <p className="mt-3 text-xs text-muted-foreground">
-        Kala is reviewing your course content. New proposals will appear here.
+        Refresh finished. The proposal list is up to date.
       </p>
     );
+  }
+  if (isSuccess && data?.status === "queued" && proposalStatus === "failed") {
+    return <p className="mt-3 text-xs text-destructive">Refresh failed. Try again later.</p>;
+  }
+  if (isSuccess && data?.status === "queued" && (proposalStatus === "queued" || proposalStatus === "running")) {
+    return <p className="mt-3 text-xs text-muted-foreground">Refreshing proposals. This can take a few minutes.</p>;
+  }
+  if (isSuccess && data?.status === "queued" && isPolling) {
+    return <p className="mt-3 text-xs text-muted-foreground">Refreshing proposals. This can take a few minutes.</p>;
   }
   return null;
 }
@@ -125,22 +138,24 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
   const review = useReviewProposedSkill(courseId);
   const propose = useProposeSkills(courseId);
   const [page, setPage] = useState(0);
-  const [pollUntil, setPollUntil] = useState<number | null>(null);
+  const [polling, setPolling] = useState(false);
   // Animated icons: the check/x/sparkle draw when their BUTTON is hovered
   // (controlled-mode handlers), same as the decision buttons elsewhere.
   const refreshRef = useRef<SparklesIconHandle | null>(null);
 
   useEffect(() => {
-    if (!pollUntil) return;
+    if (!polling || data?.proposalStatus === "done" || data?.proposalStatus === "failed") return;
     const timer = window.setInterval(() => {
-      if (Date.now() >= pollUntil) {
-        setPollUntil(null);
-        return;
-      }
       void refetch();
     }, 10_000);
     return () => window.clearInterval(timer);
-  }, [pollUntil, refetch]);
+  }, [polling, data?.proposalStatus, refetch]);
+
+  useEffect(() => {
+    if (data?.proposalStatus === "done" || data?.proposalStatus === "failed") {
+      setPolling(false);
+    }
+  }, [data?.proposalStatus]);
 
   if (isLoading) {
     return (
@@ -188,13 +203,13 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
         <Button
           variant="orange"
           size="sm"
-          disabled={propose.isPending}
-          onClick={() => propose.mutate(undefined, { onSuccess: () => setPollUntil(Date.now() + 180_000) })}
+          disabled={propose.isPending || polling}
+          onClick={() => propose.mutate(undefined, { onSuccess: () => setPolling(true) })}
           onMouseEnter={() => refreshRef.current?.startAnimation()}
           onMouseLeave={() => refreshRef.current?.stopAnimation()}
           className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
         >
-          {propose.isPending ? (
+          {propose.isPending || polling ? (
             <>
               <Spinner className="size-3.5" /> Refreshing…
             </>
@@ -209,14 +224,15 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
       {proposed.length === 0 ? (
         <div className="px-5 py-6">
           <p className="text-[13px] text-muted-foreground">
-            No proposals pending. If this course hasn't been through proposal yet — or a launch
-            only produced a partial result — press Refresh skills to draft the missing modules.
+            No proposals are waiting for review. Refresh skills to check for newly available course content.
           </p>
           <RefreshStatus
             isPending={propose.isPending}
             isError={propose.isError}
             isSuccess={propose.isSuccess}
             data={propose.data}
+            proposalStatus={data?.proposalStatus}
+            isPolling={polling}
           />
         </div>
       ) : (
@@ -227,6 +243,8 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
               isError={propose.isError}
               isSuccess={propose.isSuccess}
               data={propose.data}
+              proposalStatus={data?.proposalStatus}
+              isPolling={polling}
             />
           </div>
           {/* Roster-scale table: same Table primitives, cell padding, and
@@ -254,14 +272,15 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
             <TableBody>
               {slice.map((s) => {
                 const rawSource = s.proposed_source ?? "";
-                // Two warning flavors come from different places: the
-                // proposer bakes "⚠️ " into module-level sources, and the
-                // review layer prefixes "possible duplicate" rows. Both
-                // render as ONE warning badge (the triangle icon chip);
-                // the raw glyph is stripped from the message.
-                const isDuplicate = rawSource.startsWith("possible duplicate");
-                const hasWarningGlyph = /^\s*⚠/.test(rawSource);
-                const flagged = isDuplicate || hasWarningGlyph;
+                const normalizedSource = rawSource.toLowerCase();
+                const warningLabel = normalizedSource.includes("possible duplicate")
+                  ? "Possible duplicate"
+                  : normalizedSource.includes("possible overlap")
+                    ? "Possible overlap"
+                    : normalizedSource.includes("thin material")
+                      ? "Thin material"
+                      : null;
+                const flagged = warningLabel !== null || /^\s*⚠/.test(rawSource);
                 const message = rawSource.replace(/^\s*⚠️?\s*/, "");
                 return (
                   <TableRow key={s.id}>
@@ -287,22 +306,21 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                     </TableCell>
                     <TableCell>
                       {s.proposed_source ? (
-                        <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="flex min-w-0 items-start gap-1.5">
                           {flagged ? (
                             <span
-                              className="inline-flex size-4 shrink-0 items-center justify-center rounded-[2px] bg-brand-orange/15 text-brand-orange"
-                              aria-hidden
+                              className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-brand-orange/30 bg-brand-orange/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-orange-foreground"
+                              aria-label={warningLabel ?? "Review warning"}
                             >
-                              <TriangleAlertIcon size={11} />
+                              <TriangleAlertIcon size={11} /> {warningLabel ?? "Review warning"}
                             </span>
                           ) : null}
                           <span
                             className={
                               flagged
-                                ? "min-w-0 flex-1 truncate text-[12.5px] font-medium text-brand-orange-foreground"
-                                : "min-w-0 flex-1 truncate text-[12.5px] text-foreground/80"
+                                ? "min-w-0 flex-1 whitespace-normal break-words text-[12.5px] font-medium text-brand-orange-foreground"
+                                : "min-w-0 flex-1 whitespace-normal break-words text-[12.5px] text-foreground/80"
                             }
-                            title={s.proposed_source}
                           >
                             {message}
                           </span>

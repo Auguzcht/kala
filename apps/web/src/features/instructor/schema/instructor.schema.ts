@@ -69,6 +69,7 @@ export const proposedSkillSchema = z.object({
 export const proposedSkillsSchema = z.object({
   courseId: z.string(),
   proposed: z.array(proposedSkillSchema),
+  proposalStatus: z.enum(["queued", "running", "done", "failed"]).optional(),
 });
 
 export const reviewResponseSchema = z.object({

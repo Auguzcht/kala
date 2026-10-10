@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import { parseApiResponse } from "@/lib/api/parse-response";
 import {
   atRiskSchema,
   autoMatchedSkillsSchema,
@@ -48,7 +49,7 @@ export async function fetchStudentTwin(courseId: string, userId: string): Promis
 
 export async function fetchProposedSkills(courseId: string, timeoutMs?: number): Promise<ProposedSkills> {
   const data = await api<unknown>(`/dashboard/${courseId}/skills/proposed`, undefined, timeoutMs);
-  return proposedSkillsSchema.parse(data);
+  return parseApiResponse(proposedSkillsSchema, data, `/dashboard/${courseId}/skills/proposed`);
 }
 
 export async function reviewProposedSkill(
@@ -65,7 +66,7 @@ export async function reviewProposedSkill(
 
 export async function proposeSkills(courseId: string): Promise<ProposeSkillsResult> {
   const data = await api<unknown>(`/courses/${courseId}/skills/propose`, { method: "POST" });
-  return proposeSkillsResultSchema.parse(data);
+  return parseApiResponse(proposeSkillsResultSchema, data, `/courses/${courseId}/skills/propose`);
 }
 
 export async function fetchAutoMatchedSkills(courseId: string, timeoutMs?: number): Promise<AutoMatchedSkills> {

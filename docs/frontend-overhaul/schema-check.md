@@ -26,7 +26,7 @@ Router: `services/api/app/routers/practice.py`.
 | `GET /{course}/sets/{set}`: `_practice_set_view` fields plus attempt fields | `practiceSavedSet` | Yes | `includesRepeats` is not returned for saved sets; see backend handoff. |
 | `POST /{course}/submit`: `correct`, `explanation`, nullable `mastery` | `practiceSubmitResult` | Yes | |
 
-All object schemas for these responses are strict. The client no longer silently strips unmodeled response keys.
+Saved set schemas do not include `includesRepeats`; the backend does not return it for saved sets. The generated set schema accepts it for the immediate practice session. Unknown fields are stripped recursively for every response.
 
 ## Flashcards router
 
@@ -35,7 +35,7 @@ Router: `services/api/app/routers/flashcards.py`.
 | Response / router field | Zod field | Match | Notes |
 |---|---|---:|---|
 | `GET /{course}/deck`: `courseId`, `cards[]`, `stats` | `flashcardDeck` | Yes | |
-| Card: `itemId`, `skillId`, nullable `skillName`, `prompt`, `state`, `box`, `back` | `flashcardCard` | Yes | `skillName` may be null or omitted. |
+| Card: `itemId`, `skillId`, nullable `skillName`, `prompt`, `state`, `box`, `back` | `flashcardCard` | Yes | `skillName` is included and may be null. |
 | Card `state`: `due` or `new` | enum | Yes | |
 | Card `back`: nullable `label`, `explanation` | `flashcardBack` | Yes | |
 | Stats: `tracked`, `due`, `learning`, `mastered` | `srsStats` | Yes | |
@@ -44,7 +44,7 @@ Router: `services/api/app/routers/flashcards.py`.
 | Reward: `xp`, `attempts`, `correct`, `streakDays`, `badges[]` | `rewardSchema` | Yes | |
 | Badge: `kind`, `label`, `tier` | badge object | Yes | |
 
-All response objects are strict, including nested cards, stats, review rewards, and badges.
+All response fields are required according to the router shape, with unknown fields stripped recursively, including nested cards, stats, review rewards, and badges.
 
 ## Bank status router
 
