@@ -133,23 +133,19 @@ def test_practice_submit_404s_on_unknown_item(monkeypatch) -> None:
     assert response.status_code == 404
 
 
-def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> None:
-    """With no due cards yet, the deck tops up with a fresh card per
-    untracked skill, marks it 'new', and returns the flip back (answer label
-    + explanation). Study mode is a flip, not an MCQ: `choices` is NOT part of
-    the payload, and the raw answer key never appears."""
+def test_flashcards_deck_without_bank_returns_no_material_without_model_call(monkeypatch) -> None:
+    """The legacy GET contract remains valid, but an unserved course does not
+    make a synchronous generation call to fill the deck."""
     app.dependency_overrides[get_current_user] = authenticated_user
 
     def fake_select(table, params):
         if table == "skills":
             return [{"id": "00000000-0000-4000-8000-000000000010", "name": "Recursion", "bloom_level": "apply",
                      "module_ref": "Module 1"}]
+        if table == "courses":
+            return [{"id": "00000000-0000-4000-8000-000000000001", "bank_serving": False}]
         if table == "srs_state":  # nothing tracked yet
             return []
-        if table == "generated_items":  # the back-derivation query
-            return [{"id": "card-1", "correct_choice_id": "a", "explanation": "a function calling itself",
-                     "choices": [{"id": "a", "label": "self-reference"},
-                                 {"id": "b", "label": "a loop"}]}]
         return []
 
     monkeypatch.setattr(flashcards.db, "select", fake_select)
@@ -159,10 +155,7 @@ def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> Non
                         lambda **kwargs: {"tracked": 0, "due": 0, "learning": 0, "mastered": 0})
     monkeypatch.setattr(
         flashcards.item_gen, "generate_question",
-        lambda **kwargs: {"id": "card-1", "skillId": "00000000-0000-4000-8000-000000000010", "bloomLevel": "apply",
-                          "prompt": "What is recursion?",
-                          "choices": [{"id": "a", "label": "self-reference"},
-                                      {"id": "b", "label": "a loop"}]},
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("study path called a model")),
     )
 
     try:
@@ -174,14 +167,8 @@ def test_flashcards_deck_seeds_new_cards_when_nothing_is_due(monkeypatch) -> Non
     assert response.status_code == 200
     body = response.json()
     assert body["courseId"] == "00000000-0000-4000-8000-000000000001"
-    assert len(body["cards"]) == 1
-    card = body["cards"][0]
-    assert card["itemId"] == "card-1"
-    assert card["state"] == "new"
-    assert card["back"] == {"label": "self-reference", "explanation": "a function calling itself"}
-    # Study mode is a flip: no choices, and never the raw answer key.
-    assert "choices" not in card
-    assert "correct_choice_id" not in card
+    assert body["cards"] == []
+    assert body["bankStatus"] == {"status": "no_material", "mcqReady": 0}
     assert body["stats"]["due"] == 0
 
 
