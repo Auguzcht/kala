@@ -11,6 +11,11 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { BookOpenIcon } from "@/components/ui/book-open";
+import { CheckIcon } from "@/components/ui/check";
+import { PartyPopperIcon } from "@/components/ui/party-popper";
+import type { PartyPopperIconHandle } from "@/components/ui/party-popper";
+import { MasteryBand, MasteryRing } from "@/components/kala";
 import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
@@ -54,6 +59,14 @@ function masterySummary(mastery: { level: string; value: number | null }) {
   return `${mastery.level}${mastery.value == null ? "" : ` · ${Math.round(mastery.value * 100)}%`}`;
 }
 
+function masteryBandForLevel(level: string) {
+  const normalized = level.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-");
+  if (normalized === "mastered") return "mastered" as const;
+  if (normalized === "proficient") return "proficient" as const;
+  if (normalized === "developing") return "developing" as const;
+  return "no-evidence" as const;
+}
+
 function PracticeRecap({
   results,
   onDone,
@@ -68,54 +81,119 @@ function PracticeRecap({
   onStudyThese?: () => void;
 }) {
   const missed = results.questions.filter((question) => question.correct === false);
+  const partyPopperRef = useRef<PartyPopperIconHandle | null>(null);
+  const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (reduceMotion === false) partyPopperRef.current?.startAnimation();
+  }, [reduceMotion]);
+
   return (
     <StudySurface bar={<SessionBar title="Test results" />}>
       <StudyStream>
-        <div className="space-y-5 border bg-card p-5 sm:p-6">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-brand-slate">Test complete</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold text-foreground">
-              {results.score.correct}/{results.score.total}
-              {results.score.percent == null ? "" : ` · ${Math.round(results.score.percent)}%`}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">+{results.totalXp} XP earned this set</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Mastery: {masterySummary(results.masteryBefore)} → {masterySummary(results.masteryAfter)}
+        <div className="overflow-hidden border bg-card shadow-sm">
+          <header className="border-b bg-muted/30 px-5 py-5 sm:px-7 sm:py-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-slate">Test complete</p>
+                <h2 className="mt-1 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                  {results.score.correct}<span className="text-muted-foreground">/{results.score.total}</span>
+                  {results.score.percent == null ? null : (
+                    <span className="ml-2 align-middle font-mono text-lg font-medium text-muted-foreground">
+                      {Math.round(results.score.percent)}%
+                    </span>
+                  )}
+                </h2>
+              </div>
+              <div className="grid size-12 shrink-0 place-items-center border border-brand-gold/50 bg-brand-gold/15 text-brand-slate">
+                <PartyPopperIcon ref={partyPopperRef} size={26} aria-hidden />
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <div className="flex items-center gap-3 border bg-card px-4 py-3">
+                <span className="font-mono text-2xl font-semibold tabular-nums text-brand-orange">+{results.totalXp}</span>
+                <span className="text-sm text-muted-foreground">XP earned this set</span>
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border bg-card px-4 py-3">
+                <div className="min-w-0">
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Before</p>
+                  <MasteryBand band={masteryBandForLevel(results.masteryBefore.level)} />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {results.masteryBefore.value == null ? "No score yet" : `${Math.round(results.masteryBefore.value * 100)}%`}
+                  </p>
+                </div>
+                <ArrowRightIcon size={18} className="text-brand-orange" aria-hidden />
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">After</p>
+                    <MasteryBand band={masteryBandForLevel(results.masteryAfter.level)} />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {results.masteryAfter.value == null ? "No score yet" : `${Math.round(results.masteryAfter.value * 100)}%`}
+                    </p>
+                  </div>
+                  <MasteryRing
+                    estimate={results.masteryAfter.value}
+                    size={42}
+                    strokeWidth={4}
+                    label={`Mastery after test: ${masterySummary(results.masteryAfter)}`}
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="sr-only">
+              Mastery changed from {masterySummary(results.masteryBefore)} to {masterySummary(results.masteryAfter)}.
             </p>
-          </div>
+          </header>
 
-          {missed.length ? (
-            <section aria-labelledby="practice-missed-title" className="space-y-3 border-t pt-4">
-              <h3 id="practice-missed-title" className="font-display text-base font-semibold text-foreground">
-                Questions to review
-              </h3>
-              {missed.map((question, index) => (
-                <article key={question.itemId} className="space-y-2 border-l-2 border-brand-orange/60 pl-3">
-                  <p className="text-sm font-semibold text-foreground">
-                    {index + 1}. {question.prompt ?? "Question unavailable"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Your answer: {question.studentAnswer?.text || "Answer not recorded"}
-                  </p>
-                  <p className="text-sm text-foreground">
-                    Correct answer: {question.correctAnswer?.text ?? "Answer unavailable"}
-                  </p>
-                  {question.explanation ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">{question.explanation}</p>
-                  ) : null}
-                </article>
-              ))}
-            </section>
-          ) : null}
+          <div className="space-y-5 p-5 sm:p-7">
+            {missed.length ? (
+              <section aria-labelledby="practice-missed-title" className="space-y-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 id="practice-missed-title" className="font-display text-lg font-semibold text-foreground">
+                    Questions to review
+                  </h3>
+                  <span className="font-mono text-xs text-muted-foreground">{missed.length} missed</span>
+                </div>
+                {missed.map((question, index) => (
+                  <article key={question.itemId} className="space-y-2 border-l-2 border-brand-orange/60 bg-brand-orange/5 px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      <span className="mr-2 font-mono text-xs text-brand-slate">{String(index + 1).padStart(2, "0")}</span>
+                      {question.prompt ?? "Question unavailable"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Your answer: {question.studentAnswer?.text || "Answer not recorded"}
+                    </p>
+                    <p className="text-sm text-foreground">
+                      Correct answer: {question.correctAnswer?.text ?? "Answer unavailable"}
+                    </p>
+                    {question.explanation ? (
+                      <p className="border-t pt-2 text-sm leading-relaxed text-muted-foreground">{question.explanation}</p>
+                    ) : null}
+                  </article>
+                ))}
+              </section>
+            ) : (
+              <p className="border-l-2 border-brand-green bg-brand-green/5 px-4 py-3 text-sm text-foreground">
+                Perfect set. You got every question right.
+              </p>
+            )}
 
-          <div className="flex flex-wrap gap-2 border-t pt-4">
-            <Button variant="orange" onClick={onDone}>Done</Button>
-            <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet}>
-              {isCreatingSet ? "Loading new set…" : "New set"}
-            </Button>
-            {onStudyThese ? (
-              <Button variant="outline" onClick={onStudyThese}>Study these cards</Button>
-            ) : null}
+            <div className="flex flex-wrap gap-2 border-t pt-4">
+              <Button variant="orange" onClick={onDone}>
+                <CheckIcon size={16} aria-hidden />
+                Done
+              </Button>
+              <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet}>
+                <ArrowRightIcon size={16} aria-hidden />
+                {isCreatingSet ? "Loading new set…" : "New set"}
+              </Button>
+              {onStudyThese ? (
+                <Button variant="outline" onClick={onStudyThese}>
+                  <BookOpenIcon size={16} aria-hidden />
+                  Study these cards
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
       </StudyStream>
@@ -203,12 +281,8 @@ export function PracticePanel({
   // Reduced-motion is respected at the CALL SITE (celebrate() itself is a
   // plain side effect with no React dependency — see lib/celebrate.ts).
   const reduceMotion = useReducedMotion();
-  // Guards the celebration to fire EXACTLY ONCE per set. A ref, not state:
-  // setting state here would re-render, and an effect-driven fire needs a
-  // latch the re-render cannot clear. Keyed by set id so a fresh set (the
-  // "New set" path) re-arms it, while a re-render or a refetch
-  // of the SAME set does not re-fire — a refetch after the last answer lands
-  // still resolves to the same done state.
+  // Guards the celebration to fire exactly once per set when the recap is
+  // ready. A ref keeps rerenders and result refetches from repeating it.
   const celebratedSetRef = useRef<string | null>(null);
 
   // The gamification summary is derived from immutable evidence; when the
@@ -227,6 +301,8 @@ export function PracticePanel({
   const items = data?.items ?? [];
   const total = items.length;
   const item = items[setIndex] ?? null;
+  const completeOnServer = Boolean(results && total > 0 && results.score.answered >= total);
+  const recapVisible = showRecap || (completeOnServer && !lastResult && !resultsQuery.isFetching);
 
   // A brand-new set (new setId) restarts the cursor at its first item. This
   // is an effect on the incoming data, NOT done eagerly in advance(), so that
@@ -269,23 +345,16 @@ export function PracticePanel({
     setStartedAt(Date.now());
   }, [item?.id]);
 
-  // The completion moment. Derived from `total`/`setIndex` rather than the
-  // `atSetEnd` local below, because this effect MUST sit above the early
-  // returns — hooks cannot be called conditionally, and the loading/error/empty
-  // branches return before that local is defined. `lastResult` truthy plus the
-  // final index IS the set's done state: the student is on the last item and it
-  // has been graded.
-  //
-  // An effect, not a call inside handleAnswer's onSuccess, so the saved-set
-  // path is covered too — a set entered via the study->test bridge can already
-  // be showing a graded final item when the panel mounts.
+  // Celebrate when the results view is ready, not while the last question's
+  // feedback is still on screen. The set key keeps refreshes and query updates
+  // from firing the same celebration twice during this mount.
   useEffect(() => {
-    if (total === 0 || setIndex + 1 < total || !lastResult) return;
-    const key = data?.setId ?? null;
-    if (!key || celebratedSetRef.current === key) return;
+    if (!recapVisible || !completeOnServer || resultsQuery.isFetching || resultsQuery.isError || !results?.setId) return;
+    const key = results.setId;
+    if (celebratedSetRef.current === key) return;
     celebratedSetRef.current = key;
     if (!reduceMotion) celebrate();
-  }, [total, setIndex, lastResult, data?.setId, reduceMotion]);
+  }, [recapVisible, completeOnServer, resultsQuery.isFetching, resultsQuery.isError, results?.setId, reduceMotion]);
 
   if (!usingSaved && bank.isLoading)
     return <LoadingPanel label="Checking question availability…" lines={4} />;
@@ -370,8 +439,6 @@ export function PracticePanel({
       />
     );
 
-  const completeOnServer = Boolean(results && total > 0 && results.score.answered >= total);
-  const recapVisible = showRecap || (completeOnServer && !lastResult && !resultsQuery.isFetching);
   if (recapVisible) {
     if (resultsQuery.isError) {
       return (
