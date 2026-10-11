@@ -121,10 +121,12 @@ export function FlashcardDeck({
   const practiceCards = useMemo<FlashcardCard[] | null>(() => {
     if (!practiceSetId || !practiceResults.data) return null;
     const skillName = twin?.skills.find((skill) => skill.skillId === skillId)?.name ?? null;
-    const requestedMisses = missedItemIds ? new Set(missedItemIds) : null;
+    // This mode is scoped to one recap attempt. If the exact item IDs were
+    // lost from navigation, fail closed instead of expanding to every missed
+    // answer ever recorded against the saved set.
+    const requestedMisses = new Set(missedItemIds ?? []);
     return practiceResults.data.questions
-      .filter((question) => question.correct === false && question.prompt !== null &&
-        (!requestedMisses || requestedMisses.has(question.itemId)))
+      .filter((question) => question.prompt !== null && requestedMisses.has(question.itemId))
       .map((question) => ({
         itemId: question.itemId,
         skillId: skillId ?? "",
@@ -266,6 +268,28 @@ export function FlashcardDeck({
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
+  if (practiceSetId && (!missedItemIds || missedItemIds.length === 0)) {
+    return (
+      <EmptyState
+        title="Missed questions are unavailable"
+        description="Return to your results and open Review missed again."
+        action={onReviewDone
+          ? <Button variant="outline" onClick={() => onReviewDone(practiceSetId)}>Results</Button>
+          : undefined}
+      />
+    );
+  }
+  if (practiceSetId && practiceCards?.length === 0) {
+    return (
+      <EmptyState
+        title="Missed questions are unavailable"
+        description="Return to your results and open Review missed again."
+        action={onReviewDone
+          ? <Button variant="outline" onClick={() => onReviewDone(practiceSetId)}>Results</Button>
+          : undefined}
+      />
+    );
+  }
   const remainingToday = data?.newRemainingToday ?? data?.newCardsRemainingToday;
   const dailyNewCapReached = mode === "review" && remainingToday === 0 &&
     (membership.data?.counts.new ?? 0) > 0;
