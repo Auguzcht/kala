@@ -10,6 +10,7 @@ resource "aws_lambda_function" "api" {
   image_uri     = var.api_image_uri
   timeout       = 30
   memory_size   = 1024
+  publish       = true
 
   environment {
     variables = {
@@ -20,6 +21,18 @@ resource "aws_lambda_function" "api" {
   }
 
   depends_on = [aws_cloudwatch_log_group.api]
+}
+
+resource "aws_lambda_alias" "api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.api.function_name
+  function_version = aws_lambda_function.api.version
+}
+
+resource "aws_lambda_provisioned_concurrency_config" "api_live" {
+  function_name                     = aws_lambda_alias.api_live.function_name
+  qualifier                         = aws_lambda_alias.api_live.name
+  provisioned_concurrent_executions = 1
 }
 
 resource "aws_cloudwatch_log_group" "worker" {
@@ -46,6 +59,6 @@ resource "aws_lambda_function" "worker" {
 }
 
 resource "aws_lambda_function_event_invoke_config" "worker" {
-  function_name                = aws_lambda_function.worker.function_name
-  maximum_retry_attempts      = 0
+  function_name          = aws_lambda_function.worker.function_name
+  maximum_retry_attempts = 0
 }

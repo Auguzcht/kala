@@ -28,15 +28,17 @@ push: ecr-login build
 	docker push $(ECR)/kala-api:latest
 	docker push $(ECR)/kala-worker:latest
 
-# After a push, force Lambda to re-resolve the :latest digest. ECR tag
-# updates don't propagate to a running function by themselves; these two
-# calls redeploy whatever digest is currently behind the tag.
+# After a push, force Lambda to re-resolve the :latest digest. Publish and
+# advance the API's live alias because API Gateway invokes that alias.
 deploy: push
 	$(AWS) lambda update-function-code --function-name kala-api --image-uri $(ECR)/kala-api:latest --region $(REGION)
+	$(AWS) lambda wait function-updated-v2 --function-name kala-api --region $(REGION)
+	@api_version=$$($(AWS) lambda publish-version --function-name kala-api --region $(REGION) --query Version --output text) && \
+	$(AWS) lambda update-alias --function-name kala-api --name live --function-version $$api_version --region $(REGION)
 	$(AWS) lambda update-function-code --function-name kala-worker --image-uri $(ECR)/kala-worker:latest --region $(REGION)
 
 smoke:
-	python3 scripts/smoke_live.py
+	cd services/api && uv run python ../../scripts/smoke_live.py
 
 tf-init:
 	$(TF) -chdir=infra/terraform init

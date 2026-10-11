@@ -253,6 +253,26 @@ on its own**, because attempted rows are excluded from the pending query.
   suite: **351 passed**. API CodeSha256:
   `52670ac445fe49de180d0b344839244e52d4254d0171c016bf6f7efa515c2eba`.
 
+### Live practice smoke and historical duplicate handover — 2026-10-11
+
+- `make smoke` must use the dedicated API smoke identity, **Kala Smoke Test
+  Student**, user id `c519aee6-3a5b-4741-9f64-da54dddc7820`, in the pilot
+  institution `64a59889-ba9c-44ae-87c8-765f86c92c78` and AWS101 course
+  `ae4e7680-f94b-4652-b3f6-b9c32f4420de`. By default the script mints a
+  short-lived token from the API's configured JWT secret; an explicit token is
+  accepted only for this user, institution, and student role. It is a synthetic
+  API test identity, not a manual-testing or real-student account.
+- Read-only history query found **11** user/item/set groups with multiple
+  graded rows before commit `9cb4774`. By decision, these rows were not
+  backfilled or modified.
+- API Gateway now invokes the Terraform-managed published `live` alias. The
+  Terraform PC=1 resource is declared, but AWS account concurrency is capped
+  at 10 and PC allocation would leave fewer than Lambda's required 10
+  unreserved executions. Requesting 11 was rejected because AWS requires a
+  request above the default 1,000; the 1,001 request is pending support case
+  `179168338800048`. After AWS approves it, rerun `make tf-apply` and verify
+  the alias PC configuration reports `READY` before timing the warm path.
+
 ### Brief 4f proposer timeout fix — 2026-10-10
 
 - Worker proposer now uses the `bank` model (`deepseek/deepseek-v4.1-flash:nitro`),

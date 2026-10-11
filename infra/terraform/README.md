@@ -75,6 +75,10 @@ Take `api_base_url` from the output. Your LTI redirect URI is `<api_base_url>/lt
 
 ## Notes
 
-- The API Lambda should be kept warm enough that the LTI launch handler responds quickly. Add provisioned concurrency if cold starts hurt the launch.
-- Redeploys after a code change: rebuild and push the image, then `terraform apply` (or update the function to the new image tag).
+- API Gateway invokes the published `live` alias. Terraform keeps one API
+  execution environment provisioned on that alias at all times. The AWS account
+  concurrency quota must exceed 10 so Lambda can preserve its minimum of 10
+  unreserved executions after reserving one environment.
+- Redeploys after a code change: run `make deploy`. It updates the API image,
+  publishes a version, advances the `live` alias, then updates the worker image.
 - To hand this to the school's IT for review, everything is declarative here; the only manual step is the secret value, by design.

@@ -3,6 +3,11 @@ output "api_base_url" {
   description = "Base URL of the backend. LTI redirect_uri is <api_base_url>/lti/launch."
 }
 
+output "api_live_alias_arn" {
+  value       = aws_lambda_alias.api_live.arn
+  description = "Published API Lambda alias used by API Gateway and provisioned concurrency."
+}
+
 output "ecr_api_repo" {
   value = aws_ecr_repository.api.repository_url
 }

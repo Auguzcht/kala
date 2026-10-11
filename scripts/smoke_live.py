@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Run a small authenticated smoke check against the live practice API.
+"""Run a smoke check against the live practice API as Kala's synthetic student.
 
-Set KALA_SMOKE_TOKEN to a student bearer token. The script answers one
-previously unanswered item in the newest available set, then checks that a
-repeat submit returns the stored result and the recap survives a fresh GET.
+By default, mint a short-lived token for the dedicated smoke identity from the
+API's configured JWT secret. An explicit KALA_SMOKE_TOKEN is accepted only if
+it belongs to that same identity. The script answers one previously unanswered
+item, then checks idempotency and the durable recap.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
 
 BASE_URL = os.getenv(
@@ -21,6 +24,24 @@ BASE_URL = os.getenv(
 ).rstrip("/")
 COURSE_ID = os.getenv("KALA_SMOKE_COURSE_ID", "ae4e7680-f94b-4652-b3f6-b9c32f4420de")
 TOKEN = os.getenv("KALA_SMOKE_TOKEN")
+SMOKE_USER_ID = "c519aee6-3a5b-4741-9f64-da54dddc7820"
+SMOKE_INSTITUTION_ID = "64a59889-ba9c-44ae-87c8-765f86c92c78"
+
+
+def validate_smoke_token() -> None:
+    """Refuse to run against a manual tester's or real student's account."""
+    try:
+        payload = TOKEN.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (AttributeError, IndexError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError("KALA_SMOKE_TOKEN is not a valid session token") from exc
+    if (claims.get("sub") != SMOKE_USER_ID
+            or claims.get("institution_id") != SMOKE_INSTITUTION_ID
+            or claims.get("app_role") != "student"):
+        raise RuntimeError(
+            "KALA_SMOKE_TOKEN must belong to the dedicated Kala Smoke Test Student "
+            f"({SMOKE_USER_ID})"
+        )
 
 
 def request(path: str, body: dict | None = None) -> tuple[int, dict]:
@@ -57,9 +78,19 @@ def has_answer_key(value: object) -> bool:
 
 
 def main() -> int:
+    global TOKEN
     if not TOKEN:
-        print("Set KALA_SMOKE_TOKEN to an authenticated student bearer token.", file=sys.stderr)
-        return 2
+        api_path = str(Path(__file__).resolve().parents[1] / "services" / "api")
+        sys.path.insert(0, api_path)
+        from app.security.jwt import mint_session_token
+
+        TOKEN = mint_session_token(
+            user_id=SMOKE_USER_ID,
+            institution_id=SMOKE_INSTITUTION_ID,
+            app_role="student",
+            course_id=COURSE_ID,
+        )
+    validate_smoke_token()
 
     status, listing = request(f"/practice/{COURSE_ID}/sets")
     assert status == 200
