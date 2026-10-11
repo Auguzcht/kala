@@ -129,7 +129,7 @@ export function AnswerableCard({
       {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
 
       {result ? (
-        <div id={resultAnchorId} className="space-y-3">
+        <div id={resultAnchorId} className="space-y-3 border-t pt-4">
           <div className="flex items-start gap-2.5">
             {result.correct ? (
               <CheckIcon ref={checkRef} size={18} className="mt-0.5 shrink-0 text-brand-green" aria-hidden />
@@ -175,11 +175,9 @@ export function AnswerableCard({
             </div>
           </div>
 
-          {/* Surface-specific detail only (next-due, box, graduation…). The
-              separator is earned by this slot's presence — with mastery gone
-              above, an empty footer rule no longer renders. */}
+          {/* Surface-specific detail only (next-due, box, graduation…). */}
           {meta ? (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-2.5 font-mono text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-xs text-muted-foreground">
               {meta}
             </div>
           ) : null}
