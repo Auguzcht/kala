@@ -154,7 +154,10 @@ function PracticeRecap({
                 {isCreatingSet ? "Loading new set…" : "New set"}
               </Button>
               {onStudyThese ? (
-                <Button variant="outline" onClick={onStudyThese}>
+                <Button
+                  variant="outline"
+                  onClick={() => onStudyThese(missed.map((question) => question.itemId))}
+                >
                   <BookOpenIcon size={16} aria-hidden />
                   Review missed
                 </Button>
