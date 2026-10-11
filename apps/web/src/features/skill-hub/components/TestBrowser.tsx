@@ -116,18 +116,13 @@ function AttemptPill({ attempt, questionCount }: { attempt: PracticeSetAttempt; 
       </span>
     );
   }
-  if (attempt.attemptedCount > questionCount) {
-    return (
-      <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
-        Multiple attempts
-      </span>
-    );
-  }
   const correct = attempt.correctCount ?? 0;
   return (
-    <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
-      {correct}/{attempt.attemptedCount} correct
-    </span>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] font-semibold text-foreground">
+      <span className="inline-flex rounded-sm bg-brand-green/15 px-2 py-0.5">Latest {correct}/{questionCount}</span>
+      <span className="text-muted-foreground">Best {correct}/{questionCount}</span>
+      <span className="text-muted-foreground">1 attempt</span>
+    </div>
   );
 }
 
