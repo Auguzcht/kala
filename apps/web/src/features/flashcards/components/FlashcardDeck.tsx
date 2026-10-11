@@ -95,6 +95,7 @@ export function FlashcardDeck({
   skillId,
   mode = "review",
   practiceSetId,
+  onReviewDone,
   onExit,
 }: {
   courseId: string;
@@ -102,6 +103,8 @@ export function FlashcardDeck({
   mode?: "review" | "all";
   /** When present, study only the questions missed in this saved test set. */
   practiceSetId?: string;
+  /** Return to the saved test recap after the missed items are reviewed. */
+  onReviewDone?: (setId: string) => void;
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
@@ -338,6 +341,24 @@ export function FlashcardDeck({
   const total = deckCards.length;
 
   if (deckDone) {
+    if (practiceSetId && onReviewDone) {
+      return (
+        <StudySurface
+          bar={
+            <SessionBar
+              title="Study"
+              progress={{ current: total, total, label: "cards" }}
+              onBack={() => onReviewDone(practiceSetId)}
+              backLabel="Back to test results"
+            />
+          }
+        >
+          <StudyStream>
+            <LoadingPanel label="Returning to test results…" lines={2} />
+          </StudyStream>
+        </StudySurface>
+      );
+    }
     const canTest = Boolean(skillId) && data.cards.length > 0;
     return (
       <StudySurface
@@ -345,8 +366,10 @@ export function FlashcardDeck({
           <SessionBar
             title="Study"
             progress={{ current: total, total, label: "cards" }}
-            onBack={onExit}
-            backLabel="Choose another topic"
+            onBack={() => practiceSetId && onReviewDone
+              ? onReviewDone(practiceSetId)
+              : onExit()}
+            backLabel={practiceSetId && onReviewDone ? "Back to test results" : "Choose another topic"}
           />
         }
         dock={
@@ -354,9 +377,7 @@ export function FlashcardDeck({
             primary={
               canTest
                 ? {
-                    label: testMe.isPending
-                      ? practiceSetId ? "Preparing retry…" : "Building your test…"
-                      : practiceSetId ? "Retry test" : "Test me on these",
+                    label: testMe.isPending ? "Building your test…" : "Test me on these",
                     onClick: testMeOnThese,
                     disabled: testMe.isPending,
                     icon: ArrowRightIcon,
@@ -370,17 +391,13 @@ export function FlashcardDeck({
           <div className="relative border bg-card p-6">
             <CornerBrackets />
             <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
-              {practiceSetId ? "Missed questions reviewed" : "Deck complete"}
+              Deck complete
             </p>
             <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-              {practiceSetId
-                ? "Ready to retry?"
-                : `You reviewed ${total} ${total === 1 ? "card" : "cards"}.`}
+              You reviewed {total} {total === 1 ? "card" : "cards"}.
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {practiceSetId
-                ? "Take another pass at the questions you missed while the explanations are fresh."
-                : "Missed cards resurface sooner, so your next pass follows your review schedule."}
+              Missed cards resurface sooner, so your next pass follows your review schedule.
             </p>
             <p className="mt-3 text-sm font-medium text-foreground">
               {reviewCounts.gotIt} got it, {reviewCounts.stillLearning} still learning.
@@ -395,11 +412,9 @@ export function FlashcardDeck({
               <Button variant="orange" size="sm" onClick={onExit}>
                 Done
               </Button>
-              {!practiceSetId ? (
-                <Button variant="outline" size="sm" onClick={reloadDeck}>
-                  Reload deck
-                </Button>
-              ) : null}
+              <Button variant="outline" size="sm" onClick={reloadDeck}>
+                Reload deck
+              </Button>
               {mode === "all" && data.hasMore ? (
                 <Button
                   variant="orange"
@@ -440,7 +455,10 @@ export function FlashcardDeck({
     // The session contract records only the first rating for a card. A card
     // requeued after "Still learning" can be rated again locally without
     // writing a second item_reviews row.
-    if (alreadyPosted) return;
+    if (alreadyPosted) {
+      if (practiceSetId && ratingIndex + 1 >= nextQueue.length) onReviewDone?.(practiceSetId);
+      return;
+    }
 
     reviewInFlightRef.current = true;
     setPendingRemembered(remembered);
@@ -468,6 +486,9 @@ export function FlashcardDeck({
           setPendingRemembered(null);
           postedRatingIdsRef.current.add(card.itemId);
           reviewIdempotencyRef.current = null;
+          if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
+            onReviewDone?.(practiceSetId);
+          }
         },
         onError: () => {
           reviewInFlightRef.current = false;
@@ -615,8 +636,10 @@ export function FlashcardDeck({
         <SessionBar
           title="Study"
           progress={{ current: index + 1, total, label: "card" }}
-          onBack={onExit}
-          backLabel="Choose another topic"
+          onBack={() => practiceSetId && onReviewDone
+            ? onReviewDone(practiceSetId)
+            : onExit()}
+          backLabel={practiceSetId && onReviewDone ? "Back to test results" : "Choose another topic"}
         />
       }
       dock={

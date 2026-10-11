@@ -2,6 +2,7 @@ import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +10,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { useBankStatus } from "@/features/bank";
 import {
-  useCreateSetFromItems,
   useGenerateSet,
   usePracticeSetById,
   usePracticeSets,
@@ -108,11 +108,18 @@ export function TestBrowser({
  * when the student has answers on record. Never red — a score here is
  * informational, not a verdict (the mastery palette reserves red for the
  * instructor at-risk axis). */
-function AttemptPill({ attempt }: { attempt: PracticeSetAttempt }) {
+function AttemptPill({ attempt, questionCount }: { attempt: PracticeSetAttempt; questionCount: number }) {
   if (attempt.attemptedCount === null) {
     return (
       <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
         Not attempted
+      </span>
+    );
+  }
+  if (attempt.attemptedCount > questionCount) {
+    return (
+      <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
+        Multiple attempts
       </span>
     );
   }
@@ -285,7 +292,7 @@ function SetList({
                 </p>
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-2">
-                <AttemptPill attempt={set} />
+                <AttemptPill attempt={set} questionCount={set.size} />
                 {set.available === false || set.status === "unavailable" ? (
                   <span className="text-[11px] text-muted-foreground">This set is no longer available</span>
                 ) : null}
@@ -364,8 +371,7 @@ function SetDetail({
   includesRepeats?: boolean;
 }) {
   const { data, isLoading, isError, refetch } = usePracticeSetById(courseId, setId);
-  const createRetake = useCreateSetFromItems(courseId);
-  const itemIds = data?.items.map((item) => item.id) ?? [];
+  const createNewSet = useGenerateSet(courseId);
 
   if (isLoading) {
     return (
@@ -394,11 +400,13 @@ function SetDetail({
     correctCount: data.correctCount,
     lastAttemptedAt: data.lastAttemptedAt,
   };
+  const setSkillId = data.skillId;
+  const setSize = data.items.length || 5;
   const startLabel = unavailable
     ? "This set is no longer available"
     : canStart
       ? attempted
-        ? createRetake.isPending ? "Preparing retake…" : "Retake test"
+        ? createNewSet.isPending ? "Preparing new set…" : "New set"
         : "Start test"
       : data.status === "generating"
         ? `Preparing questions (${data.readyCount}/${data.requestedSize})`
@@ -409,9 +417,15 @@ function SetDetail({
       onStart();
       return;
     }
-    createRetake.mutate(
-      itemIds,
-      { onSuccess: (newSet) => onStart(newSet.setId) }
+    createNewSet.mutate(
+      { skillId: setSkillId, size: setSize },
+      {
+        onSuccess: (newSet) => {
+          if (newSet.setId) onStart(newSet.setId);
+          else toast.error("No new questions are ready yet. Try again shortly.");
+        },
+        onError: () => toast.error("Could not prepare a new test set. Try again."),
+      }
     );
   }
 
@@ -435,7 +449,7 @@ function SetDetail({
               {data.items.length} {data.items.length === 1 ? "question" : "questions"}
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <AttemptPill attempt={attempt} />
+              <AttemptPill attempt={attempt} questionCount={data.items.length} />
               {data.lastAttemptedAt ? (
                 <span className="text-[11px] text-muted-foreground">
                   last {fmtDate(data.lastAttemptedAt)}
@@ -449,7 +463,7 @@ function SetDetail({
             variant="orange"
             size="lg"
             onClick={startTest}
-            disabled={!canStart || createRetake.isPending}
+            disabled={!canStart || createNewSet.isPending}
             className="shrink-0"
           >
           {startLabel}
@@ -457,6 +471,11 @@ function SetDetail({
           </Button>
         </div>
       </div>
+      {attempted && !unavailable ? (
+        <p className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
+          This saved set is complete. Start a new set to keep practicing this skill.
+        </p>
+      ) : null}
       {includesRepeats ? (
         <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
           You&apos;ve seen every question for this skill. Here are the ones worth another look.

@@ -109,6 +109,18 @@ function SkillHubPage() {
           search: { tab: "study", start: true, mode: "all", studySetId: missedSetId },
         })
       }
+      onReviewMissedSet={(missedSetId) =>
+        navigate({
+          to,
+          params: { skillId },
+          search: {
+            tab: "test",
+            setId: missedSetId,
+            start: true,
+            sessionId: crypto.randomUUID(),
+          },
+        })
+      }
       // Leaving a session returns to that tab's browse pane (keeps `tab`,
       // drops `start`). Lesson has no browse pane, so it exits to Study —
       // leaving `tab=lesson` in the URL would immediately re-enter the lesson.

@@ -142,6 +142,7 @@ export function SkillHub({
   onExitSession,
   onSessionReady,
   onStudyMissedSet,
+  onReviewMissedSet,
 }: {
   courseId: string;
   skillId: string;
@@ -164,6 +165,7 @@ export function SkillHub({
   onStartTest: (setId?: string) => void;
   onSessionReady: (setId: string, sessionId: string) => void;
   onStudyMissedSet: (setId: string) => void;
+  onReviewMissedSet: (setId: string) => void;
   /** Leave a running session back to the hub pane (clears `start` in the URL
    * so a refresh doesn't re-enter it). */
   onExitSession: () => void;
@@ -182,7 +184,16 @@ export function SkillHub({
   // A running session owns the viewport (no header, no tabs) — the same
   // takeover contract every mode already has.
   if (tab === "study" && start) {
-    return <FlashcardDeck courseId={courseId} skillId={skillId} mode={studyMode ?? "review"} practiceSetId={studySetId} onExit={onExitSession} />;
+    return (
+      <FlashcardDeck
+        courseId={courseId}
+        skillId={skillId}
+        mode={studyMode ?? "review"}
+        practiceSetId={studySetId}
+        onReviewDone={onReviewMissedSet}
+        onExit={onExitSession}
+      />
+    );
   }
   if (tab === "test" && start) {
     return (
