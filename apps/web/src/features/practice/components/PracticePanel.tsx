@@ -244,11 +244,11 @@ export function PracticePanel({
         description="This skill doesn&apos;t have course material yet."
       />
     );
-  if (data?.status === "unavailable")
+  if (data && (("available" in data && data.available === false) || data.status === "unavailable"))
     return (
       <EmptyState
-        title="This test is no longer available"
-        description="Its questions are no longer part of the current course material. Choose another test to continue."
+        title="This set is no longer available"
+        description="Choose another set to continue."
         action={<Button variant="outline" onClick={onExit}>Choose another test</Button>}
       />
     );

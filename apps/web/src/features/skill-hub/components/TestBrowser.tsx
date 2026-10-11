@@ -285,8 +285,8 @@ function SetList({
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-2">
                 <AttemptPill attempt={set} />
-                {set.status === "unavailable" ? (
-                  <span className="text-[11px] text-muted-foreground">Questions unavailable</span>
+                {set.available === false || set.status === "unavailable" ? (
+                  <span className="text-[11px] text-muted-foreground">This set is no longer available</span>
                 ) : null}
                 {set.lastAttemptedAt ? (
                   <span className="text-[11px] text-muted-foreground">
@@ -384,7 +384,8 @@ function SetDetail({
   }
 
   const attempted = data.attemptedCount !== null;
-  const canStart = data.status === "ready";
+  const unavailable = data.available === false || data.status === "unavailable";
+  const canStart = data.status === "ready" && !unavailable;
   const attempt: PracticeSetAttempt = {
     attemptedCount: data.attemptedCount,
     correctCount: data.correctCount,
@@ -428,7 +429,9 @@ function SetDetail({
             disabled={!canStart}
             className="shrink-0"
           >
-            {canStart
+          {unavailable
+            ? "This set is no longer available"
+            : canStart
               ? attempted ? "Retake test" : "Start test"
               : data.status === "generating"
                 ? `Preparing questions (${data.readyCount}/${data.requestedSize})`
@@ -442,9 +445,9 @@ function SetDetail({
           You&apos;ve seen every question for this skill. Here are the ones worth another look.
         </div>
       ) : null}
-      {data.status === "unavailable" ? (
+      {unavailable ? (
         <p className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
-          The questions in this set are no longer part of the current course material.
+          This set is no longer available.
         </p>
       ) : null}
 

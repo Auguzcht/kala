@@ -74,6 +74,7 @@ export const practiceSavedSetSchema = z.object({
   setId: z.string(),
   skillId: z.string(),
   kind: z.string(),
+  available: z.boolean().optional(),
   items: z.array(practiceItemSchema),
 }).merge(practiceSetProgressSchema).merge(practiceSetAttemptSchema);
 
@@ -90,6 +91,7 @@ export const practiceSetSummarySchema = z.object({
   kind: z.string(),
   size: z.number().int().nonnegative(),
   createdAt: z.string(),
+  available: z.boolean().optional(),
   status: z.enum(["available", "unavailable"]).optional(),
 }).merge(practiceSetAttemptSchema);
 
