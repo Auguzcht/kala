@@ -133,6 +133,7 @@ export const practiceSetResultsSchema = z.object({
     percent: z.number().nullable(),
   }),
   totalXp: z.number().int().nonnegative(),
+  xpNote: z.string().optional(),
   masteryBefore: z.object({ level: z.string(), value: z.number().nullable() }),
   masteryAfter: z.object({ level: z.string(), value: z.number().nullable() }),
   questions: z.array(practiceResultsQuestionSchema),

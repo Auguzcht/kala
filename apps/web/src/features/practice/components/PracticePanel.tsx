@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
 import { CheckIcon } from "@/components/ui/check";
-import { MasteryBand, MasteryRing } from "@/components/kala";
+import { MasteryBand } from "@/components/kala";
 import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
@@ -81,11 +81,11 @@ function PracticeRecap({
   const missed = results.questions.filter((question) => question.correct === false);
 
   return (
-    <StudySurface bar={<SessionBar title="Test results" />}>
+    <StudySurface bar={<SessionBar />}>
       <StudyStream>
         <div className="overflow-hidden border bg-card">
           <header className="border-b bg-muted/30 px-5 py-5 sm:px-7 sm:py-6">
-            <div className="flex items-start justify-between gap-4">
+            <div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-slate">Test complete</p>
                 <h2 className="mt-1 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
@@ -97,45 +97,23 @@ function PracticeRecap({
                   )}
                 </h2>
               </div>
-              <div className="border border-border bg-card px-3 py-2 text-right">
-                <p className="font-mono text-sm font-semibold tabular-nums text-foreground">{results.score.total}</p>
-                <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {results.score.total === 1 ? "question" : "questions"}
-                </p>
-              </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-              <div className="flex items-center gap-3 border bg-card px-4 py-3">
-                <span className="font-mono text-2xl font-semibold tabular-nums text-brand-orange">+{results.totalXp}</span>
-                <span className="text-sm text-muted-foreground">XP earned this set</span>
-              </div>
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border bg-card px-4 py-3">
-                <div className="min-w-0">
-                  <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Before</p>
-                  <MasteryBand band={masteryBandForLevel(results.masteryBefore.level)} />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {results.masteryBefore.value == null ? "No score yet" : `${Math.round(results.masteryBefore.value * 100)}%`}
-                  </p>
-                </div>
-                <div className="grid size-8 shrink-0 place-items-center text-brand-orange">
-                  <ArrowRightIcon size={18} aria-hidden />
-                </div>
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">After</p>
-                    <MasteryBand band={masteryBandForLevel(results.masteryAfter.level)} />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {results.masteryAfter.value == null ? "No score yet" : `${Math.round(results.masteryAfter.value * 100)}%`}
-                    </p>
-                  </div>
-                  <MasteryRing
-                    estimate={results.masteryAfter.value}
-                    size={42}
-                    strokeWidth={4}
-                    label={`Mastery after test: ${masterySummary(results.masteryAfter)}`}
-                  />
-                </div>
-              </div>
+            <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span className="font-mono font-semibold tabular-nums text-brand-orange">+{results.totalXp} XP</span>
+              {results.xpNote ? <span className="text-xs text-muted-foreground">{results.xpNote}</span> : null}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-foreground">
+                Mastery {results.masteryBefore.value == null ? "—" : `${Math.round(results.masteryBefore.value * 100)}%`}
+                <span className="mx-1.5 text-muted-foreground" aria-hidden>→</span>
+                {results.masteryAfter.value == null ? "—" : `${Math.round(results.masteryAfter.value * 100)}%`}
+              </span>
+              <MasteryBand band={masteryBandForLevel(results.masteryAfter.level)} />
+              {results.masteryBefore.level !== results.masteryAfter.level ? (
+                <span className="text-xs text-muted-foreground">
+                  {results.masteryBefore.level} → {results.masteryAfter.level}
+                </span>
+              ) : null}
             </div>
             <p className="sr-only">
               Mastery changed from {masterySummary(results.masteryBefore)} to {masterySummary(results.masteryAfter)}.
