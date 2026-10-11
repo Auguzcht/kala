@@ -53,10 +53,6 @@ const SET_SIZE = 5;
 
 type FollowUpTurn = { question: string; answer: string };
 
-function masterySummary(mastery: { level: string; value: number | null }) {
-  return `${mastery.level}${mastery.value == null ? "" : ` · ${Math.round(mastery.value * 100)}%`}`;
-}
-
 function masteryBandForLevel(level: string) {
   const normalized = level.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-");
   if (normalized === "mastered") return "mastered" as const;
@@ -90,19 +86,17 @@ function PracticeRecap({
         <div className="overflow-hidden border bg-card">
           <header className="border-b bg-muted/30 px-5 py-5 sm:px-7 sm:py-6">
             <div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-slate">Test complete</p>
-                <h2 className="mt-1 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                  {results.score.correct}<span className="text-muted-foreground">/{results.score.total}</span>
-                  {results.score.percent == null ? null : (
-                    <span className="ml-2 align-middle font-mono text-lg font-medium text-muted-foreground">
-                      {Math.round(results.score.percent)}%
-                    </span>
-                  )}
-                </h2>
-              </div>
+              <h2 className="font-display text-xl font-semibold tracking-tight text-foreground">Test complete</h2>
+              <p className="mt-1 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                {results.score.correct}<span className="text-muted-foreground">/{results.score.total}</span>
+                {results.score.percent == null ? null : (
+                  <span className="ml-2 align-middle font-mono text-lg font-medium text-muted-foreground">
+                    {Math.round(results.score.percent)}%
+                  </span>
+                )}
+              </p>
             </div>
-            <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <div className="mt-3 flex flex-col items-start gap-0.5 text-sm">
               <span className="font-mono font-semibold tabular-nums text-brand-orange">+{results.totalXp} XP</span>
               {results.xpNote ? <span className="text-xs text-muted-foreground">{results.xpNote}</span> : null}
             </div>
@@ -119,9 +113,6 @@ function PracticeRecap({
                 </span>
               ) : null}
             </div>
-            <p className="sr-only">
-              Mastery changed from {masterySummary(results.masteryBefore)} to {masterySummary(results.masteryAfter)}.
-            </p>
           </header>
 
           <div className="space-y-5 p-5 sm:p-7">
