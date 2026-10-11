@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from time import perf_counter_ns
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from httpx import HTTPStatusError
 from pydantic import BaseModel
 
 from app.bank.kick import kick_bank
@@ -37,6 +39,7 @@ from app.learn import items as item_gen
 from app.routers.item_generation_jobs import enqueue_practice, practice_jobs
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 router = APIRouter(prefix="/practice", tags=["practice"])
 
@@ -592,92 +595,51 @@ def get_set(
     }
 
 
-def _record_set_attempt(*, institution_id: str, user_id: str, course_id: str,
-                        set_id: str, correct: bool) -> None:
-    """Increment this student's counters for a set they just answered in.
-
-    Read-then-upsert rather than a single atomic increment: PostgREST has no
-    increment operator, so the new totals are computed here against the
-    current row and written back on the (user_id, set_id) conflict target. A
-    single student answers a set one question at a time, so there is no
-    meaningful concurrent-writer race in practice; if that ever changes, this
-    is the function that becomes an RPC.
-
-    This remains separate from submit()'s atomic review RPC — it records only
-    "did you take this set and how did you do", not the mastery signal.
-    """
-    existing = db.select("quiz_set_attempts", {
-        "institution_id": f"eq.{institution_id}", "user_id": f"eq.{user_id}",
-        "set_id": f"eq.{set_id}",
-        "select": "attempted_count,correct_count", "limit": "1",
-    })
-    attempted = (int(existing[0]["attempted_count"]) if existing else 0) + 1
-    correct_count = (int(existing[0]["correct_count"]) if existing else 0) + (1 if correct else 0)
-    db.upsert("quiz_set_attempts", [{
-        "institution_id": institution_id, "user_id": user_id,
-        "course_id": course_id, "set_id": set_id,
-        "attempted_count": attempted, "correct_count": correct_count,
-        "last_attempted_at": datetime.now(UTC).isoformat(),
-    }], on_conflict="user_id,set_id")
-
-
 @router.post("/{course_id}/submit")
 def submit(
+    request: Request,
     body: SubmitBody,
     course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(get_current_user),
 ):
+    handler_started = perf_counter_ns()
+    timings: dict[str, float] = {"auth_ms": getattr(request.state, "practice_auth_ms", 0.0)}
     try:
-        graded = item_gen.grade(
-            institution_id=user.institution_id, item_id=body.item_id, choice_id=body.choice_id,
-        )
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
-
-    if graded.get("courseId") != course_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
-    if body.set_id is not None:
-        valid = db.select("quiz_set_items", {
-            "set_id": f"eq.{body.set_id}", "item_id": f"eq.{body.item_id}",
-            "quiz_sets.course_id": f"eq.{course_id}",
-            "quiz_sets.institution_id": f"eq.{user.institution_id}",
-            "select": "set_id,quiz_sets!inner(course_id)", "limit": "1",
+        rows = db.rpc("submit_practice", {
+            "p_institution_id": user.institution_id,
+            "p_user_id": user.user_id,
+            "p_course_id": course_id,
+            "p_item_id": body.item_id,
+            "p_choice_id": body.choice_id,
+            "p_set_id": body.set_id,
+            "p_session_id": str(body.session_id or body.set_id) if (body.session_id or body.set_id) else None,
+            "p_idempotency_key": body.idempotency_key or str(uuid4()),
+            "p_latency_ms": body.latency_ms,
         })
-        if not valid:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "item is not in this set")
-
-    rows = db.rpc("review_flashcard", {
-        "p_institution_id": user.institution_id,
-        "p_user_id": user.user_id,
-        "p_course_id": course_id,
-        "p_item_id": body.item_id,
-        "p_outcome": "good" if graded["correct"] else "again",
-        "p_mode": "quiz",
-        "p_session_id": str(body.session_id or body.set_id) if (body.session_id or body.set_id) else None,
-        "p_idempotency_key": body.idempotency_key or str(uuid4()),
-        "p_latency_ms": body.latency_ms,
-    })
+    except HTTPStatusError as exc:
+        try:
+            db_error = exc.response.json()
+        except ValueError:
+            db_error = {}
+        if db_error.get("code") == "P0002":
+            detail = "item is not in this set" if db_error.get("message") == "item is not in this set" else "item not found"
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail) from exc
+        raise
     if not rows:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "could not record practice review")
     review_result = rows[0] if isinstance(rows, list) else rows
-    # Attempt bookkeeping is explicit. An ungrouped item (/next, no set)
-    # touches nothing here — same as it touches
-    # nothing in quiz_sets. Grading, evidence, and mastery above are all
-    # unchanged; this is purely the per-student "have I taken this set"
-    # counter the Test tab badge reads.
-    if body.set_id and not review_result.get("replayed"):
-        _record_set_attempt(
-            institution_id=user.institution_id, user_id=user.user_id,
-            course_id=course_id, set_id=body.set_id, correct=graded["correct"],
-        )
-    if not review_result.get("replayed"):
-        record_exposure(
-            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
-            skill_id=graded["skillId"], item_id=body.item_id, tested=bool(body.set_id),
-            answered=True, correct=graded["correct"],
-        )
-    return {
-        "correct": graded["correct"],
-        "explanation": graded["explanation"],
+    for field in ("item_lookup_ms", "grading_ms", "set_membership_ms", "review_rpc_ms",
+                  "attempts_ms", "exposure_ms"):
+        timings[field] = float(review_result.get(field) or 0)
+    timings["transactional_review_rpc_ms"] = timings["review_rpc_ms"]
+    timings["xp_ms"] = 0.0  # XP is read separately; submit does not calculate it.
+    response_started = perf_counter_ns()
+    response = {
+        "correct": review_result["correct"],
+        "explanation": review_result["explanation"],
         "mastery": review_result.get("mastery_estimate"),
     }
+    timings["response_build_ms"] = (perf_counter_ns() - response_started) / 1_000_000
+    timings["handler_ms"] = (perf_counter_ns() - handler_started) / 1_000_000
+    request.state.practice_submit_timings = timings
+    return response

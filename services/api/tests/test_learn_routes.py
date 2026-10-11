@@ -2,6 +2,7 @@ import itertools
 import threading
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
 from app.deps import CurrentUser, get_current_user
 from app.learn.items import ItemGenerationError
@@ -111,17 +112,14 @@ def test_practice_next_returns_safe_502_when_generation_is_invalid(monkeypatch) 
     }
 
 
-def test_practice_submit_uses_transactional_quiz_review_with_legacy_body(monkeypatch) -> None:
+def test_practice_submit_uses_one_atomic_rpc_with_legacy_body(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     rpc_calls = []
-    monkeypatch.setattr(
-        practice.item_gen, "grade",
-        lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001", "correct": True, "explanation": "why"},
-    )
     monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
-        "mastery_estimate": 0.65, "replayed": False,
+        "correct": True, "explanation": "why", "mastery_estimate": 0.65, "replayed": False,
+        "item_lookup_ms": 1, "grading_ms": 0, "set_membership_ms": 0,
+        "review_rpc_ms": 2, "attempts_ms": 0, "exposure_ms": 0,
     }])
-    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
 
     try:
         with TestClient(app) as client:
@@ -134,9 +132,9 @@ def test_practice_submit_uses_transactional_quiz_review_with_legacy_body(monkeyp
 
     assert response.status_code == 200
     assert response.json() == {"correct": True, "explanation": "why", "mastery": 0.65}
-    assert rpc_calls[0][0] == "review_flashcard"
-    assert rpc_calls[0][1]["p_mode"] == "quiz"
-    assert rpc_calls[0][1]["p_outcome"] == "good"
+    assert len(rpc_calls) == 1
+    assert rpc_calls[0][0] == "submit_practice"
+    assert rpc_calls[0][1]["p_choice_id"] == "a"
     assert rpc_calls[0][1]["p_latency_ms"] == 1200
     assert rpc_calls[0][1]["p_session_id"] is None
     assert rpc_calls[0][1]["p_idempotency_key"]
@@ -145,10 +143,10 @@ def test_practice_submit_uses_transactional_quiz_review_with_legacy_body(monkeyp
 def test_practice_submit_404s_on_unknown_item(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
 
-    def raise_missing(**kwargs):
-        raise ValueError("item not found")
-
-    monkeypatch.setattr(practice.item_gen, "grade", raise_missing)
+    def raise_missing(fn, args):
+        raise httpx.HTTPStatusError("not found", request=httpx.Request("POST", "/rpc/submit_practice"),
+                                    response=httpx.Response(404, json={"code": "P0002", "message": "item not found"}))
+    monkeypatch.setattr(practice.db, "rpc", raise_missing)
 
     try:
         with TestClient(app) as client:
@@ -997,30 +995,12 @@ def test_get_set_404s_for_another_course(monkeypatch) -> None:
 
 
 def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) -> None:
-    """A graded item grouped under a set must bump this student's attempt
-    counters, while the atomic grading/evidence/mastery RPC remains separate."""
+    """The atomic submit RPC receives the set and owns attempt bookkeeping."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    upserted = []
     rpc_calls = []
-
-    monkeypatch.setattr(
-        practice.item_gen, "grade",
-        lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
-                          "correct": True, "explanation": "ok"},
-    )
-    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append(args) or [{
-        "mastery_estimate": 0.5, "replayed": False,
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
+        "correct": True, "explanation": "ok", "mastery_estimate": 0.5, "replayed": False,
     }])
-    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
-    # Existing row: 3 attempts / 1 correct before this answer.
-    monkeypatch.setattr(
-        practice.db, "select",
-        lambda table, params: [{"attempted_count": 3, "correct_count": 1}],
-    )
-    monkeypatch.setattr(
-        practice.db, "upsert",
-        lambda table, rows, on_conflict: upserted.extend(rows) or rows,
-    )
 
     try:
         with TestClient(app) as client:
@@ -1034,34 +1014,19 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert upserted[0]["attempted_count"] == 4
-    assert upserted[0]["correct_count"] == 2
-    assert upserted[0]["set_id"] == "00000000-0000-4000-8000-000000000020"
-    assert "last_attempted_at" in upserted[0]
-    assert rpc_calls[0]["p_session_id"] == "00000000-0000-4000-8000-000000000020"
-    assert rpc_calls[0]["p_idempotency_key"] == "attempt-set-1"
-    assert rpc_calls[0]["p_mode"] == "quiz"
+    assert len(rpc_calls) == 1
+    assert rpc_calls[0][0] == "submit_practice"
+    assert rpc_calls[0][1]["p_set_id"] == "00000000-0000-4000-8000-000000000020"
+    assert rpc_calls[0][1]["p_session_id"] == "00000000-0000-4000-8000-000000000020"
+    assert rpc_calls[0][1]["p_idempotency_key"] == "attempt-set-1"
 
 
 def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    upserted = []
-    monkeypatch.setattr(
-        practice.item_gen, "grade",
-        lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
-                          "correct": False, "explanation": "no", "setId": "set-9"},
-    )
-    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: [{"mastery_estimate": 0.2, "replayed": False}])
-    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
-    def no_attempt_but_valid_set(table, params):
-        if table == "quiz_set_items":
-            return [{"set_id": "00000000-0000-4000-8000-000000000020"}]
-        return []
-    monkeypatch.setattr(practice.db, "select", no_attempt_but_valid_set)
-    monkeypatch.setattr(
-        practice.db, "upsert",
-        lambda table, rows, on_conflict: upserted.extend(rows) or rows,
-    )
+    rpc_calls = []
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
+        "correct": False, "explanation": "no", "mastery_estimate": 0.2, "replayed": False,
+    }])
 
     try:
         with TestClient(app) as client:
@@ -1073,26 +1038,18 @@ def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> Non
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert upserted[0]["attempted_count"] == 1
-    assert upserted[0]["correct_count"] == 0  # wrong answer still counts an attempt
+    assert rpc_calls[0][0] == "submit_practice"
+    assert rpc_calls[0][1]["p_set_id"] == "00000000-0000-4000-8000-000000000020"
 
 
 def test_submit_of_an_ungrouped_item_touches_no_attempt_row(monkeypatch) -> None:
     """/next items have set_id null — submit must not create attempt rows for
     them (there is no set to attribute them to)."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    touched = []
-    monkeypatch.setattr(
-        practice.item_gen, "grade",
-        lambda **kwargs: {"skillId": "00000000-0000-4000-8000-000000000010", "courseId": "00000000-0000-4000-8000-000000000001",
-                          "correct": True, "explanation": "ok", "setId": None},
-    )
-    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: [{"mastery_estimate": 0.5, "replayed": False}])
-    monkeypatch.setattr(practice, "record_exposure", lambda **kwargs: None)
-    monkeypatch.setattr(
-        practice.db, "upsert",
-        lambda *a, **k: touched.append(a) or [],
-    )
+    calls = []
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: calls.append((fn, args)) or [{
+        "correct": True, "explanation": "ok", "mastery_estimate": 0.5, "replayed": False,
+    }])
 
     try:
         with TestClient(app) as client:
@@ -1104,7 +1061,8 @@ def test_submit_of_an_ungrouped_item_touches_no_attempt_row(monkeypatch) -> None
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert touched == []
+    assert calls[0][0] == "submit_practice"
+    assert calls[0][1]["p_set_id"] is None
 
 
 def test_get_set_includes_this_students_attempt_row(monkeypatch) -> None:

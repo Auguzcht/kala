@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
+from time import perf_counter_ns
 
-from fastapi import Depends, Header, HTTPException, Path, Query, status
+from fastapi import Depends, Header, HTTPException, Path, Query, Request, status
 
 from app.lms.blackboard import BlackboardConnector
 from app.security.jwt import verify_session_token
@@ -132,7 +133,8 @@ UUID_PATH_DEPS = {
 }
 
 
-def get_current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
+def get_current_user(request: Request, authorization: str | None = Header(default=None)) -> CurrentUser:
+    started = perf_counter_ns()
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
     token = authorization.split(" ", 1)[1]
@@ -140,12 +142,15 @@ def get_current_user(authorization: str | None = Header(default=None)) -> Curren
         claims = verify_session_token(token)
     except Exception:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired token")
-    return CurrentUser(
+    user = CurrentUser(
         user_id=claims["sub"],
         institution_id=claims.get("institution_id", ""),
         app_role=claims.get("app_role", ""),
         course_id=claims.get("course_id"),
     )
+    if request.url.path.startswith("/practice/") and request.url.path.endswith("/submit"):
+        request.state.practice_auth_ms = (perf_counter_ns() - started) / 1_000_000
+    return user
 
 
 def require_role(*roles: str):

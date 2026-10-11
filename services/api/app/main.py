@@ -2,6 +2,9 @@
 Wires the LTI auth spine and the feature routers together."""
 from __future__ import annotations
 
+import logging
+from time import perf_counter_ns
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,6 +27,25 @@ from app.routers.tutor import router as tutor_router
 from app.routers.twin import router as twin_router
 
 app = FastAPI(title="Kala API", version="0.1.0")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+@app.middleware("http")
+async def _log_practice_submit_timing(request: Request, call_next):
+    is_submit = request.url.path.startswith("/practice/") and request.url.path.endswith("/submit")
+    started = perf_counter_ns()
+    response = await call_next(request)
+    if is_submit:
+        profile = dict(getattr(request.state, "practice_submit_timings", {}))
+        profile["http_response_ms"] = (perf_counter_ns() - started) / 1_000_000
+        profile["response_overhead_ms"] = max(
+            0.0, profile["http_response_ms"] - profile.get("auth_ms", 0.0)
+            - profile.get("handler_ms", 0.0),
+        )
+        profile["status_code"] = response.status_code
+        logger.info("practice_submit_timing %s", profile)
+    return response
 
 
 @app.exception_handler(ModelUnavailableError)
