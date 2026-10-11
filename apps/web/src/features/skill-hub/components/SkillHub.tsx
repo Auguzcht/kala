@@ -133,6 +133,7 @@ export function SkillHub({
   includesRepeats,
   sessionId,
   studySetId,
+  missedItemIds,
   start,
   studyMode,
   onSelectTab,
@@ -155,6 +156,7 @@ export function SkillHub({
   includesRepeats?: boolean;
   sessionId?: string;
   studySetId?: string;
+  missedItemIds?: string[];
   studyMode?: "review" | "all";
   /** True once a session is running (Study's flip deck, Test's graded run).
    * Replaces the hub frame with the mode's own takeover. */
@@ -164,7 +166,7 @@ export function SkillHub({
   onStart: (mode?: "review" | "all") => void;
   onStartTest: (setId?: string) => void;
   onSessionReady: (setId: string, sessionId: string) => void;
-  onStudyMissedSet: (setId: string) => void;
+  onStudyMissedSet: (setId: string, itemIds: string[]) => void;
   onReviewMissedSet: (setId: string) => void;
   /** Leave a running session back to the hub pane (clears `start` in the URL
    * so a refresh doesn't re-enter it). */
@@ -190,6 +192,7 @@ export function SkillHub({
         skillId={skillId}
         mode={studyMode ?? "review"}
         practiceSetId={studySetId}
+        missedItemIds={missedItemIds}
         onReviewDone={onReviewMissedSet}
         onExit={onExitSession}
       />

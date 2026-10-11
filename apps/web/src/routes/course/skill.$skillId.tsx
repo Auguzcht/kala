@@ -18,6 +18,7 @@ const skillSearchSchema = z.object({
   setId: z.string().optional(),
   sessionId: z.string().optional(),
   studySetId: z.string().optional(),
+  missedItemIds: z.array(z.string()).optional(),
   repeats: z.coerce.boolean().optional(),
   start: z.coerce.boolean().optional(),
   mode: z.enum(["review", "all"]).optional().catch(undefined),
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/course/skill/$skillId")({
 function SkillHubPage() {
   const courseId = useSession()?.courseId ?? "";
   const { skillId } = Route.useParams();
-  const { tab: searchTab, setId, sessionId, studySetId, start, repeats, mode } = Route.useSearch();
+  const { tab: searchTab, setId, sessionId, studySetId, missedItemIds, start, repeats, mode } = Route.useSearch();
   const tab = searchTab ?? "study";
   const navigate = useNavigate();
   const to = "/course/skill/$skillId" as const;
@@ -44,6 +45,7 @@ function SkillHubPage() {
       setId={setId}
       sessionId={sessionId}
       studySetId={studySetId}
+      missedItemIds={missedItemIds}
       includesRepeats={repeats}
       start={start}
       studyMode={mode ?? "review"}
@@ -102,11 +104,11 @@ function SkillHubPage() {
           },
         })
       }
-      onStudyMissedSet={(missedSetId) =>
+      onStudyMissedSet={(missedSetId, itemIds) =>
         navigate({
           to,
           params: { skillId },
-          search: { tab: "study", start: true, mode: "all", studySetId: missedSetId },
+          search: { tab: "study", start: true, mode: "all", studySetId: missedSetId, missedItemIds: itemIds },
         })
       }
       onReviewMissedSet={(missedSetId) =>

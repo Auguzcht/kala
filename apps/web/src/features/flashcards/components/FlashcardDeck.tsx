@@ -95,6 +95,7 @@ export function FlashcardDeck({
   skillId,
   mode = "review",
   practiceSetId,
+  missedItemIds,
   onReviewDone,
   onExit,
 }: {
@@ -103,6 +104,8 @@ export function FlashcardDeck({
   mode?: "review" | "all";
   /** When present, study only the questions missed in this saved test set. */
   practiceSetId?: string;
+  /** Exact missed items from the recap attempt that opened this review. */
+  missedItemIds?: string[];
   /** Return to the saved test recap after the missed items are reviewed. */
   onReviewDone?: (setId: string) => void;
   onExit: () => void;
@@ -118,8 +121,10 @@ export function FlashcardDeck({
   const practiceCards = useMemo<FlashcardCard[] | null>(() => {
     if (!practiceSetId || !practiceResults.data) return null;
     const skillName = twin?.skills.find((skill) => skill.skillId === skillId)?.name ?? null;
+    const requestedMisses = missedItemIds ? new Set(missedItemIds) : null;
     return practiceResults.data.questions
-      .filter((question) => question.correct === false && question.prompt !== null)
+      .filter((question) => question.correct === false && question.prompt !== null &&
+        (!requestedMisses || requestedMisses.has(question.itemId)))
       .map((question) => ({
         itemId: question.itemId,
         skillId: skillId ?? "",

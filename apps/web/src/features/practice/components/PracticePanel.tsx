@@ -76,7 +76,7 @@ function PracticeRecap({
   onDone: () => void;
   onNewSet: () => void;
   isCreatingSet: boolean;
-  onStudyThese?: () => void;
+  onStudyThese?: (missedItemIds: string[]) => void;
 }) {
   const missed = results.questions.filter((question) => question.correct === false);
 
@@ -165,7 +165,7 @@ function PracticeRecap({
               {onStudyThese ? (
                 <Button variant="outline" onClick={onStudyThese}>
                   <BookOpenIcon size={16} aria-hidden />
-                  Study these cards
+                  Review missed
                 </Button>
               ) : null}
             </div>
@@ -198,7 +198,7 @@ export function PracticePanel({
   onExit: () => void;
   onSessionReady?: (setId: string, sessionId: string) => void;
   onOpenSet?: (setId: string) => void;
-  onStudySet?: (setId: string) => void;
+  onStudySet?: (setId: string, missedItemIds: string[]) => void;
 }) {
   const replySessionId = useId();
   const usingSaved = Boolean(setId);
@@ -435,7 +435,7 @@ export function PracticePanel({
         )}
         isCreatingSet={createNewSet.isPending}
         onStudyThese={onStudySet && results.questions.some((question) => question.correct === false)
-          ? () => onStudySet(results.setId)
+          ? () => onStudySet(results.setId, results.questions.filter((question) => question.correct === false).map((question) => question.itemId))
           : undefined}
       />
     );
