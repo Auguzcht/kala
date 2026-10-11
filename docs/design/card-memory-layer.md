@@ -88,7 +88,7 @@ Interim frontend copy fix already requested: "15 to review" instead of "15 cards
    Proficient, Mastered) feed the instructor heatmap, at-risk flags, the twin, and readiness.
 4. **Flashcard self-ratings never feed skill mastery.** Self-report is not assessment (existing
    rule, `routers/flashcards.py`).
-5. **No model calls in any study path.** Scheduling is arithmetic on stored rows.
+5. **Student learning interactions:** Cards, questions and grading never call a model. Explain and Tutor are student-initiated and may (`POST /tutor/ask`). Scheduling is arithmetic on stored rows.
 6. **Writes go through FastAPI with the service role.** The client never writes schedule fields.
 7. **Items are never edited or hard deleted, only retired.** `srs_state.item_id` cascades on
    delete, so a hard delete would destroy student schedules.

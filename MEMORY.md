@@ -65,6 +65,9 @@ This bug cost **three** debugging rounds (`generate_question` 768→1536;
 `tag_content` 256→2048→4096). Even 4096 is now insufficient for the largest chunks
 (deepseek `finish_reason=length, content=None` on a 4000-char chunk).
 
+**Student learning interactions:** Cards, questions and grading never call a model.
+Explain and Tutor are student-initiated and may (`POST /tutor/ask`).
+
 ### Tagging lives in the WORKER, not the API
 Measured: one tag call takes **3-150s** and a single call can exceed 30s. No batch
 size or time-slice fits a 30s request. So `/ingest` and `/content/upload` **store +
@@ -230,6 +233,26 @@ on its own**, because attempted rows are excluded from the pending query.
   and worker CodeSha256 remains
   `e42ad642828b4dbb64c6485b60819f3c824167814b294d81c547f2905dc899ec`.
 
+### Practice submit recap add-on — 2026-10-11
+
+- `POST /practice/{course_id}/submit` retains the legacy fields and adds
+  `correctOptionId`, `correctAnswerText`, `xpAwarded`, `masteryBefore`, and
+  `masteryAfter`. The mastery objects are `{level, value}` using the same bands
+  as the student twin. Only counted `item_reviews` award XP (12 correct, 2
+  incorrect, otherwise 0).
+- Migration `0032_practice_answer_recap.sql` stores immutable answer snapshots
+  in `practice_answer_results`, service-role only. A repeat in the same set
+  returns the original answer before grading or writing review/mastery/XP again.
+  `GET /practice/{course_id}/sets/{set_id}/results` survives refresh; unanswered
+  items include prompt/options only and null answer fields.
+- Old review rows cannot reveal which option the student selected; they are not
+  backfilled. Recap snapshots begin with answers recorded after this migration.
+- Live AWS101 smoke verified set GET has no answer key, repeat response equality,
+  and a refreshed recap. Live transaction rollback parity confirmed review
+  effects, XP, and mastery are unchanged and repeats do not change state. API
+  suite: **351 passed**. API CodeSha256:
+  `52670ac445fe49de180d0b344839244e52d4254d0171c016bf6f7efa515c2eba`.
+
 ### Brief 4f proposer timeout fix — 2026-10-10
 
 - Worker proposer now uses the `bank` model (`deepseek/deepseek-v4.1-flash:nitro`),
@@ -320,8 +343,7 @@ on its own**, because attempted rows are excluded from the pending query.
 frontend runs on the bank on all four surfaces.
 
 **Rules:** deploy through `make deploy` (linux/amd64) only; frontend ships
-through a push to `main` only, never the Vercel CLI; stage files by path; and
-never make model calls inside an API request.
+through a push to `main` only, never the Vercel CLI; stage files by path.
 
 ### Latest verification — 2026-09-25
 
@@ -505,8 +527,9 @@ at 6, then renamed `EMBED_SLICE_SECONDS`).
   `https://14vua0ys43.execute-api.ap-southeast-1.amazonaws.com`
 - Pilot course id **`ae4e7680-f94b-4652-b3f6-b9c32f4420de`**
 - Institution id **`64a59889-ba9c-44ae-87c8-765f86c92c78`**
-- The Supabase CLI is **not linked** and there's no DB password here, so **migrations
-  must be applied by the user** (0012-0018 all were).
+- Supabase CLI is linked; `supabase db query --linked` works. Migration
+  `0032_practice_answer_recap.sql` was applied live and confirmed with a separate
+  read after DDL execution.
 - The Blackboard EC2 host is **firewalled from the local machine** — reachable only
   from inside the Lambda.
 - `services/api/.env` and the deployed secret hold different things; the deployed

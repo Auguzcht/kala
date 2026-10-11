@@ -30,6 +30,19 @@ def authenticated_user() -> CurrentUser:
     return CurrentUser(user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="student")
 
 
+def practice_result_row(*, correct: bool = True, mastery: float = 0.5) -> dict:
+    return {
+        "correct": correct, "explanation": "why", "mastery_estimate": mastery,
+        "correct_option_id": "a", "correct_answer_text": "Answer A",
+        "choice_id": "a", "choice_text": "Answer A", "prompt": "Question",
+        "choices": [{"id": "a", "label": "Answer A"}],
+        "xp_awarded": 12 if correct else 2,
+        "mastery_before": 0.4, "mastery_before_level": "Proficient",
+        "mastery_after": mastery, "mastery_after_level": "Proficient",
+        "replayed": False,
+    }
+
+
 def test_srs_stats_selects_item_ids_before_filtering_active_cards(monkeypatch) -> None:
     rows = [
         {"item_id": "learning", "box": 1, "streak": 1, "due_at": "2099-01-01T00:00:00+00:00"},
@@ -117,6 +130,9 @@ def test_practice_submit_uses_one_atomic_rpc_with_legacy_body(monkeypatch) -> No
     rpc_calls = []
     monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
         "correct": True, "explanation": "why", "mastery_estimate": 0.65, "replayed": False,
+        "correct_option_id": "a", "correct_answer_text": "Answer A", "xp_awarded": 12,
+        "mastery_before": 0.5, "mastery_before_level": "Proficient",
+        "mastery_after": 0.65, "mastery_after_level": "Proficient",
         "item_lookup_ms": 1, "grading_ms": 0, "set_membership_ms": 0,
         "review_rpc_ms": 2, "attempts_ms": 0, "exposure_ms": 0,
     }])
@@ -131,7 +147,12 @@ def test_practice_submit_uses_one_atomic_rpc_with_legacy_body(monkeypatch) -> No
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"correct": True, "explanation": "why", "mastery": 0.65}
+    assert response.json() == {
+        "correct": True, "explanation": "why", "mastery": 0.65,
+        "correctOptionId": "a", "correctAnswerText": "Answer A", "xpAwarded": 12,
+        "masteryBefore": {"level": "Proficient", "value": 0.5},
+        "masteryAfter": {"level": "Proficient", "value": 0.65},
+    }
     assert len(rpc_calls) == 1
     assert rpc_calls[0][0] == "submit_practice"
     assert rpc_calls[0][1]["p_choice_id"] == "a"
@@ -158,6 +179,97 @@ def test_practice_submit_404s_on_unknown_item(monkeypatch) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
+
+
+def test_practice_submit_repeat_returns_original_rpc_result(monkeypatch) -> None:
+    """The RPC's persisted first-answer result is returned for a retry, even
+    if an old client resends a different choice without an idempotency key."""
+    app.dependency_overrides[get_current_user] = authenticated_user
+    persisted = {
+        "correct": False, "explanation": "why", "mastery_estimate": 0.425,
+        "correct_option_id": "b", "correct_answer_text": "Answer B", "xp_awarded": 2,
+        "mastery_before": 0.5, "mastery_before_level": "Proficient",
+        "mastery_after": 0.425, "mastery_after_level": "Proficient",
+        "replayed": False,
+    }
+    calls = []
+    grade_count = 0
+
+    def fake_rpc(fn, args):
+        nonlocal grade_count
+        calls.append((fn, args))
+        if len(calls) == 1:
+            grade_count += 1
+        # Models the atomic RPC contract: retry returns its stored first row.
+        return [persisted]
+
+    monkeypatch.setattr(practice.db, "rpc", fake_rpc)
+    try:
+        with TestClient(app) as client:
+            first = client.post(
+                "/practice/00000000-0000-4000-8000-000000000001/submit",
+                json={"item_id": "item-1", "choice_id": "a", "set_id": "set-1"},
+            )
+            second = client.post(
+                "/practice/00000000-0000-4000-8000-000000000001/submit",
+                json={"item_id": "item-1", "choice_id": "b", "set_id": "set-1"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert first.json()["correct"] is False
+    assert first.json()["correctOptionId"] == "b"
+    assert first.json()["xpAwarded"] == 2
+    assert len(calls) == 2  # retries reach the RPC, where stored result short-circuits
+    assert calls[0][1]["p_choice_id"] == "a"
+    assert calls[1][1]["p_choice_id"] == "b"
+    assert grade_count == 1
+
+
+def test_practice_set_results_hide_answer_key_for_unanswered_items(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+
+    def fake_select(table, params):
+        if table == "quiz_sets":
+            return [{"id": "00000000-0000-4000-8000-000000000020", "skill_id": "skill-1"}]
+        if table == "quiz_set_items":
+            return [{"item_id": "answered-1", "position": 0}, {"item_id": "unanswered-1", "position": 1}]
+        if table == "generated_items":
+            assert "correct_choice_id" not in params["select"]
+            assert "explanation" not in params["select"]
+            return [{"id": "unanswered-1", "prompt": "Question 2", "choices": [{"id": "a", "label": "A"}]}]
+        if table == "practice_answer_results":
+            return [{
+                "item_id": "answered-1", "prompt": "Question 1",
+                "choices": [{"id": "a", "label": "A"}], "choice_id": "a", "choice_text": "A",
+                "correct_option_id": "b", "correct_answer_text": "B", "explanation": "Because",
+                "correct": False, "xp_awarded": 2, "mastery_before": 0.5,
+                "mastery_before_level": "Proficient", "mastery_after": 0.425,
+                "mastery_after_level": "Proficient", "created_at": "2026-10-11T00:00:00Z",
+            }]
+        return []
+
+    monkeypatch.setattr(practice.db, "select", fake_select)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/results")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["score"] == {"correct": 0, "answered": 1, "total": 2, "percent": 0.0}
+    assert body["totalXp"] == 2
+    answered, unanswered = body["questions"]
+    assert answered["correctAnswer"] == {"optionId": "b", "text": "B"}
+    assert answered["studentAnswer"] == {"optionId": "a", "text": "A"}
+    assert unanswered["answered"] is False
+    assert unanswered["studentAnswer"] is None
+    assert unanswered["correctAnswer"] is None
+    assert unanswered["explanation"] is None
+    assert "correctOptionId" not in unanswered
 
 
 def test_flashcards_deck_without_bank_returns_no_material_without_model_call(monkeypatch) -> None:
@@ -998,9 +1110,7 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
     """The atomic submit RPC receives the set and owns attempt bookkeeping."""
     app.dependency_overrides[get_current_user] = authenticated_user
     rpc_calls = []
-    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
-        "correct": True, "explanation": "ok", "mastery_estimate": 0.5, "replayed": False,
-    }])
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [practice_result_row()])
 
     try:
         with TestClient(app) as client:
@@ -1024,9 +1134,7 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
 def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     rpc_calls = []
-    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [{
-        "correct": False, "explanation": "no", "mastery_estimate": 0.2, "replayed": False,
-    }])
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: rpc_calls.append((fn, args)) or [practice_result_row(correct=False, mastery=0.2)])
 
     try:
         with TestClient(app) as client:
@@ -1047,9 +1155,7 @@ def test_submit_of_an_ungrouped_item_touches_no_attempt_row(monkeypatch) -> None
     them (there is no set to attribute them to)."""
     app.dependency_overrides[get_current_user] = authenticated_user
     calls = []
-    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: calls.append((fn, args)) or [{
-        "correct": True, "explanation": "ok", "mastery_estimate": 0.5, "replayed": False,
-    }])
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: calls.append((fn, args)) or [practice_result_row()])
 
     try:
         with TestClient(app) as client:

@@ -416,6 +416,18 @@ class SubmitBody(BaseModel):
     idempotency_key: str | None = None
 
 
+def _mastery_display(value: float | None, level: str | None = None) -> dict:
+    """Keep the response band's label aligned with the student twin."""
+    if level is None:
+        level = (
+            "No evidence" if value is None else
+            "Developing" if value < 0.4 else
+            "Proficient" if value < 0.7 else
+            "Mastered"
+        )
+    return {"level": level, "value": value}
+
+
 def _attempts_by_set(*, institution_id: str, user_id: str, set_ids: list[str]) -> dict[str, dict]:
     """This student's attempt row per set, keyed by set_id. One query for a
     whole list rather than N — the Test tab renders many sets at once.
@@ -595,6 +607,104 @@ def get_set(
     }
 
 
+@router.get("/{course_id}/sets/{set_id}/results")
+def get_set_results(
+    course_id: str = Depends(require_valid_course_id),
+    set_id: str = Depends(require_valid_set_id),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Return the durable recap for this student's answers in one set.
+
+    Only practice_answer_results rows expose answer keys. Unanswered set items
+    are assembled from prompt/choices columns alone.
+    """
+    sets = db.select("quiz_sets", {
+        "id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}", "select": "id,skill_id", "limit": "1",
+    })
+    if not sets:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found")
+
+    links = db.select("quiz_set_items", {
+        "set_id": f"eq.{set_id}", "select": "item_id,position", "order": "position.asc",
+    })
+    if not links:
+        legacy = db.select("generated_items", {
+            "set_id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
+            "select": "id,created_at", "order": "created_at.asc",
+        })
+        links = [{"item_id": row["id"], "position": index} for index, row in enumerate(legacy)]
+    item_ids = [row["item_id"] for row in links if row.get("item_id")]
+    item_rows = db.select("generated_items", {
+        "id": f"in.({','.join(item_ids)})" if item_ids else "in.(00000000-0000-0000-0000-000000000000)",
+        "institution_id": f"eq.{user.institution_id}",
+        # Do not request correct_choice_id or explanation in this set-wide query.
+        "select": "id,prompt,choices",
+    })
+    result_rows = db.select("practice_answer_results", {
+        "institution_id": f"eq.{user.institution_id}", "user_id": f"eq.{user.user_id}",
+        "course_id": f"eq.{course_id}", "set_id": f"eq.{set_id}",
+        "select": "*", "order": "created_at.asc",
+    })
+    items = {row["id"]: row for row in item_rows}
+    answers = {row["item_id"]: row for row in result_rows}
+    questions = []
+    for link in links:
+        item_id = link.get("item_id")
+        saved = answers.get(item_id)
+        item = items.get(item_id, {})
+        if saved:
+            questions.append({
+                "itemId": item_id,
+                "prompt": saved["prompt"],
+                "options": saved.get("choices") or [],
+                "answered": True,
+                "studentAnswer": {"optionId": saved["choice_id"], "text": saved.get("choice_text")},
+                "correctAnswer": {"optionId": saved["correct_option_id"], "text": saved.get("correct_answer_text")},
+                "explanation": saved.get("explanation") or "",
+                "correct": saved["correct"],
+                "xpAwarded": saved["xp_awarded"],
+            })
+        else:
+            questions.append({
+                "itemId": item_id,
+                "prompt": item.get("prompt"),
+                "options": item.get("choices") or [],
+                "answered": False,
+                "studentAnswer": None,
+                "correctAnswer": None,
+                "explanation": None,
+                "correct": None,
+                "xpAwarded": 0,
+            })
+
+    answered = [row for row in result_rows]
+    correct_count = sum(1 for row in answered if row.get("correct") is True)
+    answered_count = len(answered)
+    first = answered[0] if answered else None
+    last = answered[-1] if answered else None
+    return {
+        "courseId": course_id,
+        "setId": set_id,
+        "score": {
+            "correct": correct_count,
+            "answered": answered_count,
+            "total": len(links),
+            "percent": round(100 * correct_count / answered_count, 1) if answered_count else None,
+        },
+        "totalXp": sum(int(row.get("xp_awarded") or 0) for row in answered),
+        "masteryBefore": _mastery_display(
+            float(first["mastery_before"]) if first and first.get("mastery_before") is not None else None,
+            first.get("mastery_before_level") if first else None,
+        ),
+        "masteryAfter": _mastery_display(
+            float(last["mastery_after"]) if last and last.get("mastery_after") is not None else None,
+            last.get("mastery_after_level") if last else None,
+        ),
+        "questions": questions,
+    }
+
+
 @router.post("/{course_id}/submit")
 def submit(
     request: Request,
@@ -638,6 +748,17 @@ def submit(
         "correct": review_result["correct"],
         "explanation": review_result["explanation"],
         "mastery": review_result.get("mastery_estimate"),
+        "correctOptionId": review_result["correct_option_id"],
+        "correctAnswerText": review_result.get("correct_answer_text"),
+        "xpAwarded": int(review_result.get("xp_awarded") or 0),
+        "masteryBefore": _mastery_display(
+            float(review_result["mastery_before"]) if review_result.get("mastery_before") is not None else None,
+            review_result.get("mastery_before_level"),
+        ),
+        "masteryAfter": _mastery_display(
+            float(review_result["mastery_after"]) if review_result.get("mastery_after") is not None else None,
+            review_result.get("mastery_after_level"),
+        ),
     }
     timings["response_build_ms"] = (perf_counter_ns() - response_started) / 1_000_000
     timings["handler_ms"] = (perf_counter_ns() - handler_started) / 1_000_000
