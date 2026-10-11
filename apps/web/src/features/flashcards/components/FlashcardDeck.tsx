@@ -347,6 +347,9 @@ export function FlashcardDeck({
               </p>
             ) : null}
             <div className="mt-4">
+              <Button variant="orange" size="sm" onClick={onExit}>
+                Done
+              </Button>
               <Button variant="outline" size="sm" onClick={reloadDeck}>
                 Reload deck
               </Button>
