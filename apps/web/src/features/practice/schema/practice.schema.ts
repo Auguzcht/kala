@@ -104,6 +104,38 @@ export const practiceSubmitResultSchema = z.object({
   correct: z.boolean(),
   explanation: z.string(),
   mastery: z.number().nullable(),
+  correctOptionId: z.string().optional(),
+  correctAnswerText: z.string().nullable().optional(),
+  xpAwarded: z.number().int().nonnegative().optional(),
+  masteryBefore: z.object({ level: z.string(), value: z.number().nullable() }).optional(),
+  masteryAfter: z.object({ level: z.string(), value: z.number().nullable() }).optional(),
+});
+
+export const practiceResultsQuestionSchema = z.object({
+  itemId: z.string(),
+  prompt: z.string().nullable(),
+  options: z.array(z.object({ id: z.string(), label: z.string() })),
+  answered: z.boolean(),
+  studentAnswer: z.object({ optionId: z.string(), text: z.string().nullable() }).nullable(),
+  correctAnswer: z.object({ optionId: z.string(), text: z.string().nullable() }).nullable(),
+  explanation: z.string().nullable(),
+  correct: z.boolean().nullable(),
+  xpAwarded: z.number().int().nonnegative(),
+});
+
+export const practiceSetResultsSchema = z.object({
+  courseId: z.string(),
+  setId: z.string(),
+  score: z.object({
+    correct: z.number().int().nonnegative(),
+    answered: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    percent: z.number().nullable(),
+  }),
+  totalXp: z.number().int().nonnegative(),
+  masteryBefore: z.object({ level: z.string(), value: z.number().nullable() }),
+  masteryAfter: z.object({ level: z.string(), value: z.number().nullable() }),
+  questions: z.array(practiceResultsQuestionSchema),
 });
 
 export type PracticeItem = z.infer<typeof practiceItemSchema>;
@@ -116,3 +148,5 @@ export type PracticeSetSummary = z.infer<typeof practiceSetSummarySchema>;
 export type PracticeSetList = z.infer<typeof practiceSetListSchema>;
 export type PracticeSetAttempt = z.infer<typeof practiceSetAttemptSchema>;
 export type PracticeSubmitResult = z.infer<typeof practiceSubmitResultSchema>;
+export type PracticeResultsQuestion = z.infer<typeof practiceResultsQuestionSchema>;
+export type PracticeSetResults = z.infer<typeof practiceSetResultsSchema>;

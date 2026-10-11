@@ -7,12 +7,14 @@ import {
   practiceSetListSchema,
   practiceSetSchema,
   practiceSubmitResultSchema,
+  practiceSetResultsSchema,
   type PracticeNext,
   type PracticeBridgeSet,
   type PracticeSavedSet,
   type PracticeSet,
   type PracticeSetList,
   type PracticeSubmitResult,
+  type PracticeSetResults,
 } from "@/features/practice/schema/practice.schema";
 
 export async function fetchNextPracticeItem(courseId: string, skillId?: string): Promise<PracticeNext> {
@@ -63,6 +65,15 @@ export async function fetchPracticeSetById(
 ): Promise<PracticeSavedSet> {
   const data = await api<unknown>(`/practice/${courseId}/sets/${setId}`);
   return parseApiResponse(practiceSavedSetSchema, data, `/practice/${courseId}/sets/${setId}`);
+}
+
+export async function fetchPracticeSetResults(
+  courseId: string,
+  setId: string,
+): Promise<PracticeSetResults> {
+  const endpoint = `/practice/${courseId}/sets/${setId}/results`;
+  const data = await api<unknown>(endpoint);
+  return parseApiResponse(practiceSetResultsSchema, data, endpoint);
 }
 
 // The retake list for a skill (or the whole course when skillId is omitted).

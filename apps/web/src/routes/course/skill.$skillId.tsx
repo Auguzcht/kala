@@ -16,6 +16,8 @@ import { SkillHub, type SkillTab } from "@/features/skill-hub";
 const skillSearchSchema = z.object({
   tab: z.enum(["lesson", "study", "test"]).optional(),
   setId: z.string().optional(),
+  sessionId: z.string().optional(),
+  studySetId: z.string().optional(),
   repeats: z.coerce.boolean().optional(),
   start: z.coerce.boolean().optional(),
   mode: z.enum(["review", "all"]).optional().catch(undefined),
@@ -29,7 +31,7 @@ export const Route = createFileRoute("/course/skill/$skillId")({
 function SkillHubPage() {
   const courseId = useSession()?.courseId ?? "";
   const { skillId } = Route.useParams();
-  const { tab: searchTab, setId, start, repeats, mode } = Route.useSearch();
+  const { tab: searchTab, setId, sessionId, studySetId, start, repeats, mode } = Route.useSearch();
   const tab = searchTab ?? "study";
   const navigate = useNavigate();
   const to = "/course/skill/$skillId" as const;
@@ -40,6 +42,8 @@ function SkillHubPage() {
       skillId={skillId}
       tab={tab as SkillTab}
       setId={setId}
+      sessionId={sessionId}
+      studySetId={studySetId}
       includesRepeats={repeats}
       start={start}
       studyMode={mode ?? "review"}
@@ -68,7 +72,29 @@ function SkillHubPage() {
             repeats,
             start: true,
             ...(tab === "study" ? { mode: studyMode ?? "review" } : {}),
+            ...(tab === "test" ? { sessionId: crypto.randomUUID() } : {}),
           },
+        })
+      }
+      onSessionReady={(nextSetId, nextSessionId) =>
+        navigate({
+          to,
+          params: { skillId },
+          replace: true,
+          search: {
+            tab: "test",
+            setId: nextSetId,
+            repeats,
+            start: true,
+            sessionId: nextSessionId,
+          },
+        })
+      }
+      onStudyMissedSet={(missedSetId) =>
+        navigate({
+          to,
+          params: { skillId },
+          search: { tab: "study", start: true, mode: "all", studySetId: missedSetId },
         })
       }
       // Leaving a session returns to that tab's browse pane (keeps `tab`,

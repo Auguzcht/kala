@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
@@ -24,11 +24,11 @@ import {
   useFlashcardMembership,
   useReviewFlashcard,
 } from "@/features/flashcards/hooks/use-flashcards";
-import { useCreateSetFromItems } from "@/features/practice";
+import { useCreateSetFromItems, usePracticeSetResults } from "@/features/practice";
 import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
-import type { FlashcardCard } from "@/features/flashcards/schema/flashcards.schema";
+import type { FlashcardCard, FlashcardDeck as FlashcardDeckData } from "@/features/flashcards/schema/flashcards.schema";
 
 // Study mode: a flip card, not a quiz. Front shows the prompt, tapping flips
 // to the back (answer label + explanation), and the student marks it "Got it"
@@ -94,11 +94,14 @@ export function FlashcardDeck({
   courseId,
   skillId,
   mode = "review",
+  practiceSetId,
   onExit,
 }: {
   courseId: string;
   skillId?: string;
   mode?: "review" | "all";
+  /** When present, study only the questions missed in this saved test set. */
+  practiceSetId?: string;
   onExit: () => void;
 }) {
   const reduceMotion = useReducedMotion();
@@ -106,7 +109,45 @@ export function FlashcardDeck({
   const [reviewSessionId] = useState(() => crypto.randomUUID());
   const [offset, setOffset] = useState(0);
   const navigate = useNavigate();
-  const { data, isLoading, isError, refetch } = useFlashcardDeck(courseId, 20, skillId, mode, offset);
+  const { data: twin } = useTwin(courseId);
+  const deckQuery = useFlashcardDeck(courseId, 20, skillId, mode, offset, { enabled: !practiceSetId });
+  const practiceResults = usePracticeSetResults(courseId, practiceSetId ?? null, Boolean(practiceSetId));
+  const practiceCards = useMemo<FlashcardCard[] | null>(() => {
+    if (!practiceSetId || !practiceResults.data) return null;
+    const skillName = twin?.skills.find((skill) => skill.skillId === skillId)?.name ?? null;
+    return practiceResults.data.questions
+      .filter((question) => question.correct === false && question.prompt !== null)
+      .map((question) => ({
+        itemId: question.itemId,
+        skillId: skillId ?? "",
+        skillName,
+        prompt: question.prompt ?? "Question unavailable",
+        back: {
+          label: question.correctAnswer?.text ?? null,
+          explanation: question.explanation ?? "",
+        },
+        state: "due" as const,
+        box: 0,
+      }));
+  }, [practiceSetId, practiceResults.data, twin?.skills, skillId]);
+  const practiceDeck = useMemo<FlashcardDeckData | undefined>(() => {
+    if (!practiceSetId || !practiceCards) return undefined;
+    return {
+      courseId,
+      cards: practiceCards,
+      stats: { tracked: practiceCards.length, due: practiceCards.length, learning: 0, mastered: 0 },
+      mode: "all",
+      sessionId: practiceSetId,
+      offset: 0,
+      limit: practiceCards.length,
+      totalCards: practiceCards.length,
+      hasMore: false,
+    };
+  }, [practiceSetId, practiceCards, courseId]);
+  const data = practiceSetId ? practiceDeck : deckQuery.data;
+  const isLoading = practiceSetId ? practiceResults.isLoading : deckQuery.isLoading;
+  const isError = practiceSetId ? practiceResults.isError : deckQuery.isError;
+  const refetch = practiceSetId ? practiceResults.refetch : deckQuery.refetch;
   const membership = useFlashcardMembership(courseId, skillId ?? "");
   const bank = useBankStatus(courseId);
   const review = useReviewFlashcard(courseId);
@@ -114,7 +155,6 @@ export function FlashcardDeck({
   const hint = useTutorAsk(courseId);
   const explain = useTutorAsk(courseId);
   const followUp = useTutorAsk(courseId);
-  const { data: twin } = useTwin(courseId);
 
   const [index, setIndex] = useState(0);
   const [sessionCards, setSessionCards] = useState<FlashcardCard[] | null>(null);

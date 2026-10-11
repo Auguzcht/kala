@@ -131,12 +131,16 @@ export function SkillHub({
   tab,
   setId,
   includesRepeats,
+  sessionId,
+  studySetId,
   start,
   studyMode,
   onSelectTab,
   onSelectSet,
   onStart,
   onExitSession,
+  onSessionReady,
+  onStudyMissedSet,
 }: {
   courseId: string;
   skillId: string;
@@ -147,6 +151,8 @@ export function SkillHub({
    * a freshly generated set). Empty string = back to the set list. */
   setId?: string;
   includesRepeats?: boolean;
+  sessionId?: string;
+  studySetId?: string;
   studyMode?: "review" | "all";
   /** True once a session is running (Study's flip deck, Test's graded run).
    * Replaces the hub frame with the mode's own takeover. */
@@ -154,6 +160,8 @@ export function SkillHub({
   onSelectTab: (tab: SkillTab) => void;
   onSelectSet: (setId: string, includesRepeats?: boolean) => void;
   onStart: (mode?: "review" | "all") => void;
+  onSessionReady: (setId: string, sessionId: string) => void;
+  onStudyMissedSet: (setId: string) => void;
   /** Leave a running session back to the hub pane (clears `start` in the URL
    * so a refresh doesn't re-enter it). */
   onExitSession: () => void;
@@ -172,7 +180,7 @@ export function SkillHub({
   // A running session owns the viewport (no header, no tabs) — the same
   // takeover contract every mode already has.
   if (tab === "study" && start) {
-    return <FlashcardDeck courseId={courseId} skillId={skillId} mode={studyMode ?? "review"} onExit={onExitSession} />;
+    return <FlashcardDeck courseId={courseId} skillId={skillId} mode={studyMode ?? "review"} practiceSetId={studySetId} onExit={onExitSession} />;
   }
   if (tab === "test" && start) {
     return (
@@ -180,8 +188,12 @@ export function SkillHub({
         courseId={courseId}
         skillId={skillId}
         setId={setId || null}
+        sessionId={sessionId}
         includesRepeats={includesRepeats}
         onExit={onExitSession}
+        onSessionReady={onSessionReady}
+        onOpenSet={(nextSetId) => onSelectSet(nextSetId)}
+        onStudySet={onStudyMissedSet}
       />
     );
   }

@@ -4,6 +4,7 @@ import {
   fetchNextPracticeItem,
   fetchPracticeSet,
   fetchPracticeSetById,
+  fetchPracticeSetResults,
   fetchPracticeSets,
   submitPracticeAttempt,
 } from "@/features/practice/api/practice.api";
@@ -66,6 +67,15 @@ export function usePracticeSetById(courseId: string, setId: string | null) {
       query.state.data?.status === "generating" ? POLL_INTERVAL_MS : false,
     refetchOnWindowFocus: (query) =>
       query.state.data?.status === "generating",
+  });
+}
+
+export function usePracticeSetResults(courseId: string, setId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["practice", courseId, "set-results", setId],
+    queryFn: () => fetchPracticeSetResults(courseId, setId as string),
+    enabled: Boolean(courseId && setId && enabled),
+    staleTime: 0,
   });
 }
 

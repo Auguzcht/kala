@@ -11,8 +11,10 @@ export function useFlashcardDeck(
   skillId?: string,
   mode?: "review" | "all",
   offset = 0,
+  options: { enabled?: boolean } = {},
 ) {
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: ["flashcards", courseId, limit, skillId ?? "auto", mode ?? "legacy", offset],
     queryFn: () => fetchFlashcardDeck(courseId, limit, skillId, mode, offset),
   });

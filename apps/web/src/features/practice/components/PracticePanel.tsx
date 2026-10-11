@@ -11,12 +11,12 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
-import { usePracticeSet, usePracticeSetById, useSubmitPractice } from "@/features/practice/hooks/use-practice";
+import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
-import type { PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
+import type { PracticeSetResults, PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
 // Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
 // docs/AI_OVERHAUL_TODO.md). `skillId` is a required prop now, not an
@@ -49,12 +49,89 @@ const SET_SIZE = 5;
 
 type FollowUpTurn = { question: string; answer: string };
 
+function masterySummary(mastery: { level: string; value: number | null }) {
+  return `${mastery.level}${mastery.value == null ? "" : ` · ${Math.round(mastery.value * 100)}%`}`;
+}
+
+function PracticeRecap({
+  results,
+  onDone,
+  onNewSet,
+  isCreatingSet,
+  onStudyThese,
+}: {
+  results: PracticeSetResults;
+  onDone: () => void;
+  onNewSet: () => void;
+  isCreatingSet: boolean;
+  onStudyThese?: () => void;
+}) {
+  const missed = results.questions.filter((question) => question.correct === false);
+  return (
+    <StudySurface bar={<SessionBar title="Test results" />}>
+      <StudyStream>
+        <div className="space-y-5 border bg-card p-5 sm:p-6">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-slate">Test complete</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold text-foreground">
+              {results.score.correct}/{results.score.total}
+              {results.score.percent == null ? "" : ` · ${Math.round(results.score.percent)}%`}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">+{results.totalXp} XP earned this set</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Mastery: {masterySummary(results.masteryBefore)} → {masterySummary(results.masteryAfter)}
+            </p>
+          </div>
+
+          {missed.length ? (
+            <section aria-labelledby="practice-missed-title" className="space-y-3 border-t pt-4">
+              <h3 id="practice-missed-title" className="font-display text-base font-semibold text-foreground">
+                Questions to review
+              </h3>
+              {missed.map((question, index) => (
+                <article key={question.itemId} className="space-y-2 border-l-2 border-brand-orange/60 pl-3">
+                  <p className="text-sm font-semibold text-foreground">
+                    {index + 1}. {question.prompt ?? "Question unavailable"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Your answer: {question.studentAnswer?.text || "Answer not recorded"}
+                  </p>
+                  <p className="text-sm text-foreground">
+                    Correct answer: {question.correctAnswer?.text ?? "Answer unavailable"}
+                  </p>
+                  {question.explanation ? (
+                    <p className="text-sm leading-relaxed text-muted-foreground">{question.explanation}</p>
+                  ) : null}
+                </article>
+              ))}
+            </section>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2 border-t pt-4">
+            <Button variant="orange" onClick={onDone}>Done</Button>
+            <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet}>
+              {isCreatingSet ? "Loading new set…" : "New set"}
+            </Button>
+            {onStudyThese ? (
+              <Button variant="outline" onClick={onStudyThese}>Study these cards</Button>
+            ) : null}
+          </div>
+        </div>
+      </StudyStream>
+    </StudySurface>
+  );
+}
+
 export function PracticePanel({
   courseId,
   skillId,
   setId,
+  sessionId,
   includesRepeats,
   onExit,
+  onSessionReady,
+  onOpenSet,
+  onStudySet,
 }: {
   courseId: string;
   skillId: string;
@@ -62,8 +139,12 @@ export function PracticePanel({
    * bridge handoff and the retake list both enter test mode this way. The set
    * is per-skill, so skillId still identifies the topic for the bar/copy. */
   setId?: string | null;
+  sessionId?: string;
   includesRepeats?: boolean;
   onExit: () => void;
+  onSessionReady?: (setId: string, sessionId: string) => void;
+  onOpenSet?: (setId: string) => void;
+  onStudySet?: (setId: string) => void;
 }) {
   const replySessionId = useId();
   const usingSaved = Boolean(setId);
@@ -88,8 +169,11 @@ export function PracticePanel({
   const preparingResponse = generatedQuery.data?.status === "preparing";
   const refetchGeneratedSet = generatedQuery.refetch;
   const submit = useSubmitPractice(courseId);
+  const createNewSet = useGenerateSet(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
+  const resultsQuery = usePracticeSetResults(courseId, data?.setId ?? setId ?? null);
+  const results = resultsQuery.data;
 
   useEffect(() => {
     if (!usingSaved && preparingResponse && bankUsable) {
@@ -100,10 +184,11 @@ export function PracticePanel({
   // Position within the fetched batch. Local state, not part of the query:
   // the set is immutable for the session, only the cursor over it moves.
   const [setIndex, setSetIndex] = useState(0);
+  const [showRecap, setShowRecap] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
-  const [fallbackSessionId] = useState(() => crypto.randomUUID());
+  const [fallbackSessionId] = useState(() => sessionId ?? crypto.randomUUID());
   const submitKeysRef = useRef(new Map<string, string>());
   const [streak, setStreak] = useState(0);
   const [gain, setGain] = useState<{ xp: number } | null>(null);
@@ -150,7 +235,23 @@ export function PracticePanel({
   // a batch (which never changes setId) can't trigger a false reset.
   useEffect(() => {
     setSetIndex(0);
+    setShowRecap(false);
   }, [data?.setId]);
+
+  const restoredResultsSetRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!results || resultsQuery.isFetching || total === 0 || restoredResultsSetRef.current === results.setId) return;
+    restoredResultsSetRef.current = results.setId;
+    const nextIndex = results.questions.findIndex((question) => !question.answered);
+    if (nextIndex >= 0) setSetIndex(nextIndex);
+  }, [results, resultsQuery.isFetching, total]);
+
+  const sessionReadyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (usingSaved || !data?.setId || sessionReadyRef.current === data.setId) return;
+    sessionReadyRef.current = data.setId;
+    onSessionReady?.(data.setId, fallbackSessionId);
+  }, [usingSaved, data?.setId, fallbackSessionId, onSessionReady]);
 
   // Reset the per-question UI when the question changes (either a new set
   // fetched, or the cursor advanced to the next item). Keyed on the item id,
@@ -268,16 +369,42 @@ export function PracticePanel({
       />
     );
 
-  // The last item in the batch: advancing past it fetches a fresh set rather
-  // than showing a card that doesn't exist.
+  const completeOnServer = Boolean(results && total > 0 && results.score.answered >= total);
+  const recapVisible = showRecap || (completeOnServer && !lastResult && !resultsQuery.isFetching);
+  if (recapVisible) {
+    if (resultsQuery.isError) {
+      return (
+        <EmptyState
+          title="We could not load your results"
+          description="Your answers are saved. Try loading the recap again."
+          action={<Button variant="outline" onClick={() => void resultsQuery.refetch()}>Retry</Button>}
+        />
+      );
+    }
+    if (!results || resultsQuery.isFetching) return <LoadingPanel label="Loading your results…" lines={4} />;
+    return (
+      <PracticeRecap
+        results={results}
+        onDone={onExit}
+        onNewSet={() => createNewSet.mutate(
+          { skillId, size: SET_SIZE },
+          { onSuccess: (newSet) => newSet.setId && onOpenSet ? onOpenSet(newSet.setId) : onExit() }
+        )}
+        isCreatingSet={createNewSet.isPending}
+        onStudyThese={onStudySet && results.questions.some((question) => question.correct === false)
+          ? () => onStudySet(results.setId)
+          : undefined}
+      />
+    );
+  }
+
+  // The last item in the batch: advancing past it opens the durable recap.
   const atSetEnd = setIndex + 1 >= total;
 
   function advance() {
     if (atSetEnd) {
-      // Exhausted the batch: pull a new set. setIndex is reset by the effect
-      // on the incoming setId, so the old set stays rendered until the new
-      // one lands (no flash of a stale first card mid-fetch).
-      refetch();
+      setShowRecap(true);
+      void resultsQuery.refetch();
     } else {
       setSetIndex((i) => i + 1);
     }
@@ -285,8 +412,9 @@ export function PracticePanel({
 
   function handleAnswer(choiceId: string) {
     setSelectedChoice(choiceId);
-    const sessionId = data?.setId ?? setId ?? fallbackSessionId;
-    const attemptKey = `${sessionId}:${item.id}:${choiceId}`;
+    const attemptSessionId = sessionId ?? fallbackSessionId;
+    const attemptSetId = data?.setId ?? setId ?? "practice";
+    const attemptKey = `${attemptSessionId}:${attemptSetId}:${item.id}`;
     let idempotencyKey = submitKeysRef.current.get(attemptKey);
     if (!idempotencyKey) {
       idempotencyKey = crypto.randomUUID();
@@ -298,13 +426,13 @@ export function PracticePanel({
         choiceId,
         latencyMs: Date.now() - startedAt,
         setId: data?.setId,
-        sessionId,
+        sessionId: attemptSessionId,
         idempotencyKey,
       },
       {
         onSuccess: (result) => {
-          submitKeysRef.current.delete(attemptKey);
           setLastResult(result);
+          void resultsQuery.refetch();
           setStreak((s) => (result.correct ? s + 1 : 0));
           const prev = prevEstimateRef.current;
           prevEstimateRef.current = result.mastery;
@@ -317,6 +445,10 @@ export function PracticePanel({
         },
       }
     );
+  }
+
+  function leaveSet() {
+    if (window.confirm("Leave this set? Answers so far are saved.")) onExit();
   }
 
   function askAboutItem(question: string) {
@@ -348,8 +480,8 @@ export function PracticePanel({
         <SessionBar
           title="Quick practice"
           progress={{ current: setIndex + 1, total, label: total === 1 ? "question" : "questions" }}
-          onBack={onExit}
-          backLabel="Choose another topic"
+          onBack={leaveSet}
+          backLabel="Leave this set"
         />
       }
       dock={
@@ -364,7 +496,7 @@ export function PracticePanel({
               : isFetching
                 ? "Loading a new set…"
                 : atSetEnd
-                  ? "New set"
+                  ? "Next"
                   : "Next question",
             onClick: () => {
               if (lastResult && !isFetching) advance();
@@ -403,6 +535,7 @@ export function PracticePanel({
                     correct: lastResult.correct,
                     explanation: lastResult.explanation,
                     mastery: lastResult.mastery,
+                    correctChoiceId: lastResult.correctOptionId,
                   }
                 : null
             }
@@ -420,6 +553,7 @@ export function PracticePanel({
             }
           />
         </div>
+
 
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">

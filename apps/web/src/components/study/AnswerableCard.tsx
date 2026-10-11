@@ -26,6 +26,7 @@ export type AnswerableResult = {
   correct: boolean;
   explanation: string;
   mastery?: number | null;
+  correctChoiceId?: string | null;
 } | null;
 
 export function AnswerableCard({
@@ -36,6 +37,7 @@ export function AnswerableCard({
   result,
   isPending = false,
   actions,
+  resultActions,
   meta,
   choicesAnchorId,
   resultAnchorId,
@@ -48,6 +50,8 @@ export function AnswerableCard({
   result?: AnswerableResult;
   isPending?: boolean;
   actions?: ReactNode;
+  /** Actions that belong to graded feedback, after its explanation. */
+  resultActions?: ReactNode;
   meta?: ReactNode;
   /** Tour anchor for the choices block. */
   choicesAnchorId?: string;
@@ -96,17 +100,32 @@ export function AnswerableCard({
 
       <div id={choicesAnchorId} className="flex flex-col gap-2">
         {choices.map((c, ci) => (
-          <Button
-            key={c.id}
-            id={ci === 0 ? (firstChoiceId ?? undefined) : undefined}
-            variant={selectedId === c.id ? "orange" : "outline"}
-            disabled={!!result || isPending}
-            onClick={() => onSelect(c.id)}
-            className="h-auto justify-start whitespace-normal text-left transition-colors hover:border-brand-orange/40 hover:bg-accent/40"
-          >
-            {showSpinner && selectedId === c.id ? <Spinner className="size-3.5" /> : null}
-            {c.label}
-          </Button>
+          (() => {
+            const isCorrectChoice = Boolean(result && (
+              result.correctChoiceId
+                ? c.id === result.correctChoiceId
+                : result.correct && c.id === selectedId
+            ));
+            const isWrongSelection = Boolean(result && selectedId === c.id && !isCorrectChoice);
+            return (
+              <Button
+                key={c.id}
+                id={ci === 0 ? (firstChoiceId ?? undefined) : undefined}
+                variant={isCorrectChoice ? "outline" : selectedId === c.id ? "orange" : "outline"}
+                disabled={!!result || isPending}
+                onClick={() => onSelect(c.id)}
+                className={cn(
+                  "h-auto justify-start whitespace-normal text-left transition-colors hover:border-brand-orange/40 hover:bg-accent/40",
+                  isCorrectChoice && "border-brand-green bg-brand-green/10 text-foreground",
+                  isWrongSelection && "border-destructive bg-destructive/10 text-foreground",
+                )}
+              >
+                {showSpinner && selectedId === c.id ? <Spinner className="size-3.5" /> : null}
+                {c.label}
+                {isCorrectChoice ? <span className="ml-auto shrink-0 text-xs font-semibold text-brand-green">Correct</span> : null}
+              </Button>
+            );
+          })()
         ))}
       </div>
 
@@ -156,6 +175,7 @@ export function AnswerableCard({
                   </MarkdownText>
                 </div>
               ) : null}
+              {resultActions ? <div className="pt-1">{resultActions}</div> : null}
             </div>
           </div>
 
