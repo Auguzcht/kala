@@ -137,7 +137,7 @@ export function FlashcardDeck({
         state: "due" as const,
         box: 0,
       }));
-  }, [practiceSetId, practiceResults.data, twin?.skills, skillId]);
+  }, [practiceSetId, missedItemIds, practiceResults.data, twin?.skills, skillId]);
   const practiceDeck = useMemo<FlashcardDeckData | undefined>(() => {
     if (!practiceSetId || !practiceCards) return undefined;
     return {
@@ -351,10 +351,10 @@ export function FlashcardDeck({
         <StudySurface
           bar={
             <SessionBar
-              title="Study"
+              title="Reviewing missed questions"
               progress={{ current: total, total, label: "cards" }}
               onBack={() => onReviewDone(practiceSetId)}
-              backLabel="Back to test results"
+              backLabel="Results"
             />
           }
         >
@@ -374,7 +374,7 @@ export function FlashcardDeck({
             onBack={() => practiceSetId && onReviewDone
               ? onReviewDone(practiceSetId)
               : onExit()}
-            backLabel={practiceSetId && onReviewDone ? "Back to test results" : "Choose another topic"}
+            backLabel={practiceSetId && onReviewDone ? "Results" : "Choose another topic"}
           />
         }
         dock={
@@ -461,7 +461,11 @@ export function FlashcardDeck({
     // requeued after "Still learning" can be rated again locally without
     // writing a second item_reviews row.
     if (alreadyPosted) {
-      if (practiceSetId && ratingIndex + 1 >= nextQueue.length) onReviewDone?.(practiceSetId);
+      if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
+        const count = practiceCards?.length ?? 0;
+        toast.success(`Reviewed ${count} missed ${count === 1 ? "question" : "questions"}`);
+        onReviewDone?.(practiceSetId);
+      }
       return;
     }
 
@@ -492,6 +496,8 @@ export function FlashcardDeck({
           postedRatingIdsRef.current.add(card.itemId);
           reviewIdempotencyRef.current = null;
           if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
+            const count = practiceCards?.length ?? 0;
+            toast.success(`Reviewed ${count} missed ${count === 1 ? "question" : "questions"}`);
             onReviewDone?.(practiceSetId);
           }
         },
@@ -639,17 +645,19 @@ export function FlashcardDeck({
     <StudySurface
       bar={
         <SessionBar
-          title="Study"
+          title={practiceSetId ? "Reviewing missed questions" : "Study"}
           progress={{ current: index + 1, total, label: "card" }}
           onBack={() => practiceSetId && onReviewDone
             ? onReviewDone(practiceSetId)
             : onExit()}
-          backLabel={practiceSetId && onReviewDone ? "Back to test results" : "Choose another topic"}
+          backLabel={practiceSetId && onReviewDone ? "Results" : "Choose another topic"}
         />
       }
       dock={
         <ComposeDock
-          primary={dockPrimary}
+          primary={practiceSetId && phase === "back" && index + 1 >= deckCards.length
+            ? { ...dockPrimary, label: "Got it · Back to results" }
+            : dockPrimary}
           secondary={dockSecondary}
           onAsk={phase === "back" ? askAboutCard : undefined}
           askPending={followUp.isPending}
@@ -670,7 +678,7 @@ export function FlashcardDeck({
               {card.skillName ?? "Card"}
             </span>
             {band ? <MasteryBand band={band} /> : null}
-            <StateBadge state={card.state} />
+            {practiceSetId ? null : <StateBadge state={card.state} />}
           </div>
         </div>
 
