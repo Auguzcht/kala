@@ -27,7 +27,10 @@ from httpx import HTTPStatusError
 from pydantic import BaseModel
 
 from app.bank.kick import kick_bank
-from app.bank.serving import MIN_USABLE, bank_enabled, pick_bank_items_with_meta, record_exposure
+from app.bank.serving import (
+    MIN_USABLE, bank_enabled, pick_bank_items_with_meta, record_exposure,
+    record_set_exposures,
+)
 from app.db import supabase as db
 from app.deps import (
     CurrentUser,
@@ -559,7 +562,16 @@ def get_set(
     flashcard browse — the client must not be able to see the answers before
     submitting. Only SET-LEVEL metadata gains the attempt fields.
     """
-    sets = db.select("quiz_sets", {
+    started_ns = perf_counter_ns()
+    timings: dict[str, float] = {}
+
+    def timed_select(name: str, table: str, params: dict) -> list[dict]:
+        query_started = perf_counter_ns()
+        result = db.select(table, params)
+        timings[name] = (perf_counter_ns() - query_started) / 1_000_000
+        return result
+
+    sets = timed_select("set_lookup_ms", "quiz_sets", {
         "id": f"eq.{set_id}",
         "institution_id": f"eq.{user.institution_id}",
         "course_id": f"eq.{course_id}",
@@ -568,18 +580,18 @@ def get_set(
     if not sets:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found")
 
-    links = db.select("quiz_set_items", {
+    links = timed_select("membership_lookup_ms", "quiz_set_items", {
         "set_id": f"eq.{set_id}", "select": "item_id,position", "order": "position.asc",
     })
     if not links or any("item_id" not in row for row in links):
-        legacy = db.select("generated_items", {
+        legacy = timed_select("legacy_membership_lookup_ms", "generated_items", {
             "set_id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
             "retired_at": "is.null", "skills.status": "eq.approved",
             "select": "id,created_at,skills!inner(status)", "order": "created_at.asc",
         })
         links = [{"item_id": row["id"], "position": index} for index, row in enumerate(legacy)]
     item_ids = [r["item_id"] for r in links]
-    items = db.select("generated_items", {
+    items = timed_select("item_lookup_ms", "generated_items", {
         "id": f"in.({','.join(item_ids)})" if item_ids else "in.(00000000-0000-0000-0000-000000000000)",
         "institution_id": f"eq.{user.institution_id}",
         "retired_at": "is.null", "skills.status": "eq.approved",
@@ -587,24 +599,34 @@ def get_set(
     })
     items_by_id = {r["id"]: r for r in items}
     items = [items_by_id[r["item_id"]] for r in links if r["item_id"] in items_by_id]
-    for item in items:
-        record_exposure(
-            institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
-            skill_id=item["skill_id"], item_id=item["id"], tested=True,
-        )
+    exposure_started = perf_counter_ns()
+    exposure_count = record_set_exposures(
+        institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+        set_id=set_id, item_ids=[item["id"] for item in items],
+    )
+    timings["exposure_rpc_ms"] = (perf_counter_ns() - exposure_started) / 1_000_000
+    jobs_started = perf_counter_ns()
     jobs = practice_jobs(
         institution_id=user.institution_id, course_id=course_id, set_id=set_id,
     )
+    timings["jobs_lookup_ms"] = (perf_counter_ns() - jobs_started) / 1_000_000
     s = sets[0]
     unavailable = bool(links) and not items
+    attempts_started = perf_counter_ns()
     attempts = _attempts_by_set(
         institution_id=user.institution_id, user_id=user.user_id, set_ids=[s["id"]],
     )
-    return {
+    timings["attempts_lookup_ms"] = (perf_counter_ns() - attempts_started) / 1_000_000
+    response = {
         **_practice_set_view(course_id=course_id, set_row=s, jobs=jobs, items=items,
                              unavailable=unavailable),
         **_attempt_view(attempts.get(s["id"])),
     }
+    timings["handler_ms"] = (perf_counter_ns() - started_ns) / 1_000_000
+    timings["items_count"] = float(len(items))
+    timings["exposures_written"] = float(exposure_count)
+    logger.info("practice_set_get_timing %s", timings)
+    return response
 
 
 @router.get("/{course_id}/sets/{set_id}/results")

@@ -130,3 +130,28 @@ def record_exposure(*, institution_id: str, user_id: str, course_id: str, skill_
         # Exposure is telemetry; it must not prevent a card or graded result
         # from reaching the student if the auxiliary write is unavailable.
         return
+
+
+def record_set_exposures(*, institution_id: str, user_id: str, course_id: str,
+                        set_id: str, item_ids: list[str]) -> int:
+    """Mark the playable items in a set as tested with one atomic RPC call.
+
+    This remains best-effort telemetry, matching ``record_exposure``. The
+    database function validates set membership and approved skills and bumps
+    ``times_tested`` atomically for every eligible item.
+    """
+    if not item_ids:
+        return 0
+    try:
+        rows = db.rpc("record_practice_set_exposures", {
+            "p_institution_id": institution_id,
+            "p_user_id": user_id,
+            "p_course_id": course_id,
+            "p_set_id": set_id,
+            "p_item_ids": item_ids,
+        })
+        if isinstance(rows, list) and rows:
+            return int(rows[0].get("record_practice_set_exposures") or 0)
+        return int(rows or 0)
+    except Exception:  # noqa: BLE001 - exposure telemetry must not block serving
+        return 0
