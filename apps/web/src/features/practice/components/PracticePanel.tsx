@@ -41,7 +41,7 @@ import type { PracticeSubmitResult } from "@/features/practice/schema/practice.s
 // one generated per "Next item" click. The set is fetched once and the panel
 // holds it, advancing `setIndex` locally — so moving to the next question is
 // instant, with no per-question generation wait. A fresh set is only fetched
-// when the batch is exhausted ("Generate another set") or the topic changes.
+// when the batch is exhausted ("New set") or the topic changes.
 // Grading is unchanged: each item is still submitted to /practice/submit and
 // graded server-side against its stored answer key.
 
@@ -120,7 +120,7 @@ export function PracticePanel({
   // Guards the celebration to fire EXACTLY ONCE per set. A ref, not state:
   // setting state here would re-render, and an effect-driven fire needs a
   // latch the re-render cannot clear. Keyed by set id so a fresh set (the
-  // "Generate another set" path) re-arms it, while a re-render or a refetch
+  // "New set" path) re-arms it, while a re-render or a refetch
   // of the SAME set does not re-fire — a refetch after the last answer lands
   // still resolves to the same done state.
   const celebratedSetRef = useRef<string | null>(null);
@@ -364,7 +364,7 @@ export function PracticePanel({
               : isFetching
                 ? "Loading a new set…"
                 : atSetEnd
-                  ? "Generate another set"
+                  ? "New set"
                   : "Next question",
             onClick: () => {
               if (lastResult && !isFetching) advance();

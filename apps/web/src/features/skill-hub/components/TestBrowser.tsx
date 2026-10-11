@@ -16,7 +16,7 @@ import {
 import type { PracticeSetAttempt, PracticeSetSummary } from "@/features/practice";
 
 // The Test tab's browser: saved sets for one skill, browse before you commit.
-// Picking a set (or generating a new one) opens its DETAIL view — prompts only
+// Picking a set (or requesting a new one) opens its DETAIL view — prompts only
 // — and only the detail view's "Start test" begins the graded run. That extra
 // beat is the point: a graded test moves mastery, so it should be an explicit
 // choice, not the accidental consequence of tapping a card in a list.
@@ -206,7 +206,7 @@ function SetList({
         <div className="border border-dashed bg-card px-5 py-4">
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Generate one below, or study these cards and hit "Test me on these".
+            Select New set below, or study these cards and hit "Test me on these".
             saved sets land here to retake.
           </p>
         </div>
@@ -298,7 +298,7 @@ function SetList({
           </motion.button>
         ))}
 
-        {/* Generate — SAME footprint as a real set card so it sits in the grid
+        {/* New set — SAME footprint as a real set card so it sits in the grid
             as a peer, but a dashed border and centered icon keep it visually
             distinct: it is an action, not a saved set you might have taken.
             While generating it shows a shimmer + spinner instead of sitting
@@ -333,7 +333,7 @@ function SetList({
           ) : generate.isPending ? (
             <span className="text-sm font-semibold text-foreground">Loading your questions…</span>
           ) : (
-            <p className="text-sm font-semibold text-foreground">Generate new set</p>
+            <p className="text-sm font-semibold text-foreground">New set</p>
           )}
           <p className="text-xs leading-relaxed text-muted-foreground">
             Fresh questions. Choose 5, 10, or 20 at a time.
