@@ -312,7 +312,7 @@ def stats(*, institution_id: str, user_id: str, course_id: str,
     count, which contradicts what's actually on screen."""
     params = {
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
-        "select": "box,streak,due_at",
+        "select": "item_id,box,streak,due_at",
     }
     if skill_id is not None:
         params["skill_id"] = f"eq.{skill_id}"

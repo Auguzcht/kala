@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from app.deps import CurrentUser, get_current_user
 from app.learn.items import ItemGenerationError
+from app.learn import srs
 from app.main import app
 from app.routers import flashcards, practice
 from fastapi.testclient import TestClient
@@ -26,6 +27,28 @@ def legacy_route_fixtures(monkeypatch):
 
 def authenticated_user() -> CurrentUser:
     return CurrentUser(user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="student")
+
+
+def test_srs_stats_selects_item_ids_before_filtering_active_cards(monkeypatch) -> None:
+    rows = [
+        {"item_id": "learning", "box": 1, "streak": 1, "due_at": "2099-01-01T00:00:00+00:00"},
+        {"item_id": "known", "box": 5, "streak": 3, "due_at": "2099-01-01T00:00:00+00:00"},
+    ]
+    seen = {}
+
+    def fake_select(table, params):
+        if table == "srs_state":
+            seen.update(params)
+            return rows
+        return [{"id": "learning"}, {"id": "known"}]
+
+    monkeypatch.setattr(srs.db, "select", fake_select)
+    result = srs.stats(
+        institution_id="institution-1", user_id="student-1", course_id="course-1",
+    )
+
+    assert "item_id" in seen["select"].split(",")
+    assert result == {"tracked": 2, "due": 0, "learning": 1, "mastered": 1}
 
 
 def test_practice_next_returns_none_when_course_has_no_skills(monkeypatch) -> None:
