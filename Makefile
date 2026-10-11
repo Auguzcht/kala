@@ -6,7 +6,7 @@ TF ?= pnpm terraform
 ACCOUNT ?= $(shell $(AWS) sts get-caller-identity --query Account --output text)
 ECR = $(ACCOUNT).dkr.ecr.$(REGION).amazonaws.com
 
-.PHONY: web-dev api-dev openapi ecr-login build push deploy tf-init tf-plan tf-apply
+.PHONY: web-dev api-dev openapi ecr-login build push deploy smoke tf-init tf-plan tf-apply
 
 web-dev:
 	pnpm --filter web dev
@@ -34,6 +34,9 @@ push: ecr-login build
 deploy: push
 	$(AWS) lambda update-function-code --function-name kala-api --image-uri $(ECR)/kala-api:latest --region $(REGION)
 	$(AWS) lambda update-function-code --function-name kala-worker --image-uri $(ECR)/kala-worker:latest --region $(REGION)
+
+smoke:
+	python3 scripts/smoke_live.py
 
 tf-init:
 	$(TF) -chdir=infra/terraform init
