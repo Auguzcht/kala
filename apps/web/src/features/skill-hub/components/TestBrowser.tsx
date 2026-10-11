@@ -424,7 +424,7 @@ function SetDetail({
           <Button
             variant="orange"
             size="lg"
-            onClick={onStart}
+            onClick={() => onStart()}
             disabled={!canStart}
             className="shrink-0"
           >

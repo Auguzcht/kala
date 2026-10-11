@@ -18,7 +18,7 @@ const skillSearchSchema = z.object({
   setId: z.string().optional(),
   repeats: z.coerce.boolean().optional(),
   start: z.coerce.boolean().optional(),
-  mode: z.enum(["review", "all"]).optional(),
+  mode: z.enum(["review", "all"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/course/skill/$skillId")({
@@ -62,7 +62,13 @@ function SkillHubPage() {
         navigate({
           to,
           params: { skillId },
-          search: { tab, setId, repeats, mode: studyMode, start: true },
+          search: {
+            tab,
+            setId,
+            repeats,
+            start: true,
+            ...(tab === "study" ? { mode: studyMode ?? "review" } : {}),
+          },
         })
       }
       // Leaving a session returns to that tab's browse pane (keeps `tab`,
