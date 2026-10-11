@@ -354,7 +354,9 @@ export function FlashcardDeck({
             primary={
               canTest
                 ? {
-                    label: testMe.isPending ? "Building your test…" : "Test me on these",
+                    label: testMe.isPending
+                      ? practiceSetId ? "Preparing retry…" : "Building your test…"
+                      : practiceSetId ? "Retry test" : "Test me on these",
                     onClick: testMeOnThese,
                     disabled: testMe.isPending,
                     icon: ArrowRightIcon,
@@ -368,14 +370,17 @@ export function FlashcardDeck({
           <div className="relative border bg-card p-6">
             <CornerBrackets />
             <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
-              Deck complete
+              {practiceSetId ? "Missed questions reviewed" : "Deck complete"}
             </p>
             <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-              Nice work on {total} cards
+              {practiceSetId
+                ? "Ready to retry?"
+                : `You reviewed ${total} ${total === 1 ? "card" : "cards"}.`}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Missed cards resurface sooner, so your next pass is exactly what your schedule says
-              you need.
+              {practiceSetId
+                ? "Take another pass at the questions you missed while the explanations are fresh."
+                : "Missed cards resurface sooner, so your next pass follows your review schedule."}
             </p>
             <p className="mt-3 text-sm font-medium text-foreground">
               {reviewCounts.gotIt} got it, {reviewCounts.stillLearning} still learning.
@@ -390,9 +395,11 @@ export function FlashcardDeck({
               <Button variant="orange" size="sm" onClick={onExit}>
                 Done
               </Button>
-              <Button variant="outline" size="sm" onClick={reloadDeck}>
-                Reload deck
-              </Button>
+              {!practiceSetId ? (
+                <Button variant="outline" size="sm" onClick={reloadDeck}>
+                  Reload deck
+                </Button>
+              ) : null}
               {mode === "all" && data.hasMore ? (
                 <Button
                   variant="orange"

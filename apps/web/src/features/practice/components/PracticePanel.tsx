@@ -13,8 +13,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
 import { CheckIcon } from "@/components/ui/check";
-import { PartyPopperIcon } from "@/components/ui/party-popper";
-import type { PartyPopperIconHandle } from "@/components/ui/party-popper";
 import { MasteryBand, MasteryRing } from "@/components/kala";
 import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
@@ -81,17 +79,11 @@ function PracticeRecap({
   onStudyThese?: () => void;
 }) {
   const missed = results.questions.filter((question) => question.correct === false);
-  const partyPopperRef = useRef<PartyPopperIconHandle | null>(null);
-  const reduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    if (reduceMotion === false) partyPopperRef.current?.startAnimation();
-  }, [reduceMotion]);
 
   return (
     <StudySurface bar={<SessionBar title="Test results" />}>
       <StudyStream>
-        <div className="overflow-hidden border bg-card shadow-sm">
+        <div className="overflow-hidden border bg-card">
           <header className="border-b bg-muted/30 px-5 py-5 sm:px-7 sm:py-6">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -105,8 +97,11 @@ function PracticeRecap({
                   )}
                 </h2>
               </div>
-              <div className="grid size-12 shrink-0 place-items-center border border-brand-gold/50 bg-brand-gold/15 text-brand-slate">
-                <PartyPopperIcon ref={partyPopperRef} size={26} aria-hidden />
+              <div className="border border-border bg-card px-3 py-2 text-right">
+                <p className="font-mono text-sm font-semibold tabular-nums text-foreground">{results.score.total}</p>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {results.score.total === 1 ? "question" : "questions"}
+                </p>
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
@@ -122,7 +117,9 @@ function PracticeRecap({
                     {results.masteryBefore.value == null ? "No score yet" : `${Math.round(results.masteryBefore.value * 100)}%`}
                   </p>
                 </div>
-                <ArrowRightIcon size={18} className="text-brand-orange" aria-hidden />
+                <div className="grid size-8 shrink-0 place-items-center text-brand-orange">
+                  <ArrowRightIcon size={18} aria-hidden />
+                </div>
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">After</p>

@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { useBankStatus } from "@/features/bank";
 import {
+  useCreateSetFromItems,
   useGenerateSet,
   usePracticeSetById,
   usePracticeSets,
@@ -86,8 +87,8 @@ export function TestBrowser({
   /** Open a set's detail view (from the list, or after generating). */
   includesRepeats?: boolean;
   onSelectSet: (setId: string, includesRepeats?: boolean) => void;
-  /** Begin the graded run on the currently open set. */
-  onStart: () => void;
+  /** Begin a run on the current set or a fresh set id for a retake. */
+  onStart: (setId?: string) => void;
 }) {
   if (setId) {
     return (
@@ -358,11 +359,13 @@ function SetDetail({
 }: {
   courseId: string;
   setId: string;
-  onStart: () => void;
+  onStart: (setId?: string) => void;
   onBack: () => void;
   includesRepeats?: boolean;
 }) {
   const { data, isLoading, isError, refetch } = usePracticeSetById(courseId, setId);
+  const createRetake = useCreateSetFromItems(courseId);
+  const itemIds = data?.items.map((item) => item.id) ?? [];
 
   if (isLoading) {
     return (
@@ -391,6 +394,26 @@ function SetDetail({
     correctCount: data.correctCount,
     lastAttemptedAt: data.lastAttemptedAt,
   };
+  const startLabel = unavailable
+    ? "This set is no longer available"
+    : canStart
+      ? attempted
+        ? createRetake.isPending ? "Preparing retake…" : "Retake test"
+        : "Start test"
+      : data.status === "generating"
+        ? `Preparing questions (${data.readyCount}/${data.requestedSize})`
+        : "Questions unavailable";
+
+  function startTest() {
+    if (!attempted) {
+      onStart();
+      return;
+    }
+    createRetake.mutate(
+      itemIds,
+      { onSuccess: (newSet) => onStart(newSet.setId) }
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -425,17 +448,11 @@ function SetDetail({
           <Button
             variant="orange"
             size="lg"
-            onClick={() => onStart()}
-            disabled={!canStart}
+            onClick={startTest}
+            disabled={!canStart || createRetake.isPending}
             className="shrink-0"
           >
-          {unavailable
-            ? "This set is no longer available"
-            : canStart
-              ? attempted ? "Retake test" : "Start test"
-              : data.status === "generating"
-                ? `Preparing questions (${data.readyCount}/${data.requestedSize})`
-                : "Questions unavailable"}
+          {startLabel}
             {canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>

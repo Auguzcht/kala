@@ -138,6 +138,7 @@ export function SkillHub({
   onSelectTab,
   onSelectSet,
   onStart,
+  onStartTest,
   onExitSession,
   onSessionReady,
   onStudyMissedSet,
@@ -160,6 +161,7 @@ export function SkillHub({
   onSelectTab: (tab: SkillTab) => void;
   onSelectSet: (setId: string, includesRepeats?: boolean) => void;
   onStart: (mode?: "review" | "all") => void;
+  onStartTest: (setId?: string) => void;
   onSessionReady: (setId: string, sessionId: string) => void;
   onStudyMissedSet: (setId: string) => void;
   /** Leave a running session back to the hub pane (clears `start` in the URL
@@ -214,7 +216,7 @@ export function SkillHub({
           setId={setId || null}
           includesRepeats={includesRepeats}
           onSelectSet={onSelectSet}
-          onStart={onStart}
+          onStart={onStartTest}
         />
       ) : (
         <StudyBrowser courseId={courseId} skillId={skillId} onStart={onStart} />

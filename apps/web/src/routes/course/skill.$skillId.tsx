@@ -76,6 +76,18 @@ function SkillHubPage() {
           },
         })
       }
+      onStartTest={(nextSetId) =>
+        navigate({
+          to,
+          params: { skillId },
+          search: {
+            tab: "test",
+            setId: nextSetId ?? setId,
+            start: true,
+            sessionId: crypto.randomUUID(),
+          },
+        })
+      }
       onSessionReady={(nextSetId, nextSessionId) =>
         navigate({
           to,
