@@ -541,15 +541,6 @@ export function PracticePanel({
                 : null
             }
             isPending={submit.isPending}
-            resultActions={lastResult && selectedChoice ? (
-              <PracticeExplainMore
-                courseId={courseId}
-                sessionId={sessionId ?? fallbackSessionId}
-                item={item}
-                selectedChoiceId={selectedChoice}
-                result={lastResult}
-              />
-            ) : null}
             meta={
               <>
                 {bandTransition ? (
@@ -563,7 +554,15 @@ export function PracticePanel({
             }
           />
         </div>
-
+        {lastResult && selectedChoice ? (
+          <PracticeExplainMore
+            courseId={courseId}
+            sessionId={sessionId ?? fallbackSessionId}
+            item={item}
+            selectedChoiceId={selectedChoice}
+            result={lastResult}
+          />
+        ) : null}
 
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">

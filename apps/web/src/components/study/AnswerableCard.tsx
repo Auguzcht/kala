@@ -37,7 +37,6 @@ export function AnswerableCard({
   result,
   isPending = false,
   actions,
-  resultActions,
   meta,
   choicesAnchorId,
   resultAnchorId,
@@ -50,8 +49,6 @@ export function AnswerableCard({
   result?: AnswerableResult;
   isPending?: boolean;
   actions?: ReactNode;
-  /** Actions that belong to graded feedback, after its explanation. */
-  resultActions?: ReactNode;
   meta?: ReactNode;
   /** Tour anchor for the choices block. */
   choicesAnchorId?: string;
@@ -175,7 +172,6 @@ export function AnswerableCard({
                   </MarkdownText>
                 </div>
               ) : null}
-              {resultActions ? <div className="pt-1">{resultActions}</div> : null}
             </div>
           </div>
 
