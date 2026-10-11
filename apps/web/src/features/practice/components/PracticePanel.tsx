@@ -14,7 +14,7 @@ import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
 import { CheckIcon } from "@/components/ui/check";
 import { MasteryBand } from "@/components/kala";
-import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet, useCreateSetFromItems } from "@/features/practice/hooks/use-practice";
+import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
@@ -65,16 +65,12 @@ function PracticeRecap({
   results,
   onDone,
   onNewSet,
-  onRetake,
-  isRetaking,
   isCreatingSet,
   onStudyThese,
 }: {
   results: PracticeSetResults;
   onDone: () => void;
   onNewSet: () => void;
-  onRetake: () => void;
-  isRetaking: boolean;
   isCreatingSet: boolean;
   onStudyThese?: (missedItemIds: string[]) => void;
 }) {
@@ -153,16 +149,12 @@ function PracticeRecap({
                 <CheckIcon size={16} aria-hidden />
                 Done
               </Button>
-              <Button variant="outline" onClick={onRetake} disabled={isRetaking}>
-                <ArrowRightIcon size={16} aria-hidden />
-                {isRetaking ? "Preparing retake…" : "Retake this set"}
-              </Button>
               <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet}>
                 <ArrowRightIcon size={16} aria-hidden />
                 {isCreatingSet ? "Loading new set…" : "New set"}
               </Button>
               {onStudyThese ? (
-                <Button variant="outline" onClick={() => onStudyThese(missed.map((question) => question.itemId))}>
+                <Button variant="outline" onClick={onStudyThese}>
                   <BookOpenIcon size={16} aria-hidden />
                   Review missed
                 </Button>
@@ -223,7 +215,6 @@ export function PracticePanel({
   const refetchGeneratedSet = generatedQuery.refetch;
   const submit = useSubmitPractice(courseId);
   const createNewSet = useGenerateSet(courseId);
-  const createRetake = useCreateSetFromItems(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
   const resultsQuery = usePracticeSetResults(courseId, data?.setId ?? setId ?? null);
@@ -429,15 +420,6 @@ export function PracticePanel({
       <PracticeRecap
         results={results}
         onDone={onExit}
-        isRetaking={createRetake.isPending}
-        onRetake={() => createRetake.mutate(
-          results.questions.map((question) => question.itemId),
-          { onSuccess: (retake) => {
-              if (retake.setId && onSessionReady) onSessionReady(retake.setId, crypto.randomUUID());
-              else if (retake.setId && onOpenSet) onOpenSet(retake.setId);
-              else onExit();
-            } }
-        )}
         onNewSet={() => createNewSet.mutate(
           { skillId, size: SET_SIZE },
           { onSuccess: (newSet) => newSet.setId && onOpenSet ? onOpenSet(newSet.setId) : onExit() }
