@@ -29,3 +29,5 @@ def test_pick_bank_items_is_db_only_and_excludes_tracked(monkeypatch) -> None:
     assert calls == ["generated_items", "srs_state"]
     assert item_params[0]["retired_at"] == "is.null"
     assert item_params[0]["skills.status"] == "eq.approved"
+    assert item_params[0]["select"] != "*"
+    assert "embedding" not in item_params[0]["select"]

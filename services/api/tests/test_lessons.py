@@ -4,6 +4,25 @@ generated step carries structured content plus a server-graded check item."""
 from app.learn import lessons
 
 
+def test_assembly_uses_explicit_lesson_step_columns_without_embedding(monkeypatch):
+    selected = []
+
+    def fake_select(table, params):
+        if table == "guided_lesson_steps":
+            selected.append(params["select"])
+            return []
+        return []
+
+    monkeypatch.setattr(lessons.db, "select", fake_select)
+    lessons._assemble_lesson(
+        lesson_row={"id": "lesson", "course_id": "course", "skill_id": "skill",
+                    "title": "Title", "status": "ready"},
+        institution_id="institution",
+    )
+    assert selected and selected[0] != "*"
+    assert "embedding" not in selected[0]
+
+
 def test_ready_lesson_fast_path_selects_guided_lessons_only_once(monkeypatch):
     """The perf fix: get_or_generate_lesson's existence check already fetches
     every field the assembly step needs, so a lesson already at 'ready'
@@ -154,6 +173,34 @@ def test_step_content_uses_the_lesson_reasoning_role(monkeypatch):
     )
     assert captured["model_id"] == lessons.get_model_for("reasoning")
     assert captured["max_tokens"] == 1536
+
+
+def test_step_content_retries_thin_output_once(monkeypatch):
+    calls = []
+    responses = [
+        '{"summary":"short","detail_points":["one"],"misconception":null,"key_takeaway":null}',
+        '{"summary":"A sufficiently detailed explanation of the topic, describing why it matters and how it works in a real situation.",'
+        '"detail_points":["First key point explains the core idea with enough useful context for a learner to understand the concept.",'
+        '"Second key point explains a practical consequence and how it should guide a decision."]}'
+    ]
+    monkeypatch.setattr(lessons.bedrock, "converse", lambda **kw: calls.append(kw) or responses.pop(0))
+    content = lessons._generate_step_content(
+        skill={"id": "s", "name": "Skill"}, step={"title": "Topic", "focus": "Topic"}, context="ctx",
+    )
+    assert len(calls) == 2
+    assert len(content["detail_points"]) == 2
+
+
+def test_step_content_keeps_thin_second_result_with_warning(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setattr(lessons.bedrock, "converse", lambda **kw: calls.append(kw) or
+                        '{"summary":"short","detail_points":["one"],"misconception":null,"key_takeaway":null}')
+    content = lessons._generate_step_content(
+        skill={"id": "s", "name": "Skill"}, step={"title": "Topic", "focus": "Topic"}, context="ctx",
+    )
+    assert len(calls) == 2
+    assert content["detail_points"] == ["one"]
+    assert "remains thin after retry" in caplog.text
 
 
 def test_generation_persists_steps_in_position_order_even_when_parallel_completion_is_out_of_order(monkeypatch):
