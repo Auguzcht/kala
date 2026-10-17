@@ -73,7 +73,7 @@ def test_depth_limited_refresh_resumes_on_next_scheduled_run_with_bank_build(mon
     ]
 
     monkeypatch.setattr(handler_module.db, "select", lambda table, params: worker_state if table == "worker_state" else [])
-    for name in ("reconcile_mastery", "ingest_walk", "embed_backfill", "readiness_snapshot",
+    for name in ("reconcile_mastery", "ingest_walk", "embed_backfill", "embed_bank_items", "readiness_snapshot",
                  "item_generation", "tag_recompute"):
         monkeypatch.setattr(handler_module, name, SimpleNamespace(run=lambda **kwargs: {}))
     monkeypatch.setattr(handler_module.skill_proposer, "run",

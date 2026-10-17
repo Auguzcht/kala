@@ -66,6 +66,7 @@ from app.db import supabase as db
 from app.jobs import (
     bank_build,
     embed_backfill,
+    embed_bank_items,
     ingest_walk,
     item_generation,
     readiness_snapshot,
@@ -154,6 +155,7 @@ def handler(event, context):
         ("reconcileMastery", reconcile_mastery),
         ("ingestWalk", ingest_walk),
         ("embedBackfill", embed_backfill),
+        ("embedBankItems", embed_bank_items),
         ("readinessSnapshot", readiness_snapshot),
     ):
         run_one(name, job)
