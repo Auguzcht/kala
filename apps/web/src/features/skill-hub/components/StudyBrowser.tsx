@@ -108,29 +108,57 @@ export function StudyBrowser({
     );
   }
 
+  const counts = data?.counts ?? { new: 0, learning: 0, slipping: 0, known: 0, dueToday: 0 };
+  const memoryTotal = counts.new + counts.learning + counts.slipping + counts.known;
+  const summaryStates = ["new", "learning", "slipping", "known"] as const;
+
   return (
     <div className="space-y-4">
       {/* Review the due queue or open the full skill deck. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border bg-card px-5 py-4">
-        <div className="min-w-0 space-y-2">
-          <p className="text-sm font-semibold text-foreground">
-            {data?.isFallback ? `${cards.length} to review` : `${cards.length} ${cards.length === 1 ? "card" : "cards"}`}
-          </p>
-          {!data?.isFallback ? (
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Card memory summary">
-              <span>{data?.counts.new ?? 0} new</span>
-              <span>{data?.counts.learning ?? 0} learning</span>
-              <span>{data?.counts.slipping ?? 0} slipping</span>
-              <span>{data?.counts.known ?? 0} known</span>
-              <span>{data?.counts.dueToday ?? 0} due today</span>
+      <div className="grid gap-4 border bg-card px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="min-w-0 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <p className="font-display text-lg font-semibold text-foreground">{cards.length} cards</p>
+            <div className="text-right sm:hidden">
+              <p className="font-display text-xl font-semibold leading-none text-foreground">{counts.dueToday}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">due today</p>
             </div>
-          ) : null}
+          </div>
+          <div
+            className="flex h-2 w-full overflow-hidden"
+            role="img"
+            aria-label={`Card memory: ${counts.new} new, ${counts.learning} learning, ${counts.slipping} slipping, ${counts.known} known`}
+          >
+            {summaryStates.map((state) => {
+              const presentation = cardStatePresentation(state);
+              const count = counts[state];
+              return count > 0 ? (
+                <span
+                  key={state}
+                  className={presentation.fillClassName}
+                  style={{ width: `${memoryTotal ? (count / memoryTotal) * 100 : 0}%` }}
+                />
+              ) : null;
+            })}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5" aria-label="Card memory summary">
+            {summaryStates.map((state) => {
+              const presentation = cardStatePresentation(state);
+              return (
+                <span key={state} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className={cn("size-2 shrink-0", presentation.fillClassName)} aria-hidden />
+                  {presentation.label} <span className="font-mono tabular-nums">{counts[state]}</span>
+                </span>
+              );
+            })}
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Recall each answer, then mark it yourself. Missed cards return sooner.
           </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Cards are added to your review queue as you study.
-          </p>
+        </div>
+        <div className="hidden min-w-24 text-right sm:block">
+          <p className="font-display text-2xl font-semibold leading-none text-foreground">{counts.dueToday}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">due today</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
