@@ -533,7 +533,7 @@ export function PracticePanel({
               : isFetching
                 ? "Loading a new set…"
                 : atSetEnd
-                  ? "Next"
+                  ? "See results"
                   : "Next question",
             onClick: () => {
               if (lastResult && !isFetching) advance();
