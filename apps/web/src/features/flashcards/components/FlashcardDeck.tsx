@@ -822,7 +822,7 @@ export function FlashcardDeck({
               type="button"
               onClick={askHint}
               disabled={hint.isPending}
-              className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <BrainIcon size={14} aria-hidden />
               {hint.isPending ? "Thinking…" : "Give me a hint"}
@@ -833,7 +833,7 @@ export function FlashcardDeck({
               type="button"
               onClick={askExplain}
               disabled={explain.isPending}
-              className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <SparklesIcon size={14} aria-hidden />
               {explain.isPending ? "Thinking…" : "Explain more"}

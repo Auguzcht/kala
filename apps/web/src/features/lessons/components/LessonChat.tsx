@@ -432,25 +432,25 @@ export function LessonChat({
                     thread below, and the button disables after its kind has
                     been answered to prevent a no-op repeat tap. */}
                 {!result ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => openCheckThread("hint")}
                     disabled={checkAsk.isPending || answeredKinds.has("hint")}
                   >
                     <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                    Hint
-                  </Button>
+                    Give me a hint
+                  </button>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => openCheckThread("explain")}
                     disabled={checkAsk.isPending || answeredKinds.has("explain")}
                   >
                     <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                    Explain
-                  </Button>
+                    Explain more
+                  </button>
                 )}
               </div>
               {checkThreadOpen ? (
