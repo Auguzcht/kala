@@ -170,7 +170,7 @@ export function FlashcardDeck({
   const [sessionCards, setSessionCards] = useState<FlashcardCard[] | null>(null);
   const [phase, setPhase] = useState<Phase>("front");
   const [deckDone, setDeckDone] = useState(false);
-  const [reviewCounts, setReviewCounts] = useState({ gotIt: 0, stillLearning: 0 });
+  const [ratingsByItemId, setRatingsByItemId] = useState<Record<string, boolean>>({});
   const [showReviewSpinner, setShowReviewSpinner] = useState(false);
   const [pendingRemembered, setPendingRemembered] = useState<boolean | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
@@ -203,6 +203,7 @@ export function FlashcardDeck({
     setDeckDone(false);
     postedRatingIdsRef.current.clear();
     requeuedIdsRef.current.clear();
+    setRatingsByItemId({});
   }, [data, responseSessionKey]);
 
   useEffect(() => {
@@ -226,11 +227,15 @@ export function FlashcardDeck({
     startedAtRef.current = Date.now();
   }, [index, data?.courseId]);
 
-  useEffect(() => {
-    setReviewCounts({ gotIt: 0, stillLearning: 0 });
-  }, [courseId, skillId]);
-
   const deckCards = sessionCards ?? data?.cards ?? [];
+  const originalDeckLength = data?.cards.length ?? 0;
+  const originalCardIds = new Set((data?.cards ?? []).map((item) => item.itemId));
+  const reviewCounts = Object.values(ratingsByItemId).reduce(
+    (counts, remembered) => remembered
+      ? { ...counts, gotIt: counts.gotIt + 1 }
+      : { ...counts, stillLearning: counts.stillLearning + 1 },
+    { gotIt: 0, stillLearning: 0 },
+  );
   const activeItemId = deckCards[index]?.itemId;
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -367,7 +372,7 @@ export function FlashcardDeck({
     );
   }
 
-  const total = deckCards.length;
+  const total = originalCardIds.size;
 
   if (deckDone) {
     if (practiceSetId && onReviewDone) {
@@ -462,6 +467,7 @@ export function FlashcardDeck({
   }
 
   const card: FlashcardCard = deckCards[index];
+  const isSecondLook = index >= originalDeckLength;
 
   function mark(remembered: boolean) {
     if (reviewInFlightRef.current) return;
@@ -471,9 +477,16 @@ export function FlashcardDeck({
     const ratingIndex = index;
     const nextQueue = shouldRequeue ? [...queueBeforeRating, card] : queueBeforeRating;
 
-    setReviewCounts((counts) => remembered
-      ? { ...counts, gotIt: counts.gotIt + 1 }
-      : { ...counts, stillLearning: counts.stillLearning + 1 });
+    const priorRating = ratingsByItemId[card.itemId];
+    const nextRatings = { ...ratingsByItemId, [card.itemId]: remembered };
+    setRatingsByItemId(nextRatings);
+    const distinctMissed = new Set((practiceCards ?? []).map((item) => item.itemId)).size;
+    const stillLearningCount = Object.values(nextRatings).filter((rating) => !rating).length;
+    const showMissedReviewToast = () => {
+      toast.success(
+        `Reviewed ${distinctMissed} missed ${distinctMissed === 1 ? "question" : "questions"}${stillLearningCount ? ` · ${stillLearningCount} still learning` : ""}`,
+      );
+    };
     if (shouldRequeue) {
       requeuedIdsRef.current.add(card.itemId);
       setSessionCards(nextQueue);
@@ -485,8 +498,7 @@ export function FlashcardDeck({
     // writing a second item_reviews row.
     if (alreadyPosted) {
       if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
-        const count = practiceCards?.length ?? 0;
-        toast.success(`Reviewed ${count} missed ${count === 1 ? "question" : "questions"}`);
+        showMissedReviewToast();
         onReviewDone?.(practiceSetId);
       }
       return;
@@ -519,8 +531,7 @@ export function FlashcardDeck({
           postedRatingIdsRef.current.add(card.itemId);
           reviewIdempotencyRef.current = null;
           if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
-            const count = practiceCards?.length ?? 0;
-            toast.success(`Reviewed ${count} missed ${count === 1 ? "question" : "questions"}`);
+            showMissedReviewToast();
             onReviewDone?.(practiceSetId);
           }
         },
@@ -532,9 +543,12 @@ export function FlashcardDeck({
           setDeckDone(false);
           setPhase("back");
           if (shouldRequeue) requeuedIdsRef.current.delete(card.itemId);
-          setReviewCounts((counts) => remembered
-            ? { ...counts, gotIt: Math.max(0, counts.gotIt - 1) }
-            : { ...counts, stillLearning: Math.max(0, counts.stillLearning - 1) });
+          setRatingsByItemId((ratings) => {
+            const reverted = { ...ratings };
+            if (priorRating === undefined) delete reverted[card.itemId];
+            else reverted[card.itemId] = priorRating;
+            return reverted;
+          });
           toast.error("Could not save your review. Try again.");
         },
       }
@@ -559,7 +573,7 @@ export function FlashcardDeck({
     setExplainText(null);
     setFollowUpTurns([]);
     setPendingFollowUp(null);
-    setReviewCounts({ gotIt: 0, stillLearning: 0 });
+    setRatingsByItemId({});
     setSessionCards(data?.cards ?? []);
     postedRatingIdsRef.current.clear();
     requeuedIdsRef.current.clear();
@@ -669,7 +683,7 @@ export function FlashcardDeck({
       bar={
         <SessionBar
           title={practiceSetId ? "Reviewing missed questions" : "Study"}
-          progress={{ current: index + 1, total, label: "card" }}
+          progress={{ current: isSecondLook ? total : Math.min(Object.keys(ratingsByItemId).length + 1, total), total, label: "card" }}
           onBack={() => practiceSetId && onReviewDone
             ? onReviewDone(practiceSetId)
             : onExit()}
@@ -701,6 +715,11 @@ export function FlashcardDeck({
               {card.skillName ?? "Card"}
             </span>
             {practiceSetId ? null : <StateBadge state={card.state} />}
+            {isSecondLook ? (
+              <span className="inline-flex items-center rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
+                Second look
+              </span>
+            ) : null}
           </div>
         </div>
 
