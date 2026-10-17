@@ -50,6 +50,14 @@ from app.learn import srs, xp
 router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 
 
+def _card_back_label(item: dict) -> str | None:
+    """Use an explicit flashcard back when present, otherwise resolve its key."""
+    back = item.get("back")
+    if isinstance(back, str) and back.strip():
+        return back
+    return item_gen.correct_label(item)
+
+
 @router.get("/{course_id}/skills/{skill_id}/cards")
 def skill_cards(
     course_id: str = Depends(require_valid_course_id),
@@ -110,7 +118,7 @@ def skill_cards(
         due = due_dt is not None and due_dt <= now
         if due_dt is not None and due_dt < day_end_utc:
             due_today += 1
-        label = item.get("back") if item["kind"] == "flashcard" else item_gen.correct_label(item)
+        label = _card_back_label(item) if item["kind"] == "flashcard" else item_gen.correct_label(item)
         cards.append({
             "itemId": item["id"], "prompt": item.get("front") or item["prompt"],
             "back": {"label": label, "explanation": item.get("explanation") or ""},
@@ -394,7 +402,7 @@ def _deck_response(*, course_id: str, cards: list[dict], institution_id: str, us
         "select": "id,kind,back,correct_choice_id,choices,explanation",
     }) if ids else []
     back_by_id = {r["id"]: {
-        "label": r.get("back") if r["kind"] == "flashcard" else item_gen.correct_label(r),
+        "label": _card_back_label(r) if r["kind"] == "flashcard" else item_gen.correct_label(r),
         "explanation": r.get("explanation") or "",
     } for r in backs}
     for card in cards:
