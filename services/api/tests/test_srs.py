@@ -167,8 +167,8 @@ def test_due_cards_excludes_mastered(monkeypatch):
     def select(table, params):
         if table == "srs_state":
             return [
-                {"item_id": "a", "skill_id": "s1", "box": 5, "streak": 5, "due_at": "2020-01-01T00:00:00+00:00"},
-                {"item_id": "b", "skill_id": "s2", "box": 1, "streak": 0, "due_at": "2020-01-01T00:00:00+00:00"},
+                {"item_id": "a", "skill_id": "s1", "box": 5, "streak": 5, "reps": 5, "due_at": "2020-01-01T00:00:00+00:00"},
+                {"item_id": "b", "skill_id": "s2", "box": 1, "streak": 0, "reps": 1, "due_at": "2020-01-01T00:00:00+00:00"},
             ]
         return [{"id": "a"}, {"id": "b"}]
     monkeypatch.setattr(srs.db, "select", select)

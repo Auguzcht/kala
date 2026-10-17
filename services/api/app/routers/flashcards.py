@@ -114,9 +114,8 @@ def skill_cards(
         )
         counts[state] += 1
         due_at = row.get("due_at") if row else None
-        due_dt = datetime.fromisoformat(due_at.replace("Z", "+00:00")) if due_at else None
-        due = due_dt is not None and due_dt <= now
-        if due_dt is not None and due_dt < day_end_utc:
+        due = srs.is_due(row, at=now)
+        if srs.is_due(row, at=day_end_utc, inclusive=False):
             due_today += 1
         label = _card_back_label(item) if item["kind"] == "flashcard" else item_gen.correct_label(item)
         cards.append({
