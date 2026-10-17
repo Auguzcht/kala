@@ -10,7 +10,7 @@ import { SessionBar } from "@/components/study/SessionBar";
 import { StudyStream } from "@/components/study/StudyStream";
 import { StudySurface } from "@/components/study/StudySurface";
 import { UserBlock } from "@/components/study/UserBlock";
-import { CornerBrackets, MasteryBand } from "@/components/kala";
+import { CornerBrackets } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
@@ -462,7 +462,6 @@ export function FlashcardDeck({
   }
 
   const card: FlashcardCard = deckCards[index];
-  const band = twin?.skills.find((s) => s.skillId === card.skillId)?.band;
 
   function mark(remembered: boolean) {
     if (reviewInFlightRef.current) return;
@@ -701,7 +700,6 @@ export function FlashcardDeck({
             <span className="truncate text-sm font-semibold text-foreground">
               {card.skillName ?? "Card"}
             </span>
-            {band ? <MasteryBand band={band} /> : null}
             {practiceSetId ? null : <StateBadge state={card.state} />}
           </div>
         </div>
