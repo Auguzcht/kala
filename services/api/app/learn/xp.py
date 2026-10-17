@@ -1,5 +1,5 @@
-"""XP, streaks, and badges — DERIVED from the append-only evidence log, never
-a parallel currency.
+"""XP, streaks, and badges — derived from immutable practice answers,
+counted flashcard reviews, the evidence log, and mastery state, never a balance.
 
 The masterplan is explicit (section 10.1): rewards must be tied to the twin so
 they mean something. XP is earned for evidence that moves mastery, streaks for
@@ -13,8 +13,9 @@ of it as a pure function of evidence_events (+ the derived mastery_state) means:
   * it is fully recomputable and auditable — a research export can reproduce
     every number from the same log.
 
-This module does no writes. It reads evidence_events and mastery_state and
-computes the reward view.
+This module does no writes. Practice XP comes from saved answer snapshots;
+flashcard XP comes from counted reviews. Evidence events still supply other
+activity rewards and streak history.
 """
 from __future__ import annotations
 
@@ -69,15 +70,30 @@ def summary(*, institution_id: str, user_id: str, course_id: str) -> dict:
     counted_reviews = db.select("item_reviews", {
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
         "counted": "eq.true",
-        "select": "outcome,created_at",
+        "select": "mode,outcome,created_at,idempotency_key",
     })
+    practice_answers = db.select("practice_answer_results", {
+        "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
+        "select": "xp_awarded,idempotency_key",
+    })
+    practice_idempotency_keys = {row["idempotency_key"] for row in practice_answers}
     other_events = [e for e in events if e.get("type") not in {"flashcard", "practice"}]
     attempts = len(other_events) + len(counted_reviews)
     correct = (
         sum(1 for e in other_events if e.get("correct") is True)
         + sum(1 for r in counted_reviews if r.get("outcome") == "good")
     )
-    xp = correct * _XP_CORRECT + attempts * _XP_ATTEMPT
+    practice_xp = sum(int(row.get("xp_awarded") or 0) for row in practice_answers)
+    review_xp = sum(
+        _XP_ATTEMPT + (_XP_CORRECT if row.get("outcome") == "good" else 0)
+        for row in counted_reviews
+        if row.get("mode") != "quiz" or row.get("idempotency_key") not in practice_idempotency_keys
+    )
+    other_event_xp = sum(
+        _XP_ATTEMPT + (_XP_CORRECT if event.get("correct") is True else 0)
+        for event in other_events
+    )
+    xp = practice_xp + review_xp + other_event_xp
     streak = _streak_days([e["created_at"] for e in events if e.get("created_at")])
 
     badges = _badges(institution_id=institution_id, user_id=user_id, course_id=course_id)
