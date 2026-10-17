@@ -1,6 +1,7 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { Clock3Icon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ export function StudyBrowser({
   /** Enter the sequential flip session. */
   onStart: (mode: "review" | "all") => void;
 }) {
+  const [filter, setFilter] = useState<CardFilter>("all");
+  const [showAnswers, setShowAnswers] = useState(false);
   const { data, isLoading, isError, refetch } = useFlashcardMembership(courseId, skillId);
   const bank = useBankStatus(courseId);
   const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
@@ -111,6 +114,28 @@ export function StudyBrowser({
   const counts = data?.counts ?? { new: 0, learning: 0, slipping: 0, known: 0, dueToday: 0 };
   const memoryTotal = counts.new + counts.learning + counts.slipping + counts.known;
   const summaryStates = ["new", "learning", "slipping", "known"] as const;
+  const filterOptions: { id: CardFilter; label: string; count: number }[] = [
+    { id: "all", label: "All", count: cards.length },
+    { id: "due", label: "Due", count: cards.filter((card) => card.due || card.state === "due").length },
+    ...(["slipping", "learning", "new", "known"] as const).map((state) => ({
+      id: state,
+      label: state[0].toUpperCase() + state.slice(1),
+      count: cards.filter((card) => card.state === state).length,
+    })),
+  ];
+  const stateOrder = { slipping: 0, learning: 1, new: 2, known: 3, due: 4 } as const;
+  const filteredCards = cards
+    .filter((card) => {
+      if (filter === "all") return true;
+      if (filter === "due") return card.due || card.state === "due";
+      return card.state === filter;
+    })
+    .sort((a, b) => {
+      const aDue = a.due || a.state === "due";
+      const bDue = b.due || b.state === "due";
+      if (aDue !== bDue) return aDue ? -1 : 1;
+      return stateOrder[a.state] - stateOrder[b.state];
+    });
 
   return (
     <div className="space-y-4">
@@ -188,9 +213,40 @@ export function StudyBrowser({
         </p>
       ) : null}
 
-      {/* Both sides shown: Study never grades, so there is nothing to hide. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-sm font-semibold text-foreground">Study cards</h2>
+        <button
+          type="button"
+          aria-pressed={showAnswers}
+          onClick={() => setShowAnswers((shown) => !shown)}
+          className="text-xs font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {showAnswers ? "Hide answers" : "Show answers"}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2" aria-label="Filter study cards">
+        {filterOptions.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={filter === option.id}
+            onClick={() => setFilter(option.id)}
+            className={cn(
+              "rounded-sm border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              filter === option.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            {option.label} <span className="ml-1 font-mono tabular-nums">{option.count}</span>
+          </button>
+        ))}
+      </div>
       <ol aria-label="Study cards" className="divide-y divide-border border bg-card">
-        {cards.map((card: FlashcardMembershipCard, i: number) => (
+        {filteredCards.length === 0 ? (
+          <li className="px-5 py-4 text-sm text-muted-foreground">No cards match this filter.</li>
+        ) : null}
+        {filteredCards.map((card: FlashcardMembershipCard, i: number) => (
           <motion.li
             key={card.itemId}
             initial={reduceMotion ? false : { opacity: 0, y: 6 }}
@@ -202,20 +258,28 @@ export function StudyBrowser({
               <p className="min-w-0 text-sm font-medium text-foreground">{card.prompt}</p>
               <StateBadge state={card.state} due={card.due} />
             </div>
-            <div className="flex items-start gap-2 border-l-2 border-brand-green/40 pl-3">
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Answer
-              </span>
-              <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">
-                {card.back.label ?? "No answer label"}
-              </p>
-            </div>
+            {showAnswers ? (
+              <div className="flex items-start gap-2 border-l-2 border-brand-green/40 pl-3">
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Answer
+                </span>
+                {card.back.label ? (
+                  <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">{card.back.label}</p>
+                ) : (
+                  <p className="min-w-0 text-sm italic leading-relaxed text-muted-foreground">Answer unavailable</p>
+                )}
+              </div>
+            ) : (
+              <p className="pl-3 text-sm text-muted-foreground">Answer hidden</p>
+            )}
           </motion.li>
         ))}
       </ol>
     </div>
   );
 }
+
+type CardFilter = "all" | "due" | FlashcardMembershipCard["state"];
 
 /** Card memory state is separate from the skill mastery band shown above. */
 function StateBadge({ state, due }: { state: FlashcardMembershipCard["state"]; due: boolean }) {

@@ -637,7 +637,7 @@ export function FlashcardDeck({
           "You are Kala helping a student study one flashcard.",
           "The card is a term/prompt with a definition/answer on the back. Guide recall without simply stating the back while they are still on the front; explain the concept clearly once they have flipped.",
           `Card prompt: ${card.prompt}`,
-          `Card back: ${card.back.label ?? "No answer label"}`,
+          `Card back: ${card.back.label ?? "Answer unavailable"}`,
           `Side shown: ${phase}.`,
           `Student question: ${question}`,
         ].join("\n\n"),
@@ -795,7 +795,7 @@ export function FlashcardDeck({
                     Answer
                   </p>
                   <p className="mt-0.5 text-base font-semibold text-foreground">
-                    {card.back.label ?? "No answer label"}
+                    {card.back.label ?? <span className="italic text-muted-foreground">Answer unavailable</span>}
                   </p>
                 </div>
                 {card.back.explanation ? (
