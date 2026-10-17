@@ -1,4 +1,5 @@
 import json
+import math
 
 from app.jobs import bank_build
 
@@ -53,7 +54,11 @@ def test_only_is_not_absolute_but_no_value_and_identical_are():
 
 def test_batch_size_is_clamped_to_remaining_need(monkeypatch):
     captured = {}
-    monkeypatch.setattr(bank_build, "_live_items", lambda *args: [{"prompt": "existing"}] * 3)
+    monkeypatch.setattr(bank_build, "embed", lambda text: [1.0] + [0.0] * 1023)
+    monkeypatch.setattr(bank_build, "_live_items", lambda *args: [
+        {"id": f"old-{index}", "prompt": "existing", "embedding": [1.0] + [0.0] * 1023}
+        for index in range(3)
+    ])
     monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: captured.update(kwargs) or ([], {}))
     state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud elasticity",
              "bloom_level": "understand", "mcq_target": 5, "deadline": 9999999999}
@@ -63,6 +68,7 @@ def test_batch_size_is_clamped_to_remaining_need(monkeypatch):
 
 def test_choice_shuffle_preserves_correct_id_and_varies_position(monkeypatch):
     inserted = []
+    monkeypatch.setattr(bank_build, "embed", lambda text: [1.0] + [0.0] * 1023)
     monkeypatch.setattr(bank_build, "_live_items", lambda *args: [])
     monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {}))
     monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: inserted.extend(rows) or rows)
@@ -188,6 +194,7 @@ def test_lease_is_one_conditional_update(monkeypatch):
 
 def test_bank_insert_payload_never_has_set_id(monkeypatch):
     inserted = []
+    monkeypatch.setattr(bank_build, "embed", lambda text: [1.0] + [0.0] * 1023)
     monkeypatch.setattr(bank_build, "_live_items", lambda *args: [])
     monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {"status": "success"}))
     monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: inserted.extend(rows) or rows)
@@ -198,12 +205,71 @@ def test_bank_insert_payload_never_has_set_id(monkeypatch):
 
 
 def test_insert_count_uses_rows_returned_by_supabase(monkeypatch):
+    monkeypatch.setattr(bank_build, "embed", lambda text: [1.0] + [0.0] * 1023)
     monkeypatch.setattr(bank_build, "_live_items", lambda *args: [])
     monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {"status": "success"}))
     monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: [])
     state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud elasticity", "bloom_level": "understand", "deadline": 9999999999}
     result = bank_build._build_one(state, [{"id": "chunk", "text": "x" * 1200}], 0)
     assert result["inserted"] == 0
+
+
+def _unit_vector_with_first_component(value):
+    return [value, math.sqrt(1 - value * value)] + [0.0] * 1022
+
+
+def test_bank_candidate_cosine_dedupe_rejects_above_threshold(monkeypatch):
+    inserted = []
+    existing_vector = [1.0] + [0.0] * 1023
+    candidate_vector = _unit_vector_with_first_component(0.97)
+    monkeypatch.setattr(bank_build, "_live_items", lambda *args: [
+        {"id": "old", "prompt": "An unrelated wording", "choices": [], "embedding": existing_vector},
+    ])
+    monkeypatch.setattr(bank_build, "embed", lambda text: candidate_vector)
+    monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {"status": "success"}))
+    monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: inserted.extend(rows) or rows)
+    state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud",
+             "bloom_level": "understand", "deadline": 9999999999}
+    result = bank_build._build_one(state, [{"id": "chunk", "text": "x" * 1200}], 0)
+    assert result["inserted"] == 0
+    assert result["rejection_counts"]["near_duplicate"] == 1
+    assert not inserted
+
+
+def test_bank_candidate_cosine_dedupe_keeps_calibrated_distinct_pair(monkeypatch):
+    inserted = []
+    existing_vector = [1.0] + [0.0] * 1023
+    candidate_vector = _unit_vector_with_first_component(0.9205)
+    monkeypatch.setattr(bank_build, "_live_items", lambda *args: [
+        {"id": "old", "prompt": "A different question", "choices": [], "embedding": existing_vector},
+    ])
+    monkeypatch.setattr(bank_build, "embed", lambda text: candidate_vector)
+    monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {"status": "success"}))
+    monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: inserted.extend(rows) or rows)
+    state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud",
+             "bloom_level": "understand", "deadline": 9999999999}
+
+    result = bank_build._build_one(state, [{"id": "chunk", "text": "x" * 1200}], 0)
+
+    assert result["inserted"] == 1
+    assert result["rejection_counts"]["near_duplicate"] == 0
+    assert inserted
+
+
+def test_bank_candidate_checks_old_rows_missing_embeddings(monkeypatch):
+    updates = []
+    vector = [1.0] + [0.0] * 1023
+    monkeypatch.setattr(bank_build, "_live_items", lambda *args: [
+        {"id": "old", "prompt": "An older item", "choices": [], "embedding": None},
+    ])
+    monkeypatch.setattr(bank_build, "embed", lambda text: vector)
+    monkeypatch.setattr(bank_build.db, "update", lambda *args: updates.append(args) or [])
+    monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([], {"status": "success"}))
+    state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud",
+             "bloom_level": "understand", "deadline": 9999999999}
+    bank_build._build_one(state, [{"id": "chunk", "text": "x" * 1200}], 0)
+    assert updates[0][1]["id"] == "eq.old"
+    assert updates[0][2]["embedding"] == vector
 
 
 def test_thin_context_makes_zero_model_calls(monkeypatch):

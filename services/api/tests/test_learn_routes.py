@@ -9,6 +9,21 @@ from app.learn.items import ItemGenerationError
 from app.learn import srs
 from app.main import app
 from app.routers import flashcards, practice
+
+
+def test_flashcard_back_prefers_nonempty_back(monkeypatch):
+    monkeypatch.setattr(flashcards.item_gen, "correct_label", lambda item: "resolved")
+    assert flashcards._card_back_label({"back": " Printed label "}) == " Printed label "
+
+
+def test_flashcard_back_falls_back_for_empty_back(monkeypatch):
+    monkeypatch.setattr(flashcards.item_gen, "correct_label", lambda item: "resolved")
+    assert flashcards._card_back_label({"back": "  "}) == "resolved"
+
+
+def test_flashcard_back_falls_back_for_null_back(monkeypatch):
+    monkeypatch.setattr(flashcards.item_gen, "correct_label", lambda item: "resolved")
+    assert flashcards._card_back_label({"back": None}) == "resolved"
 from fastapi.testclient import TestClient
 
 

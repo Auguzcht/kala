@@ -64,8 +64,10 @@ from app.bank_config import CHAIN_MAX
 from app.config import get_settings
 from app.db import supabase as db
 from app.jobs import (
+    assign_lesson_checks,
     bank_build,
     embed_backfill,
+    embed_bank_items,
     ingest_walk,
     item_generation,
     readiness_snapshot,
@@ -91,12 +93,13 @@ def handler(event, context):
     results: dict[str, dict] = {}
     errors: dict[str, str] = {}
 
-    def run_one(name, job, course_id_override: str | None = None) -> dict:
+    def run_one(name, job, course_id_override: str | None = None, extra: dict | None = None) -> dict:
         """Run one isolated job and record structured timing/result."""
         started = time.monotonic()
         logger.info("job start name=%s institution_id=%s", name, institution_id or "all")
         try:
             job_kwargs = {"institution_id": institution_id}
+            job_kwargs.update(extra or {})
             job_course_id = targeted_course_id or course_id_override
             if job_course_id and name in {"bankBuild", "tagRecompute", "skillProposer"}:
                 job_kwargs["course_id"] = job_course_id
@@ -136,6 +139,11 @@ def handler(event, context):
             return {}
 
     if targeted_course_id and trigger:
+        if trigger == "lesson_checks":
+            lesson_id = event.get("lessonId")
+            if lesson_id:
+                run_one("assignLessonChecks", assign_lesson_checks, extra={"lesson_id": lesson_id})
+            return {"ok": not errors, "results": results, "errors": errors}
         if trigger in {"skills_approved", "skills_changed"}:
             run_one("tagRecompute", tag_recompute)
         if trigger == "propose":
@@ -154,6 +162,7 @@ def handler(event, context):
         ("reconcileMastery", reconcile_mastery),
         ("ingestWalk", ingest_walk),
         ("embedBackfill", embed_backfill),
+        ("embedBankItems", embed_bank_items),
         ("readinessSnapshot", readiness_snapshot),
     ):
         run_one(name, job)

@@ -22,6 +22,7 @@ from app import rag
 from app.bank_config import (
     ACTIVE_DAYS,
     BACKOFF_MIN,
+    BANK_DUP_COSINE,
     BANK_CONCURRENCY,
     CONTEXT_CAP_CHARS,
     ERROR_AFTER,
@@ -45,6 +46,7 @@ from app.bank_config import (
 )
 from app.config import get_settings
 from app.db import supabase as db
+from app.embed import embed
 from app.item_gen import (
     _BANNED_STEM_PHRASES,
     _MCQ_RESPONSE_FORMAT,
@@ -52,6 +54,7 @@ from app.item_gen import (
     _validated_mcq,
 )
 from app.model_errors import ModelCallError, error_reason
+from app.vector_utils import cosine, parse_vector
 
 logger = logging.getLogger("kala.worker.bank")
 
@@ -335,7 +338,7 @@ def _depth(skill: dict, institution_id: str, course_id: str) -> tuple[int, list[
 def _live_items(course_id: str, skill_id: str) -> list[dict]:
     return db.select("generated_items", {"course_id": f"eq.{course_id}", "skill_id": f"eq.{skill_id}",
         "kind": "eq.practice", "origin": "eq.bank", "retired_at": "is.null",
-        "select": "id,prompt,stem_hash,choices", "order": "created_at.desc", "limit": "1000"})
+        "select": "id,prompt,stem_hash,choices,embedding", "order": "created_at.desc", "limit": "1000"})
 
 
 def _target(course_id: str, skill_id: str, depth: int, current: dict | None) -> int:
@@ -490,9 +493,9 @@ def _record_failure(state: dict, exc: Exception, rejection_counts: dict[str, int
 
 def _build_one(state: dict, chunks: list[dict], offset: int) -> dict:
     live = _live_items(state["course_id"], state["skill_id"])
-    live_stems = [r.get("prompt") or "" for r in live[:30]]
-    do_not_repeat = [{"stem": r.get("prompt") or "", "choices": r.get("choices") or []} for r in live[:30]]
-    live_choice_sets = [{str(c.get("label", "")).strip().lower() for c in (r.get("choices") or [])} for r in live[:30]]
+    live_stems = [r.get("prompt") or "" for r in live]
+    do_not_repeat = [{"stem": r.get("prompt") or "", "choices": r.get("choices") or []} for r in live]
+    live_choice_sets = [{str(c.get("label", "")).strip().lower() for c in (r.get("choices") or [])} for r in live]
     window, context_chars = _context_snapshot(chunks, offset)
     context = "\n---\n".join(row["text"] for row in window)
     if context_chars < MIN_CONTEXT_CHARS:
@@ -510,12 +513,31 @@ def _build_one(state: dict, chunks: list[dict], offset: int) -> dict:
     if meta:
         _log_model_call(meta, rejection_counts)
     inserted = 0
+    comparison_vectors: list[list[float]] = []
+    for row in live:
+        vector = parse_vector(row.get("embedding"))
+        if vector is None:
+            vector = embed(row["prompt"])
+            if len(vector) != 1024:
+                raise ValueError(f"embedding dimension {len(vector)}, expected 1024")
+            db.update("generated_items", {"id": f"eq.{row['id']}", "embedding": "is.null"}, {
+                "embedding": vector, "embedded_at": datetime.now(UTC).isoformat(),
+            })
+        comparison_vectors.append(vector)
+    batch_vectors: list[list[float]] = []
     for item in valid:
         try:
+            vector = embed(item["prompt"])
+            if len(vector) != 1024:
+                raise ValueError(f"embedding dimension {len(vector)}, expected 1024")
+            if any(cosine(vector, old) >= BANK_DUP_COSINE for old in comparison_vectors + batch_vectors):
+                rejection_counts["near_duplicate"] += 1
+                continue
             choices = list(item["choices"])
             random.SystemRandom().shuffle(choices)
-            created = db.insert("generated_items", [{"institution_id": state["institution_id"], "course_id": state["course_id"], "skill_id": state["skill_id"], "kind": "practice", "bloom_level": state.get("bloom_level"), "prompt": item["prompt"], "choices": choices, "correct_choice_id": item["correct_choice_id"], "explanation": item["explanation"], "origin": "bank", "generation_version": GENERATION_VERSION, "stem_hash": item["stem_hash"], "source_chunk_ids": [c["id"] for c in window]}])
+            created = db.insert("generated_items", [{"institution_id": state["institution_id"], "course_id": state["course_id"], "skill_id": state["skill_id"], "kind": "practice", "bloom_level": state.get("bloom_level"), "prompt": item["prompt"], "choices": choices, "correct_choice_id": item["correct_choice_id"], "explanation": item["explanation"], "origin": "bank", "generation_version": GENERATION_VERSION, "stem_hash": item["stem_hash"], "source_chunk_ids": [c["id"] for c in window], "embedding": vector, "embedded_at": datetime.now(UTC).isoformat()}])
             inserted += len(created)
+            batch_vectors.append(vector)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 409:
                 continue

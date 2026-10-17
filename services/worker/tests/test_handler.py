@@ -4,8 +4,10 @@ import json
 from app import handler as handler_module
 from app.handler import handler
 from app.jobs import (
+    assign_lesson_checks,
     bank_build,
     embed_backfill,
+    embed_bank_items,
     ingest_walk,
     item_generation,
     readiness_snapshot,
@@ -26,6 +28,7 @@ def test_handler_runs_all_jobs_and_threads_scope(monkeypatch) -> None:
     monkeypatch.setattr(reconcile_mastery, "run", make_fake("reconcileMastery"))
     monkeypatch.setattr(ingest_walk, "run", make_fake("ingestWalk"))
     monkeypatch.setattr(embed_backfill, "run", make_fake("embedBackfill"))
+    monkeypatch.setattr(embed_bank_items, "run", make_fake("embedBankItems"))
     monkeypatch.setattr(tag_recompute, "run", make_fake("tagRecompute"))
     monkeypatch.setattr(bank_build, "run", make_fake("bankBuild"))
     monkeypatch.setattr(readiness_snapshot, "run", make_fake("readinessSnapshot"))
@@ -39,6 +42,7 @@ def test_handler_runs_all_jobs_and_threads_scope(monkeypatch) -> None:
         "reconcileMastery": {"ran": "reconcileMastery"},
         "ingestWalk": {"ran": "ingestWalk"},
         "embedBackfill": {"ran": "embedBackfill"},
+        "embedBankItems": {"ran": "embedBankItems"},
         "readinessSnapshot": {"ran": "readinessSnapshot"},
         "itemGeneration": {"ran": "itemGeneration"},
         "tagRecompute": {"ran": "tagRecompute"},
@@ -49,6 +53,7 @@ def test_handler_runs_all_jobs_and_threads_scope(monkeypatch) -> None:
         ("reconcileMastery", "inst-1"),
         ("ingestWalk", "inst-1"),
         ("embedBackfill", "inst-1"),
+        ("embedBankItems", "inst-1"),
         ("readinessSnapshot", "inst-1"),
         ("itemGeneration", "inst-1"),
         ("tagRecompute", "inst-1"),
@@ -64,7 +69,7 @@ def test_handler_passes_item_generation_the_remaining_invocation_budget(monkeypa
         return {"claimed": 0}
 
     for job in (
-        reconcile_mastery, ingest_walk, embed_backfill, readiness_snapshot,
+        reconcile_mastery, ingest_walk, embed_backfill, embed_bank_items, readiness_snapshot,
         tag_recompute, bank_build,
     ):
         monkeypatch.setattr(job, "run", lambda **kw: {})
@@ -85,6 +90,7 @@ def test_handler_with_no_event_scopes_to_every_institution(monkeypatch) -> None:
     monkeypatch.setattr(reconcile_mastery, "run", fake_run)
     monkeypatch.setattr(ingest_walk, "run", fake_run)
     monkeypatch.setattr(embed_backfill, "run", fake_run)
+    monkeypatch.setattr(embed_bank_items, "run", fake_run)
     monkeypatch.setattr(tag_recompute, "run", fake_run)
     monkeypatch.setattr(bank_build, "run", fake_run)
     monkeypatch.setattr(readiness_snapshot, "run", fake_run)
@@ -92,7 +98,7 @@ def test_handler_with_no_event_scopes_to_every_institution(monkeypatch) -> None:
 
     handler(None, None)  # Lambda can invoke with event=None on a schedule
 
-    assert seen_institution_ids == [None, None, None, None, None, None, None]
+    assert seen_institution_ids == [None, None, None, None, None, None, None, None]
 
 
 def test_targeted_propose_checkpoints_and_chains(monkeypatch):
@@ -136,6 +142,7 @@ def test_handler_isolates_a_raising_job_from_the_others(monkeypatch) -> None:
     monkeypatch.setattr(reconcile_mastery, "run", raising_run)
     monkeypatch.setattr(ingest_walk, "run", fake_ok_run)
     monkeypatch.setattr(embed_backfill, "run", fake_ok_run)
+    monkeypatch.setattr(embed_bank_items, "run", fake_ok_run)
     monkeypatch.setattr(tag_recompute, "run", fake_ok_run)
     monkeypatch.setattr(bank_build, "run", fake_ok_run)
     monkeypatch.setattr(readiness_snapshot, "run", fake_ok_run)
@@ -149,6 +156,7 @@ def test_handler_isolates_a_raising_job_from_the_others(monkeypatch) -> None:
     assert result["results"] == {
         "ingestWalk": {"ok": True},
         "embedBackfill": {"ok": True},
+        "embedBankItems": {"ok": True},
         "readinessSnapshot": {"ok": True},
         "itemGeneration": {"ok": True},
         "tagRecompute": {"ok": True},
@@ -162,6 +170,7 @@ def test_handler_logs_job_start_and_completion(monkeypatch, caplog) -> None:
     monkeypatch.setattr(reconcile_mastery, "run", lambda **kw: {"pairsChecked": 3})
     monkeypatch.setattr(ingest_walk, "run", lambda **kw: {"jobsAdvanced": 0})
     monkeypatch.setattr(embed_backfill, "run", lambda **kw: {"embedded": 1})
+    monkeypatch.setattr(embed_bank_items, "run", lambda **kw: {"embedded": 0})
     monkeypatch.setattr(tag_recompute, "run", lambda **kw: {"tagged": 4})
     monkeypatch.setattr(bank_build, "run", lambda **kw: {})
     monkeypatch.setattr(readiness_snapshot, "run", lambda **kw: {"snapshots": 2})
@@ -182,6 +191,7 @@ def test_handler_runs_embedding_tagging_when_item_generation_claims_work(monkeyp
     monkeypatch.setattr(reconcile_mastery, "run", lambda **kw: {})
     monkeypatch.setattr(ingest_walk, "run", lambda **kw: {})
     monkeypatch.setattr(embed_backfill, "run", lambda **kw: {})
+    monkeypatch.setattr(embed_bank_items, "run", lambda **kw: {})
     monkeypatch.setattr(readiness_snapshot, "run", lambda **kw: {})
     monkeypatch.setattr(item_generation, "run", lambda **kw: {"claimed": 2})
 
@@ -202,3 +212,12 @@ def test_targeted_skill_changes_recompute_then_build_only_one_course(monkeypatch
     assert result["errors"] == {}
     assert [name for name, _ in calls] == ["tag", "bank"]
     assert all(kwargs["course_id"] == "course-1" for _, kwargs in calls)
+
+
+def test_lesson_check_trigger_runs_only_the_requested_lesson(monkeypatch):
+    calls = []
+    monkeypatch.setattr(assign_lesson_checks, "run", lambda **kw: calls.append(kw) or {"assigned": 1})
+    result = handler({"trigger": "lesson_checks", "courseId": "course",
+                      "lessonId": "lesson-1"}, None)
+    assert result["errors"] == {}
+    assert calls == [{"institution_id": None, "lesson_id": "lesson-1"}]
