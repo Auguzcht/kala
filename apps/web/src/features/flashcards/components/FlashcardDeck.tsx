@@ -154,6 +154,7 @@ export function FlashcardDeck({
   const data = practiceSetId ? practiceDeck : deckQuery.data;
   const isLoading = practiceSetId ? practiceResults.isLoading : deckQuery.isLoading;
   const isError = practiceSetId ? practiceResults.isError : deckQuery.isError;
+  const isFetching = practiceSetId ? practiceResults.isFetching : deckQuery.isFetching;
   const refetch = practiceSetId ? practiceResults.refetch : deckQuery.refetch;
   const membership = useFlashcardMembership(courseId, skillId ?? "");
   const bank = useBankStatus(courseId);
@@ -363,7 +364,12 @@ export function FlashcardDeck({
               : "No cards are available for this course right now."
         }
         action={
-          <Button variant="outline" onClick={() => refetch()}>Reload deck</Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button variant="outline" onClick={() => void refreshEmptyDeck()} disabled={isFetching}>
+              {isFetching ? "Checking cards…" : "Reload deck"}
+            </Button>
+            <Button variant="outline" onClick={onExit}>Back to Study</Button>
+          </div>
         }
       />
     );
@@ -558,6 +564,16 @@ export function FlashcardDeck({
       return;
     }
     setIndex(currentIndex + 1);
+  }
+
+  async function refreshEmptyDeck() {
+    const refreshed = await refetch();
+    if (refreshed.isError || !refreshed.data || !("cards" in refreshed.data)) return;
+    if (refreshed.data.cards.length === 0) {
+      toast.info(refreshed.data.stats.tracked > 0
+        ? "No cards are due yet. Return to Study to review all cards."
+        : "No cards are available yet. Try again later.");
+    }
   }
 
   function reloadDeck() {
