@@ -31,6 +31,7 @@ caller pays the generation cost.
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
 
@@ -64,6 +65,7 @@ _STEP_SYSTEM = (
 
 _MAX_STEPS = 6
 _VALID_BLOOM = {"remember", "understand", "apply", "analyze", "evaluate", "create"}
+logger = logging.getLogger(__name__)
 
 
 def _parse_json(raw: str) -> dict:
@@ -129,36 +131,42 @@ def _generate_outline(*, skill: dict, context: str) -> list[dict]:
 def _generate_step_content(*, skill: dict, step: dict, context: str) -> dict:
     """Phase 2a. Structured teaching content for one step. Deterministic
     fallback keeps the step renderable if generation fails."""
-    try:
-        raw = bedrock.converse(
-            # Lesson step generation is isolated to this module. Use the
-            # paid, bounded reasoning role here rather than moving the shared
-            # default role used by other surfaces.
-            model_id=get_model_for("reasoning"),
-            system=_STEP_SYSTEM,
-            messages=[{"role": "user", "content": [{"text": json.dumps({
-                "skill": skill["name"], "step_title": step["title"],
-                "step_focus": step["focus"], "excerpt": context,
-            })}]}],
-            max_tokens=1536,
-        )
-        parsed = _parse_json(raw)
-        details = parsed.get("detail_points", [])
-        if not isinstance(details, list):
-            details = []
-        return {
-            "summary": (parsed.get("summary") or step["focus"]).strip(),
-            "detail_points": [str(d) for d in details][:4],
-            "misconception": (parsed.get("misconception") or "").strip() or None,
-            "key_takeaway": (parsed.get("key_takeaway") or "").strip() or None,
-        }
-    except Exception:
-        return {
-            "summary": step["focus"],
-            "detail_points": [],
-            "misconception": None,
-            "key_takeaway": None,
-        }
+    result = None
+    for attempt in range(2):
+        try:
+            raw = bedrock.converse(
+                model_id=get_model_for("reasoning"), system=_STEP_SYSTEM,
+                messages=[{"role": "user", "content": [{"text": json.dumps({
+                    "skill": skill["name"], "step_title": step["title"],
+                    "step_focus": step["focus"], "excerpt": context,
+                    "retry": attempt > 0,
+                    "quality_requirement": "At least two key points and 200 characters of teaching text.",
+                })}]}],
+                max_tokens=1536,
+            )
+            parsed = _parse_json(raw)
+            details = parsed.get("detail_points", [])
+            if not isinstance(details, list):
+                details = []
+            result = {
+                "summary": (parsed.get("summary") or step["focus"]).strip(),
+                "detail_points": [str(d).strip() for d in details if str(d).strip()][:4],
+                "misconception": (parsed.get("misconception") or "").strip() or None,
+                "key_takeaway": (parsed.get("key_takeaway") or "").strip() or None,
+            }
+        except Exception as exc:  # noqa: BLE001 - one bounded retry, then fallback
+            logger.warning("lesson step content attempt %d failed: %s", attempt + 1, exc)
+            continue
+        teaching_text = " ".join(str(result.get(field) or "") for field in
+                                 ("summary", "misconception", "key_takeaway")) + " " + " ".join(result["detail_points"])
+        if len(result["detail_points"]) >= 2 and len(teaching_text.strip()) >= 200:
+            return result
+        if attempt == 0:
+            continue
+        logger.warning("lesson step content remains thin after retry skill=%s title=%s points=%d chars=%d",
+                       skill.get("id"), step.get("title"), len(result["detail_points"]), len(teaching_text.strip()))
+    return result or {"summary": step["focus"], "detail_points": [],
+                      "misconception": None, "key_takeaway": None}
 
 
 def get_or_generate_lesson(*, institution_id: str, course_id: str, skill: dict) -> dict:
