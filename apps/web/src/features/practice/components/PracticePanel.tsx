@@ -19,7 +19,6 @@ import { useBankStatus } from "@/features/bank";
 import { celebrate } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
-import { PracticeExplainMore } from "@/features/practice/components/PracticeExplainMore";
 import type { PracticeSetResults, PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 
 // Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
@@ -590,16 +589,6 @@ export function PracticePanel({
             }
           />
         </div>
-        {lastResult && selectedChoice ? (
-          <PracticeExplainMore
-            courseId={courseId}
-            sessionId={sessionId ?? fallbackSessionId}
-            item={item}
-            selectedChoiceId={selectedChoice}
-            result={lastResult}
-          />
-        ) : null}
-
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">
             <UserBlock text={turn.question} />
