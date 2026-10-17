@@ -391,6 +391,7 @@ export function LessonChat({
       }
       dock={isCheckTakeover && !checkDockVisible ? undefined : (
         <ComposeDock
+          tourId="tour-lesson-dock"
           primary={dockPrimary}
           onAsk={
             isReanswering
@@ -487,6 +488,7 @@ export function LessonChat({
                     <div key={`${turn.question}-${index}`} className="mt-5 space-y-3">
                       <UserBlock text={turn.question} />
                       <AssistantBlock
+                        id={index === 0 ? "tour-lesson-reply" : undefined}
                         text={turn.answer}
                         animationKey={`${courseId}:${replySessionId}:${skillId}:${current?.id ?? stepIndex}:check-follow-up:${index}`}
                       />
@@ -537,6 +539,7 @@ export function LessonChat({
                     <div key={`${turn.question}-${index}`} className="space-y-3">
                       <UserBlock text={turn.question} />
                       <AssistantBlock
+                        id={index === 0 ? "tour-lesson-reply" : undefined}
                         text={turn.answer}
                         animationKey={`${courseId}:${replySessionId}:${skillId}:${current?.id ?? stepIndex}:follow-up:${index}`}
                       />

@@ -1,3 +1,5 @@
+import { useSession } from "@/lib/auth/AuthProvider";
+import { readReviewProgress, writeReviewProgress } from "@/features/flashcards/lib/review-progress";
 import { SessionState } from "@/components/study/SessionState";
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -112,7 +114,12 @@ export function FlashcardDeck({
   const reduceMotion = useReducedMotion();
   const replySessionId = useId();
   const contentEpochRef = useRef(0);
-  const [reviewSessionId] = useState(() => crypto.randomUUID());
+  const userId = useSession()?.userId;
+  const progressKey = practiceSetId && userId
+    ? `kala:missed-review:v1:${JSON.stringify([userId, courseId, skillId, practiceSetId, practiceAttemptId, [...(missedItemIds ?? [])].sort()])}`
+    : null;
+  const [restoredProgress] = useState(() => readReviewProgress(progressKey));
+  const [reviewSessionId] = useState(() => restoredProgress?.sessionId ?? crypto.randomUUID());
   const [offset, setOffset] = useState(0);
   const { data: twin } = useTwin(courseId);
   const deckQuery = useFlashcardDeck(courseId, 20, skillId, mode, offset, { enabled: !practiceSetId });
@@ -197,12 +204,16 @@ export function FlashcardDeck({
   useEffect(() => {
     if (!data || responseSessionKey === initializedSessionRef.current) return;
     initializedSessionRef.current = responseSessionKey;
-    setSessionCards(data.cards);
-    setIndex(0);
+    const cardsById = new Map(data.cards.map((card) => [card.itemId, card]));
+    const saved = restoredProgress;
+    const valid = saved && saved.queue.every((id) => cardsById.has(id));
+    setSessionCards(valid ? saved.queue.map((id) => cardsById.get(id)!) : data.cards);
+    setIndex(valid ? saved.index : 0);
     setDeckDone(false);
-    postedRatingIdsRef.current.clear();
-    setRatingsByItemId({});
-  }, [data, responseSessionKey]);
+    postedRatingIdsRef.current = new Set(valid ? saved.posted : []);
+    reviewIdempotencyRef.current = valid ? saved.pending : null;
+    setRatingsByItemId(valid ? saved.ratings : {});
+  }, [data, responseSessionKey, restoredProgress]);
 
   useEffect(() => {
     if (!review.isPending) {
@@ -417,6 +428,7 @@ export function FlashcardDeck({
         }
         dock={
           <ComposeDock
+            tourId="tour-study-dock"
             primary={{ label: "Return to menu", onClick: onExit, icon: ArrowRightIcon }}
             secondary={{ label: "Reload deck", onClick: reloadDeck, icon: RotateCCWIcon }}
           />
@@ -484,7 +496,17 @@ export function FlashcardDeck({
     // The session contract records only the first rating for a card. A card
     // requeued after "Still learning" can be rated again locally without
     // writing a second item_reviews row.
+    const persistAdvanced = () => writeReviewProgress(progressKey,
+      ratingIndex + 1 >= nextQueue.length ? null : {
+        sessionId: reviewSessionId,
+        queue: nextQueue.map((item) => item.itemId),
+        index: ratingIndex + 1,
+        ratings: nextRatings,
+        posted: [...postedRatingIdsRef.current],
+        pending: null,
+      });
     if (alreadyPosted) {
+      persistAdvanced();
       if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
         showMissedReviewToast();
         onReviewDone?.(practiceSetId);
@@ -504,6 +526,16 @@ export function FlashcardDeck({
         key: crypto.randomUUID(),
       };
     }
+    // A refresh during POST resumes the prior card with the same key. The
+    // server can safely acknowledge the original write if it already landed.
+    writeReviewProgress(progressKey, {
+      sessionId: reviewSessionId,
+      queue: queueBeforeRating.map((item) => item.itemId),
+      index: ratingIndex,
+      ratings: ratingsByItemId,
+      posted: [...postedRatingIdsRef.current],
+      pending: reviewIdempotencyRef.current,
+    });
     review.mutate(
       {
         itemId: card.itemId,
@@ -518,6 +550,7 @@ export function FlashcardDeck({
           setPendingRemembered(null);
           postedRatingIdsRef.current.add(card.itemId);
           reviewIdempotencyRef.current = null;
+          persistAdvanced();
           if (practiceSetId && ratingIndex + 1 >= nextQueue.length) {
             showMissedReviewToast();
             onReviewDone?.(practiceSetId);
@@ -673,6 +706,7 @@ export function FlashcardDeck({
       }
       dock={
         <ComposeDock
+          tourId="tour-study-dock"
           primary={practiceSetId && phase === "back" && index + 1 >= deckCards.length
             ? { ...dockPrimary, label: "Got it · Back to results" }
             : dockPrimary}
@@ -855,6 +889,7 @@ export function FlashcardDeck({
           <div key={`${turn.question}-${turnIndex}`} className="space-y-3">
             <UserBlock text={turn.question} />
             <AssistantBlock
+              id={turnIndex === 0 ? "tour-study-reply" : undefined}
               text={turn.answer}
               animationKey={`${courseId}:${replySessionId}:${card.itemId}:follow-up:${turnIndex}`}
             />

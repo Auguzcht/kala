@@ -1,3 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
+import { fetchBankStatus } from "@/features/bank/api/bank.api";
+import { fetchPracticeSets } from "@/features/practice/api/practice.api";
+import type { Lesson } from "@/features/lessons/schema/lessons.schema";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   useEffect,
@@ -114,6 +120,9 @@ export function CourseShell({
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const session = useSession();
+  const queryClient = useQueryClient();
+  const [preparingTour, setPreparingTour] = useState(false);
+  const tourSelectionRef = useRef(0);
   // Resolve a dynamic section (/course/skill/:id) before falling back to the
   // static map, so a skill page shows "Skills / <skill>" rather than the
   // Workspace default it used to inherit.
@@ -207,12 +216,49 @@ export function CourseShell({
   const iconPlay = () => tourIconRef.current?.startAnimation();
   const iconStop = () => tourIconRef.current?.stopAnimation();
 
-  const startTour = () => {
-    setConfirmOpen(false);
-    useUI.getState().setTourStep(0);
-    if (pathname !== TOUR_STEPS[0].route) {
+  const startTour = async () => {
+    if (preparingTour) return;
+    setPreparingTour(true);
+    const requestId = ++tourSelectionRef.current;
+    try {
+      // Read availability and existing sets before leaving the current topic.
+      // Never select a random recommendation or a topic without material.
+      const [bank, saved] = await Promise.all([fetchBankStatus(courseId), fetchPracticeSets(courseId)]);
+      if (requestId !== tourSelectionRef.current) return;
+      const currentSkillId = pathname.startsWith("/course/skill/") ? pathname.split("/")[3] : undefined;
+      const readyLessons = queryClient.getQueriesData<Lesson>({ queryKey: ["lesson", courseId] })
+        .map(([, lesson]) => lesson).filter((lesson) => lesson?.status === "ready" && lesson.steps.length);
+      const sets = saved.sets.filter((set) => set.available !== false && set.status !== "unavailable");
+      const candidates = bank.bankServing
+        ? bank.skills.filter((skill) => skill.usable && skill.status !== "no_material" && skill.mcqReady >= 5)
+        : (twinForCrumb?.skills ?? []).filter((skill) =>
+            readyLessons.some((lesson) => lesson?.skillId === skill.skillId) ||
+            (skill.moduleRef && sets.some((set) => set.skillId === skill.skillId && set.size >= 5)));
+      const rank = (skillId: string) =>
+        (skillId === currentSkillId ? 4 : 0) +
+        (readyLessons.some((lesson) => lesson?.skillId === skillId) ? 8 : 0) +
+        (sets.some((set) => set.skillId === skillId) ? 2 : 0);
+      const chosen = candidates.sort((a, b) => rank(b.skillId) - rank(a.skillId))[0];
+      if (!chosen) {
+        toast.info("The tour needs a topic with at least five prepared questions. Open a ready topic and try again.");
+        return;
+      }
+      const topicSets = sets.filter((set) => set.skillId === chosen.skillId);
+      const set = topicSets.find((set) => (set.attemptedCount ?? 0) < set.size) ?? topicSets.find((set) => (set.attemptCount ?? 0) > 0);
+      useUI.getState().setTourContext({ skillId: chosen.skillId, setId: set?.setId });
+      setConfirmOpen(false);
+      useUI.getState().setTourStep(0);
       void navigate({ to: TOUR_STEPS[0].route });
+    } catch {
+      if (requestId === tourSelectionRef.current) toast.error("Could not check tour availability. Try again.");
+    } finally {
+      setPreparingTour(false);
     }
+  };
+
+  const closeTourConfirmation = () => {
+    tourSelectionRef.current += 1;
+    setConfirmOpen(false);
   };
 
   const bannerVisible = tourPrompted && pathname === "/course";
@@ -377,7 +423,7 @@ export function CourseShell({
       </div>
 
       {/* Pre-tour confirmation */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog open={confirmOpen} onOpenChange={(open) => open ? setConfirmOpen(true) : closeTourConfirmation()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Take the tour?</DialogTitle>
@@ -388,17 +434,20 @@ export function CourseShell({
           <DialogFooter>
             <button
               type="button"
-              onClick={() => setConfirmOpen(false)}
+              onClick={closeTourConfirmation}
               className="rounded-[3px] border border-primary/20 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
             >
               Maybe later
             </button>
             <button
               type="button"
-              onClick={startTour}
+              onClick={() => void startTour()}
+              disabled={preparingTour}
+              aria-busy={preparingTour}
               className="rounded-[3px] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              Start tour
+              {preparingTour ? <Spinner className="mr-1 inline-block" aria-hidden /> : null}
+              {preparingTour ? "Checking topics…" : "Start tour"}
             </button>
           </DialogFooter>
         </DialogContent>

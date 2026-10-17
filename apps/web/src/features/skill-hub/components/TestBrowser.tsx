@@ -110,14 +110,14 @@ export function TestBrowser({
  * informational, not a verdict (the mastery palette reserves red for the
  * instructor at-risk axis). */
 function AttemptPill({ attempt, questionCount }: { attempt: PracticeSetAttempt; questionCount: number }) {
-  if (attempt.attemptedCount === null) {
+  if ((attempt.attemptedCount ?? 0) === 0) {
     return (
       <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
         Not attempted
       </span>
     );
   }
-  if (attempt.attemptedCount > questionCount) {
+  if ((attempt.attemptedCount ?? 0) > questionCount) {
     return (
       <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
         Multiple attempts
@@ -127,7 +127,7 @@ function AttemptPill({ attempt, questionCount }: { attempt: PracticeSetAttempt; 
   const correct = attempt.correctCount ?? 0;
   return (
     <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
-      {correct}/{attempt.attemptedCount} correct
+      {correct}/{questionCount} correct
     </span>
   );
 }

@@ -1,3 +1,4 @@
+import type { HubTourContext } from "@/components/shell/student-tour";
 import { create } from "zustand";
 
 // EPHEMERAL UI STATE ONLY. Never put server data here (use TanStack Query),
@@ -10,6 +11,8 @@ interface UIState {
    * route change (which remounts pages but not the CourseShell layout) does
    * not lose where the tour is. */
   tourStep: number | null;
+  tourContext: HubTourContext | null;
+  setTourContext: (context: HubTourContext) => void;
   setTab: (tab: string) => void;
   setCommandOpen: (open: boolean) => void;
   setTourStep: (step: number | null) => void;
@@ -19,6 +22,8 @@ export const useUI = create<UIState>((set) => ({
   activeCourseTab: "overview",
   commandOpen: false,
   tourStep: null,
+  tourContext: null,
+  setTourContext: (tourContext) => set({ tourContext }),
   setTab: (activeCourseTab) => set({ activeCourseTab }),
   setCommandOpen: (commandOpen) => set({ commandOpen }),
   setTourStep: (tourStep) => set({ tourStep }),

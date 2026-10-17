@@ -48,7 +48,7 @@ export function TourRunner({
   dismissKey: (userId: string) => string;
 }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const session = useSession();
   const reduceMotion = useReducedMotion();
   const tourStep = useUI((s) => s.tourStep);
@@ -67,8 +67,11 @@ export function TourRunner({
     // Navigation in flight: the store advanced but this page isn't mounted
     // yet. The pathname dep re-runs this effect when it lands.
     if (!matchesTourRoute(pathname, step.route)) return;
+    if (step.search && Object.entries(step.search).some(([key, value]) =>
+      (search as Record<string, unknown>)[key] !== value)) return;
 
     let cancelled = false;
+    let submittingSample = false;
     let flowDestroy = false; // we destroyed on purpose (wait-state resolving)
     let instance: ReturnType<typeof driver> | null = null;
 
@@ -90,8 +93,8 @@ export function TourRunner({
         return;
       }
       setTourStep(index);
-      if (steps[index].route !== steps[tourStep].route && !steps[index].route.endsWith("/*")) {
-        void navigate({ to: steps[index].route });
+      if (steps[index].search || (steps[index].route !== steps[tourStep].route && !steps[index].route.endsWith("/*"))) {
+        void navigate({ to: steps[index].route, search: steps[index].search ?? {} });
       }
     };
 
@@ -109,8 +112,8 @@ export function TourRunner({
     // targeted. The native value setter is per-element-type — reusing
     // HTMLInputElement's setter on a textarea node is a silent no-op, not
     // an error, so this would have stalled the tour without ever throwing.
-    const askTutor = async (question: string) => {
-      const input = document.querySelector<HTMLTextAreaElement>("#tour-tutor-input textarea");
+    const askTutor = async (question: string, inputId = "tour-tutor-input") => {
+      const input = document.querySelector<HTMLTextAreaElement>(`#${inputId} textarea`);
       if (!input) return;
       const setter = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype,
@@ -120,7 +123,7 @@ export function TourRunner({
       input.dispatchEvent(new Event("input", { bubbles: true }));
       await frame();
       await frame();
-      document.querySelector<HTMLFormElement>("#tour-tutor-input")?.requestSubmit();
+      if (!cancelled) document.querySelector<HTMLFormElement>(`#${inputId}`)?.requestSubmit();
     };
 
     const scrollThenDrive = async (el: Element | null) => {
@@ -138,6 +141,8 @@ export function TourRunner({
     while (
       end < steps.length &&
       steps[end].route === step.route &&
+      !steps[end].search &&
+      !steps[end].waitFor &&
       !steps[end - 1].click &&
       !steps[end - 1].tutorAsk
     ) {
@@ -244,8 +249,11 @@ export function TourRunner({
           };
         } else if (s.tutorAsk) {
           popover.onNextClick = () => {
-            void askTutor(s.tutorAsk!.question);
-            advanceTo(globalIndex + 1);
+            if (submittingSample) return;
+            submittingSample = true;
+            void askTutor(s.tutorAsk!.question, s.tutorAsk!.inputId).then(() => {
+              if (!cancelled) advanceTo(globalIndex + 1);
+            });
           };
         } else if (isInstanceLast) {
           popover.onNextClick = () => advanceTo(end);
@@ -271,7 +279,7 @@ export function TourRunner({
       cancelled = true;
       instance?.destroy();
     };
-  }, [tourStep, pathname, navigate, setTourStep, session?.userId, reduceMotion, recheck, steps, dismissKey]);
+  }, [tourStep, pathname, search, navigate, setTourStep, session?.userId, reduceMotion, recheck, steps, dismissKey]);
 
   return null;
 }

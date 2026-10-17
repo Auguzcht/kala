@@ -198,7 +198,7 @@ function PracticeRecap({
                 </Button>
               ) : null}
               {hasAttemptId(results.attemptId) && onRetake ? (
-                <Button variant="outline" onClick={onRetake} disabled={isRetaking} className="group">
+                <Button id="tour-test-retake" variant="outline" onClick={onRetake} disabled={isRetaking} className="group">
                   {isRetaking ? <Spinner aria-hidden /> : <RotateCcwIcon aria-hidden className="transition-transform duration-200 group-hover:-rotate-90 motion-reduce:transition-none" />}
                   {isRetaking ? "Starting retake…" : "Retake this set"}
                 </Button>
@@ -644,6 +644,7 @@ export function PracticePanel({
       }
       dock={
         <ComposeDock
+          tourId="tour-test-dock"
           // Match the Lessons contract: the dock is a visible, locked
           // advance action until server-side grading succeeds. Compose before
           // an answer would make it both look like a tutor and offer an easy
@@ -710,6 +711,7 @@ export function PracticePanel({
           <div key={`${turn.question}-${index}`} className="space-y-3">
             <UserBlock text={turn.question} />
             <AssistantBlock
+              id={index === 0 ? "tour-test-reply" : undefined}
               text={turn.answer}
               animationKey={`${courseId}:${replySessionId}:${skillId}:${data?.setId ?? setId ?? "session"}:follow-up:${index}`}
             />

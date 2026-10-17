@@ -72,3 +72,63 @@ These checks are not browser or end-to-end coverage. Full web lint, typecheck, a
 12. Run the student tour through Lesson teaching/checks and Test menu/generation/preview/start/feedback. Check the new wait states with a slow set preparation.
 13. Open hub URLs with `start=false`, `start=0`, invalid tabs, or malformed optional fields. They must not accidentally start a session or crash the route.
 14. Separately verify the graduated-card eligibility case after the API follow-up above. Do not treat the UI-only review as closing that issue.
+
+
+## Smoke follow-up: cases 7, 9, 11 and 12
+
+Baseline: `80d64f3` on `feat/study-lesson-ui`. Scope remains `apps/web` only. No browser was opened, no deployment was performed, and verification made zero live model calls. Diagnostic and standalone Tutor tour content were left as they were.
+
+### Case 7 — partial Test preview
+
+The pill divided the correct count by the answered count. It now uses the saved set's question count: one correct answer in a five-question set reads **1/5 correct**, and zero answers reads **Not attempted**. Continue test still restores the first unanswered question; that working behavior was retained.
+
+Source: `src/features/skill-hub/components/TestBrowser.tsx:112`.
+
+### Case 9 — refresh during missed-question review
+
+The URL preserved the test attempt and exact missed item IDs, but the queue, cursor, ratings and posted-item set existed only in React memory. Refresh recreated the review session and started at card one.
+
+Missed-question review now stores IDs and local progress in tab-scoped `sessionStorage`, keyed by user, course, skill, set, attempt and the exact missed item IDs. It restores the same review session ID, current card, repeated-card queue, local ratings and already-posted IDs. Confirmed progress is saved after the request succeeds; repeat ratings remain local and do not create additional review writes. Completion clears the saved progress. Malformed/unavailable storage falls back to an in-memory session.
+
+If refresh happens during a save, the previous, unconfirmed card resumes with its pending idempotency key. Re-answering can safely retry that request instead of assuming the optimistic next-card state was saved. This intentionally differs from refreshing after a confirmed save, which resumes the next card.
+
+Sources: `src/features/flashcards/lib/review-progress.ts:1`; `src/features/flashcards/components/FlashcardDeck.tsx:118`, `:208`, `:499`, `:529`.
+
+### Case 11 — confirmed in code
+
+- Old Lessons topic choices open `/course/skill/$skillId?tab=lesson`: `src/routes/course/lessons.tsx:28`.
+- Old Flashcards topic choices open the same canonical hub with `tab=study`: `src/routes/course/flashcards.tsx:44`. Its intentional course-wide due-review entry remains separate.
+- Old Practice links carrying a skill/set replace themselves with the hub's Test preview, without `start=true`; fresh topic choices open the Test menu: `src/routes/course/practice.tsx:35`, `:43`.
+- Home Start practice creates a fresh `sessionId` on every click: `src/routes/course/index.tsx:147`. That ID participates in the generated-set cache key: `src/features/practice/hooks/use-practice.ts:24`. Repeated Home starts therefore do not reuse an old sitting's cached completed set. Once a set exists, refresh/polling reads it with GET instead of generating another set.
+
+These are code-confirmed navigation contracts, not new visual smoke results.
+
+### Case 12 — one-topic hub walkthrough
+
+The previous walkthrough independently selected topics through the old Lesson and Practice pickers. It could pick a different, material-free Test topic and wait on a disabled generation button.
+
+The tour now reads bank availability and saved tests before starting, selects one topic with at least five prepared questions, and pins that skill through Lesson, Study and Test. It prefers a ready lesson already in the query cache, then the current topic, with saved tests as another preference. It excludes topics marked no-material. On legacy courses without bank serving, it uses an already prepared lesson or a topic with material and an existing five-question set instead. Cancelling the availability dialog also cancels the pending tour launch. If no suitable topic exists, it reports that immediately instead of entering an unavailable Test flow.
+
+The hub section now demonstrates:
+
+1. Lesson teaching, its Continue/chat dock, a typed sample question, the reply, and the check/feedback when present. Teaching-only steps continue without waiting for a nonexistent check.
+2. Study on the same topic: Show answer, Still learning/Got it controls, chat toggle, a typed sample question and reply.
+3. Test on the same topic: reuse a saved test when available, preferring an unfinished sitting; otherwise create a set. A completed modern set explicitly starts a retake. Then select an answer, show feedback and the Test dock, and demonstrate its chat input/reply.
+
+Legacy completed sets without modern attempt metadata are not selected for automatic retake; the tour can create a new set instead. Diagnostic and standalone Tutor sections remain outside this follow-up's smoke scope.
+
+The runner now navigates on search changes even when the skill pathname is unchanged, separates asynchronous wait boundaries, targets each mode's own dock form, and submits the sample prompt **before** advancing. Existing explicit tour IDs remain; the shared dock adds mode-specific anchors. Preparation and reply waits remain bounded at 120 seconds, with an exit message when unavailable. This does not fix a failed or stalled backend generation job.
+
+Sources: `src/components/shell/CourseShell.tsx:219`; `src/components/shell/student-tour.ts:111`; `src/components/shell/TourRunner.tsx:70`, `:95`, `:114`, `:144`, `:252`; `src/components/study/ComposeDock.tsx`.
+
+### Verification and handoff
+
+- Lint: **0 errors, 18 existing warnings**.
+- Typecheck: passed.
+- Production build: passed, with the existing chunk-size advisory.
+- Code-only regression checks: passed for partial/complete/untouched score pills; confirmed cursor and repeated queue persistence; pending-write idempotency state; storage isolation and malformed data; saved-test reuse; no-material rejection; one skill across all three tour modes; actual tour form submission before navigation; earlier repeat-loop, navigation, cache and retake checks.
+- Checks used stubbed DOM/query/network callbacks against production functions. They did not open a browser or contact model endpoints. Temporary check scripts are outside the repository.
+
+**User smoke remaining:** repeat case 7; refresh on card two of missed review and again during a repeated miss in case 9; run case 12 from an already opened ready topic, checking all three dock demonstrations and automatic Test activation. Also run the tour when there is no saved test and when only a completed modern set exists. Confirm each hub breadcrumb stays on the same skill.
+
+**Closure status:** this addresses the reported frontend regressions, subject to that visual smoke. The previously documented API mismatch between graduated-card membership counts and Review due eligibility remains outside this branch's frontend-only authorization. Do not label the entire hub fully closed until that API issue is resolved or explicitly accepted as a separate follow-up.

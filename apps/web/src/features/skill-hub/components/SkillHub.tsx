@@ -190,7 +190,7 @@ export function SkillHub({
   if (tab === "study" && start) {
     return (
       <FlashcardDeck
-        key={`${courseId}:${skillId}:${studySetId ?? studyMode ?? "review"}:${attemptId ?? "latest"}`}
+        key={`${courseId}:${skillId}:${studySetId ?? studyMode ?? "review"}:${attemptId ?? "latest"}:${[...(missedItemIds ?? [])].sort().join(",")}`}
         practiceAttemptId={attemptId}
         courseId={courseId}
         skillId={skillId}

@@ -1,8 +1,6 @@
 // Shared config for the cross-page student walkthrough (DESIGN.md: the
-// driver.js onboarding tour; student path: diagnostic → lessons → practice →
-// tutor → twin). Every page follows the same overview → example → outcome
-// shape, several steps deep — the walkthrough is ~16 real highlights across
-// 5 pages by design, not one popover per page.
+// driver.js onboarding tour). Diagnostic, Tutor and Twin remain static;
+// the hub section below pins Lesson, Study and Test to one prepared topic.
 //
 // Copy rule (DESIGN.md): student-facing text is plain topic language. No
 // "Bloom's", no "RAG", no "your twin" until the closing Twin steps, where
@@ -10,6 +8,7 @@
 export type TourStepConfig = {
   /** A trailing /* follows the hub opened by a preceding click. */
   route: string;
+  search?: Record<string, string | boolean>;
   /** Element to highlight for this step. */
   selector: string;
   title: string;
@@ -27,7 +26,7 @@ export type TourStepConfig = {
   clickOnlyWhenClosed?: string;
   /** Ask the tutor a canned question when Next is hit: fill the input and
    * submit through the same path the Ask button uses. */
-  tutorAsk?: { question: string };
+  tutorAsk?: { question: string; inputId?: string };
   /** Wait for this selector before highlighting (never highlight against a
    * skeleton). If missing, show `waitState` instead and poll until ready. */
   waitFor?: string;
@@ -53,101 +52,6 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     selector: "#tour-diagnostic-submit",
     title: "Diagnostic",
     description: "Submit once every topic's answered. Your twin updates right after.",
-  },
-  // Lessons — module list, real lesson, continue, the check, the feedback.
-  {
-    route: "/course/lessons",
-    selector: "#tour-lessons-picker",
-    title: "Lessons",
-    description: "Lessons are grouped by topic, one skill at a time.",
-    click: true,
-    clickSelector: "#tour-lessons-first-card",
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-lesson-explain",
-    title: "Lessons",
-    description: "Kala teaches one skill at a time — explain, then check.",
-    waitFor: "#tour-lesson-explain",
-    waitState: {
-      selector: "#tour-lesson-generating",
-      description: "Kala is writing this lesson…",
-    },
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-lesson-continue",
-    title: "Lessons",
-    description: "You confirm you're ready before moving on.",
-    click: true,
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-lesson-check",
-    title: "Lessons",
-    description: "One quick check on what Kala just taught — correct answers advance the lesson.",
-    click: true,
-    clickSelector: "#tour-first-choice",
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-lesson-check-feedback",
-    title: "Lessons",
-    description: "Right or wrong, you see why — and your twin moves.",
-  },
-  // Practice — landing (choose or take the recommendation), then the
-  // session: overview, choices, graded result (the twin-moved moment).
-  // The landing step is new here — Practice used to land straight on the
-  // session panel; now that a topic choice comes first (Stage 3 of the
-  // AI overhaul), #tour-practice-card doesn't exist until that choice is
-  // made, so the tour has to make it the same way Lessons' own tour
-  // already clicks through its landing grid.
-  {
-    route: "/course/practice",
-    selector: "#tour-practice-picker",
-    title: "Practice",
-    description: "Pick a topic, or take the recommended one.",
-    click: true,
-    clickSelector: "#tour-practice-recommended, #tour-practice-picker button",
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-test-new-set",
-    title: "Test",
-    description: "Create a saved set for this topic before starting your test.",
-    click: true,
-    waitFor: "#tour-test-new-set:not(:disabled)",
-    waitState: { selector: "#tour-test-new-set", description: "Checking question availability…" },
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-test-start",
-    title: "Test",
-    description: "Preview the questions, then start when you are ready.",
-    click: true,
-    waitFor: "#tour-test-start:not(:disabled)",
-    waitState: { selector: "#tour-test-start", description: "Preparing your test…" },
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-practice-card",
-    title: "Practice",
-    description: "Targeted at your weakest skill, not random.",
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-practice-choices",
-    title: "Practice",
-    description: "Pick the closest match — the result shows why, either way.",
-    click: true,
-    clickSelector: "#tour-first-choice",
-  },
-  {
-    route: "/course/skill/*",
-    selector: "#tour-practice-feedback",
-    title: "Practice",
-    description:
-      "Right or wrong, you see why — and your twin moves. Streak and XP tick up as you practice.",
   },
   // Tutor — ask a real question, highlight the grounded answer.
   {
@@ -198,4 +102,83 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
 // banner eligible.
 export function studentTourDismissKey(userId: string): string {
   return `kala.student.tour.${userId}`;
+}
+
+
+export type HubTourContext = { skillId: string; setId?: string };
+
+/** All hub modes share one topic selected before leaving the current page. */
+export function createStudentTour(context: HubTourContext): readonly TourStepConfig[] {
+  const route = `/course/skill/${context.skillId}`;
+  const hub = (selector: string, title: string, description: string, extra: Partial<TourStepConfig> = {}): TourStepConfig =>
+    ({ route, selector, title, description, ...extra });
+  const chat = (mode: string): TourStepConfig[] => [
+    hub(`#tour-${mode}-dock-toggle`, "Ask about this topic", "Use the chat button to switch this dock from actions to a follow-up question.", { click: true }),
+    hub(`#tour-${mode}-dock-input`, "Try a follow-up", "Next types and sends a sample question about the content on this card.", {
+      tutorAsk: { question: "Can you explain this with one short example?", inputId: `tour-${mode}-dock-input` },
+    }),
+    hub(`#tour-${mode}-reply`, "Stay on the same topic", "Kala answers in this session. The dock lets you ask another question or return to the action.", {
+      waitFor: `#tour-${mode}-reply`,
+      waitState: { selector: `#tour-${mode}-dock`, description: "Waiting for your follow-up answer…" },
+    }),
+    hub(`#tour-${mode}-dock-toggle`, "Back to the action", "Close the input to restore the session controls.", { click: true }),
+  ];
+  return [
+    ...TOUR_STEPS.slice(0, 3),
+    hub("#tour-lesson-explain", "Lesson", "Learn this topic, then use the dock to continue or ask a follow-up.", {
+      search: { tab: "lesson" }, waitFor: "#tour-lesson-explain",
+      waitState: { selector: "#tour-lesson-generating", description: "Preparing this topic's lesson…" },
+    }),
+    ...chat("lesson"),
+    hub("#tour-lesson-continue", "Lesson controls", "Continue opens a check when this step has one. Teaching-only steps move to the next explanation.", { click: true }),
+    hub("#tour-lesson-check, #tour-lesson-explain", "Check your understanding", "When this step has a check, Next selects an answer. Otherwise the lesson continues with teaching.", {
+      click: true, clickSelector: "#tour-first-choice",
+      waitFor: "#tour-lesson-check, #tour-lesson-explain",
+      waitState: { selector: "main", description: "Opening the lesson step…" },
+    }),
+    hub("#tour-lesson-check-feedback, #tour-lesson-explain", "Lesson feedback", "Check feedback stays visible. The dock offers the next step or another try after answering.", {
+      waitFor: "#tour-lesson-check-feedback, #tour-lesson-explain",
+      waitState: { selector: "#tour-lesson-check", description: "Checking your answer…" },
+    }),
+    hub("#tour-study-dock", "Study", "The same topic, now for recall. Show the answer before rating the card.", {
+      search: { tab: "study", start: true, mode: "all" },
+      waitFor: "#tour-study-dock-primary:not(:disabled)",
+      waitState: { selector: "main", description: "Preparing this topic's cards…" },
+      click: true, clickSelector: "#tour-study-dock-primary",
+    }),
+    hub("#tour-study-dock", "Rate your recall", "Still learning repeats this card later in the session. Got it clears it from this session's queue."),
+    ...chat("study"),
+    ...(context.setId ? [
+      hub("#tour-test-start", "Saved test", "Reuse a saved test on this same topic. Start, continue, or open its results.", {
+        search: { tab: "test", setId: context.setId }, click: true,
+        waitFor: "#tour-test-start:not(:disabled)",
+        waitState: { selector: "main", description: "Loading the saved test…" },
+      }),
+      hub("#tour-test-retake, #tour-practice-card", "Test sitting", "If this set is complete, Next starts a new retake. Otherwise it keeps your current sitting.", {
+        click: true, clickSelector: "#tour-test-retake",
+        waitFor: "#tour-test-retake:not(:disabled), #tour-practice-card",
+        waitState: { selector: "main", description: "Loading the test sitting…" },
+      }),
+    ] : [
+      hub("#tour-test-new-set", "Test", "Create a saved set for this same topic. Next activates the button once questions are available.", {
+        search: { tab: "test" }, click: true,
+        waitFor: "#tour-test-new-set:not(:disabled)",
+        waitState: { selector: "main", description: "Checking this topic's questions…" },
+      }),
+      hub("#tour-test-start", "Test preview", "Preview the questions, then start this saved set.", {
+        click: true, waitFor: "#tour-test-start:not(:disabled)",
+        waitState: { selector: "main", description: "Preparing the test set…" },
+      }),
+    ]),
+    hub("#tour-practice-choices", "Answer a question", "Next selects an answer. Feedback stays visible until you use the dock.", {
+      click: true, clickSelector: "#tour-first-choice", waitFor: "#tour-first-choice:not(:disabled)",
+      waitState: { selector: "main", description: "Loading the question…" },
+    }),
+    hub("#tour-practice-feedback", "Test feedback", "The dock now offers Next question or See results, plus chat about the answer.", {
+      waitFor: "#tour-practice-feedback",
+      waitState: { selector: "#tour-test-dock", description: "Checking the answer…" },
+    }),
+    ...chat("test"),
+    ...TOUR_STEPS.slice(3),
+  ];
 }

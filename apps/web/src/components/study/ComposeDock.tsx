@@ -47,6 +47,7 @@ export function ComposeDock({
   attachmentSlot,
   attachmentChips,
   inputId,
+  tourId,
 }: {
   primary?: ComposeDockPrimary | null;
   secondary?: ComposeDockPrimary;
@@ -58,6 +59,7 @@ export function ComposeDock({
   attachmentChips?: ReactNode;
   /** Applied to PromptInput's form to preserve the Tutor tour contract. */
   inputId?: string;
+  tourId?: string;
 }) {
   const canToggle = Boolean(primary) && Boolean(onAsk);
   const [userMode, setUserMode] = useState<"action" | "compose">("action");
@@ -80,7 +82,7 @@ export function ComposeDock({
   const DOCK_HEIGHT = "h-12";
 
   return (
-    <div className="bg-gradient-to-t from-background via-background/95 to-background/0 px-4 pb-3 pt-6 backdrop-blur-sm">
+    <div id={tourId} className="bg-gradient-to-t from-background via-background/95 to-background/0 px-4 pb-3 pt-6 backdrop-blur-sm">
       <div className="mx-auto flex max-w-[800px] items-end gap-2">
         <div className="min-w-0 flex-1">
           {attachmentChips ? (
@@ -92,7 +94,7 @@ export function ComposeDock({
               <div className="flex w-full gap-2">
                 <button
                   type="button"
-                  id={secondary.id}
+                  id={secondary.id ?? (tourId ? `${tourId}-secondary` : undefined)}
                   onClick={secondary.onClick}
                   disabled={secondary.disabled || secondary.pending}
                   aria-busy={secondary.pending || undefined}
@@ -113,7 +115,7 @@ export function ComposeDock({
                 </button>
                 <button
                   type="button"
-                  id={primary.id}
+                  id={primary.id ?? (tourId ? `${tourId}-primary` : undefined)}
                   onClick={primary.onClick}
                   disabled={primary.disabled || primary.pending}
                   aria-busy={primary.pending || undefined}
@@ -136,7 +138,7 @@ export function ComposeDock({
             ) : (
               <button
                 type="button"
-                id={primary.id}
+                id={primary.id ?? (tourId ? `${tourId}-primary` : undefined)}
                 onClick={primary.onClick}
                 disabled={primary.disabled || primary.pending}
                 aria-busy={primary.pending || undefined}
@@ -160,7 +162,7 @@ export function ComposeDock({
             )
           ) : (
             <PromptInput
-              id={inputId}
+              id={inputId ?? (tourId ? `${tourId}-input` : undefined)}
               onSubmit={(message) => {
                 if (message.text.trim()) onAsk?.(message.text);
               }}
@@ -197,6 +199,7 @@ export function ComposeDock({
         {canToggle ? (
           <button
             type="button"
+            id={tourId ? `${tourId}-toggle` : undefined}
             onClick={() => setUserMode((mode) => mode === "action" ? "compose" : "action")}
             onMouseEnter={toggleIcon.play}
             onMouseLeave={toggleIcon.stop}
