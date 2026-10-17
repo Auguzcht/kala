@@ -16,6 +16,7 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { CheckIcon } from "@/components/ui/check";
 import { RotateCCWIcon } from "@/components/ui/rotate-ccw";
+import { Clock3Icon } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
 import type { FlashcardCard, FlashcardDeck as FlashcardDeckData } from "@/features/flashcards/schema/flashcards.schema";
+import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 
 // Study mode: a flip card, not a quiz. Front shows the prompt, tapping flips
 // to the back (answer label + explanation), and the student marks it "Got it"
@@ -71,21 +73,16 @@ const ReviewSpinnerIcon = forwardRef<ReviewIconHandle, { size?: number }>(functi
 });
 
 function StateBadge({ state }: { state: FlashcardCard["state"] }) {
-  const label = state === "due" ? "Due" : state[0].toUpperCase() + state.slice(1);
+  const presentation = state === "due" ? null : cardStatePresentation(state);
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground",
-        state === "due" ? "border-brand-orange/50 bg-brand-orange/10" : "border-border bg-muted"
+        "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10.5px] font-semibold",
+        presentation?.className ?? "border-brand-orange/40 bg-brand-orange/10 text-brand-orange"
       )}
     >
-      <span
-        className={cn(
-          "size-1.5 rounded-sm",
-          state === "due" ? "bg-brand-orange" : "bg-muted-foreground/60"
-        )}
-      />
-      {label}
+      {state === "due" ? <Clock3Icon size={12} aria-hidden /> : null}
+      {presentation?.label ?? "Due"}
     </span>
   );
 }

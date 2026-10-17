@@ -1,4 +1,5 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { Clock3Icon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useFlashcardMembership } from "@/features/flashcards/hooks/use-flashcards";
 import type { FlashcardMembershipCard } from "@/features/flashcards/schema/flashcards.schema";
 import { useBankStatus } from "@/features/bank";
+import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 
 // The Study tab's browse view — the materials list that sits in front of the
 // sequential flip session, the same browse-then-commit shape the Test tab
@@ -189,21 +191,19 @@ export function StudyBrowser({
 
 /** Card memory state is separate from the skill mastery band shown above. */
 function StateBadge({ state, due }: { state: FlashcardMembershipCard["state"]; due: boolean }) {
-  const label = state === "due" ? "Due" : state[0].toUpperCase() + state.slice(1);
+  const presentation = state === "due" ? null : cardStatePresentation(state);
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      <span
-        className={cn(
-          "rounded-sm px-2 py-0.5 text-[10.5px] font-semibold",
-          due
-            ? "bg-brand-orange/15 text-foreground"
-            : "bg-muted text-muted-foreground"
-        )}
-      >
-        {label}
-      </span>
-      {due && state !== "due" ? (
-        <span className="text-[10.5px] text-brand-orange">Due</span>
+      {presentation ? (
+        <span className={cn("rounded-sm border px-2 py-0.5 text-[10.5px] font-semibold", presentation.className)}>
+          {presentation.label}
+        </span>
+      ) : null}
+      {due || state === "due" ? (
+        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-brand-orange">
+          <Clock3Icon size={12} aria-hidden />
+          Due
+        </span>
       ) : null}
     </span>
   );
