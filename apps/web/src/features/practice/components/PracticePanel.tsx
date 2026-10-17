@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { ArrowLeftIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { ComposeDock } from "@/components/study/ComposeDock";
@@ -195,15 +196,17 @@ function PracticeRecap({
                 </Button>
               ) : null}
               {hasAttemptId(results.attemptId) && onRetake ? (
-                <Button variant="outline" onClick={onRetake} disabled={isRetaking}>
+                <Button variant="outline" onClick={onRetake} disabled={isRetaking} className="group">
+                  <RotateCcwIcon aria-hidden className="transition-transform duration-200 group-hover:-rotate-90 motion-reduce:transition-none" />
                   {isRetaking ? "Starting retake…" : "Retake this set"}
                 </Button>
               ) : null}
-              <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet}>
-                <ArrowRightIcon size={16} aria-hidden />
+              <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet} className="group">
+                <PlusIcon aria-hidden className="transition-transform duration-200 group-hover:scale-125 motion-reduce:transition-none" />
                 {isCreatingSet ? "Loading new set…" : "New set"}
               </Button>
-              <Button variant="outline" onClick={onDone}>
+              <Button variant="outline" onClick={onDone} className="group">
+                <ArrowLeftIcon aria-hidden className="transition-transform duration-200 group-hover:-translate-x-1 motion-reduce:transition-none" />
                 Back to tests
               </Button>
             </div>
