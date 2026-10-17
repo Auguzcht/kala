@@ -111,7 +111,10 @@ export function StudyBrowser({
 
   const counts = data?.counts ?? { new: 0, learning: 0, slipping: 0, known: 0, dueToday: 0 };
   const dueNow = cards.filter(isDueNow).length;
-  const dueLaterToday = Math.max(0, counts.dueToday - dueNow);
+  // Claiming an untouched card creates a due timestamp before its first rating.
+  // Exclude those timestamps from both review counts and the later-today count.
+  const scheduledNow = cards.filter((card) => card.due || card.state === "due").length;
+  const dueLaterToday = Math.max(0, counts.dueToday - scheduledNow);
   const hasNewCards = counts.new > 0;
   const startWithAll = dueNow === 0 && hasNewCards;
   const studyLabel = dueNow > 0
@@ -270,7 +273,7 @@ export function StudyBrowser({
           >
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 text-sm font-medium text-foreground">{card.prompt}</p>
-              <StateBadge state={card.state} due={card.due} />
+              <StateBadge state={card.state} due={isDueNow(card)} />
             </div>
             {showAnswers ? (
               <div className="flex items-start gap-2 border-l-2 border-brand-green/40 pl-3">
@@ -294,7 +297,7 @@ export function StudyBrowser({
 }
 
 function isDueNow(card: FlashcardMembershipCard): boolean {
-  return card.due || card.state === "due";
+  return card.state !== "new" && (card.due || card.state === "due");
 }
 
 type CardFilter = "all" | "due" | FlashcardMembershipCard["state"];
