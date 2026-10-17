@@ -30,7 +30,7 @@ select expected.constraint_name, count(c.oid) as found_count
     ('practice_answer_results_user_id_set_id_item_id_key')
   ) as expected(constraint_name)
   left join pg_constraint c on c.conname = expected.constraint_name
-  left join pg_namespace n on n.oid = c.connamespace and n.nspname = 'public'
+    and c.connamespace = 'public'::regnamespace
  group by expected.constraint_name
  order by expected.constraint_name;
 ```
