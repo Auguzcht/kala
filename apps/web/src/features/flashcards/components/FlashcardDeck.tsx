@@ -412,17 +412,14 @@ export function FlashcardDeck({
         }
         dock={
           <ComposeDock
-            primary={
-              canTest
-                ? {
-                    label: testMe.isPending ? "Building your test…" : "Test me on these",
-                    onClick: testMeOnThese,
-                    disabled: testMe.isPending,
-                    pending: testMe.isPending,
-                    icon: ArrowRightIcon,
-                  }
-                : { label: "Reload deck", onClick: reloadDeck, icon: ArrowRightIcon }
-            }
+            primary={{ label: "Return to menu", onClick: onExit, icon: ArrowRightIcon }}
+            secondary={canTest ? {
+              label: testMe.isPending ? "Building your test…" : "Test me on these",
+              onClick: testMeOnThese,
+              disabled: testMe.isPending,
+              pending: testMe.isPending,
+              icon: ArrowRightIcon,
+            } : undefined}
           />
         }
       >
@@ -447,18 +444,14 @@ export function FlashcardDeck({
                 mastery. Studying alone does not.
               </p>
             ) : null}
-            <div className="mt-4">
-              <Button variant="orange" size="sm" onClick={onExit}>
-                Done
-              </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={reloadDeck}>
                 Reload deck
               </Button>
               {mode === "all" && data.hasMore ? (
                 <Button
-                  variant="orange"
+                  variant="outline"
                   size="sm"
-                  className="ml-2"
                   onClick={continueNextGroup}
                 >
                   Continue with next 20
@@ -731,7 +724,8 @@ export function FlashcardDeck({
             </span>
             {practiceSetId ? null : <StateBadge state={card.state} />}
             {isSecondLook ? (
-              <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
+              <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
+                <RotateCCWIcon size={12} aria-hidden />
                 Second look
               </span>
             ) : null}
