@@ -488,15 +488,22 @@ export function PracticePanel({
   }
 
   function askAboutItem(question: string) {
+    if (!lastResult) return;
+    const selectedLabel = item.choices.find((c) => c.id === selectedChoice)?.label ?? "unknown";
+    const correctLabel = lastResult.correctAnswerText ??
+      item.choices.find((c) => c.id === lastResult.correctOptionId)?.label ??
+      "unknown";
     setPendingFollowUp(question);
     followUp.mutate(
       {
         question: [
-          "You are Kala helping a student with one practice question.",
-          "Before the question is graded, guide their reasoning without stating which option is correct. After grading, explain clearly if asked.",
+          "You are Kala helping a student review one practice question they have already answered.",
+          "Explain clearly and directly. Help them understand why the correct answer is right and, if they were wrong, why their choice was not.",
           `Question: ${item.prompt}`,
-          `Options: ${item.choices.map((choice) => `${choice.id}: ${choice.label}`).join(" | ")}`,
-          lastResult ? `The student was ${lastResult.correct ? "correct" : "incorrect"}.` : "The student has not submitted an answer yet.",
+          `Options: ${item.choices.map((c) => `${c.id}: ${c.label}`).join(" | ")}`,
+          `Student's answer: ${selectedLabel}`,
+          `Correct answer: ${correctLabel}`,
+          `The student was ${lastResult.correct ? "correct" : "incorrect"}.`,
           `Student question: ${question}`,
         ].join("\n\n"),
       },
