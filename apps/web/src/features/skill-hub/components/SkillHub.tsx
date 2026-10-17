@@ -5,7 +5,7 @@ import { BookOpenIcon } from "@/components/ui/book-open";
 import { ChevronLeftIcon } from "@/components/ui/chevron-left";
 import { LayersIcon } from "@/components/ui/layers";
 import { ZapIcon } from "@/components/ui/zap";
-import { MasteryBand } from "@/components/kala";
+import { BloomsLadder, MasteryBand, MasteryRing } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTwin } from "@/features/twin";
@@ -297,24 +297,21 @@ function SkillHubFrame({
       >
         <ChevronLeftIcon size={14} /> All skills
       </button>
-      {/* Skill header — unchanged from the tile version: title, mastery band,
-          and the bloom/module/attempts line. The one part that already read
-          right, so the tab change is confined to what sits under it. */}
+      {/* The ring and ladder show the twin's current estimate and Bloom level;
+          the qualitative band keeps the number in context. */}
       <div className="border bg-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="font-display text-xl font-semibold text-foreground">{skill.name}</h1>
-          <MasteryBand band={skill.band} />
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {skill.bloomLevel ? (
-            <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold capitalize">
-              {skill.bloomLevel}
-            </span>
-          ) : null}
-          {skill.moduleRef ? <span className="capitalize">{skill.moduleRef}</span> : null}
-          <span className="font-mono">
-            {skill.attempts} {skill.attempts === 1 ? "attempt" : "attempts"}
-          </span>
+        <div className="flex flex-wrap items-start gap-4">
+          <MasteryRing estimate={skill.estimate} size={56} />
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-xl font-semibold text-foreground">{skill.name}</h1>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {skill.moduleRef ?? "Module not assigned"} · {skill.attempts} {skill.attempts === 1 ? "attempt" : "attempts"}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <MasteryBand band={skill.band} />
+              <BloomsLadder skills={[skill]} className="w-full max-w-[560px] gap-0.5" />
+            </div>
+          </div>
         </div>
       </div>
 
