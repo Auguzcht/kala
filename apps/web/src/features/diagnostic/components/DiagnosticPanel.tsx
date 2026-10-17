@@ -21,7 +21,7 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { MasteryDelta, CornerBrackets } from "@/components/kala";
+import { MasteryDelta } from "@/components/kala";
 import { TransitionPanel } from "@/components/motion/transition-panel";
 import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 
@@ -231,9 +231,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
           transition={{ duration: reduceMotion ? 0 : 0.35, ease: "easeInOut" }}
         >
         {[
-          <div key="answering" id="tour-diagnostic-card" className="relative border bg-card">
-            <CornerBrackets />
-
+          <div key="answering" id="tour-diagnostic-card">
             <StudyStream height="h-[55vh]">
               {hasNoMaterialSkills ? (
                 <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
@@ -246,18 +244,17 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
                 </p>
               ) : null}
               {data.questions.map((q, qi) => (
-                <div key={q.id} className="rounded-md border bg-card p-4">
-                  <AnswerableCard
-                    prompt={q.prompt}
-                    choices={q.choices}
-                    selectedId={selections[q.id] ?? null}
-                    onSelect={(choiceId) => setSelections((s) => ({ ...s, [q.id]: choiceId }))}
-                    result={null}
-                    isPending={submit.isPending}
-                    choicesAnchorId={qi === 0 ? "tour-diagnostic-choices" : undefined}
-                    firstChoiceId={null}
-                  />
-                </div>
+                <AnswerableCard
+                  key={q.id}
+                  prompt={q.prompt}
+                  choices={q.choices}
+                  selectedId={selections[q.id] ?? null}
+                  onSelect={(choiceId) => setSelections((s) => ({ ...s, [q.id]: choiceId }))}
+                  result={null}
+                  isPending={submit.isPending}
+                  choicesAnchorId={qi === 0 ? "tour-diagnostic-choices" : undefined}
+                  firstChoiceId={null}
+                />
               ))}
             </StudyStream>
           </div>,

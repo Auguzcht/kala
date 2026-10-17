@@ -4,7 +4,7 @@ import type { CheckIconHandle } from "@/components/ui/check";
 import { XIcon } from "@/components/ui/x";
 import type { XIconHandle } from "@/components/ui/x";
 import { MarkdownText } from "@/components/study/MarkdownText";
-import { MasteryBand, bandFor } from "@/components/kala";
+import { CornerBrackets, MasteryBand, bandFor } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,9 @@ export function AnswerableCard({
   isPending = false,
   actions,
   meta,
+  framed = true,
+  id,
+  eyebrow,
   choicesAnchorId,
   resultAnchorId,
   firstChoiceId = "tour-first-choice",
@@ -50,6 +53,12 @@ export function AnswerableCard({
   isPending?: boolean;
   actions?: ReactNode;
   meta?: ReactNode;
+  /** Render the shared instrument-panel frame around this question. */
+  framed?: boolean;
+  /** Optional surface or tour anchor id for the card frame. */
+  id?: string;
+  /** Small label shown above the prompt inside the frame. */
+  eyebrow?: string;
   /** Tour anchor for the choices block. */
   choicesAnchorId?: string;
   /** Tour anchor for the graded-result block. */
@@ -92,7 +101,15 @@ export function AnswerableCard({
   }, [isPending]);
 
   return (
-    <div className="space-y-4">
+    <div
+      id={id}
+      className={framed ? "relative border bg-card px-5 py-6 sm:px-6" : undefined}
+    >
+      {framed ? <CornerBrackets /> : null}
+      <div className="space-y-4">
+      {eyebrow ? (
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{eyebrow}</p>
+      ) : null}
       <p className="text-lg font-medium leading-relaxed text-foreground">{prompt}</p>
 
       <div id={choicesAnchorId} className="flex flex-col gap-2">
@@ -183,6 +200,7 @@ export function AnswerableCard({
           ) : null}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

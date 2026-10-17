@@ -407,9 +407,10 @@ export function LessonChat({
             transition={{ duration: reduceMotion ? 0 : 0.18 }}
             className="h-full min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-10 sm:pt-14"
           >
-            <div id="tour-lesson-check" className="mx-auto w-full max-w-[800px]">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Check yourself</p>
+            <div className="mx-auto w-full max-w-[800px]">
               <AnswerableCard
+                id="tour-lesson-check"
+                eyebrow="Check yourself"
                 prompt={current.check.prompt}
                 choices={current.check.choices}
                 selectedId={selected}
@@ -425,37 +426,33 @@ export function LessonChat({
                       }
                     : null
                 }
-                actions={
-                  // Keep the label stable. The old behavior swapped the
-                  // button into a "Thinking…" spinner, which read as "this
-                  // button is loading" rather than "Kala is answering below"
-                  // — the pending state now lives in the thread instead.
-                  // Disabled once this kind has been answered: the button has
-                  // nothing left to do, and leaving it live invited repeat
-                  // taps that produced no request and no feedback.
-                  !result ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCheckThread("hint")}
-                      disabled={checkAsk.isPending || answeredKinds.has("hint")}
-                    >
-                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                      Hint
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCheckThread("explain")}
-                      disabled={checkAsk.isPending || answeredKinds.has("explain")}
-                    >
-                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                      Explain
-                    </Button>
-                  )
-                }
               />
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {/* Keep the label stable. Pending tutor output lives in the
+                    thread below, and the button disables after its kind has
+                    been answered to prevent a no-op repeat tap. */}
+                {!result ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openCheckThread("hint")}
+                    disabled={checkAsk.isPending || answeredKinds.has("hint")}
+                  >
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    Hint
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openCheckThread("explain")}
+                    disabled={checkAsk.isPending || answeredKinds.has("explain")}
+                  >
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    Explain
+                  </Button>
+                )}
+              </div>
               {checkThreadOpen ? (
                 <div ref={checkThreadRef} className="mt-8 scroll-mt-4 border-t pt-6">
                   {/* One AssistantBlock for the whole thread: it renders

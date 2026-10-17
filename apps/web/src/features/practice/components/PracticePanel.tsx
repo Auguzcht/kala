@@ -649,38 +649,37 @@ export function PracticePanel({
             You&apos;ve seen every question for this skill. Here are the ones worth another look.
           </div>
         ) : null}
-        <div id="tour-practice-card" className="border bg-card px-5 py-6 sm:px-6">
-          <AnswerableCard
-            prompt={item.prompt}
-            choices={item.choices}
-            selectedId={selectedChoice}
-            onSelect={handleAnswer}
-            choicesAnchorId="tour-practice-choices"
-            resultAnchorId="tour-practice-feedback"
-            result={
-              lastResult
-                ? {
-                    correct: lastResult.correct,
-                    explanation: lastResult.explanation,
-                    mastery: lastResult.mastery,
-                    correctChoiceId: lastResult.correctOptionId,
-                  }
-                : null
-            }
-            isPending={submit.isPending}
-            meta={
-              <>
-                {bandTransition ? (
-                  <span className="capitalize">
-                    {bandTransition.from} → {bandTransition.to}
-                  </span>
-                ) : null}
-                {streak > 1 ? <span>{streak} in a row</span> : null}
-                {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
-              </>
-            }
-          />
-        </div>
+        <AnswerableCard
+          id="tour-practice-card"
+          prompt={item.prompt}
+          choices={item.choices}
+          selectedId={selectedChoice}
+          onSelect={handleAnswer}
+          choicesAnchorId="tour-practice-choices"
+          resultAnchorId="tour-practice-feedback"
+          result={
+            lastResult
+              ? {
+                  correct: lastResult.correct,
+                  explanation: lastResult.explanation,
+                  mastery: lastResult.mastery,
+                  correctChoiceId: lastResult.correctOptionId,
+                }
+              : null
+          }
+          isPending={submit.isPending}
+          meta={
+            <>
+              {bandTransition ? (
+                <span className="capitalize">
+                  {bandTransition.from} → {bandTransition.to}
+                </span>
+              ) : null}
+              {streak > 1 ? <span>{streak} in a row</span> : null}
+              {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
+            </>
+          }
+        />
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">
             <UserBlock text={turn.question} />
