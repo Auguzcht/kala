@@ -13,7 +13,7 @@ from app.db import supabase as db
 logger = logging.getLogger("kala.api.bank")
 
 
-def kick_bank(course_id: str, trigger: str) -> bool:
+def kick_bank(course_id: str, trigger: str, *, lesson_id: str | None = None) -> bool:
     now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=60)
     try:
@@ -29,9 +29,12 @@ def kick_bank(course_id: str, trigger: str) -> bool:
         settings = get_settings()
         if not settings.worker_function_arn:
             raise RuntimeError("WORKER_FUNCTION_ARN is not configured")
+        event = {"trigger": trigger, "courseId": course_id, "chainDepth": 0}
+        if lesson_id:
+            event["lessonId"] = lesson_id
         boto3.client("lambda", region_name=settings.aws_region).invoke(
             FunctionName=settings.worker_function_arn, InvocationType="Event",
-            Payload=json.dumps({"trigger": trigger, "courseId": course_id, "chainDepth": 0}).encode(),
+            Payload=json.dumps(event).encode(),
         )
     except Exception as exc:  # noqa: BLE001 — a kick never fails its caller
         logger.warning("bank kick invoke failed course_id=%s trigger=%s error=%s", course_id, trigger, exc)

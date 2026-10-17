@@ -4,6 +4,7 @@ import json
 from app import handler as handler_module
 from app.handler import handler
 from app.jobs import (
+    assign_lesson_checks,
     bank_build,
     embed_backfill,
     embed_bank_items,
@@ -211,3 +212,12 @@ def test_targeted_skill_changes_recompute_then_build_only_one_course(monkeypatch
     assert result["errors"] == {}
     assert [name for name, _ in calls] == ["tag", "bank"]
     assert all(kwargs["course_id"] == "course-1" for _, kwargs in calls)
+
+
+def test_lesson_check_trigger_runs_only_the_requested_lesson(monkeypatch):
+    calls = []
+    monkeypatch.setattr(assign_lesson_checks, "run", lambda **kw: calls.append(kw) or {"assigned": 1})
+    result = handler({"trigger": "lesson_checks", "courseId": "course",
+                      "lessonId": "lesson-1"}, None)
+    assert result["errors"] == {}
+    assert calls == [{"institution_id": None, "lesson_id": "lesson-1"}]

@@ -23,6 +23,32 @@ def test_assembly_uses_explicit_lesson_step_columns_without_embedding(monkeypatc
     assert "embedding" not in selected[0]
 
 
+def test_assembly_kicks_check_assignment_without_writing_checks(monkeypatch):
+    calls = []
+    updates = []
+
+    def fake_select(table, params):
+        if table == "guided_lesson_steps":
+            return [{"id": "step", "position": 0, "summary": "Topic",
+                     "detail_points": [], "bloom_level": "remember", "check_item_id": None}]
+        if table == "courses":
+            return [{"bank_serving": True}]
+        if table == "skill_bank_state":
+            return [{"status": "ready", "mcq_ready": 6}]
+        return []
+
+    monkeypatch.setattr(lessons.db, "select", fake_select)
+    monkeypatch.setattr(lessons.db, "update", lambda *args: updates.append(args))
+    monkeypatch.setattr(lessons, "kick_bank", lambda *args, **kwargs: calls.append((args, kwargs)))
+    result = lessons._assemble_lesson(
+        lesson_row={"id": "lesson", "course_id": "course", "skill_id": "skill",
+                    "title": "Lesson", "status": "ready"}, institution_id="institution",
+    )
+    assert result["steps"][0]["check"] is None
+    assert calls == [(('course', 'lesson_checks'), {"lesson_id": "lesson"})]
+    assert not updates
+
+
 def test_ready_lesson_fast_path_selects_guided_lessons_only_once(monkeypatch):
     """The perf fix: get_or_generate_lesson's existence check already fetches
     every field the assembly step needs, so a lesson already at 'ready'

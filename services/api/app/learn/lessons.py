@@ -393,20 +393,8 @@ def _assemble_lesson(*, lesson_row: dict, institution_id: str, course_id: str | 
         })
         state = state_rows[0] if state_rows else {"status": "waiting_content", "mcq_ready": 0}
         if int(state.get("mcq_ready") or 0) >= 5:
-            pool = _approved_item_pool(
-                institution_id=institution_id, course_id=course_id,
-                skill_id=lesson_row["skill_id"],
-            )
-            used = {s["check_item_id"] for s in steps if s.get("check_item_id")}
-            lesson_chunks = set(lesson_row.get("source_chunk_ids") or [])
-            available = [item for item in pool if item["id"] not in used]
-            available.sort(key=lambda item: (
-                0 if lesson_chunks.intersection(item.get("source_chunk_ids") or []) else 1,
-                item.get("created_at") or "",
-            ))
-            for step, item in zip((s for s in steps if not s.get("check_item_id")), available):
-                db.update("guided_lesson_steps", {"id": f"eq.{step['id']}"}, {"check_item_id": item["id"]})
-                step["check_item_id"] = item["id"]
+            if any(not step.get("check_item_id") for step in steps):
+                kick_bank(course_id, "lesson_checks", lesson_id=lesson_id)
         else:
             kick_bank(course_id, "lesson")
 
