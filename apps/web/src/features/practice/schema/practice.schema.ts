@@ -71,9 +71,9 @@ const practiceAttemptScoreSchema = z.object({
 });
 
 const practiceSetAttemptSummarySchema = z.object({
-  latestScore: practiceAttemptScoreSchema.optional(),
-  bestScore: practiceAttemptScoreSchema.optional(),
-  attemptCount: z.number().int().nonnegative().optional(),
+  latestScore: practiceAttemptScoreSchema.nullish(),
+  bestScore: practiceAttemptScoreSchema.nullish(),
+  attemptCount: z.number().int().nonnegative().nullish(),
 });
 
 // A saved set loaded by id (GET /practice/{id}/sets/{set_id}) — used to
@@ -120,8 +120,8 @@ export const practiceSubmitResultSchema = z.object({
   xpAwarded: z.number().int().nonnegative().optional(),
   masteryBefore: z.object({ level: z.string(), value: z.number().nullable() }).optional(),
   masteryAfter: z.object({ level: z.string(), value: z.number().nullable() }).optional(),
-  attemptId: z.string().optional(),
-  attemptNumber: z.number().int().positive().optional(),
+  attemptId: z.string().nullish(),
+  attemptNumber: z.number().int().positive().nullish(),
 });
 
 export const practiceRetakeResponseSchema = z.object({
@@ -145,16 +145,16 @@ export const practiceResultsQuestionSchema = z.object({
 export const practiceSetResultsSchema = z.object({
   courseId: z.string(),
   setId: z.string(),
-  attemptId: z.string().optional(),
-  attemptNumber: z.number().int().positive().optional(),
+  attemptId: z.string().nullish(),
+  attemptNumber: z.number().int().positive().nullish(),
   attempts: z.array(z.object({
-    attemptId: z.string(),
-    attemptNumber: z.number().int().positive(),
-    correct: z.number().int().nonnegative(),
-    answered: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    completedAt: z.string().nullable(),
-  })).optional(),
+    attemptId: z.string().nullish(),
+    attemptNumber: z.number().int().positive().nullish(),
+    correct: z.number().int().nonnegative().nullish(),
+    answered: z.number().int().nonnegative().nullish(),
+    total: z.number().int().nonnegative().nullish(),
+    completedAt: z.string().nullish(),
+  })).nullish(),
   score: z.object({
     correct: z.number().int().nonnegative(),
     answered: z.number().int().nonnegative(),

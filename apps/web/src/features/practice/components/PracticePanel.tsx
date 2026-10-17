@@ -64,6 +64,16 @@ function isApiConflict(error: unknown, code: string) {
   return error instanceof Error && error.message.includes("API 409:") && error.message.includes(code);
 }
 
+function hasAttemptId(attemptId: string | null | undefined): attemptId is string {
+  return typeof attemptId === "string" && attemptId.trim().length > 0;
+}
+
+type ScoredAttempt = NonNullable<PracticeSetResults["attempts"]>[number] & {
+  attemptNumber: number;
+  correct: number;
+  total: number;
+};
+
 function PracticeRecap({
   results,
   onDone,
@@ -82,6 +92,15 @@ function PracticeRecap({
   onStudyThese?: (missedItemIds: string[]) => void;
 }) {
   const missed = results.questions.filter((question) => question.correct === false);
+  const attempts = (results.attempts ?? []).filter((attempt): attempt is ScoredAttempt =>
+    typeof attempt.attemptNumber === "number" &&
+    typeof attempt.correct === "number" &&
+    typeof attempt.total === "number"
+  );
+  const bestAttempt = attempts.reduce<ScoredAttempt | null>(
+    (best, attempt) => !best || attempt.correct > best.correct ? attempt : best,
+    null,
+  );
 
   return (
     <StudySurface bar={<SessionBar />}>
@@ -91,7 +110,7 @@ function PracticeRecap({
             <div>
               <div className="flex items-baseline gap-2">
                 <h2 className="font-display text-xl font-semibold tracking-tight text-foreground">Test complete</h2>
-                {results.attemptNumber && results.attemptNumber > 1 ? (
+                {typeof results.attemptNumber === "number" && results.attemptNumber > 1 ? (
                   <span className="text-xs font-semibold text-muted-foreground">Attempt {results.attemptNumber}</span>
                 ) : null}
               </div>
@@ -103,21 +122,15 @@ function PracticeRecap({
                   </span>
                 )}
               </p>
-              {results.attempts && results.attempts.length >= 2 ? (() => {
-                let bestIndex = 0;
-                for (let index = 1; index < results.attempts!.length; index += 1) {
-                  if (results.attempts![index].correct > results.attempts![bestIndex].correct) bestIndex = index;
-                }
-                return (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {results.attempts.map((attempt, index) => (
-                      <span key={attempt.attemptId}>
-                        {index > 0 ? " · " : ""}Attempt {attempt.attemptNumber}: {attempt.correct}/{attempt.total}{index === bestIndex ? " · Best" : ""}
-                      </span>
-                    ))}
-                  </p>
-                );
-              })() : null}
+              {(results.attempts?.length ?? 0) >= 2 && attempts.length > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {attempts.map((attempt, index) => (
+                    <span key={`${attempt.attemptId ?? attempt.attemptNumber}:${index}`}>
+                      {index > 0 ? " · " : ""}Attempt {attempt.attemptNumber}: {attempt.correct}/{attempt.total}{attempt === bestAttempt ? " · Best" : ""}
+                    </span>
+                  ))}
+                </p>
+              ) : null}
             </div>
             <div className="mt-3 flex flex-col items-start gap-0.5 text-sm">
               <span className="font-mono font-semibold tabular-nums text-brand-orange">+{results.totalXp} XP</span>
@@ -181,7 +194,7 @@ function PracticeRecap({
                   Review missed
                 </Button>
               ) : null}
-              {results.attemptId && onRetake ? (
+              {hasAttemptId(results.attemptId) && onRetake ? (
                 <Button variant="outline" onClick={onRetake} disabled={isRetaking}>
                   {isRetaking ? "Starting retake…" : "Retake this set"}
                 </Button>
@@ -260,7 +273,7 @@ export function PracticePanel({
   useEffect(() => {
     if (!results || initialAttemptSetRef.current === results.setId) return;
     initialAttemptSetRef.current = results.setId;
-    setActiveAttemptId(results.attemptId);
+    setActiveAttemptId(results.attemptId ?? undefined);
   }, [results]);
 
   useEffect(() => {
@@ -467,7 +480,7 @@ export function PracticePanel({
           { skillId, size: SET_SIZE },
           { onSuccess: (newSet) => newSet.setId && onOpenSet ? onOpenSet(newSet.setId) : onExit() }
         )}
-        onRetake={results.attemptId ? () => {
+        onRetake={hasAttemptId(results.attemptId) ? () => {
           startRetake.mutate(results.setId, {
             onSuccess: (retake) => {
               setActiveAttemptId(retake.attemptId);

@@ -303,7 +303,8 @@ function SetList({
                     </span>
                   ) : null}
                 </div>
-                {set.attemptCount !== undefined && set.attemptCount > 1 && set.bestScore ? (
+                {typeof set.attemptCount === "number" && set.attemptCount > 1 &&
+                set.bestScore !== null && typeof set.bestScore === "object" ? (
                   <p className="text-[11px] text-muted-foreground">
                     Best {set.bestScore.correct}/{set.bestScore.total} · {set.attemptCount} attempts
                   </p>
