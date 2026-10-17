@@ -150,9 +150,7 @@ function TopicBankState({
 }) {
   if (!entry) return null;
   if (entry.status === "ready") return null;
-  if (entry.status === "building" && entry.usable) {
-    return <p className="mt-2 text-xs text-muted-foreground">More questions on the way.</p>;
-  }
+  if (entry.status === "building" && entry.usable) return null;
   if (entry.status === "no_material") {
     return <p className="mt-2 text-xs text-muted-foreground">This skill doesn&apos;t have course material yet.</p>;
   }

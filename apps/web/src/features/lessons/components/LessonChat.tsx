@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+import { SessionState } from "@/components/study/SessionState";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrainIcon } from "@/components/ui/brain";
@@ -39,6 +41,7 @@ export function LessonChat({
 }) {
   const reduceMotion = useReducedMotion();
   const replySessionId = useId();
+  const contentEpochRef = useRef(0);
   const { data, isLoading, isError, error, refetch } = useLesson(courseId, skillId);
   const bank = useBankStatus(courseId);
   const submit = useSubmitStepCheck(courseId);
@@ -80,6 +83,9 @@ export function LessonChat({
   const startedAtRef = useRef(Date.now());
 
   function resetStepState() {
+    contentEpochRef.current += 1;
+    setAnsweredKinds(new Set());
+    setHasAnsweredOnce(false);
     setCheckOpen(false);
     setSelected(null);
     setResult(null);
@@ -114,28 +120,28 @@ export function LessonChat({
   }, [checkThreadOpen, checkExplanation, checkAsk.isPending, reduceMotion]);
 
   if (isLoading || data?.status === "generating") {
-    return (
+    return (<SessionState title="Lesson" onExit={onExit}>{(
       <div id="tour-lesson-generating" className="w-full">
         <LoadingPanel label="Kala is writing your lesson — first pass takes a moment…" lines={5} />
       </div>
-    );
+    )}</SessionState>);
   }
   if (isError) {
-    return (
+    return (<SessionState title="Lesson" onExit={onExit}>{(
       <EmptyState
         title="We could not load this lesson"
         description={apiErrorReason(error) ?? "Check your connection and try again."}
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
-    );
+    )}</SessionState>);
   }
   if (!data || data.steps.length === 0) {
-    return (
+    return (<SessionState title="Lesson" onExit={onExit}>{(
       <EmptyState
         title="No lesson here yet"
         description="This skill doesn't have a lesson yet. Come back after course content is ingested."
       />
-    );
+    )}</SessionState>);
   }
 
   const total = data.steps.length;
@@ -147,9 +153,11 @@ export function LessonChat({
   const hasGradedCheck = checkOpen && result !== null;
 
   function openCheck() {
+    contentEpochRef.current += 1;
     if (!current?.check) {
       resetStepState();
       setStepIndex((index) => index + 1);
+      if (stepIndex + 1 >= total && !reduceMotion) celebrate();
       return;
     }
     setSelected(null);
@@ -170,7 +178,8 @@ export function LessonChat({
   }
 
   function choose(choiceId: string) {
-    if (!current?.check || result) return;
+    const requestEpoch = contentEpochRef.current;
+    if (!current?.check || result || submit.isPending) return;
     setSelected(choiceId);
     submit.mutate(
       {
@@ -180,7 +189,7 @@ export function LessonChat({
         latencyMs: Date.now() - startedAtRef.current,
         hintsUsed: hintsUsedRef.current,
       },
-      { onSuccess: (nextResult) => { setResult(nextResult); setHasAnsweredOnce(true); } }
+      { onSuccess: (nextResult) => { if (requestEpoch !== contentEpochRef.current) return; setResult(nextResult); setHasAnsweredOnce(true); }, onError: () => toast.error("Could not save your answer. Try again.") }
     );
   }
 
@@ -199,6 +208,7 @@ export function LessonChat({
   }
 
   function openCheckThread(kind: "hint" | "explain") {
+    const requestEpoch = contentEpochRef.current;
     if (!current?.check) return;
     // The thread opens IMMEDIATELY, before the answer exists — the student's
     // attention moves to where the explanation will appear (a Kala header
@@ -232,6 +242,7 @@ export function LessonChat({
       },
       {
         onSuccess: (answer) => {
+          if (requestEpoch !== contentEpochRef.current) return;
           setCheckExplanation(answer.answer);
           setAnsweredKinds((kinds) => new Set(kinds).add(kind));
           if (kind === "hint") hintsUsedRef.current += 1;
@@ -241,6 +252,7 @@ export function LessonChat({
   }
 
   function askCheckFollowUp(question: string) {
+    const requestEpoch = contentEpochRef.current;
     if (!current?.check) return;
     setCheckThreadOpen(true);
     setPendingCheckFollowUp(question);
@@ -248,15 +260,17 @@ export function LessonChat({
       { question: checkContext(`The student asks: "${question}"`), style: "default" },
       {
         onSuccess: (answer) => {
+          if (requestEpoch !== contentEpochRef.current) return;
           setCheckFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
           setPendingCheckFollowUp(null);
         },
-        onError: () => setPendingCheckFollowUp(null),
+        onError: () => { if (requestEpoch === contentEpochRef.current) setPendingCheckFollowUp(null); },
       }
     );
   }
 
   function askFollowUp(question: string) {
+    const requestEpoch = contentEpochRef.current;
     if (!current) return;
     // The student's turn goes into the stream NOW, with a pending Kala reply
     // under it. Waiting for onSuccess and then appending {question, answer}
@@ -267,10 +281,11 @@ export function LessonChat({
       { question, style: "default" },
       {
         onSuccess: (answer) => {
+          if (requestEpoch !== contentEpochRef.current) return;
           setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
           setPendingFollowUp(null);
         },
-        onError: () => setPendingFollowUp(null),
+        onError: () => { if (requestEpoch === contentEpochRef.current) setPendingFollowUp(null); },
       }
     );
   }
@@ -286,6 +301,7 @@ export function LessonChat({
   }
 
   function retry() {
+    contentEpochRef.current += 1;
     setSelected(null);
     setResult(null);
     // The explanation is the answer key; leaving it on screen through a retry
@@ -368,7 +384,6 @@ export function LessonChat({
             current: done ? total : stepIndex + 1,
             total,
             label: "step",
-            bloomLevel: current?.bloomLevel,
           }}
           onBack={goBack}
           backLabel="Choose another topic"
@@ -376,6 +391,7 @@ export function LessonChat({
       }
       dock={isCheckTakeover && !checkDockVisible ? undefined : (
         <ComposeDock
+          tourId="tour-lesson-dock"
           primary={dockPrimary}
           onAsk={
             isReanswering
@@ -407,9 +423,10 @@ export function LessonChat({
             transition={{ duration: reduceMotion ? 0 : 0.18 }}
             className="h-full min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-10 sm:pt-14"
           >
-            <div id="tour-lesson-check" className="mx-auto w-full max-w-[800px]">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Check yourself</p>
+            <div className="mx-auto w-full max-w-[800px]">
               <AnswerableCard
+                id="tour-lesson-check"
+                eyebrow="Check yourself"
                 prompt={current.check.prompt}
                 choices={current.check.choices}
                 selectedId={selected}
@@ -425,37 +442,33 @@ export function LessonChat({
                       }
                     : null
                 }
-                actions={
-                  // Keep the label stable. The old behavior swapped the
-                  // button into a "Thinking…" spinner, which read as "this
-                  // button is loading" rather than "Kala is answering below"
-                  // — the pending state now lives in the thread instead.
-                  // Disabled once this kind has been answered: the button has
-                  // nothing left to do, and leaving it live invited repeat
-                  // taps that produced no request and no feedback.
-                  !result ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCheckThread("hint")}
-                      disabled={checkAsk.isPending || answeredKinds.has("hint")}
-                    >
-                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                      Hint
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCheckThread("explain")}
-                      disabled={checkAsk.isPending || answeredKinds.has("explain")}
-                    >
-                      <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
-                      Explain
-                    </Button>
-                  )
-                }
               />
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {/* Keep the label stable. Pending tutor output lives in the
+                    thread below, and the button disables after its kind has
+                    been answered to prevent a no-op repeat tap. */}
+                {!result ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => openCheckThread("hint")}
+                    disabled={checkAsk.isPending || answeredKinds.has("hint")}
+                  >
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    Give me a hint
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => openCheckThread("explain")}
+                    disabled={checkAsk.isPending || answeredKinds.has("explain")}
+                  >
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
+                    Explain more
+                  </button>
+                )}
+              </div>
               {checkThreadOpen ? (
                 <div ref={checkThreadRef} className="mt-8 scroll-mt-4 border-t pt-6">
                   {/* One AssistantBlock for the whole thread: it renders
@@ -475,6 +488,7 @@ export function LessonChat({
                     <div key={`${turn.question}-${index}`} className="mt-5 space-y-3">
                       <UserBlock text={turn.question} />
                       <AssistantBlock
+                        id={index === 0 ? "tour-lesson-reply" : undefined}
                         text={turn.answer}
                         animationKey={`${courseId}:${replySessionId}:${skillId}:${current?.id ?? stepIndex}:check-follow-up:${index}`}
                       />
@@ -525,6 +539,7 @@ export function LessonChat({
                     <div key={`${turn.question}-${index}`} className="space-y-3">
                       <UserBlock text={turn.question} />
                       <AssistantBlock
+                        id={index === 0 ? "tour-lesson-reply" : undefined}
                         text={turn.answer}
                         animationKey={`${courseId}:${replySessionId}:${skillId}:${current?.id ?? stepIndex}:follow-up:${index}`}
                       />

@@ -1,11 +1,10 @@
+import { useMemo } from "react";
 import { TourRunner } from "@/components/shell/TourRunner";
-import { TOUR_STEPS, studentTourDismissKey } from "@/components/shell/student-tour";
-
-// Student-side tour. The actual runner is shared (TourRunner); the student
-// config and dismissal key live in student-tour.ts. CourseShell mounts this
-// once and the runner survives route changes because the shell stays
-// mounted around the /course routes.
+import { createStudentTour, studentTourDismissKey } from "@/components/shell/student-tour";
+import { useUI } from "@/stores/ui-store";
 
 export function TourStepRunner() {
-  return <TourRunner steps={TOUR_STEPS} dismissKey={studentTourDismissKey} />;
+  const context = useUI((state) => state.tourContext);
+  const steps = useMemo(() => context ? createStudentTour(context) : [], [context]);
+  return <TourRunner steps={steps} dismissKey={studentTourDismissKey} />;
 }

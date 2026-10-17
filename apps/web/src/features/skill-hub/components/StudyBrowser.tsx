@@ -1,5 +1,7 @@
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { Clock3Icon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
@@ -8,12 +10,11 @@ import { cn } from "@/lib/utils";
 import { useFlashcardMembership } from "@/features/flashcards/hooks/use-flashcards";
 import type { FlashcardMembershipCard } from "@/features/flashcards/schema/flashcards.schema";
 import { useBankStatus } from "@/features/bank";
+import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 
 // The Study tab's browse view — the materials list that sits in front of the
-// sequential flip session, the same browse-then-commit shape the Test tab
-// proved. Unlike Test, there is NO answer-key concern here: Study never grades,
-// so each row shows BOTH sides of the card. That is the point of a materials
-// list — you can see what you're about to review.
+// sequential flip session. Answers stay hidden until the student opts in,
+// so browsing the materials does not reveal them before recall.
 //
 // Data comes from the membership endpoint, independent of the session queue.
 // That keeps Known cards visible while session selection stays due-first.
@@ -32,6 +33,8 @@ export function StudyBrowser({
   /** Enter the sequential flip session. */
   onStart: (mode: "review" | "all") => void;
 }) {
+  const [filter, setFilter] = useState<CardFilter>("all");
+  const [showAnswers, setShowAnswers] = useState(false);
   const { data, isLoading, isError, refetch } = useFlashcardMembership(courseId, skillId);
   const bank = useBankStatus(courseId);
   const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
@@ -106,50 +109,111 @@ export function StudyBrowser({
     );
   }
 
+  const counts = data?.counts ?? { new: 0, learning: 0, slipping: 0, known: 0, dueToday: 0 };
+  const dueNow = cards.filter(isDueNow).length;
+  // Claiming an untouched card creates a due timestamp before its first rating.
+  // Exclude those timestamps from both review counts and the later-today count.
+  const scheduledNow = cards.filter((card) => card.due || card.state === "due").length;
+  const dueLaterToday = Math.max(0, counts.dueToday - scheduledNow);
+  const hasNewCards = counts.new > 0;
+  const startWithAll = dueNow === 0 && hasNewCards;
+  const studyLabel = dueNow > 0
+    ? `Review due (${dueNow})`
+    : hasNewCards
+      ? counts.new === cards.length ? "Start studying" : "Continue studying"
+      : "All caught up";
+  const memoryTotal = counts.new + counts.learning + counts.slipping + counts.known;
+  const summaryStates = ["new", "learning", "slipping", "known"] as const;
+  const filterOptions: { id: CardFilter; label: string; count: number }[] = [
+    { id: "all", label: "All", count: cards.length },
+    { id: "due", label: "Due", count: dueNow },
+    ...(["slipping", "learning", "new", "known"] as const).map((state) => ({
+      id: state,
+      label: state[0].toUpperCase() + state.slice(1),
+      count: cards.filter((card) => card.state === state).length,
+    })),
+  ];
+  const stateOrder = { slipping: 0, learning: 1, new: 2, known: 3, due: 4 } as const;
+  const filteredCards = cards
+    .filter((card) => {
+      if (filter === "all") return true;
+      if (filter === "due") return isDueNow(card);
+      return card.state === filter;
+    })
+    .sort((a, b) => {
+      const aDue = isDueNow(a);
+      const bDue = isDueNow(b);
+      if (aDue !== bDue) return aDue ? -1 : 1;
+      return stateOrder[a.state] - stateOrder[b.state];
+    });
+
   return (
     <div className="space-y-4">
       {/* Review the due queue or open the full skill deck. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border bg-card px-5 py-4">
-        <div className="min-w-0 space-y-2">
-          <p className="text-sm font-semibold text-foreground">
-            {data?.isFallback ? `${cards.length} to review` : `${cards.length} ${cards.length === 1 ? "card" : "cards"}`}
-          </p>
-          {!data?.isFallback ? (
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Card memory summary">
-              <span>{data?.counts.new ?? 0} new</span>
-              <span>{data?.counts.learning ?? 0} learning</span>
-              <span>{data?.counts.slipping ?? 0} slipping</span>
-              <span>{data?.counts.known ?? 0} known</span>
-              <span>{data?.counts.dueToday ?? 0} due today</span>
+      <div className="grid gap-4 border bg-card px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="min-w-0 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <p className="font-display text-lg font-semibold text-foreground">{cards.length} cards</p>
+            <div className="text-right sm:hidden">
+              <p className="font-display text-xl font-semibold leading-none text-foreground">{dueNow}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">due now</p>
+              {dueLaterToday > 0 ? <p className="mt-1 text-[10px] text-muted-foreground">{dueLaterToday} due later today</p> : null}
             </div>
-          ) : null}
+          </div>
+          <div
+            className="flex h-2 w-full overflow-hidden"
+            role="img"
+            aria-label={`Card memory: ${counts.new} new, ${counts.learning} learning, ${counts.slipping} slipping, ${counts.known} known`}
+          >
+            {summaryStates.map((state) => {
+              const presentation = cardStatePresentation(state);
+              const count = counts[state];
+              return count > 0 ? (
+                <span
+                  key={state}
+                  className={presentation.fillClassName}
+                  style={{ width: `${memoryTotal ? (count / memoryTotal) * 100 : 0}%` }}
+                />
+              ) : null;
+            })}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5" aria-label="Card memory summary">
+            {summaryStates.map((state) => {
+              const presentation = cardStatePresentation(state);
+              return (
+                <span key={state} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className={cn("size-2 shrink-0", presentation.fillClassName)} aria-hidden />
+                  {presentation.label} <span className="font-mono tabular-nums">{counts[state]}</span>
+                </span>
+              );
+            })}
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Recall each answer, then mark it yourself. Missed cards return sooner.
           </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Cards are added to your review queue as you study.
-          </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="hidden min-w-24 text-right sm:block">
+          <p className="font-display text-2xl font-semibold leading-none text-foreground">{dueNow}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">due now</p>
+          {dueLaterToday > 0 ? <p className="mt-1 text-[11px] text-muted-foreground">{dueLaterToday} due later today</p> : null}
+        </div>
+        <div id="tour-study-actions" className="flex shrink-0 flex-wrap gap-2">
           <Button
             variant="orange"
-            onClick={() => onStart("review")}
-            disabled={data?.counts.dueToday === 0}
+            onClick={() => onStart(startWithAll ? "all" : "review")}
+            disabled={dueNow === 0 && !hasNewCards}
           >
-            {data?.counts.dueToday === 0 ? "All caught up" : `Review due (${data?.counts.dueToday ?? 0})`}
+            {studyLabel}
             <ArrowRightIcon size={16} />
           </Button>
-          <Button variant="outline" onClick={() => onStart("all")}>
-            Study all
-          </Button>
+          {!startWithAll ? (
+            <Button variant="outline" onClick={() => onStart("all")}>
+              Study all
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {bank.data?.bankServing && bankSkill?.status === "building" && bankSkill.usable ? (
-        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-          More questions on the way.
-        </p>
-      ) : null}
       {bank.data?.bankServing &&
       ["waiting_content", "building", "error"].includes(bankSkill?.status ?? "waiting_content") &&
       !bankSkill?.usable ? (
@@ -158,9 +222,48 @@ export function StudyBrowser({
         </p>
       ) : null}
 
-      {/* Both sides shown: Study never grades, so there is nothing to hide. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-sm font-semibold text-foreground">Study cards</h2>
+        <button
+          type="button"
+          aria-pressed={showAnswers}
+          onClick={() => setShowAnswers((shown) => !shown)}
+          className="text-xs font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {showAnswers ? "Hide answers" : "Show answers"}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2" aria-label="Filter study cards">
+        {filterOptions.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={filter === option.id}
+            onClick={() => setFilter(option.id)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              filter === option.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            {option.id === "due" ? (
+              <Clock3Icon size={12} className="text-brand-orange" aria-hidden />
+            ) : option.id !== "all" ? (
+              <span
+                className={cn("size-2 shrink-0", cardStatePresentation(option.id).fillClassName)}
+                aria-hidden
+              />
+            ) : null}
+            {option.label} <span className="font-mono tabular-nums">{option.count}</span>
+          </button>
+        ))}
+      </div>
       <ol aria-label="Study cards" className="divide-y divide-border border bg-card">
-        {cards.map((card: FlashcardMembershipCard, i: number) => (
+        {filteredCards.length === 0 ? (
+          <li className="px-5 py-4 text-sm text-muted-foreground">No cards match this filter.</li>
+        ) : null}
+        {filteredCards.map((card: FlashcardMembershipCard, i: number) => (
           <motion.li
             key={card.itemId}
             initial={reduceMotion ? false : { opacity: 0, y: 6 }}
@@ -170,16 +273,22 @@ export function StudyBrowser({
           >
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 text-sm font-medium text-foreground">{card.prompt}</p>
-              <StateBadge state={card.state} due={card.due} />
+              <StateBadge state={card.state} due={isDueNow(card)} />
             </div>
-            <div className="flex items-start gap-2 border-l-2 border-brand-green/40 pl-3">
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Answer
-              </span>
-              <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">
-                {card.back.label ?? "No answer label"}
-              </p>
-            </div>
+            {showAnswers ? (
+              <div className="flex items-start gap-2 border-l-2 border-brand-green/40 pl-3">
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Answer
+                </span>
+                {card.back.label ? (
+                  <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">{card.back.label}</p>
+                ) : (
+                  <p className="min-w-0 text-sm italic leading-relaxed text-muted-foreground">Answer unavailable</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Answer hidden</p>
+            )}
           </motion.li>
         ))}
       </ol>
@@ -187,23 +296,27 @@ export function StudyBrowser({
   );
 }
 
+function isDueNow(card: FlashcardMembershipCard): boolean {
+  return card.state !== "new" && (card.due || card.state === "due");
+}
+
+type CardFilter = "all" | "due" | FlashcardMembershipCard["state"];
+
 /** Card memory state is separate from the skill mastery band shown above. */
 function StateBadge({ state, due }: { state: FlashcardMembershipCard["state"]; due: boolean }) {
-  const label = state === "due" ? "Due" : state[0].toUpperCase() + state.slice(1);
+  const presentation = state === "due" ? null : cardStatePresentation(state);
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      <span
-        className={cn(
-          "rounded-sm px-2 py-0.5 text-[10.5px] font-semibold",
-          due
-            ? "bg-brand-orange/15 text-foreground"
-            : "bg-muted text-muted-foreground"
-        )}
-      >
-        {label}
-      </span>
-      {due && state !== "due" ? (
-        <span className="text-[10.5px] text-brand-orange">Due</span>
+      {presentation ? (
+        <span className={cn("rounded-sm border px-2 py-0.5 text-[10.5px] font-semibold", presentation.className)}>
+          {presentation.label}
+        </span>
+      ) : null}
+      {due || state === "due" ? (
+        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-brand-orange">
+          <Clock3Icon size={12} aria-hidden />
+          Due
+        </span>
       ) : null}
     </span>
   );

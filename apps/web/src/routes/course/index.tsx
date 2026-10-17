@@ -144,7 +144,7 @@ function WorkspaceHome() {
                 // browse entry, so it skips the Test tab's set browser and
                 // goes straight into the graded run (start: true). The hub's
                 // own Test tab, entered deliberately, is where browsing lives.
-                search: { tab: "test", start: true },
+                search: { tab: "test", start: true, sessionId: crypto.randomUUID() },
               })
             }
             className="shrink-0"

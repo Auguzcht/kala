@@ -35,7 +35,7 @@ export function LoadingPanel({
           <div
             key={i}
             className={cn(
-              "h-3 animate-pulse rounded-sm bg-muted",
+              "h-3 animate-pulse rounded-sm bg-muted motion-reduce:animate-none",
               i === 0 ? "w-2/3" : i === lines - 1 ? "w-1/3" : "w-full"
             )}
           />

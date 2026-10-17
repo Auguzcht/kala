@@ -1,22 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect } from "react";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { TopicLanding } from "@/components/study/TopicLanding";
-import { PracticePanel } from "@/features/practice";
+import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { useTwin, useNextUp } from "@/features/twin";
 import { useBankStatus } from "@/features/bank";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { ZapIcon } from "@/components/ui/zap";
 import { z } from "zod";
 
-// Test mode. A session can be entered two ways:
-//   - locally, by picking a topic on this page (skillId in local state), or
-//   - from the study deck's "Test me on these" bridge, which navigates here
-//     with ?skillId=&setId= so the panel runs the SAVED set instead of
-//     generating a fresh one.
-// The search params are therefore the bridge's entry contract; local state
-// stays for the in-page picker so picking a topic doesn't rewrite the URL.
+// Legacy Test entry: topic choices and saved-set links open the canonical
+// skill hub browse pane, so revisiting a topic cannot resume a cached sitting.
 const practiceSearchSchema = z.object({
   skillId: z.string().optional(),
   setId: z.string().optional(),
@@ -34,30 +29,21 @@ function PracticePage() {
   const { data: nextUp } = useNextUp(courseId);
   const { skillId: searchSkillId, setId: searchSetId } = Route.useSearch();
   const navigate = useNavigate();
-  const [skillId, setSkillId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!searchSkillId) return;
+    void navigate({
+      to: "/course/skill/$skillId",
+      params: { skillId: searchSkillId },
+      search: { tab: "test", setId: searchSetId },
+      replace: true,
+    });
+  }, [searchSkillId, searchSetId, navigate]);
 
-  // A set handed in from the bridge owns the session; leaving it back to the
-  // picker clears the URL so a refresh doesn't re-enter the same set.
-  if (searchSetId && searchSkillId) {
-    return (
-      <PracticePanel
-        courseId={courseId}
-        skillId={searchSkillId}
-        setId={searchSetId}
-        onExit={() => navigate({ to: "/course/practice", search: {} })}
-      />
-    );
+  function openTopic(skillId: string) {
+    void navigate({ to: "/course/skill/$skillId", params: { skillId }, search: { tab: "test" } });
   }
 
-  if (skillId) {
-    return (
-      <PracticePanel
-        courseId={courseId}
-        skillId={skillId}
-        onExit={() => setSkillId(null)}
-      />
-    );
-  }
+  if (searchSkillId) return <LoadingPanel label="Opening tests…" lines={2} />;
 
   return (
     <>
@@ -70,7 +56,7 @@ function PracticePage() {
         isLoading={isLoading}
         skills={twin?.skills ?? []}
         bankStatus={bankStatus}
-        onChoose={setSkillId}
+        onChoose={openTopic}
         caption="quick, graded reps"
         gridId="tour-practice-picker"
         recommended={
@@ -78,7 +64,7 @@ function PracticePage() {
             <button
               id="tour-practice-recommended"
               type="button"
-              onClick={() => setSkillId(nextUp.next!.skillId)}
+              onClick={() => openTopic(nextUp.next!.skillId)}
               className="flex w-full items-center justify-between gap-4 bg-primary px-6 py-5 text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="min-w-0">

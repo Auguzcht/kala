@@ -1,3 +1,4 @@
+import { SessionState } from "@/components/study/SessionState";
 import { useEffect, useId, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { ArrowLeftIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
@@ -10,6 +11,7 @@ import { StudySurface } from "@/components/study/StudySurface";
 import { UserBlock } from "@/components/study/UserBlock";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
@@ -186,7 +188,7 @@ function PracticeRecap({
             )}
 
             <div className="flex flex-wrap gap-2 border-t pt-4">
-              {onStudyThese ? (
+              {onStudyThese && missed.length > 0 ? (
                 <Button
                   variant="orange"
                   onClick={() => onStudyThese(missed.map((question) => question.itemId))}
@@ -196,16 +198,16 @@ function PracticeRecap({
                 </Button>
               ) : null}
               {hasAttemptId(results.attemptId) && onRetake ? (
-                <Button variant="outline" onClick={onRetake} disabled={isRetaking} className="group">
-                  <RotateCcwIcon aria-hidden className="transition-transform duration-200 group-hover:-rotate-90 motion-reduce:transition-none" />
+                <Button id="tour-test-retake" variant="outline" onClick={onRetake} disabled={isRetaking} className="group">
+                  {isRetaking ? <Spinner aria-hidden /> : <RotateCcwIcon aria-hidden className="transition-transform duration-200 group-hover:-rotate-90 motion-reduce:transition-none" />}
                   {isRetaking ? "Starting retake…" : "Retake this set"}
                 </Button>
               ) : null}
-              <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet} className="group">
-                <PlusIcon aria-hidden className="transition-transform duration-200 group-hover:scale-125 motion-reduce:transition-none" />
+              <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet} className="group">
+                {isCreatingSet ? <Spinner aria-hidden /> : <PlusIcon aria-hidden className="transition-transform duration-200 group-hover:scale-125 motion-reduce:transition-none" />}
                 {isCreatingSet ? "Loading new set…" : "New set"}
               </Button>
-              <Button variant="outline" onClick={onDone} className="group">
+              <Button variant={onStudyThese && missed.length > 0 ? "outline" : "orange"} onClick={onDone} className="group">
                 <ArrowLeftIcon aria-hidden className="transition-transform duration-200 group-hover:-translate-x-1 motion-reduce:transition-none" />
                 Back to tests
               </Button>
@@ -222,6 +224,7 @@ export function PracticePanel({
   skillId,
   setId,
   sessionId,
+  attemptId,
   includesRepeats,
   onExit,
   onSessionReady,
@@ -231,17 +234,20 @@ export function PracticePanel({
   courseId: string;
   skillId: string;
   /** Run a SAVED set instead of generating a fresh one — the study->test
-   * bridge handoff and the retake list both enter test mode this way. The set
+   * saved-set list and a retake both enter test mode this way. The set
    * is per-skill, so skillId still identifies the topic for the bar/copy. */
   setId?: string | null;
   sessionId?: string;
+  attemptId?: string;
   includesRepeats?: boolean;
   onExit: () => void;
-  onSessionReady?: (setId: string, sessionId: string) => void;
+  onSessionReady?: (setId: string, sessionId: string, attemptId?: string) => void;
   onOpenSet?: (setId: string) => void;
-  onStudySet?: (setId: string, missedItemIds: string[]) => void;
+  onStudySet?: (setId: string, missedItemIds: string[], attemptId?: string) => void;
 }) {
   const replySessionId = useId();
+  const contentEpochRef = useRef(0);
+  const [fallbackSessionId] = useState(() => sessionId ?? crypto.randomUUID());
   const usingSaved = Boolean(setId);
   const bank = useBankStatus(courseId, !usingSaved);
   const bankSkill = bank.data?.skills.find((entry) => entry.skillId === skillId);
@@ -251,26 +257,26 @@ export function PracticePanel({
   const bankUsable = !isBankCourse || bankSkill?.usable === true;
   const skillBuilding = ["waiting_content", "building", "error"].includes(bankStatus);
   const bankBuilding = isBankCourse && !bankNoMaterial && skillBuilding && !bankUsable;
-  const bankBuildingUsable = isBankCourse && skillBuilding && bankUsable;
   // Both hooks are always called (Rules of Hooks), but only the active path is
   // enabled. A saved set must never also trigger the POST that creates a new
   // set when the test session mounts.
   const generatedQuery = usePracticeSet(courseId, skillId, SET_SIZE, {
     enabled: !usingSaved && bank.data !== undefined && bankUsable,
+    sessionId: fallbackSessionId,
   });
   const savedQuery = usePracticeSetById(courseId, setId ?? null);
   const { isLoading, isError, isFetching, refetch } = usingSaved ? savedQuery : generatedQuery;
   const data = usingSaved ? savedQuery.data : generatedQuery.data;
   const preparingResponse = generatedQuery.data?.status === "preparing";
   const refetchGeneratedSet = generatedQuery.refetch;
-  const [activeAttemptId, setActiveAttemptId] = useState<string | undefined>();
+  const [activeAttemptId, setActiveAttemptId] = useState<string | undefined>(attemptId);
   const initialAttemptSetRef = useRef<string | null>(null);
   const submit = useSubmitPractice(courseId);
   const startRetake = useStartRetake(courseId);
   const createNewSet = useGenerateSet(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
-  const resultsQuery = usePracticeSetResults(courseId, data?.setId ?? setId ?? null, true, activeAttemptId);
+  const resultsQuery = usePracticeSetResults(courseId, data?.setId ?? setId ?? null, data?.status === "ready", activeAttemptId);
   const results = resultsQuery.data;
 
   useEffect(() => {
@@ -281,8 +287,8 @@ export function PracticePanel({
 
   useEffect(() => {
     initialAttemptSetRef.current = null;
-    setActiveAttemptId(undefined);
-  }, [setId]);
+    setActiveAttemptId(attemptId);
+  }, [setId, attemptId]);
 
   useEffect(() => {
     if (!usingSaved && preparingResponse && bankUsable) {
@@ -293,11 +299,11 @@ export function PracticePanel({
   // Position within the fetched batch. Local state, not part of the query:
   // the set is immutable for the session, only the cursor over it moves.
   const [setIndex, setSetIndex] = useState(0);
+  const hasInteractedRef = useRef(false);
   const [showRecap, setShowRecap] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
-  const [fallbackSessionId] = useState(() => sessionId ?? crypto.randomUUID());
   const submitKeysRef = useRef(new Map<string, string>());
   const [streak, setStreak] = useState(0);
   const [gain, setGain] = useState<{ xp: number } | null>(null);
@@ -338,6 +344,7 @@ export function PracticePanel({
   // a stale index. Depends on setId, not the items array, so advancing within
   // a batch (which never changes setId) can't trigger a false reset.
   useEffect(() => {
+    hasInteractedRef.current = false;
     setSetIndex(0);
     setShowRecap(false);
   }, [data?.setId]);
@@ -347,6 +354,9 @@ export function PracticePanel({
     const resultsKey = results ? `${results.setId}:${results.attemptId ?? activeAttemptId ?? "1"}` : null;
     if (!results || resultsQuery.isFetching || total === 0 || restoredResultsSetRef.current === resultsKey) return;
     restoredResultsSetRef.current = resultsKey;
+    // The first submission can create an attempt id. Its results refresh must
+    // preserve this question's feedback, rather than resume at the next one.
+    if (hasInteractedRef.current) return;
     const nextIndex = results.questions.findIndex((question) => !question.answered);
     if (nextIndex >= 0) setSetIndex(nextIndex);
   }, [results, resultsQuery.isFetching, total, activeAttemptId]);
@@ -364,6 +374,7 @@ export function PracticePanel({
   // new one did before — the student never sees the previous answer's state
   // bleed onto the next card.
   useEffect(() => {
+    contentEpochRef.current += 1;
     setSelectedChoice(null);
     setLastResult(null);
     setGain(null);
@@ -382,99 +393,108 @@ export function PracticePanel({
   }, [recapVisible, completeOnServer, resultsQuery.isFetching, resultsQuery.isError, results?.setId, results?.attemptId, reduceMotion]);
 
   if (!usingSaved && bank.isLoading)
-    return <LoadingPanel label="Checking question availability…" lines={4} />;
+    return (<SessionState title="Test" onExit={onExit}>{<LoadingPanel label="Checking question availability…" lines={4} />}</SessionState>);
   if (!usingSaved && bank.isError)
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="We could not check question availability"
         description="Reload this page to try again."
       />
-    );
+    )}</SessionState>);
   if (!usingSaved && bankNoMaterial)
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="No course material yet"
         description="This skill doesn&apos;t have course material yet."
       />
-    );
+    )}</SessionState>);
   if (!usingSaved && bankBuilding)
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <LoadingPanel
         label={`Preparing questions (${bankSkill?.mcqReady ?? 0} of ${bankSkill?.mcqTarget ?? 0})`}
         lines={4}
       />
-    );
+    )}</SessionState>);
   if (isLoading)
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <LoadingPanel
         label="Loading your practice set…"
         lines={4}
       />
-    );
+    )}</SessionState>);
   if (isError)
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="We could not load practice"
         description="Check your connection and try again."
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
-    );
+    )}</SessionState>);
   if (data?.status === "generating")
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <LoadingPanel
         label={`Loading your set (${data.readyCount} of ${data.requestedSize} ready)`}
         lines={4}
       />
-    );
+    )}</SessionState>);
   if (data?.status === "preparing")
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <LoadingPanel
         label={`Preparing questions (${bankSkill?.mcqReady ?? 0} of ${bankSkill?.mcqTarget ?? 0})`}
         lines={4}
       />
-    );
+    )}</SessionState>);
   if (data?.status === "no_material")
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="No course material yet"
         description="This skill doesn&apos;t have course material yet."
       />
-    );
+    )}</SessionState>);
   if (data && (("available" in data && data.available === false) || data.status === "unavailable"))
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="This set is no longer available"
         description="Choose another set to continue."
         action={<Button variant="outline" onClick={onExit}>Choose another test</Button>}
       />
-    );
+    )}</SessionState>);
   if (data?.status === "failed")
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="No questions are ready yet"
         description="Questions for this skill are still being prepared."
         action={<Button variant="outline" onClick={() => refetch()}>Try again</Button>}
       />
-    );
+    )}</SessionState>);
+  if (usingSaved && data && "skillId" in data && data.skillId !== skillId) {
+    return <SessionState title="Test" onExit={onExit}><EmptyState title="This test belongs to another topic" action={<Button variant="orange" onClick={onExit}>Back to tests</Button>} /></SessionState>;
+  }
   if (!item)
-    return (
+    return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
         title="Nothing to practice yet"
         description="No questions are available right now."
       />
-    );
+    )}</SessionState>);
 
+  if (usingSaved && !lastResult && resultsQuery.isLoading) {
+    return <SessionState title="Test" onExit={onExit}><LoadingPanel label="Loading your saved progress…" lines={3} /></SessionState>;
+  }
+  if (usingSaved && !lastResult && resultsQuery.isError) {
+    return <SessionState title="Test" onExit={onExit}><EmptyState title="We could not load your saved progress" action={<Button variant="outline" onClick={() => void resultsQuery.refetch()}>Retry</Button>} /></SessionState>;
+  }
   if (recapVisible) {
     if (resultsQuery.isError) {
-      return (
+      return (<SessionState title="Test" onExit={onExit}>{(
         <EmptyState
           title="We could not load your results"
           description="Your answers are saved. Try loading the recap again."
           action={<Button variant="outline" onClick={() => void resultsQuery.refetch()}>Retry</Button>}
         />
-      );
+      )}</SessionState>);
     }
-    if (!results || resultsQuery.isFetching) return <LoadingPanel label="Loading your results…" lines={4} />;
+    if (!results || resultsQuery.isFetching) return (<SessionState title="Test" onExit={onExit}>{<LoadingPanel label="Loading your results…" lines={4} />}</SessionState>);
     return (
       <PracticeRecap
         results={results}
@@ -486,7 +506,9 @@ export function PracticePanel({
         onRetake={hasAttemptId(results.attemptId) ? () => {
           startRetake.mutate(results.setId, {
             onSuccess: (retake) => {
+              hasInteractedRef.current = false;
               setActiveAttemptId(retake.attemptId);
+              onSessionReady?.(results.setId, crypto.randomUUID(), retake.attemptId);
               setSetIndex(0);
               setShowRecap(false);
               setSelectedChoice(null);
@@ -509,7 +531,7 @@ export function PracticePanel({
         isRetaking={startRetake.isPending}
         isCreatingSet={createNewSet.isPending}
         onStudyThese={onStudySet && results.questions.some((question) => question.correct === false)
-          ? () => onStudySet(results.setId, results.questions.filter((question) => question.correct === false).map((question) => question.itemId))
+          ? () => onStudySet(results.setId, results.questions.filter((question) => question.correct === false).map((question) => question.itemId), results.attemptId ?? undefined)
           : undefined}
       />
     );
@@ -528,6 +550,7 @@ export function PracticePanel({
   }
 
   function handleAnswer(choiceId: string) {
+    hasInteractedRef.current = true;
     setSelectedChoice(choiceId);
     const attemptSessionId = sessionId ?? fallbackSessionId;
     const attemptSetId = data?.setId ?? setId ?? "practice";
@@ -565,6 +588,8 @@ export function PracticePanel({
           if (isApiConflict(error, "attempt_complete")) {
             setShowRecap(true);
             void resultsQuery.refetch();
+          } else {
+            toast.error("Could not save your answer. Try again.");
           }
         },
       }
@@ -576,6 +601,7 @@ export function PracticePanel({
   }
 
   function askAboutItem(question: string) {
+    const requestEpoch = contentEpochRef.current;
     if (!lastResult) return;
     const selectedLabel = item.choices.find((c) => c.id === selectedChoice)?.label ?? "unknown";
     const correctLabel = lastResult.correctAnswerText ??
@@ -597,10 +623,11 @@ export function PracticePanel({
       },
       {
         onSuccess: (answer) => {
+          if (requestEpoch !== contentEpochRef.current) return;
           setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
           setPendingFollowUp(null);
         },
-        onError: () => setPendingFollowUp(null),
+        onError: () => { if (requestEpoch === contentEpochRef.current) setPendingFollowUp(null); },
       }
     );
   }
@@ -617,6 +644,7 @@ export function PracticePanel({
       }
       dock={
         <ComposeDock
+          tourId="tour-test-dock"
           // Match the Lessons contract: the dock is a visible, locked
           // advance action until server-side grading succeeds. Compose before
           // an answer would make it both look like a tutor and offer an easy
@@ -633,6 +661,7 @@ export function PracticePanel({
               if (lastResult && !isFetching) advance();
             },
             disabled: !lastResult || isFetching,
+            pending: Boolean(lastResult) && isFetching,
             icon: ArrowRightIcon,
           }}
           onAsk={lastResult ? askAboutItem : undefined}
@@ -642,52 +671,47 @@ export function PracticePanel({
       }
     >
       <StudyStream>
-        {bankBuildingUsable ? (
-          <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-            More questions on the way.
-          </p>
-        ) : null}
         {includesRepeats ? (
           <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
             You&apos;ve seen every question for this skill. Here are the ones worth another look.
           </div>
         ) : null}
-        <div id="tour-practice-card" className="border bg-card px-5 py-6 sm:px-6">
-          <AnswerableCard
-            prompt={item.prompt}
-            choices={item.choices}
-            selectedId={selectedChoice}
-            onSelect={handleAnswer}
-            choicesAnchorId="tour-practice-choices"
-            resultAnchorId="tour-practice-feedback"
-            result={
-              lastResult
-                ? {
-                    correct: lastResult.correct,
-                    explanation: lastResult.explanation,
-                    mastery: lastResult.mastery,
-                    correctChoiceId: lastResult.correctOptionId,
-                  }
-                : null
-            }
-            isPending={submit.isPending}
-            meta={
-              <>
-                {bandTransition ? (
-                  <span className="capitalize">
-                    {bandTransition.from} → {bandTransition.to}
-                  </span>
-                ) : null}
-                {streak > 1 ? <span>{streak} in a row</span> : null}
-                {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
-              </>
-            }
-          />
-        </div>
+        <AnswerableCard
+          id="tour-practice-card"
+          prompt={item.prompt}
+          choices={item.choices}
+          selectedId={selectedChoice}
+          onSelect={handleAnswer}
+          choicesAnchorId="tour-practice-choices"
+          resultAnchorId="tour-practice-feedback"
+          result={
+            lastResult
+              ? {
+                  correct: lastResult.correct,
+                  explanation: lastResult.explanation,
+                  mastery: lastResult.mastery,
+                  correctChoiceId: lastResult.correctOptionId,
+                }
+              : null
+          }
+          isPending={submit.isPending}
+          meta={
+            <>
+              {bandTransition ? (
+                <span className="capitalize">
+                  {bandTransition.from} → {bandTransition.to}
+                </span>
+              ) : null}
+              {streak > 1 ? <span>{streak} in a row</span> : null}
+              {gain && gain.xp > 0 ? <span className="text-brand-green">+{gain.xp} XP</span> : null}
+            </>
+          }
+        />
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">
             <UserBlock text={turn.question} />
             <AssistantBlock
+              id={index === 0 ? "tour-test-reply" : undefined}
               text={turn.answer}
               animationKey={`${courseId}:${replySessionId}:${skillId}:${data?.setId ?? setId ?? "session"}:follow-up:${index}`}
             />

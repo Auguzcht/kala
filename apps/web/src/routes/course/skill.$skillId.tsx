@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { z } from "zod";
 import { useSession } from "@/lib/auth/AuthProvider";
-import { SkillHub, type SkillTab } from "@/features/skill-hub";
+import { SkillHub, hubSearchSchema, type SkillTab } from "@/features/skill-hub";
 
 // /course/skill/:skillId — the skill hub. The active mode lives in the URL so
 // the page is linkable and the Workspace "Next up" card can deep-link straight
@@ -9,30 +8,19 @@ import { SkillHub, type SkillTab } from "@/features/skill-hub";
 //
 // Browse-then-commit, same shape for Study and Test: `tab` alone is the browse
 // pane (which cards / which set), and `start=1` begins the session takeover.
-// `setId` additionally opens one set's detail view (a retake, or a study→test
-// bridge handoff) so the student sees what they're about to be tested on.
+// `setId` additionally opens one set's detail view (a saved set or a retake) so the student sees what they're about to be tested on.
 // Lesson has no browse step — there is one guided walkthrough per skill, not a
 // choice — so `tab=lesson` goes straight into the lesson session.
-const skillSearchSchema = z.object({
-  tab: z.enum(["lesson", "study", "test"]).optional(),
-  setId: z.string().optional(),
-  sessionId: z.string().optional(),
-  studySetId: z.string().optional(),
-  missedItemIds: z.array(z.string()).optional(),
-  repeats: z.coerce.boolean().optional(),
-  start: z.coerce.boolean().optional(),
-  mode: z.enum(["review", "all"]).optional().catch(undefined),
-});
 
 export const Route = createFileRoute("/course/skill/$skillId")({
-  validateSearch: skillSearchSchema,
+  validateSearch: hubSearchSchema,
   component: SkillHubPage,
 });
 
 function SkillHubPage() {
   const courseId = useSession()?.courseId ?? "";
   const { skillId } = Route.useParams();
-  const { tab: searchTab, setId, sessionId, studySetId, missedItemIds, start, repeats, mode } = Route.useSearch();
+  const { tab: searchTab, setId, sessionId, attemptId, studySetId, missedItemIds, start, repeats, mode } = Route.useSearch();
   const tab = searchTab ?? "study";
   const navigate = useNavigate();
   const to = "/course/skill/$skillId" as const;
@@ -44,6 +32,7 @@ function SkillHubPage() {
       tab={tab as SkillTab}
       setId={setId}
       sessionId={sessionId}
+      attemptId={attemptId}
       studySetId={studySetId}
       missedItemIds={missedItemIds}
       includesRepeats={repeats}
@@ -90,7 +79,7 @@ function SkillHubPage() {
           },
         })
       }
-      onSessionReady={(nextSetId, nextSessionId) =>
+      onSessionReady={(nextSetId, nextSessionId, nextAttemptId) =>
         navigate({
           to,
           params: { skillId },
@@ -101,14 +90,15 @@ function SkillHubPage() {
             repeats,
             start: true,
             sessionId: nextSessionId,
+            attemptId: nextAttemptId,
           },
         })
       }
-      onStudyMissedSet={(missedSetId, itemIds) =>
+      onStudyMissedSet={(missedSetId, itemIds, reviewAttemptId) =>
         navigate({
           to,
           params: { skillId },
-          search: { tab: "study", start: true, mode: "all", studySetId: missedSetId, missedItemIds: itemIds },
+          search: { tab: "study", start: true, mode: "all", studySetId: missedSetId, missedItemIds: itemIds, attemptId: reviewAttemptId },
         })
       }
       onReviewMissedSet={(missedSetId) =>
@@ -118,6 +108,7 @@ function SkillHubPage() {
           search: {
             tab: "test",
             setId: missedSetId,
+            attemptId,
             start: true,
             sessionId: crypto.randomUUID(),
           },

@@ -45,7 +45,7 @@ export function StudyStream({
     >
       <Conversation>
         <ConversationContent className="gap-5 py-6">
-          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5 px-4">
+          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5">
             {children}
           </div>
         </ConversationContent>

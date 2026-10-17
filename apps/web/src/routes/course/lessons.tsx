@@ -1,8 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { LessonChat } from "@/features/lessons";
 import { TopicLanding } from "@/components/study/TopicLanding";
 import { useTwin } from "@/features/twin";
 import { useBankStatus } from "@/features/bank";
@@ -15,17 +13,7 @@ function LessonsPage() {
   const courseId = useSession()?.courseId ?? "";
   const { data: twin, isLoading } = useTwin(courseId);
   const { data: bankStatus } = useBankStatus(courseId);
-  const [skillId, setSkillId] = useState<string | null>(null);
-
-  if (skillId) {
-    return (
-      <LessonChat
-        courseId={courseId}
-        skillId={skillId}
-        onExit={() => setSkillId(null)}
-      />
-    );
-  }
+  const navigate = useNavigate();
 
   return (
     <>
@@ -37,7 +25,7 @@ function LessonsPage() {
         isLoading={isLoading}
         skills={twin?.skills ?? []}
         bankStatus={bankStatus}
-        onChoose={setSkillId}
+        onChoose={(skillId) => navigate({ to: "/course/skill/$skillId", params: { skillId }, search: { tab: "lesson" } })}
         gridId="tour-lessons-picker"
         firstCardId="tour-lessons-first-card"
       />

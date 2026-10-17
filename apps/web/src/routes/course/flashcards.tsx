@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/course/flashcards")({
 });
 
 function FlashcardsPage() {
+  const navigate = useNavigate();
   const courseId = useSession()?.courseId ?? "";
   const { data: twin, isLoading } = useTwin(courseId);
   // limit=0 returns the course-wide review counts without fetching cards.
@@ -40,7 +41,7 @@ function FlashcardsPage() {
       <TopicLanding
         isLoading={isLoading}
         skills={twin?.skills ?? []}
-        onChoose={(skillId) => setSession({ skillId })}
+        onChoose={(skillId) => navigate({ to: "/course/skill/$skillId", params: { skillId }, search: { tab: "study" } })}
         caption="spaced recall card"
         gridId="tour-flashcards-picker"
         recommended={

@@ -95,6 +95,7 @@ export function TestBrowser({
       <SetDetail
         courseId={courseId}
         setId={setId}
+        skillId={skillId}
         onStart={onStart}
         onBack={() => onSelectSet("")}
         includesRepeats={includesRepeats}
@@ -109,14 +110,14 @@ export function TestBrowser({
  * informational, not a verdict (the mastery palette reserves red for the
  * instructor at-risk axis). */
 function AttemptPill({ attempt, questionCount }: { attempt: PracticeSetAttempt; questionCount: number }) {
-  if (attempt.attemptedCount === null) {
+  if ((attempt.attemptedCount ?? 0) === 0) {
     return (
       <span className="inline-flex items-center rounded-sm bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
         Not attempted
       </span>
     );
   }
-  if (attempt.attemptedCount > questionCount) {
+  if ((attempt.attemptedCount ?? 0) > questionCount) {
     return (
       <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
         Multiple attempts
@@ -126,7 +127,7 @@ function AttemptPill({ attempt, questionCount }: { attempt: PracticeSetAttempt; 
   const correct = attempt.correctCount ?? 0;
   return (
     <span className="inline-flex items-center rounded-sm bg-brand-green/15 px-2 py-0.5 text-[10.5px] font-semibold text-foreground">
-      {correct}/{attempt.attemptedCount} correct
+      {correct}/{questionCount} correct
     </span>
   );
 }
@@ -166,7 +167,6 @@ function SetList({
     ["waiting_content", "building", "error"].includes(bankStatus);
   const isUsable = bank.data?.bankServing !== true || bankSkill?.usable === true;
   const isPreparing = isBuilding && !isUsable && !isNoMaterial;
-  const isBuildingUsable = isBuilding && isUsable;
   const canGenerate = bank.data !== undefined && isUsable && !isNoMaterial;
   const reduceMotion = useReducedMotion();
   const sets = data?.sets ?? [];
@@ -199,12 +199,12 @@ function SetList({
       { onSuccess: (set) => {
           if (set.setId) onSelectSet(set.setId, Boolean(set.includesRepeats));
           else void bank.refetch();
-        } }
+        }, onError: () => toast.error("Could not prepare a test. Try again.") }
     );
   };
 
   return (
-    <div className="space-y-4">
+    <div id="tour-test-menu" className="space-y-4">
       <p className="text-sm text-muted-foreground">
         A graded check on this skill. It moves your mastery. Pick a set to see
         what's in it before you start.
@@ -214,17 +214,12 @@ function SetList({
         <div className="border border-dashed bg-card px-5 py-4">
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Select New set below, or study these cards and hit "Test me on these".
+            Select New set below to prepare questions for this topic.
             Saved sets land here so you can retake them later.
           </p>
         </div>
       ) : null}
 
-      {isBuildingUsable ? (
-        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-          More questions on the way.
-        </p>
-      ) : null}
       {isPreparing ? (
         <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
           Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0}).
@@ -322,6 +317,7 @@ function SetList({
             when the new set lands. */}
         <button
           type="button"
+          id="tour-test-new-set"
           onClick={onGenerate}
           disabled={generate.isPending || isPreparing || isNoMaterial || !canGenerate}
           className={cn(
@@ -368,18 +364,19 @@ function SetList({
 function SetDetail({
   courseId,
   setId,
+  skillId,
   onStart,
   onBack,
   includesRepeats,
 }: {
   courseId: string;
   setId: string;
+  skillId: string;
   onStart: (setId?: string) => void;
   onBack: () => void;
   includesRepeats?: boolean;
 }) {
   const { data, isLoading, isError, refetch } = usePracticeSetById(courseId, setId);
-  const createNewSet = useGenerateSet(courseId);
 
   if (isLoading) {
     return (
@@ -395,12 +392,15 @@ function SetDetail({
       <EmptyState
         title="We could not load this set"
         description="Check your connection and try again."
-        action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
+        action={<div className="flex gap-2"><Button variant="outline" onClick={() => refetch()}>Retry</Button><Button variant="outline" onClick={onBack}>All tests</Button></div>}
       />
     );
   }
 
-  const attempted = data.attemptedCount !== null;
+  if (data.skillId !== skillId) {
+    return <EmptyState title="This test belongs to another topic" action={<Button variant="outline" onClick={onBack}>All tests</Button>} />;
+  }
+  const attempted = (data.attemptedCount ?? 0) > 0;
   const unavailable = data.available === false || data.status === "unavailable";
   const canStart = data.status === "ready" && !unavailable;
   const attempt: PracticeSetAttempt = {
@@ -408,33 +408,17 @@ function SetDetail({
     correctCount: data.correctCount,
     lastAttemptedAt: data.lastAttemptedAt,
   };
-  const setSkillId = data.skillId;
-  const setSize = data.items.length || 5;
+  const complete = attempted && (data.attemptedCount ?? 0) >= data.items.length;
   const startLabel = unavailable
     ? "This set is no longer available"
     : canStart
-      ? attempted
-        ? createNewSet.isPending ? "Preparing new set…" : "New set"
-        : "Start test"
+      ? complete ? "View results" : attempted ? "Continue test" : "Start test"
       : data.status === "generating"
         ? `Preparing questions (${data.readyCount}/${data.requestedSize})`
         : "Questions unavailable";
 
   function startTest() {
-    if (!attempted) {
-      onStart();
-      return;
-    }
-    createNewSet.mutate(
-      { skillId: setSkillId, size: setSize },
-      {
-        onSuccess: (newSet) => {
-          if (newSet.setId) onStart(newSet.setId);
-          else toast.error("No new questions are ready yet. Try again shortly.");
-        },
-        onError: () => toast.error("Could not prepare a new test set. Try again."),
-      }
-    );
+    onStart();
   }
 
   return (
@@ -470,18 +454,21 @@ function SetDetail({
           <Button
             variant="orange"
             size="lg"
+            id="tour-test-start"
             onClick={startTest}
-            disabled={!canStart || createNewSet.isPending}
+            disabled={!canStart}
             className="shrink-0"
           >
             {startLabel}
-            {canStart ? <ArrowRightIcon size={16} /> : null}
+            {data.status === "generating"
+              ? <Spinner aria-hidden />
+              : canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>
       </div>
-      {attempted && !unavailable ? (
+      {complete && !unavailable ? (
         <p className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
-          This saved set is complete. Start a new set to keep practicing this skill.
+          This set is complete. View your results to review missed cards or retake it.
         </p>
       ) : null}
       {includesRepeats ? (
