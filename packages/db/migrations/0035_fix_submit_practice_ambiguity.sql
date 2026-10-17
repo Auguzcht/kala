@@ -325,6 +325,8 @@ declare
   v_completed_at timestamptz;
   v_set_institution_id uuid;
   v_set_course_id uuid;
+  v_new_id uuid;
+  v_new_number smallint;
 begin
   perform pg_advisory_xact_lock(hashtextextended(
     p_user_id::text || ':practice-set:' || p_set_id::text, 0));
@@ -349,12 +351,14 @@ begin
     raise exception 'attempt_in_progress' using errcode = 'P0001';
   end if;
 
-  return query insert into public.quiz_set_attempts (
+  insert into public.quiz_set_attempts (
     institution_id, user_id, course_id, set_id, attempt_number
   ) values (
     p_institution_id, p_user_id, p_course_id, p_set_id, v_latest_number + 1
   ) returning public.quiz_set_attempts.id,
-             public.quiz_set_attempts.attempt_number;
+             public.quiz_set_attempts.attempt_number
+    into v_new_id, v_new_number;
+  return query select v_new_id, v_new_number;
 end;
 $$;
 
