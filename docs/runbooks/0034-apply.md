@@ -1,6 +1,6 @@
 # Migration 0034: attempt-aware practice
 
-This runbook is for applying `packages/db/migrations/0034_attempt_aware_practice.sql` after review and approval. The migration has **not** been applied by this task. Run all checks below in the Supabase SQL editor immediately before applying; every query is read-only.
+Migration `packages/db/migrations/0034_attempt_aware_practice.sql` was applied manually by the user in the Supabase SQL editor on 2026-10-18. The checks below are read-only and can be rerun to verify the live schema.
 
 ## Pre-apply checks, results 2026-10-17
 
@@ -130,6 +130,103 @@ select (select count(*) from comparisons) as user_count,
 ```
 
 Expected from the user's 2026-10-17 audit: `user_count = 3`, `mismatches = 0`, `mismatching_users = []`. The equivalence works because migration 0032 passes the same `p_idempotency_key` into `review_flashcard` at `packages/db/migrations/0032_practice_answer_recap.sql:188-192`, allowing saved practice answers to be matched to their quiz review rows. The only pre-0032 quiz reviews without a saved answer snapshot remain included in the after-formula.
+
+## Applied 2026-10-18 (manual, SQL editor), post-apply checks PASSED (user-run)
+
+The user applied migration 0034 manually in the Supabase SQL editor. The following five read-only checks were run by the user on 2026-10-18 and passed. Re-run them immediately before any future apply or deployment that depends on this schema.
+
+### C1. Function signatures
+
+```sql
+select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as signature
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in ('review_flashcard', 'start_practice_retake', 'submit_practice')
+ order by p.proname, signature;
+```
+
+Result: 3 rows; old 9-argument versions are gone:
+
+```text
+review_flashcard(uuid,uuid,uuid,uuid,text,text,uuid,text,integer,boolean)
+start_practice_retake(uuid,uuid,uuid,uuid)
+submit_practice(uuid,uuid,uuid,uuid,text,uuid,uuid,text,integer,uuid)
+```
+
+### C2. Unique constraints
+
+```sql
+select c.conname
+  from pg_constraint c
+ where c.connamespace = 'public'::regnamespace
+   and c.contype = 'u'
+   and c.conname in (
+     'quiz_set_attempts_user_set_number_key',
+     'practice_answer_results_attempt_item_key',
+     'practice_answer_results_user_id_idempotency_key_key',
+     'quiz_set_attempts_user_id_set_id_key',
+     'practice_answer_results_user_id_set_id_item_id_key'
+   )
+ order by c.conname;
+```
+
+Result: the three current constraints exist, and the two old constraints are gone:
+
+```text
+practice_answer_results_attempt_item_key
+practice_answer_results_user_id_idempotency_key_key
+quiz_set_attempts_user_set_number_key
+```
+
+### C3. Immutable trigger state
+
+```sql
+select t.tgenabled
+  from pg_trigger t
+  join pg_class c on c.oid = t.tgrelid
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'public'
+   and c.relname = 'practice_answer_results'
+   and t.tgname = 'practice_answer_results_immutable'
+   and not t.tgisinternal;
+```
+
+Result: `tgenabled = 'O'`.
+
+### C4. Answers missing an attempt
+
+```sql
+select count(*) as answers_with_set_but_no_attempt
+  from public.practice_answer_results
+ where set_id is not null and attempt_id is null;
+```
+
+Result: `0`.
+
+### C5. Attempts above set size
+
+```sql
+with set_sizes as (
+  select qs.id as set_id,
+         coalesce(nullif(qsi.item_count, 0), gi.item_count, 0) as item_count
+    from public.quiz_sets qs
+    left join (
+      select set_id, count(*)::integer as item_count
+        from public.quiz_set_items group by set_id
+    ) qsi on qsi.set_id = qs.id
+    left join (
+      select set_id, count(*)::integer as item_count
+        from public.generated_items group by set_id
+    ) gi on gi.set_id = qs.id
+)
+select count(*) as attempts_above_set_size
+  from public.quiz_set_attempts qsa
+  join set_sizes ss on ss.set_id = qsa.set_id
+ where qsa.attempted_count > ss.item_count;
+```
+
+Result: `0`.
 
 ## `review_flashcard` write map
 
