@@ -6,6 +6,7 @@ import {
   fetchPracticeSetById,
   fetchPracticeSetResults,
   fetchPracticeSets,
+  startRetake,
   submitPracticeAttempt,
 } from "@/features/practice/api/practice.api";
 import type { PracticeSavedSet, PracticeSet } from "@/features/practice/schema/practice.schema";
@@ -70,12 +71,28 @@ export function usePracticeSetById(courseId: string, setId: string | null) {
   });
 }
 
-export function usePracticeSetResults(courseId: string, setId: string | null, enabled = true) {
+export function usePracticeSetResults(
+  courseId: string,
+  setId: string | null,
+  enabled = true,
+  attemptId?: string,
+) {
   return useQuery({
-    queryKey: ["practice", courseId, "set-results", setId],
-    queryFn: () => fetchPracticeSetResults(courseId, setId as string),
+    queryKey: ["practice", courseId, "set-results", setId, attemptId],
+    queryFn: () => fetchPracticeSetResults(courseId, setId as string, attemptId),
     enabled: Boolean(courseId && setId && enabled),
     staleTime: 0,
+  });
+}
+
+export function useStartRetake(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (setId: string) => startRetake(courseId, setId),
+    onSuccess: (_result, setId) => {
+      queryClient.invalidateQueries({ queryKey: ["practice", courseId, "set-results", setId] });
+      queryClient.invalidateQueries({ queryKey: ["practice", courseId, "sets"] });
+    },
   });
 }
 
@@ -124,6 +141,7 @@ export function useSubmitPractice(courseId: string) {
       choiceId: string;
       latencyMs: number;
       setId?: string | null;
+      attemptId?: string;
       sessionId: string;
       idempotencyKey: string;
     }) =>
