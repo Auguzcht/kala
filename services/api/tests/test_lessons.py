@@ -39,13 +39,13 @@ def test_assembly_kicks_check_assignment_without_writing_checks(monkeypatch):
 
     monkeypatch.setattr(lessons.db, "select", fake_select)
     monkeypatch.setattr(lessons.db, "update", lambda *args: updates.append(args))
-    monkeypatch.setattr(lessons, "kick_bank", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(lessons, "kick_lesson_checks", lambda *args: calls.append(args))
     result = lessons._assemble_lesson(
         lesson_row={"id": "lesson", "course_id": "course", "skill_id": "skill",
                     "title": "Lesson", "status": "ready"}, institution_id="institution",
     )
     assert result["steps"][0]["check"] is None
-    assert calls == [(('course', 'lesson_checks'), {"lesson_id": "lesson"})]
+    assert calls == [("course", "lesson")]
     assert not updates
 
 

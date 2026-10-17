@@ -1,3 +1,4 @@
+import json
 import pytest
 from app.bank import kick as kick_module
 from app.deps import CurrentUser
@@ -20,6 +21,20 @@ def test_kick_bank_debounces_second_call(monkeypatch):
     assert kick_module.kick_bank("c", "status") is True
     assert kick_module.kick_bank("c", "status") is False
     assert len(invokes) == 1
+
+
+def test_kick_lesson_checks_invokes_only_the_requested_lesson(monkeypatch):
+    invokes = []
+    monkeypatch.setattr(kick_module, "get_settings", lambda: type("S", (), {"worker_function_arn": "arn", "aws_region": "region"})())
+    class Lambda:
+        def invoke(self, **kwargs):
+            invokes.append(kwargs)
+    monkeypatch.setattr(kick_module.boto3, "client", lambda *args, **kwargs: Lambda())
+    assert kick_module.kick_lesson_checks("course", "lesson") is True
+    assert len(invokes) == 1
+    assert json.loads(invokes[0]["Payload"]) == {
+        "trigger": "lesson_checks", "courseId": "course", "lessonId": "lesson", "chainDepth": 0,
+    }
 
 
 def test_student_status_hides_last_error_and_other_course_is_404(monkeypatch):

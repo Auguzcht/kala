@@ -38,7 +38,7 @@ import httpx
 from app.ai import bedrock, rag
 from app.ai.concurrency import map_concurrent
 from app.ai.router import get_fallback_for, get_model_for
-from app.bank.kick import kick_bank
+from app.bank.kick import kick_bank, kick_lesson_checks
 from app.bank.serving import _approved_item_pool, bank_enabled
 from app.db import supabase as db
 from app.routers.item_generation_jobs import enqueue_lesson
@@ -402,7 +402,7 @@ def _assemble_lesson(*, lesson_row: dict, institution_id: str, course_id: str | 
         state = state_rows[0] if state_rows else {"status": "waiting_content", "mcq_ready": 0}
         if int(state.get("mcq_ready") or 0) >= 5:
             if any(not step.get("check_item_id") for step in steps):
-                kick_bank(course_id, "lesson_checks", lesson_id=lesson_id)
+                kick_lesson_checks(course_id, lesson_id)
         else:
             kick_bank(course_id, "lesson")
 

@@ -6,7 +6,7 @@ from app.vector_utils import cosine, parse_vector
 
 
 def step_text(step: dict) -> str:
-    title = step.get("title") or step.get("summary") or ""
+    title = step.get("title") or ""
     points = step.get("detail_points") or []
     if isinstance(points, str):
         points = [points]

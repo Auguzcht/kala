@@ -1,8 +1,12 @@
-from app.lesson_matching import assign_matches
+from app.lesson_matching import assign_matches, step_text
 
 
 def vec(x, y=0):
     return [x, y] + [0.0] * 1022
+
+
+def test_step_text_does_not_duplicate_summary_when_title_is_not_stored():
+    assert step_text({"summary": "Summary", "detail_points": ["Point"]}) == "Summary\nPoint"
 
 
 def test_best_similarity_wins_and_duplicate_candidates_are_excluded():

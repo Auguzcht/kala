@@ -63,6 +63,7 @@ def run(*, lesson_id: str, institution_id: str | None = None) -> dict:
         }, {"check_item_id": item_id})
         if updated:
             assigned += 1
+            step["check_item_id"] = item_id
         logger.info("lesson check assigned lesson_id=%s step_id=%s item_id=%s score=%.4f",
                     lesson_id, step["id"], item_id, score)
     return {"lesson_id": lesson_id, "steps": len(steps), "embedded": embedded_count,
