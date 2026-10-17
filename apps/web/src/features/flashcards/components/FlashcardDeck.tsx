@@ -77,7 +77,7 @@ function StateBadge({ state }: { state: FlashcardCard["state"] }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10.5px] font-semibold",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[10.5px] font-semibold",
         presentation?.className ?? "border-brand-orange/40 bg-brand-orange/10 text-brand-orange"
       )}
     >
@@ -708,12 +708,12 @@ export function FlashcardDeck({
         {/* Deck state is session context, not a second panel header. */}
         <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-xs text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="truncate text-sm font-semibold text-foreground">
+            <span className="min-w-0 truncate text-sm font-semibold text-foreground">
               {card.skillName ?? "Card"}
             </span>
             {practiceSetId ? null : <StateBadge state={card.state} />}
             {isSecondLook ? (
-              <span className="inline-flex items-center rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
+              <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
                 Second look
               </span>
             ) : null}
