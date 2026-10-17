@@ -215,7 +215,7 @@ function SetList({
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Select New set below, or study these cards and hit "Test me on these".
-            saved sets land here to retake.
+            Saved sets land here so you can retake them later.
           </p>
         </div>
       ) : null}
@@ -291,15 +291,23 @@ function SetList({
                   {set.size} {set.size === 1 ? "question" : "questions"} · {fmtDate(set.createdAt)}
                 </p>
               </div>
-              <div className="mt-auto flex flex-wrap items-center gap-2">
-                <AttemptPill attempt={set} questionCount={set.size} />
-                {set.available === false || set.status === "unavailable" ? (
-                  <span className="text-[11px] text-muted-foreground">This set is no longer available</span>
-                ) : null}
-                {set.lastAttemptedAt ? (
-                  <span className="text-[11px] text-muted-foreground">
-                    last {fmtDate(set.lastAttemptedAt)}
-                  </span>
+              <div className="mt-auto space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <AttemptPill attempt={set} questionCount={set.size} />
+                  {set.available === false || set.status === "unavailable" ? (
+                    <span className="text-[11px] text-muted-foreground">This set is no longer available</span>
+                  ) : null}
+                  {set.lastAttemptedAt ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      last {fmtDate(set.lastAttemptedAt)}
+                    </span>
+                  ) : null}
+                </div>
+                {typeof set.attemptCount === "number" && set.attemptCount > 1 &&
+                set.bestScore !== null && typeof set.bestScore === "object" ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Best {set.bestScore.correct}/{set.bestScore.total} · {set.attemptCount} attempts
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -434,9 +442,9 @@ function SetDetail({
       <button
         type="button"
         onClick={onBack}
-        className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+        className="rounded-sm text-xs font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        ← All tests
+        <span aria-hidden="true">←</span> All tests
       </button>
 
       {/* Header repeats the card's color bar AND its tinted border, so grid ->
@@ -466,7 +474,7 @@ function SetDetail({
             disabled={!canStart || createNewSet.isPending}
             className="shrink-0"
           >
-          {startLabel}
+            {startLabel}
             {canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>

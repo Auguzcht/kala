@@ -21,6 +21,7 @@ import confetti from "canvas-confetti";
 // The palette is Kala's own (orange / gold / ink / paper) — confetti that
 // ignores the brand reads as a different product's celebration pasted in.
 const KALA_COLORS = ["#ff8a00", "#ffc63d", "#0e1b33", "#f7f8fb"];
+const celebrated = new Set<string>();
 
 export function celebrate() {
   const common = {
@@ -38,4 +39,10 @@ export function celebrate() {
   // Just off the bottom edge, one burst each side, angled up and inward.
   confetti({ ...common, origin: { x: 0.1, y: 1.05 }, angle: 65 });
   confetti({ ...common, origin: { x: 0.9, y: 1.05 }, angle: 115 });
+}
+
+export function celebrateOnce(key: string) {
+  if (celebrated.has(key)) return;
+  celebrated.add(key);
+  celebrate();
 }

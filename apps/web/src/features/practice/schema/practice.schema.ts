@@ -65,6 +65,17 @@ export const practiceSetAttemptSchema = z.object({
   lastAttemptedAt: z.string().nullable(),
 });
 
+const practiceAttemptScoreSchema = z.object({
+  correct: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
+
+const practiceSetAttemptSummarySchema = z.object({
+  latestScore: practiceAttemptScoreSchema.nullish(),
+  bestScore: practiceAttemptScoreSchema.nullish(),
+  attemptCount: z.number().int().nonnegative().nullish(),
+});
+
 // A saved set loaded by id (GET /practice/{id}/sets/{set_id}) — used to
 // re-enter test mode on a set the student already has (the bridge handoff and
 // the retake list). Carries prompts + choices only; the answer key stays
@@ -76,7 +87,7 @@ export const practiceSavedSetSchema = z.object({
   kind: z.string(),
   available: z.boolean().optional(),
   items: z.array(practiceItemSchema),
-}).merge(practiceSetProgressSchema).merge(practiceSetAttemptSchema);
+}).merge(practiceSetProgressSchema).merge(practiceSetAttemptSchema).merge(practiceSetAttemptSummarySchema);
 
 // The study-to-test bridge intentionally remains its old synchronous
 // contract; it does not touch item_generation_jobs.
@@ -93,7 +104,7 @@ export const practiceSetSummarySchema = z.object({
   createdAt: z.string(),
   available: z.boolean().optional(),
   status: z.enum(["available", "unavailable"]).optional(),
-}).merge(practiceSetAttemptSchema);
+}).merge(practiceSetAttemptSchema).merge(practiceSetAttemptSummarySchema);
 
 export const practiceSetListSchema = z.object({
   courseId: z.string(),
@@ -109,6 +120,14 @@ export const practiceSubmitResultSchema = z.object({
   xpAwarded: z.number().int().nonnegative().optional(),
   masteryBefore: z.object({ level: z.string(), value: z.number().nullable() }).optional(),
   masteryAfter: z.object({ level: z.string(), value: z.number().nullable() }).optional(),
+  attemptId: z.string().nullish(),
+  attemptNumber: z.number().int().positive().nullish(),
+});
+
+export const practiceRetakeResponseSchema = z.object({
+  setId: z.string(),
+  attemptId: z.string(),
+  attemptNumber: z.number().int().positive(),
 });
 
 export const practiceResultsQuestionSchema = z.object({
@@ -126,6 +145,16 @@ export const practiceResultsQuestionSchema = z.object({
 export const practiceSetResultsSchema = z.object({
   courseId: z.string(),
   setId: z.string(),
+  attemptId: z.string().nullish(),
+  attemptNumber: z.number().int().positive().nullish(),
+  attempts: z.array(z.object({
+    attemptId: z.string().nullish(),
+    attemptNumber: z.number().int().positive().nullish(),
+    correct: z.number().int().nonnegative().nullish(),
+    answered: z.number().int().nonnegative().nullish(),
+    total: z.number().int().nonnegative().nullish(),
+    completedAt: z.string().nullish(),
+  })).nullish(),
   score: z.object({
     correct: z.number().int().nonnegative(),
     answered: z.number().int().nonnegative(),
@@ -149,5 +178,6 @@ export type PracticeSetSummary = z.infer<typeof practiceSetSummarySchema>;
 export type PracticeSetList = z.infer<typeof practiceSetListSchema>;
 export type PracticeSetAttempt = z.infer<typeof practiceSetAttemptSchema>;
 export type PracticeSubmitResult = z.infer<typeof practiceSubmitResultSchema>;
+export type PracticeRetakeResponse = z.infer<typeof practiceRetakeResponseSchema>;
 export type PracticeResultsQuestion = z.infer<typeof practiceResultsQuestionSchema>;
 export type PracticeSetResults = z.infer<typeof practiceSetResultsSchema>;

@@ -159,7 +159,7 @@ export function StudyBrowser({
       ) : null}
 
       {/* Both sides shown: Study never grades, so there is nothing to hide. */}
-      <ol className="divide-y divide-border border bg-card">
+      <ol aria-label="Study cards" className="divide-y divide-border border bg-card">
         {cards.map((card: FlashcardMembershipCard, i: number) => (
           <motion.li
             key={card.itemId}
@@ -172,12 +172,12 @@ export function StudyBrowser({
               <p className="min-w-0 text-sm font-medium text-foreground">{card.prompt}</p>
               <StateBadge state={card.state} due={card.due} />
             </div>
-            <div className="flex items-start gap-2">
-              <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-brand-slate">
+            <div className="flex items-start gap-2 border-l-2 border-brand-green/40 pl-3">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Answer
               </span>
-              <p className="min-w-0 text-sm text-muted-foreground">
-              {card.back.label ?? "No answer label"}
+              <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">
+                {card.back.label ?? "No answer label"}
               </p>
             </div>
           </motion.li>

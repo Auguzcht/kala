@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { ArrowLeftIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { ComposeDock } from "@/components/study/ComposeDock";
@@ -12,15 +13,14 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
-import { CheckIcon } from "@/components/ui/check";
 import { MasteryBand } from "@/components/kala";
-import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
+import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet, useStartRetake } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
-import { celebrate } from "@/lib/celebrate";
+import { celebrateOnce } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
-import { PracticeExplainMore } from "@/features/practice/components/PracticeExplainMore";
 import type { PracticeSetResults, PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
+import { toast } from "sonner";
 
 // Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
 // docs/AI_OVERHAUL_TODO.md). `skillId` is a required prop now, not an
@@ -61,20 +61,47 @@ function masteryBandForLevel(level: string) {
   return "no-evidence" as const;
 }
 
+function isApiConflict(error: unknown, code: string) {
+  return error instanceof Error && error.message.includes("API 409:") && error.message.includes(code);
+}
+
+function hasAttemptId(attemptId: string | null | undefined): attemptId is string {
+  return typeof attemptId === "string" && attemptId.trim().length > 0;
+}
+
+type ScoredAttempt = NonNullable<PracticeSetResults["attempts"]>[number] & {
+  attemptNumber: number;
+  correct: number;
+  total: number;
+};
+
 function PracticeRecap({
   results,
   onDone,
   onNewSet,
+  onRetake,
+  isRetaking,
   isCreatingSet,
   onStudyThese,
 }: {
   results: PracticeSetResults;
   onDone: () => void;
   onNewSet: () => void;
+  onRetake?: () => void;
+  isRetaking: boolean;
   isCreatingSet: boolean;
   onStudyThese?: (missedItemIds: string[]) => void;
 }) {
   const missed = results.questions.filter((question) => question.correct === false);
+  const attempts = (results.attempts ?? []).filter((attempt): attempt is ScoredAttempt =>
+    typeof attempt.attemptNumber === "number" &&
+    typeof attempt.correct === "number" &&
+    typeof attempt.total === "number"
+  );
+  const bestAttempt = attempts.reduce<ScoredAttempt | null>(
+    (best, attempt) => !best || attempt.correct > best.correct ? attempt : best,
+    null,
+  );
 
   return (
     <StudySurface bar={<SessionBar />}>
@@ -82,7 +109,12 @@ function PracticeRecap({
         <div className="overflow-hidden border bg-card">
           <header className="border-b bg-muted/30 px-5 py-5 sm:px-7 sm:py-6">
             <div>
-              <h2 className="font-display text-xl font-semibold tracking-tight text-foreground">Test complete</h2>
+              <div className="flex items-baseline gap-2">
+                <h2 className="font-display text-xl font-semibold tracking-tight text-foreground">Test complete</h2>
+                {typeof results.attemptNumber === "number" && results.attemptNumber > 1 ? (
+                  <span className="text-xs font-semibold text-muted-foreground">Attempt {results.attemptNumber}</span>
+                ) : null}
+              </div>
               <p className="mt-1 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
                 {results.score.correct}<span className="text-muted-foreground">/{results.score.total}</span>
                 {results.score.percent == null ? null : (
@@ -91,6 +123,15 @@ function PracticeRecap({
                   </span>
                 )}
               </p>
+              {(results.attempts?.length ?? 0) >= 2 && attempts.length > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {attempts.map((attempt, index) => (
+                    <span key={`${attempt.attemptId ?? attempt.attemptNumber}:${index}`}>
+                      {index > 0 ? " · " : ""}Attempt {attempt.attemptNumber}: {attempt.correct}/{attempt.total}{attempt === bestAttempt ? " · Best" : ""}
+                    </span>
+                  ))}
+                </p>
+              ) : null}
             </div>
             <div className="mt-3 flex flex-col items-start gap-0.5 text-sm">
               <span className="font-mono font-semibold tabular-nums text-brand-orange">+{results.totalXp} XP</span>
@@ -145,23 +186,29 @@ function PracticeRecap({
             )}
 
             <div className="flex flex-wrap gap-2 border-t pt-4">
-              <Button variant="orange" onClick={onDone}>
-                <CheckIcon size={16} aria-hidden />
-                Done
-              </Button>
-              <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet}>
-                <ArrowRightIcon size={16} aria-hidden />
-                {isCreatingSet ? "Loading new set…" : "New set"}
-              </Button>
               {onStudyThese ? (
                 <Button
-                  variant="outline"
+                  variant="orange"
                   onClick={() => onStudyThese(missed.map((question) => question.itemId))}
                 >
                   <BookOpenIcon size={16} aria-hidden />
                   Review missed
                 </Button>
               ) : null}
+              {hasAttemptId(results.attemptId) && onRetake ? (
+                <Button variant="outline" onClick={onRetake} disabled={isRetaking} className="group">
+                  <RotateCcwIcon aria-hidden className="transition-transform duration-200 group-hover:-rotate-90 motion-reduce:transition-none" />
+                  {isRetaking ? "Starting retake…" : "Retake this set"}
+                </Button>
+              ) : null}
+              <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet} className="group">
+                <PlusIcon aria-hidden className="transition-transform duration-200 group-hover:scale-125 motion-reduce:transition-none" />
+                {isCreatingSet ? "Loading new set…" : "New set"}
+              </Button>
+              <Button variant="outline" onClick={onDone} className="group">
+                <ArrowLeftIcon aria-hidden className="transition-transform duration-200 group-hover:-translate-x-1 motion-reduce:transition-none" />
+                Back to tests
+              </Button>
             </div>
           </div>
         </div>
@@ -216,12 +263,26 @@ export function PracticePanel({
   const data = usingSaved ? savedQuery.data : generatedQuery.data;
   const preparingResponse = generatedQuery.data?.status === "preparing";
   const refetchGeneratedSet = generatedQuery.refetch;
+  const [activeAttemptId, setActiveAttemptId] = useState<string | undefined>();
+  const initialAttemptSetRef = useRef<string | null>(null);
   const submit = useSubmitPractice(courseId);
+  const startRetake = useStartRetake(courseId);
   const createNewSet = useGenerateSet(courseId);
   const gamification = useGamification(courseId);
   const followUp = useTutorAsk(courseId);
-  const resultsQuery = usePracticeSetResults(courseId, data?.setId ?? setId ?? null);
+  const resultsQuery = usePracticeSetResults(courseId, data?.setId ?? setId ?? null, true, activeAttemptId);
   const results = resultsQuery.data;
+
+  useEffect(() => {
+    if (!results || initialAttemptSetRef.current === results.setId) return;
+    initialAttemptSetRef.current = results.setId;
+    setActiveAttemptId(results.attemptId ?? undefined);
+  }, [results]);
+
+  useEffect(() => {
+    initialAttemptSetRef.current = null;
+    setActiveAttemptId(undefined);
+  }, [setId]);
 
   useEffect(() => {
     if (!usingSaved && preparingResponse && bankUsable) {
@@ -250,9 +311,6 @@ export function PracticePanel({
   // Reduced-motion is respected at the CALL SITE (celebrate() itself is a
   // plain side effect with no React dependency — see lib/celebrate.ts).
   const reduceMotion = useReducedMotion();
-  // Guards the celebration to fire exactly once per set when the recap is
-  // ready. A ref keeps rerenders and result refetches from repeating it.
-  const celebratedSetRef = useRef<string | null>(null);
 
   // The gamification summary is derived from immutable evidence; when the
   // submit invalidates it, the refetched delta IS the real +XP for that
@@ -286,11 +344,12 @@ export function PracticePanel({
 
   const restoredResultsSetRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!results || resultsQuery.isFetching || total === 0 || restoredResultsSetRef.current === results.setId) return;
-    restoredResultsSetRef.current = results.setId;
+    const resultsKey = results ? `${results.setId}:${results.attemptId ?? activeAttemptId ?? "1"}` : null;
+    if (!results || resultsQuery.isFetching || total === 0 || restoredResultsSetRef.current === resultsKey) return;
+    restoredResultsSetRef.current = resultsKey;
     const nextIndex = results.questions.findIndex((question) => !question.answered);
     if (nextIndex >= 0) setSetIndex(nextIndex);
-  }, [results, resultsQuery.isFetching, total]);
+  }, [results, resultsQuery.isFetching, total, activeAttemptId]);
 
   const sessionReadyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -319,11 +378,8 @@ export function PracticePanel({
   // from firing the same celebration twice during this mount.
   useEffect(() => {
     if (!recapVisible || !completeOnServer || resultsQuery.isFetching || resultsQuery.isError || !results?.setId) return;
-    const key = results.setId;
-    if (celebratedSetRef.current === key) return;
-    celebratedSetRef.current = key;
-    if (!reduceMotion) celebrate();
-  }, [recapVisible, completeOnServer, resultsQuery.isFetching, resultsQuery.isError, results?.setId, reduceMotion]);
+    if (!reduceMotion) celebrateOnce(`${results.setId}:${results.attemptId ?? "1"}`);
+  }, [recapVisible, completeOnServer, resultsQuery.isFetching, resultsQuery.isError, results?.setId, results?.attemptId, reduceMotion]);
 
   if (!usingSaved && bank.isLoading)
     return <LoadingPanel label="Checking question availability…" lines={4} />;
@@ -427,6 +483,30 @@ export function PracticePanel({
           { skillId, size: SET_SIZE },
           { onSuccess: (newSet) => newSet.setId && onOpenSet ? onOpenSet(newSet.setId) : onExit() }
         )}
+        onRetake={hasAttemptId(results.attemptId) ? () => {
+          startRetake.mutate(results.setId, {
+            onSuccess: (retake) => {
+              setActiveAttemptId(retake.attemptId);
+              setSetIndex(0);
+              setShowRecap(false);
+              setSelectedChoice(null);
+              setLastResult(null);
+              setFollowUpTurns([]);
+              setPendingFollowUp(null);
+              setStreak(0);
+              setGain(null);
+              setBandTransition(null);
+              setStartedAt(Date.now());
+            },
+            onError: (error) => {
+              if (isApiConflict(error, "attempt_in_progress")) {
+                toast.error("Finish this attempt first.");
+                void resultsQuery.refetch();
+              }
+            },
+          });
+        } : undefined}
+        isRetaking={startRetake.isPending}
         isCreatingSet={createNewSet.isPending}
         onStudyThese={onStudySet && results.questions.some((question) => question.correct === false)
           ? () => onStudySet(results.setId, results.questions.filter((question) => question.correct === false).map((question) => question.itemId))
@@ -451,7 +531,7 @@ export function PracticePanel({
     setSelectedChoice(choiceId);
     const attemptSessionId = sessionId ?? fallbackSessionId;
     const attemptSetId = data?.setId ?? setId ?? "practice";
-    const attemptKey = `${attemptSessionId}:${attemptSetId}:${item.id}`;
+    const attemptKey = `${attemptSessionId}:${attemptSetId}:${activeAttemptId ?? "1"}:${item.id}`;
     let idempotencyKey = submitKeysRef.current.get(attemptKey);
     if (!idempotencyKey) {
       idempotencyKey = crypto.randomUUID();
@@ -463,6 +543,7 @@ export function PracticePanel({
         choiceId,
         latencyMs: Date.now() - startedAt,
         setId: data?.setId,
+        attemptId: activeAttemptId,
         sessionId: attemptSessionId,
         idempotencyKey,
       },
@@ -480,6 +561,12 @@ export function PracticePanel({
             });
           }
         },
+        onError: (error) => {
+          if (isApiConflict(error, "attempt_complete")) {
+            setShowRecap(true);
+            void resultsQuery.refetch();
+          }
+        },
       }
     );
   }
@@ -489,15 +576,22 @@ export function PracticePanel({
   }
 
   function askAboutItem(question: string) {
+    if (!lastResult) return;
+    const selectedLabel = item.choices.find((c) => c.id === selectedChoice)?.label ?? "unknown";
+    const correctLabel = lastResult.correctAnswerText ??
+      item.choices.find((c) => c.id === lastResult.correctOptionId)?.label ??
+      "unknown";
     setPendingFollowUp(question);
     followUp.mutate(
       {
         question: [
-          "You are Kala helping a student with one practice question.",
-          "Before the question is graded, guide their reasoning without stating which option is correct. After grading, explain clearly if asked.",
+          "You are Kala helping a student review one practice question they have already answered.",
+          "Explain clearly and directly. Help them understand why the correct answer is right and, if they were wrong, why their choice was not.",
           `Question: ${item.prompt}`,
-          `Options: ${item.choices.map((choice) => `${choice.id}: ${choice.label}`).join(" | ")}`,
-          lastResult ? `The student was ${lastResult.correct ? "correct" : "incorrect"}.` : "The student has not submitted an answer yet.",
+          `Options: ${item.choices.map((c) => `${c.id}: ${c.label}`).join(" | ")}`,
+          `Student's answer: ${selectedLabel}`,
+          `Correct answer: ${correctLabel}`,
+          `The student was ${lastResult.correct ? "correct" : "incorrect"}.`,
           `Student question: ${question}`,
         ].join("\n\n"),
       },
@@ -533,7 +627,7 @@ export function PracticePanel({
               : isFetching
                 ? "Loading a new set…"
                 : atSetEnd
-                  ? "Next"
+                  ? "See results"
                   : "Next question",
             onClick: () => {
               if (lastResult && !isFetching) advance();
@@ -590,16 +684,6 @@ export function PracticePanel({
             }
           />
         </div>
-        {lastResult && selectedChoice ? (
-          <PracticeExplainMore
-            courseId={courseId}
-            sessionId={sessionId ?? fallbackSessionId}
-            item={item}
-            selectedChoiceId={selectedChoice}
-            result={lastResult}
-          />
-        ) : null}
-
         {followUpTurns.map((turn, index) => (
           <div key={`${turn.question}-${index}`} className="space-y-3">
             <UserBlock text={turn.question} />
