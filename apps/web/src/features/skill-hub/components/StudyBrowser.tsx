@@ -110,11 +110,13 @@ export function StudyBrowser({
   }
 
   const counts = data?.counts ?? { new: 0, learning: 0, slipping: 0, known: 0, dueToday: 0 };
+  const dueNow = cards.filter(isDueNow).length;
+  const dueLaterToday = Math.max(0, counts.dueToday - dueNow);
   const memoryTotal = counts.new + counts.learning + counts.slipping + counts.known;
   const summaryStates = ["new", "learning", "slipping", "known"] as const;
   const filterOptions: { id: CardFilter; label: string; count: number }[] = [
     { id: "all", label: "All", count: cards.length },
-    { id: "due", label: "Due", count: cards.filter((card) => card.due || card.state === "due").length },
+    { id: "due", label: "Due", count: dueNow },
     ...(["slipping", "learning", "new", "known"] as const).map((state) => ({
       id: state,
       label: state[0].toUpperCase() + state.slice(1),
@@ -125,12 +127,12 @@ export function StudyBrowser({
   const filteredCards = cards
     .filter((card) => {
       if (filter === "all") return true;
-      if (filter === "due") return card.due || card.state === "due";
+      if (filter === "due") return isDueNow(card);
       return card.state === filter;
     })
     .sort((a, b) => {
-      const aDue = a.due || a.state === "due";
-      const bDue = b.due || b.state === "due";
+      const aDue = isDueNow(a);
+      const bDue = isDueNow(b);
       if (aDue !== bDue) return aDue ? -1 : 1;
       return stateOrder[a.state] - stateOrder[b.state];
     });
@@ -143,8 +145,9 @@ export function StudyBrowser({
           <div className="flex items-center justify-between gap-4">
             <p className="font-display text-lg font-semibold text-foreground">{cards.length} cards</p>
             <div className="text-right sm:hidden">
-              <p className="font-display text-xl font-semibold leading-none text-foreground">{counts.dueToday}</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">due today</p>
+              <p className="font-display text-xl font-semibold leading-none text-foreground">{dueNow}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">due now</p>
+              {dueLaterToday > 0 ? <p className="mt-1 text-[10px] text-muted-foreground">{dueLaterToday} due later today</p> : null}
             </div>
           </div>
           <div
@@ -180,16 +183,17 @@ export function StudyBrowser({
           </p>
         </div>
         <div className="hidden min-w-24 text-right sm:block">
-          <p className="font-display text-2xl font-semibold leading-none text-foreground">{counts.dueToday}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">due today</p>
+          <p className="font-display text-2xl font-semibold leading-none text-foreground">{dueNow}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">due now</p>
+          {dueLaterToday > 0 ? <p className="mt-1 text-[11px] text-muted-foreground">{dueLaterToday} due later today</p> : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             variant="orange"
             onClick={() => onStart("review")}
-            disabled={data?.counts.dueToday === 0}
+            disabled={dueNow === 0}
           >
-            {data?.counts.dueToday === 0 ? "All caught up" : `Review due (${data?.counts.dueToday ?? 0})`}
+            {dueNow === 0 ? "All caught up" : `Review due (${dueNow})`}
             <ArrowRightIcon size={16} />
           </Button>
           <Button variant="outline" onClick={() => onStart("all")}>
@@ -283,6 +287,10 @@ export function StudyBrowser({
       </ol>
     </div>
   );
+}
+
+function isDueNow(card: FlashcardMembershipCard): boolean {
+  return card.due || card.state === "due";
 }
 
 type CardFilter = "all" | "due" | FlashcardMembershipCard["state"];
