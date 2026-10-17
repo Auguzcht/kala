@@ -29,6 +29,10 @@ COLLISION HANDLING
   rows. Only `recommendations` (user_id, skill_id) collides here. The SOURCE's
   rows win, and the destination's colliding rows are deleted first:
 
+  Practice attempts use (user_id, set_id, attempt_number). If both accounts
+  have the same set/attempt number, source attempts are renumbered after the
+  destination's latest attempt; answer rows remain attached by attempt id.
+
     - the source is the account with the real evidence. The destination's rows
       were generated from an empty view ("0 attempts across all four skills,
       the learner may be disengaged") — advice built on a fiction, and in this
@@ -72,12 +76,12 @@ USER_TABLES = [
 ]
 # Handled separately (PK is user_id itself, and both sides may have a row).
 PROFILE_TABLE = "user_profiles"
-# (user_id, X) primary keys — the collision-prone ones.
+# (user_id, X) primary keys — the collision-prone ones. quiz_set_attempts is
+# handled separately because its key includes attempt_number.
 COMPOSITE_KEYS = {
     "mastery_state": "skill_id",
     "srs_state": "item_id",
     "enrollments": "course_id",
-    "quiz_set_attempts": "set_id",
     "recommendations": "skill_id",
 }
 
@@ -136,6 +140,31 @@ def main() -> int:
         n = len(rows)
         if n == 0:
             continue
+        if table == "quiz_set_attempts":
+            dst_rows = api.select(table, f"user_id=eq.{args.dst}&select=set_id,attempt_number")
+            dst_attempts: dict[str, set[int]] = {}
+            for row in dst_rows:
+                dst_attempts.setdefault(row["set_id"], set()).add(int(row["attempt_number"]))
+            src_rows = api.select(table, f"user_id=eq.{args.src}&select=set_id,attempt_number")
+            src_attempts: dict[str, set[int]] = {}
+            for row in src_rows:
+                src_attempts.setdefault(row["set_id"], set()).add(int(row["attempt_number"]))
+            collision_sets = sorted(
+                set(src_attempts) & set(dst_attempts)
+            )
+            collision_sets = [
+                set_id for set_id in collision_sets
+                if src_attempts[set_id] & dst_attempts[set_id]
+            ]
+            detail = f"{n} attempts re-pointed"
+            if collision_sets:
+                detail += f"; {len(collision_sets)} set(s) renumbered after destination max"
+                collisions.append(
+                    f"quiz_set_attempts: {len(collision_sets)} set(s) renumbered; "
+                    "answer rows remain attached to attempt ids"
+                )
+            plan.append((table, detail, n))
+            continue
         if table in COMPOSITE_KEYS:
             key = COMPOSITE_KEYS[table]
             dst_rows = api.select(table, f"user_id=eq.{args.dst}&select={key}")
@@ -175,6 +204,31 @@ def main() -> int:
     print("\nAPPLYING...")
     for table, _, _ in plan:
         if table == PROFILE_TABLE:
+            continue
+        if table == "quiz_set_attempts":
+            dst_rows = api.select(table, f"user_id=eq.{args.dst}&select=set_id,attempt_number")
+            dst_numbers: dict[str, list[int]] = {}
+            for row in dst_rows:
+                dst_numbers.setdefault(row["set_id"], []).append(int(row["attempt_number"]))
+            src_rows = api.select(table, f"user_id=eq.{args.src}&select=id,set_id,attempt_number")
+            src_numbers: dict[str, set[int]] = {}
+            for row in src_rows:
+                src_numbers.setdefault(row["set_id"], set()).add(int(row["attempt_number"]))
+            collision_sets = {
+                set_id for set_id, numbers in src_numbers.items()
+                if numbers & set(dst_numbers.get(set_id, []))
+            }
+            for set_id in sorted(collision_sets):
+                rows_for_set = sorted(
+                    (row for row in src_rows if row["set_id"] == set_id),
+                    key=lambda row: int(row["attempt_number"]), reverse=True,
+                )
+                next_number = max(dst_numbers[set_id]) + len(rows_for_set)
+                for row in rows_for_set:
+                    api.patch(table, f"id=eq.{row['id']}", {"attempt_number": next_number})
+                    next_number -= 1
+            moved = api.patch(table, f"user_id=eq.{args.src}", {"user_id": args.dst})
+            print(f"  {table:<24} {len(moved)} rows -> destination; {len(collision_sets)} set(s) renumbered")
             continue
         # Delete colliding source rows first so the PK cannot be violated.
         if table in COMPOSITE_KEYS:

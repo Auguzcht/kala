@@ -21,10 +21,10 @@ from datetime import UTC, datetime
 from time import perf_counter_ns
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from httpx import HTTPStatusError
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.bank.kick import kick_bank
 from app.bank.serving import (
@@ -411,12 +411,15 @@ def create_set_from_items(
 
 
 class SubmitBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     item_id: str
     choice_id: str
     latency_ms: int = 0
     set_id: str | None = None
     session_id: UUID | None = None
     idempotency_key: str | None = None
+    attempt_id: UUID | None = Field(default=None, alias="attemptId")
 
 
 def _mastery_display(value: float | None, level: str | None = None) -> dict:
@@ -446,21 +449,44 @@ def _attempts_by_set(*, institution_id: str, user_id: str, set_ids: list[str]) -
         "institution_id": f"eq.{institution_id}",
         "user_id": f"eq.{user_id}",
         "set_id": f"in.({','.join(set_ids)})",
-        "select": "set_id,attempted_count,correct_count,last_attempted_at",
+        "select": "id,set_id,attempt_number,attempted_count,correct_count,last_attempted_at,completed_at",
+        "order": "set_id.asc,attempt_number.asc",
     })
-    return {r["set_id"]: r for r in rows}
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(row["set_id"], []).append(row)
+    return {
+        set_id: {
+            "latest": max(attempt_rows, key=lambda row: int(row.get("attempt_number") or 1)),
+            "attempts": attempt_rows,
+        }
+        for set_id, attempt_rows in grouped.items()
+    }
 
 
-def _attempt_view(row: dict | None) -> dict:
+def _attempt_view(row: dict | None, *, total: int | None = None) -> dict:
     """The set-level attempt metadata the UI badge reads. Null fields (not a
     missing key) for a set the student has never attempted, so the client can
     branch on `attemptedCount == null` without a separate existence flag."""
     if not row:
-        return {"attemptedCount": None, "correctCount": None, "lastAttemptedAt": None}
+        return {
+            "attemptedCount": None, "correctCount": None, "lastAttemptedAt": None,
+            "latestScore": None, "bestScore": None, "attemptCount": 0,
+        }
+    attempts = row["attempts"]
+    latest = row["latest"]
+    score_total = total if total is not None else 0
+    best = max(attempts, key=lambda attempt: (
+        int(attempt.get("correct_count") or 0),
+        int(attempt.get("attempt_number") or 1),
+    ))
     return {
-        "attemptedCount": row["attempted_count"],
-        "correctCount": row["correct_count"],
-        "lastAttemptedAt": row.get("last_attempted_at"),
+        "attemptedCount": latest["attempted_count"],
+        "correctCount": latest["correct_count"],
+        "lastAttemptedAt": latest.get("last_attempted_at"),
+        "latestScore": {"correct": int(latest.get("correct_count") or 0), "total": score_total},
+        "bestScore": {"correct": int(best.get("correct_count") or 0), "total": score_total},
+        "attemptCount": len(attempts),
     }
 
 
@@ -538,7 +564,7 @@ def list_sets(
             "setId": r["id"], "skillId": r["skill_id"], "kind": r["kind"],
             "size": counts.get(r["id"], 0), "createdAt": r["created_at"],
             "status": "available" if counts.get(r["id"], 0) else "unavailable",
-            **_attempt_view(attempts.get(r["id"])),
+            **_attempt_view(attempts.get(r["id"]), total=counts.get(r["id"], 0)),
         } for r in rows],
     }
 
@@ -620,7 +646,7 @@ def get_set(
     response = {
         **_practice_set_view(course_id=course_id, set_row=s, jobs=jobs, items=items,
                              unavailable=unavailable),
-        **_attempt_view(attempts.get(s["id"])),
+        **_attempt_view(attempts.get(s["id"]), total=len(items)),
     }
     timings["handler_ms"] = (perf_counter_ns() - started_ns) / 1_000_000
     timings["items_count"] = float(len(items))
@@ -629,10 +655,52 @@ def get_set(
     return response
 
 
+@router.post("/{course_id}/sets/{set_id}/retake", status_code=status.HTTP_201_CREATED)
+def start_practice_retake(
+    course_id: str = Depends(require_valid_course_id),
+    set_id: str = Depends(require_valid_set_id),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Create the next server-owned attempt after the latest one is complete."""
+    sets = db.select("quiz_sets", {
+        "id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}", "select": "id", "limit": "1",
+    })
+    if not sets:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found")
+    try:
+        rows = db.rpc("start_practice_retake", {
+            "p_institution_id": user.institution_id,
+            "p_user_id": user.user_id,
+            "p_course_id": course_id,
+            "p_set_id": set_id,
+        })
+    except HTTPStatusError as exc:
+        try:
+            db_error = exc.response.json()
+        except ValueError:
+            db_error = {}
+        message = db_error.get("message")
+        if db_error.get("code") == "P0001" and message in {"attempt_in_progress", "no_attempt"}:
+            return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"code": message})
+        if db_error.get("code") == "P0002":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found") from exc
+        raise
+    if not rows:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "could not start practice retake")
+    result = rows[0] if isinstance(rows, list) else rows
+    return {
+        "setId": set_id,
+        "attemptId": result["attempt_id"],
+        "attemptNumber": result["attempt_number"],
+    }
+
+
 @router.get("/{course_id}/sets/{set_id}/results")
 def get_set_results(
     course_id: str = Depends(require_valid_course_id),
     set_id: str = Depends(require_valid_set_id),
+    attempt_id: UUID | None = Query(default=None, alias="attemptId"),
     user: CurrentUser = Depends(get_current_user),
 ):
     """Return the durable recap for this student's answers in one set.
@@ -646,6 +714,21 @@ def get_set_results(
     })
     if not sets:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "set not found")
+
+    attempt_rows = db.select("quiz_set_attempts", {
+        "institution_id": f"eq.{user.institution_id}",
+        "user_id": f"eq.{user.user_id}",
+        "course_id": f"eq.{course_id}", "set_id": f"eq.{set_id}",
+        "select": "id,attempt_number,attempted_count,correct_count,completed_at,last_attempted_at",
+        "order": "attempt_number.asc",
+    })
+    selected_attempt = None
+    if attempt_id is not None:
+        selected_attempt = next((row for row in attempt_rows if row["id"] == str(attempt_id)), None)
+        if selected_attempt is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "attempt not found")
+    elif attempt_rows:
+        selected_attempt = max(attempt_rows, key=lambda row: int(row["attempt_number"]))
 
     links = db.select("quiz_set_items", {
         "set_id": f"eq.{set_id}", "select": "item_id,position", "order": "position.asc",
@@ -668,6 +751,25 @@ def get_set_results(
         "course_id": f"eq.{course_id}", "set_id": f"eq.{set_id}",
         "select": "*", "order": "created_at.asc",
     })
+    all_result_rows = result_rows
+    if selected_attempt is not None:
+        result_rows = [row for row in all_result_rows if row.get("attempt_id") == selected_attempt["id"]]
+
+    answers_by_attempt: dict[str, list[dict]] = {}
+    for row in all_result_rows:
+        if row.get("attempt_id"):
+            answers_by_attempt.setdefault(row["attempt_id"], []).append(row)
+    attempt_summaries = []
+    for attempt in sorted(attempt_rows, key=lambda row: int(row["attempt_number"])):
+        attempt_answers = answers_by_attempt.get(attempt["id"], [])
+        attempt_summaries.append({
+            "attemptId": attempt["id"],
+            "attemptNumber": attempt["attempt_number"],
+            "correct": sum(1 for row in attempt_answers if row.get("correct") is True),
+            "answered": len(attempt_answers),
+            "total": len(links),
+            "completedAt": attempt.get("completed_at"),
+        })
     items = {row["id"]: row for row in item_rows}
     answers = {row["item_id"]: row for row in result_rows}
     questions = []
@@ -705,7 +807,7 @@ def get_set_results(
     answered_count = len(answered)
     first = answered[0] if answered else None
     last = answered[-1] if answered else None
-    return {
+    response = {
         "courseId": course_id,
         "setId": set_id,
         "score": {
@@ -724,7 +826,18 @@ def get_set_results(
             last.get("mastery_after_level") if last else None,
         ),
         "questions": questions,
+        "attempts": attempt_summaries,
     }
+    if selected_attempt is not None:
+        response["attemptId"] = selected_attempt["id"]
+        response["attemptNumber"] = selected_attempt["attempt_number"]
+        if int(selected_attempt["attempt_number"]) > 1:
+            response["xpNote"] = "Retakes don't earn XP. Your first try counts."
+        elif sum(int(row.get("xp_awarded") or 0) for row in answered) < (
+            answered_count * 2 + correct_count * 10
+        ):
+            response["xpNote"] = "Some of these answers were saved before XP rules changed."
+    return response
 
 
 @router.post("/{course_id}/submit")
@@ -747,6 +860,7 @@ def submit(
             "p_session_id": str(body.session_id or body.set_id) if (body.session_id or body.set_id) else None,
             "p_idempotency_key": body.idempotency_key or str(uuid4()),
             "p_latency_ms": body.latency_ms,
+            "p_attempt_id": str(body.attempt_id) if body.attempt_id else None,
         })
     except HTTPStatusError as exc:
         try:
@@ -756,6 +870,8 @@ def submit(
         if db_error.get("code") == "P0002":
             detail = "item is not in this set" if db_error.get("message") == "item is not in this set" else "item not found"
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail) from exc
+        if db_error.get("code") == "P0001" and db_error.get("message") == "attempt_complete":
+            return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"code": "attempt_complete"})
         raise
     if not rows:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "could not record practice review")
@@ -782,6 +898,9 @@ def submit(
             review_result.get("mastery_after_level"),
         ),
     }
+    if review_result.get("attempt_id") is not None:
+        response["attemptId"] = review_result["attempt_id"]
+        response["attemptNumber"] = review_result.get("attempt_number")
     timings["response_build_ms"] = (perf_counter_ns() - response_started) / 1_000_000
     timings["handler_ms"] = (perf_counter_ns() - handler_started) / 1_000_000
     request.state.practice_submit_timings = timings
