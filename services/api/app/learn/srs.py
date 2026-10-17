@@ -153,6 +153,21 @@ def is_mastered(*, box: int, streak: int) -> bool:
     return box >= _MAX_BOX and streak >= GRADUATE_STREAK
 
 
+def is_due(row: dict | None, *, at: datetime, inclusive: bool = True) -> bool:
+    """Whether a studied, ungraduated card is due by the supplied horizon.
+
+    Membership uses an exclusive local-midnight horizon for dueToday; review
+    uses an inclusive current-time horizon. Untracked and never-studied cards
+    belong to the new-card pool, even if tracking gave them a past due_at.
+    """
+    if not row or int(row.get("reps", 0)) == 0 or not row.get("due_at"):
+        return False
+    if is_mastered(box=int(row["box"]), streak=int(row["streak"])):
+        return False
+    due_at = datetime.fromisoformat(row["due_at"].replace("Z", "+00:00"))
+    return due_at <= at if inclusive else due_at < at
+
+
 def interval_hours(*, box: int, ease_milli: int) -> float:
     """Current scheduled interval from the stored scheduler parameters."""
     return _BOX_BASE_HOURS[box] * (ease_milli / 1000.0)
@@ -275,16 +290,17 @@ def due_cards(*, institution_id: str, user_id: str, course_id: str,
     """The cards this student should see now, most-overdue first, excluding
     mastered ones. This replaces the old flat top-N skill slice: selection is
     driven by the schedule (due date + box), so missed cards resurface more
-    often and mastered cards drop out until their long interval elapses.
+    often and graduated cards stop surfacing in normal review.
 
     Returns the srs_state rows joined to their generated_items (client-safe
     fields only — never the answer key). Empty list is a valid, common state
     (nothing due yet), which the caller turns into "you're all caught up".
     """
+    now = _now()
     params: dict[str, str] = {
         "user_id": f"eq.{user_id}",
         "course_id": f"eq.{course_id}",
-        "due_at": f"lte.{_now().isoformat()}",
+        "due_at": f"lte.{now.isoformat()}",
         "select": "item_id,skill_id,box,ease_milli,streak,reps,lapses,last_outcome,due_at",
         "order": "due_at.asc",
         "limit": str(max(1, limit) * 3),  # over-fetch, then drop mastered below
@@ -297,7 +313,7 @@ def due_cards(*, institution_id: str, user_id: str, course_id: str,
     active_ids = _active_item_ids(institution_id=institution_id, course_id=course_id, rows=rows)
     rows = [r for r in rows if r["item_id"] in active_ids]
 
-    fresh = [r for r in rows if not is_mastered(box=int(r["box"]), streak=int(r["streak"]))]
+    fresh = [r for r in rows if is_due(r, at=now)]
     return fresh[:limit]
 
 
