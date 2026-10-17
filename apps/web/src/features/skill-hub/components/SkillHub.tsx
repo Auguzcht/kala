@@ -7,6 +7,7 @@ import { LayersIcon } from "@/components/ui/layers";
 import { ZapIcon } from "@/components/ui/zap";
 import { MasteryBand, MasteryRing } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTwin } from "@/features/twin";
 import { useBankStatus } from "@/features/bank";
@@ -37,8 +38,7 @@ type AnimatedIcon = ComponentType<{
 // unrelated features. Here the skill is the hub and the modes launch from it.
 //
 // The modes are not rebuilt: LessonChat, FlashcardDeck, and PracticePanel are
-// the exact session surfaces Phases 1–3 shipped, including the study→test
-// bridge. This file only chooses which one is showing and provides the chrome
+// the exact session surfaces Phases 1–3 shipped, including missed-question review. This file only chooses which one is showing and provides the chrome
 // to switch between them.
 //
 // Grain: a skill (skillId), not a module. TopicLanding groups by moduleRef for
@@ -132,6 +132,7 @@ export function SkillHub({
   setId,
   includesRepeats,
   sessionId,
+  attemptId,
   studySetId,
   missedItemIds,
   start,
@@ -150,11 +151,12 @@ export function SkillHub({
   /** Active mode. Owned by the route's search param so the hub is linkable and
    * the "Next up" card can deep-link straight to Test. */
   tab?: SkillTab;
-  /** The set open in the Test tab's detail view (retake, bridge handoff, or
+  /** The set open in the Test tab's detail view (retake, saved set, or
    * a freshly generated set). Empty string = back to the set list. */
   setId?: string;
   includesRepeats?: boolean;
   sessionId?: string;
+  attemptId?: string;
   studySetId?: string;
   missedItemIds?: string[];
   studyMode?: "review" | "all";
@@ -165,8 +167,8 @@ export function SkillHub({
   onSelectSet: (setId: string, includesRepeats?: boolean) => void;
   onStart: (mode?: "review" | "all") => void;
   onStartTest: (setId?: string) => void;
-  onSessionReady: (setId: string, sessionId: string) => void;
-  onStudyMissedSet: (setId: string, itemIds: string[]) => void;
+  onSessionReady: (setId: string, sessionId: string, attemptId?: string) => void;
+  onStudyMissedSet: (setId: string, itemIds: string[], attemptId?: string) => void;
   onReviewMissedSet: (setId: string) => void;
   /** Leave a running session back to the hub pane (clears `start` in the URL
    * so a refresh doesn't re-enter it). */
@@ -180,7 +182,7 @@ export function SkillHub({
   // Its exit returns to the hub with the Study pane active (see the route),
   // because a bare `tab=lesson` would immediately re-enter the session.
   if (tab === "lesson") {
-    return <LessonChat courseId={courseId} skillId={skillId} onExit={onExitSession} />;
+    return <LessonChat key={`${courseId}:${skillId}`} courseId={courseId} skillId={skillId} onExit={onExitSession} />;
   }
 
   // A running session owns the viewport (no header, no tabs) — the same
@@ -188,6 +190,8 @@ export function SkillHub({
   if (tab === "study" && start) {
     return (
       <FlashcardDeck
+        key={`${courseId}:${skillId}:${studySetId ?? studyMode ?? "review"}:${attemptId ?? "latest"}`}
+        practiceAttemptId={attemptId}
         courseId={courseId}
         skillId={skillId}
         mode={studyMode ?? "review"}
@@ -201,6 +205,8 @@ export function SkillHub({
   if (tab === "test" && start) {
     return (
       <PracticePanel
+        key={`${courseId}:${skillId}:${sessionId ?? setId ?? "new"}`}
+        attemptId={attemptId}
         courseId={courseId}
         skillId={skillId}
         setId={setId || null}
@@ -225,6 +231,7 @@ export function SkillHub({
     >
       {tab === "test" ? (
         <TestBrowser
+          key={`${courseId}:${skillId}`}
           courseId={courseId}
           skillId={skillId}
           setId={setId || null}
@@ -233,7 +240,7 @@ export function SkillHub({
           onStart={onStartTest}
         />
       ) : (
-        <StudyBrowser courseId={courseId} skillId={skillId} onStart={onStart} />
+        <StudyBrowser key={`${courseId}:${skillId}`} courseId={courseId} skillId={skillId} onStart={onStart} />
       )}
     </SkillHubFrame>
   );
@@ -255,7 +262,7 @@ function SkillHubFrame({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
-  const { data: twin, isLoading } = useTwin(courseId);
+  const { data: twin, isLoading, isError, refetch } = useTwin(courseId);
   const reduceMotion = useReducedMotion();
   const skill: TwinSkill | undefined = twin?.skills.find((s) => s.skillId === skillId);
 
@@ -266,12 +273,16 @@ function SkillHubFrame({
       </div>
     );
   }
+  if (isError) {
+    return <EmptyState title="We could not load this skill" description="Check your connection and try again." action={<div className="flex gap-2"><Button variant="outline" onClick={() => refetch()}>Retry</Button><Button variant="outline" onClick={() => navigate({ to: "/course/skills", search: {} })}>All skills</Button></div>} />;
+  }
   if (!skill) {
     return (
       <div className="mx-auto max-w-[1040px] px-4 py-8">
         <EmptyState
           title="Skill not found"
           description="This skill isn't part of the course's approved map."
+          action={<Button variant="outline" onClick={() => navigate({ to: "/course/skills", search: {} })}>All skills</Button>}
         />
       </div>
     );

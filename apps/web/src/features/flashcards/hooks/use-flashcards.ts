@@ -15,6 +15,9 @@ export function useFlashcardDeck(
 ) {
   return useQuery({
     enabled: options.enabled ?? true,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryKey: ["flashcards", courseId, limit, skillId ?? "auto", mode ?? "legacy", offset],
     queryFn: () => fetchFlashcardDeck(courseId, limit, skillId, mode, offset),
   });
@@ -25,6 +28,7 @@ export function useFlashcardMembership(courseId: string, skillId: string) {
     queryKey: ["flashcards", courseId, "membership", skillId],
     queryFn: () => fetchFlashcardMembership(courseId, skillId),
     enabled: Boolean(courseId && skillId),
+    refetchInterval: (query) => query.state.data?.cards.some((card) => card.state !== "new" && !card.due && card.dueAt) ? 60_000 : false,
   });
 }
 
@@ -48,6 +52,7 @@ export function useReviewFlashcard(courseId: string) {
     }) => reviewFlashcard(courseId, args),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["gamification", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["flashcards", courseId, 0] });
       queryClient.invalidateQueries({ queryKey: ["flashcards", courseId, "membership"] });
     },
   });

@@ -8,6 +8,7 @@
 // "Bloom's", no "RAG", no "your twin" until the closing Twin steps, where
 // the analytical layer is allowed.
 export type TourStepConfig = {
+  /** A trailing /* follows the hub opened by a preceding click. */
   route: string;
   /** Element to highlight for this step. */
   selector: string;
@@ -63,7 +64,7 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     clickSelector: "#tour-lessons-first-card",
   },
   {
-    route: "/course/lessons",
+    route: "/course/skill/*",
     selector: "#tour-lesson-explain",
     title: "Lessons",
     description: "Kala teaches one skill at a time — explain, then check.",
@@ -74,14 +75,14 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     },
   },
   {
-    route: "/course/lessons",
+    route: "/course/skill/*",
     selector: "#tour-lesson-continue",
     title: "Lessons",
     description: "You confirm you're ready before moving on.",
     click: true,
   },
   {
-    route: "/course/lessons",
+    route: "/course/skill/*",
     selector: "#tour-lesson-check",
     title: "Lessons",
     description: "One quick check on what Kala just taught — correct answers advance the lesson.",
@@ -89,7 +90,7 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     clickSelector: "#tour-first-choice",
   },
   {
-    route: "/course/lessons",
+    route: "/course/skill/*",
     selector: "#tour-lesson-check-feedback",
     title: "Lessons",
     description: "Right or wrong, you see why — and your twin moves.",
@@ -107,16 +108,34 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     title: "Practice",
     description: "Pick a topic, or take the recommended one.",
     click: true,
-    clickSelector: "#tour-practice-recommended",
+    clickSelector: "#tour-practice-recommended, #tour-practice-picker button",
   },
   {
-    route: "/course/practice",
+    route: "/course/skill/*",
+    selector: "#tour-test-new-set",
+    title: "Test",
+    description: "Create a saved set for this topic before starting your test.",
+    click: true,
+    waitFor: "#tour-test-new-set:not(:disabled)",
+    waitState: { selector: "#tour-test-new-set", description: "Checking question availability…" },
+  },
+  {
+    route: "/course/skill/*",
+    selector: "#tour-test-start",
+    title: "Test",
+    description: "Preview the questions, then start when you are ready.",
+    click: true,
+    waitFor: "#tour-test-start:not(:disabled)",
+    waitState: { selector: "#tour-test-start", description: "Preparing your test…" },
+  },
+  {
+    route: "/course/skill/*",
     selector: "#tour-practice-card",
     title: "Practice",
     description: "Targeted at your weakest skill, not random.",
   },
   {
-    route: "/course/practice",
+    route: "/course/skill/*",
     selector: "#tour-practice-choices",
     title: "Practice",
     description: "Pick the closest match — the result shows why, either way.",
@@ -124,7 +143,7 @@ export const TOUR_STEPS: readonly TourStepConfig[] = [
     clickSelector: "#tour-first-choice",
   },
   {
-    route: "/course/practice",
+    route: "/course/skill/*",
     selector: "#tour-practice-feedback",
     title: "Practice",
     description:

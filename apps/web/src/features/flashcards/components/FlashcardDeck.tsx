@@ -1,3 +1,4 @@
+import { SessionState } from "@/components/study/SessionState";
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
@@ -91,6 +92,7 @@ export function FlashcardDeck({
   skillId,
   mode = "review",
   practiceSetId,
+  practiceAttemptId,
   missedItemIds,
   onReviewDone,
   onExit,
@@ -100,6 +102,7 @@ export function FlashcardDeck({
   mode?: "review" | "all";
   /** When present, study only the questions missed in this saved test set. */
   practiceSetId?: string;
+  practiceAttemptId?: string;
   /** Exact missed items from the recap attempt that opened this review. */
   missedItemIds?: string[];
   /** Return to the saved test recap after the missed items are reviewed. */
@@ -108,11 +111,12 @@ export function FlashcardDeck({
 }) {
   const reduceMotion = useReducedMotion();
   const replySessionId = useId();
+  const contentEpochRef = useRef(0);
   const [reviewSessionId] = useState(() => crypto.randomUUID());
   const [offset, setOffset] = useState(0);
   const { data: twin } = useTwin(courseId);
   const deckQuery = useFlashcardDeck(courseId, 20, skillId, mode, offset, { enabled: !practiceSetId });
-  const practiceResults = usePracticeSetResults(courseId, practiceSetId ?? null, Boolean(practiceSetId));
+  const practiceResults = usePracticeSetResults(courseId, practiceSetId ?? null, Boolean(practiceSetId), practiceAttemptId);
   const practiceCards = useMemo<FlashcardCard[] | null>(() => {
     if (!practiceSetId || !practiceResults.data) return null;
     const skillName = twin?.skills.find((skill) => skill.skillId === skillId)?.name ?? null;
@@ -142,13 +146,13 @@ export function FlashcardDeck({
       cards: practiceCards,
       stats: { tracked: practiceCards.length, due: practiceCards.length, learning: 0, mastered: 0 },
       mode: "all",
-      sessionId: practiceSetId,
+      sessionId: reviewSessionId,
       offset: 0,
       limit: practiceCards.length,
       totalCards: practiceCards.length,
       hasMore: false,
     };
-  }, [practiceSetId, practiceCards, courseId]);
+  }, [practiceSetId, practiceCards, courseId, reviewSessionId]);
   const data = practiceSetId ? practiceDeck : deckQuery.data;
   const isLoading = practiceSetId ? practiceResults.isLoading : deckQuery.isLoading;
   const isError = practiceSetId ? practiceResults.isError : deckQuery.isError;
@@ -210,6 +214,7 @@ export function FlashcardDeck({
   }, [review.isPending]);
 
   useEffect(() => {
+    contentEpochRef.current += 1;
     setPhase("front");
     setDeckDone(false);
     setHintText(null);
@@ -219,7 +224,7 @@ export function FlashcardDeck({
     setFollowUpTurns([]);
     setPendingFollowUp(null);
     startedAtRef.current = Date.now();
-  }, [index, data?.courseId]);
+  }, [index, data?.courseId, responseSessionKey]);
 
   const deckCards = sessionCards ?? data?.cards ?? [];
   const originalDeckLength = data?.cards.length ?? 0;
@@ -263,17 +268,17 @@ export function FlashcardDeck({
   }, [activeItemId, deckDone, phase, review.isPending]);
 
   if (isLoading)
-    return <LoadingPanel label="Loading your cards…" lines={4} />;
+    return (<SessionState title="Study" onExit={onExit}>{<LoadingPanel label="Loading your cards…" lines={4} />}</SessionState>);
   if (isError)
-    return (
+    return (<SessionState title="Study" onExit={onExit}>{(
       <EmptyState
         title="We could not load flashcards"
         description="Check your connection and try again."
         action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
-    );
+    )}</SessionState>);
   if (practiceSetId && (!missedItemIds || missedItemIds.length === 0)) {
-    return (
+    return (<SessionState title="Study" onExit={onExit}>{(
       <EmptyState
         title="Missed questions are unavailable"
         description="Return to your results and open Review missed again."
@@ -281,10 +286,10 @@ export function FlashcardDeck({
           ? <Button variant="outline" onClick={() => onReviewDone(practiceSetId)}>Results</Button>
           : undefined}
       />
-    );
+    )}</SessionState>);
   }
   if (practiceSetId && practiceCards?.length === 0) {
-    return (
+    return (<SessionState title="Study" onExit={onExit}>{(
       <EmptyState
         title="Missed questions are unavailable"
         description="Return to your results and open Review missed again."
@@ -292,7 +297,7 @@ export function FlashcardDeck({
           ? <Button variant="outline" onClick={() => onReviewDone(practiceSetId)}>Results</Button>
           : undefined}
       />
-    );
+    )}</SessionState>);
   }
   const remainingToday = data?.newRemainingToday ?? data?.newCardsRemainingToday;
   const dailyNewCapReached = mode === "review" && remainingToday === 0 &&
@@ -311,48 +316,48 @@ export function FlashcardDeck({
       !selectedSkill || !selectedSkill.usable
     );
     if (bank.isLoading) {
-      return <LoadingPanel label="Checking card availability…" lines={4} />;
+      return (<SessionState title="Study" onExit={onExit}>{<LoadingPanel label="Checking card availability…" lines={4} />}</SessionState>);
     }
     if (noMaterial) {
-      return (
+      return (<SessionState title="Study" onExit={onExit}>{(
         <EmptyState
           title="No course material yet"
           description={skillId
             ? "This skill doesn&apos;t have course material yet."
             : "No mapped skill has course material yet."}
         />
-      );
+      )}</SessionState>);
     }
     if (preparing) {
-      return (
+      return (<SessionState title="Study" onExit={onExit}>{(
         <LoadingPanel
           label={`Preparing questions (${selectedSkill?.mcqReady ?? 0} of ${selectedSkill?.mcqTarget ?? 0})`}
           lines={4}
         />
-      );
+      )}</SessionState>);
     }
     if (bank.isError) {
-      return (
+      return (<SessionState title="Study" onExit={onExit}>{(
         <EmptyState
           title="We could not check card availability"
           description="Check your connection and reload the deck."
           action={<Button variant="outline" onClick={() => refetch()}>Reload deck</Button>}
         />
-      );
+      )}</SessionState>);
     }
     if (mode === "review" && remainingToday === 0 && skillId && membership.isLoading) {
-      return <LoadingPanel label="Checking your review cards…" lines={3} />;
+      return (<SessionState title="Study" onExit={onExit}>{<LoadingPanel label="Checking your review cards…" lines={3} />}</SessionState>);
     }
     if (dailyNewCapReached) {
-      return (
+      return (<SessionState title="Study" onExit={onExit}>{(
         <EmptyState
           title="Daily new card limit reached"
           description="You've started 20 new cards today. Come back tomorrow, or use Study all."
         />
-      );
+      )}</SessionState>);
     }
     const allCaughtUp = data ? data.stats.tracked > 0 : false;
-    return (
+    return (<SessionState title="Study" onExit={onExit}>{(
       <EmptyState
         title={allCaughtUp ? "All caught up" : "No cards yet"}
         description={
@@ -374,7 +379,7 @@ export function FlashcardDeck({
           </div>
         }
       />
-    );
+    )}</SessionState>);
   }
 
   const total = originalCardIds.size;
@@ -584,6 +589,7 @@ export function FlashcardDeck({
   }
 
   function askHint() {
+    const requestEpoch = contentEpochRef.current;
     setHintText(null);
     setHintAnimationKey(`${courseId}:${replySessionId}:${card.itemId}:hint:${++replySequenceRef.current}`);
     hint.mutate(
@@ -591,20 +597,22 @@ export function FlashcardDeck({
         question: `Give me a hint for this recall card without revealing the answer: "${card.prompt}"`,
         style: "eli5",
       },
-      { onSuccess: (r) => setHintText(r.answer) }
+      { onSuccess: (r) => { if (requestEpoch === contentEpochRef.current) setHintText(r.answer); } }
     );
   }
 
   function askExplain() {
+    const requestEpoch = contentEpochRef.current;
     setExplainText(null);
     setExplainAnimationKey(`${courseId}:${replySessionId}:${card.itemId}:explain:${++replySequenceRef.current}`);
     explain.mutate(
       { question: `Explain this in more detail: ${card.prompt}`, style: "detail" },
-      { onSuccess: (r) => setExplainText(r.answer) }
+      { onSuccess: (r) => { if (requestEpoch === contentEpochRef.current) setExplainText(r.answer); } }
     );
   }
 
   function askAboutCard(question: string) {
+    const requestEpoch = contentEpochRef.current;
     setPendingFollowUp(question);
     followUp.mutate(
       {
@@ -619,10 +627,11 @@ export function FlashcardDeck({
       },
       {
         onSuccess: (answer) => {
+          if (requestEpoch !== contentEpochRef.current) return;
           setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
           setPendingFollowUp(null);
         },
-        onError: () => setPendingFollowUp(null),
+        onError: () => { if (requestEpoch === contentEpochRef.current) setPendingFollowUp(null); },
       }
     );
   }
@@ -686,7 +695,7 @@ export function FlashcardDeck({
             <span className="min-w-0 truncate text-sm font-semibold text-foreground">
               {card.skillName ?? "Card"}
             </span>
-            {practiceSetId ? null : <StateBadge state={card.state} />}
+            {practiceSetId ? null : <StateBadge state={ratingsByItemId[card.itemId] === false ? "slipping" : card.state} />}
             {isSecondLook ? (
               <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border border-border bg-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-foreground">
                 <RotateCCWIcon size={12} aria-hidden />

@@ -9,17 +9,6 @@ export const practiceItemSchema = z.object({
   choices: z.array(z.object({ id: z.string(), label: z.string() })),
 });
 
-export const practiceNextSchema = z.object({
-  courseId: z.string(),
-  item: practiceItemSchema.nullable(),
-  bankStatus: z.object({
-    status: bankSkillStatusSchema,
-    mcqReady: z.number().int().nonnegative(),
-    mcqTarget: z.number().int().nonnegative(),
-    usable: z.boolean(),
-  }).optional(),
-});
-
 const practiceSetPayloadSchema = z.object({
   courseId: z.string(),
   setId: z.string().nullable(),
@@ -77,8 +66,8 @@ const practiceSetAttemptSummarySchema = z.object({
 });
 
 // A saved set loaded by id (GET /practice/{id}/sets/{set_id}) — used to
-// re-enter test mode on a set the student already has (the bridge handoff and
-// the retake list). Carries prompts + choices only; the answer key stays
+// re-enter test mode on a set the student already has (the saved-set and
+// retake lists). Carries prompts + choices only; the answer key stays
 // server-side (it is a graded test, not a flashcard browse).
 export const practiceSavedSetSchema = z.object({
   courseId: z.string(),
@@ -88,12 +77,6 @@ export const practiceSavedSetSchema = z.object({
   available: z.boolean().optional(),
   items: z.array(practiceItemSchema),
 }).merge(practiceSetProgressSchema).merge(practiceSetAttemptSchema).merge(practiceSetAttemptSummarySchema);
-
-// The study-to-test bridge intentionally remains its old synchronous
-// contract; it does not touch item_generation_jobs.
-export const practiceBridgeSetSchema = practiceSetPayloadSchema.extend({
-  setId: z.string(),
-});
 
 // The retake list (GET /practice/{id}/sets), newest first.
 export const practiceSetSummarySchema = z.object({
@@ -169,11 +152,9 @@ export const practiceSetResultsSchema = z.object({
 });
 
 export type PracticeItem = z.infer<typeof practiceItemSchema>;
-export type PracticeNext = z.infer<typeof practiceNextSchema>;
 export type PracticeSet = z.infer<typeof practiceSetSchema>;
 export type PracticeBankStatus = z.infer<typeof practiceBankStatusSchema>;
 export type PracticeSavedSet = z.infer<typeof practiceSavedSetSchema>;
-export type PracticeBridgeSet = z.infer<typeof practiceBridgeSetSchema>;
 export type PracticeSetSummary = z.infer<typeof practiceSetSummarySchema>;
 export type PracticeSetList = z.infer<typeof practiceSetListSchema>;
 export type PracticeSetAttempt = z.infer<typeof practiceSetAttemptSchema>;

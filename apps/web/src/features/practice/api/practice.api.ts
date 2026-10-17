@@ -1,16 +1,12 @@
 import { api } from "@/lib/api/client";
 import { parseApiResponse } from "@/lib/api/parse-response";
 import {
-  practiceNextSchema,
-  practiceBridgeSetSchema,
   practiceSavedSetSchema,
   practiceSetListSchema,
   practiceSetSchema,
   practiceSubmitResultSchema,
   practiceSetResultsSchema,
   practiceRetakeResponseSchema,
-  type PracticeNext,
-  type PracticeBridgeSet,
   type PracticeSavedSet,
   type PracticeSet,
   type PracticeSetList,
@@ -18,12 +14,6 @@ import {
   type PracticeSetResults,
   type PracticeRetakeResponse,
 } from "@/features/practice/schema/practice.schema";
-
-export async function fetchNextPracticeItem(courseId: string, skillId?: string): Promise<PracticeNext> {
-  const query = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
-  const data = await api<unknown>(`/practice/${courseId}/next${query}`);
-  return parseApiResponse(practiceNextSchema, data, `/practice/${courseId}/next`);
-}
 
 // Enqueue a batch of N items for one skill, grouped under a quiz_sets row.
 // The 202 response is followed by GET /sets/{set_id} polling in the hook.
@@ -41,23 +31,6 @@ export async function fetchPracticeSet(
     15_000
   );
   return parseApiResponse(practiceSetSchema, data, `/practice/${courseId}/set`);
-}
-
-// The study -> test bridge: group ALREADY-GENERATED items (the ones the
-// student just studied) into a quiz set, without regenerating anything. Same
-// response shape as fetchPracticeSet so the quiz surface consumes it
-// identically. timeoutMs is short — this makes no model calls, it is a
-// grouping write.
-export async function createPracticeSetFromItems(
-  courseId: string,
-  itemIds: string[]
-): Promise<PracticeBridgeSet> {
-  const data = await api<unknown>(
-    `/practice/${courseId}/set/from-items`,
-    { method: "POST", body: JSON.stringify({ item_ids: itemIds }) },
-    15_000
-  );
-  return parseApiResponse(practiceBridgeSetSchema, data, `/practice/${courseId}/set/from-items`);
 }
 
 // Load a saved set by id, so test mode can run it instead of generating.

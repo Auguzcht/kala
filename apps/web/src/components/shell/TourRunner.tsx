@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+import { matchesTourRoute } from "@/components/shell/tour-route";
 import { useEffect, useState } from "react";
 import { driver, type Popover } from "driver.js";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -64,13 +66,20 @@ export function TourRunner({
     }
     // Navigation in flight: the store advanced but this page isn't mounted
     // yet. The pathname dep re-runs this effect when it lands.
-    if (pathname !== step.route) return;
+    if (!matchesTourRoute(pathname, step.route)) return;
 
     let cancelled = false;
     let flowDestroy = false; // we destroyed on purpose (wait-state resolving)
     let instance: ReturnType<typeof driver> | null = null;
 
     const exit = () => setTourStep(null);
+    const unavailable = () => {
+      if (cancelled) return;
+      flowDestroy = true;
+      instance?.destroy();
+      toast.info("This tour step is not available yet. You can restart the tour later.");
+      exit();
+    };
     const advanceTo = (index: number) => {
       if (index >= steps.length) {
         // Completed the walkthrough — same permanent dismissal as "Got it".
@@ -81,7 +90,7 @@ export function TourRunner({
         return;
       }
       setTourStep(index);
-      if (steps[index].route !== steps[tourStep].route) {
+      if (steps[index].route !== steps[tourStep].route && !steps[index].route.endsWith("/*")) {
         void navigate({ to: steps[index].route });
       }
     };
@@ -168,8 +177,9 @@ export function TourRunner({
         onDestroyed,
       });
       void scrollThenDrive(document.querySelector(first.waitState.selector));
-      void waitForElement(first.waitFor, { timeout: 120_000 }).then(() => {
+      void waitForElement(first.waitFor, { timeout: 120_000 }).then((element) => {
         if (cancelled) return;
+        if (!element) { unavailable(); return; }
         flowDestroy = true;
         instance?.destroy();
         setRecheck((r) => r + 1);
@@ -252,6 +262,7 @@ export function TourRunner({
       });
       void waitForElement(first.selector, { timeout: 8000 }).then((el) => {
         if (cancelled) return;
+        if (!el) { unavailable(); return; }
         void scrollThenDrive(el);
       });
     }
