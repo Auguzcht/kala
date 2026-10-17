@@ -475,7 +475,9 @@ function SetDetail({
             className="shrink-0"
           >
             {startLabel}
-            {canStart ? <ArrowRightIcon size={16} /> : null}
+            {createNewSet.isPending || data.status === "generating"
+              ? <Spinner aria-hidden />
+              : canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>
       </div>

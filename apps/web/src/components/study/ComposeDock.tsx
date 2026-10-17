@@ -9,6 +9,7 @@ import {
 import { MessageCircleIcon } from "@/components/ui/message-circle";
 import { XIcon } from "@/components/ui/x";
 import { useIconHover } from "@/hooks/use-icon-hover";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 /** An animated lucide-animated icon: forwards a ref with the imperative
@@ -25,6 +26,8 @@ export type ComposeDockPrimary = {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /** Replace the action icon with the shared spinner while work is pending. */
+  pending?: boolean;
   /** Animated icon component (not a rendered node) — the dock renders it and
    * owns its ref, so hovering the button animates the icon. */
   icon?: AnimatedIcon;
@@ -91,7 +94,8 @@ export function ComposeDock({
                   type="button"
                   id={secondary.id}
                   onClick={secondary.onClick}
-                  disabled={secondary.disabled}
+                  disabled={secondary.disabled || secondary.pending}
+                  aria-busy={secondary.pending || undefined}
                   onMouseEnter={secondaryIcon.play}
                   onMouseLeave={secondaryIcon.stop}
                   onFocus={secondaryIcon.play}
@@ -104,14 +108,15 @@ export function ComposeDock({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   )}
                 >
-                  {secondary.icon ? <secondary.icon ref={secondaryIcon.ref} size={16} aria-hidden /> : null}
+                  {secondary.pending ? <Spinner aria-hidden /> : secondary.icon ? <secondary.icon ref={secondaryIcon.ref} size={16} aria-hidden /> : null}
                   {secondary.label}
                 </button>
                 <button
                   type="button"
                   id={primary.id}
                   onClick={primary.onClick}
-                  disabled={primary.disabled}
+                  disabled={primary.disabled || primary.pending}
+                  aria-busy={primary.pending || undefined}
                   onMouseEnter={primaryIcon.play}
                   onMouseLeave={primaryIcon.stop}
                   onFocus={primaryIcon.play}
@@ -124,7 +129,7 @@ export function ComposeDock({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   )}
                 >
-                  {PrimaryIcon ? <PrimaryIcon ref={primaryIcon.ref} size={16} aria-hidden /> : null}
+                  {primary.pending ? <Spinner aria-hidden /> : PrimaryIcon ? <PrimaryIcon ref={primaryIcon.ref} size={16} aria-hidden /> : null}
                   {primary.label}
                 </button>
               </div>
@@ -133,7 +138,8 @@ export function ComposeDock({
                 type="button"
                 id={primary.id}
                 onClick={primary.onClick}
-                disabled={primary.disabled}
+                disabled={primary.disabled || primary.pending}
+                aria-busy={primary.pending || undefined}
                 onMouseEnter={primaryIcon.play}
                 onMouseLeave={primaryIcon.stop}
                 onFocus={primaryIcon.play}
@@ -146,7 +152,7 @@ export function ComposeDock({
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 )}
               >
-                {PrimaryIcon ? (
+                {primary.pending ? <Spinner aria-hidden /> : PrimaryIcon ? (
                   <PrimaryIcon ref={primaryIcon.ref} size={16} aria-hidden />
                 ) : null}
                 {primary.label}

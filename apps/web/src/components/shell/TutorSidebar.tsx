@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ChevronLeftIcon } from "@/components/ui/chevron-left";
 import { ChevronRightIcon } from "@/components/ui/chevron-right";
 import { XIcon } from "@/components/ui/x";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { useDeleteTutorConversation, useTutorConversations } from "@/features/tutor";
 import type { TutorConversation } from "@/features/tutor";
@@ -112,7 +113,9 @@ export function TutorSidebar({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {conversations.isLoading ? (
-          <p className="px-1 py-2 text-xs text-muted-foreground">Loading…</p>
+          <p role="status" className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
+            <Spinner className="size-3.5" aria-hidden /> Loading…
+          </p>
         ) : !hasAny ? (
           <p className="px-1 py-2 text-xs text-muted-foreground">
             No chats yet — ask something to start one.

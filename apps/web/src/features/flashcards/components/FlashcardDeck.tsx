@@ -365,7 +365,8 @@ export function FlashcardDeck({
         }
         action={
           <div className="flex flex-wrap justify-center gap-2">
-            <Button variant="outline" onClick={() => void refreshEmptyDeck()} disabled={isFetching}>
+            <Button variant="outline" onClick={() => void refreshEmptyDeck()} disabled={isFetching} aria-busy={isFetching}>
+              {isFetching ? <Spinner aria-hidden /> : null}
               {isFetching ? "Checking cards…" : "Reload deck"}
             </Button>
             <Button variant="outline" onClick={onExit}>Back to Study</Button>
@@ -417,6 +418,7 @@ export function FlashcardDeck({
                     label: testMe.isPending ? "Building your test…" : "Test me on these",
                     onClick: testMeOnThese,
                     disabled: testMe.isPending,
+                    pending: testMe.isPending,
                     icon: ArrowRightIcon,
                   }
                 : { label: "Reload deck", onClick: reloadDeck, icon: ArrowRightIcon }
@@ -840,7 +842,7 @@ export function FlashcardDeck({
               disabled={hint.isPending}
               className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <BrainIcon size={14} aria-hidden />
+              {hint.isPending ? <Spinner className="size-3.5" aria-hidden /> : <BrainIcon size={14} aria-hidden />}
               {hint.isPending ? "Thinking…" : "Give me a hint"}
             </button>
           ) : null}
@@ -851,7 +853,7 @@ export function FlashcardDeck({
               disabled={explain.isPending}
               className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <SparklesIcon size={14} aria-hidden />
+              {explain.isPending ? <Spinner className="size-3.5" aria-hidden /> : <SparklesIcon size={14} aria-hidden />}
               {explain.isPending ? "Thinking…" : "Explain more"}
             </button>
           ) : null}

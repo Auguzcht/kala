@@ -219,6 +219,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
                         : "Answer every question to continue",
                     onClick: handleSubmit,
                     disabled: !allAnswered || submit.isPending,
+                    pending: submit.isPending,
                     icon: ArrowRightIcon,
                   }
             }

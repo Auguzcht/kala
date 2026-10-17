@@ -9,6 +9,7 @@ import { StudySurface } from "@/components/study/StudySurface";
 import { UserBlock } from "@/components/study/UserBlock";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
@@ -196,11 +197,12 @@ function PracticeRecap({
               ) : null}
               {hasAttemptId(results.attemptId) && onRetake ? (
                 <Button variant="outline" onClick={onRetake} disabled={isRetaking}>
+                  {isRetaking ? <Spinner aria-hidden /> : null}
                   {isRetaking ? "Starting retake…" : "Retake this set"}
                 </Button>
               ) : null}
               <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet}>
-                <ArrowRightIcon size={16} aria-hidden />
+                {isCreatingSet ? <Spinner aria-hidden /> : <ArrowRightIcon size={16} aria-hidden />}
                 {isCreatingSet ? "Loading new set…" : "New set"}
               </Button>
               <Button variant="outline" onClick={onDone}>
@@ -637,6 +639,7 @@ export function PracticePanel({
               if (lastResult && !isFetching) advance();
             },
             disabled: !lastResult || isFetching,
+            pending: Boolean(lastResult) && isFetching,
             icon: ArrowRightIcon,
           }}
           onAsk={lastResult ? askAboutItem : undefined}
