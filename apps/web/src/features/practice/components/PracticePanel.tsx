@@ -187,7 +187,7 @@ function PracticeRecap({
             )}
 
             <div className="flex flex-wrap gap-2 border-t pt-4">
-              {onStudyThese ? (
+              {onStudyThese && missed.length > 0 ? (
                 <Button
                   variant="orange"
                   onClick={() => onStudyThese(missed.map((question) => question.itemId))}
@@ -202,11 +202,11 @@ function PracticeRecap({
                   {isRetaking ? "Starting retake…" : "Retake this set"}
                 </Button>
               ) : null}
-              <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet} className="group">
+              <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet} className="group">
                 {isCreatingSet ? <Spinner aria-hidden /> : <PlusIcon aria-hidden className="transition-transform duration-200 group-hover:scale-125 motion-reduce:transition-none" />}
                 {isCreatingSet ? "Loading new set…" : "New set"}
               </Button>
-              <Button variant="outline" onClick={onDone} className="group">
+              <Button variant={onStudyThese && missed.length > 0 ? "outline" : "orange"} onClick={onDone} className="group">
                 <ArrowLeftIcon aria-hidden className="transition-transform duration-200 group-hover:-translate-x-1 motion-reduce:transition-none" />
                 Back to tests
               </Button>

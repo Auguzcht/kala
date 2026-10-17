@@ -181,7 +181,6 @@ export function FlashcardDeck({
   const replySequenceRef = useRef(0);
   const reviewInFlightRef = useRef(false);
   const postedRatingIdsRef = useRef(new Set<string>());
-  const requeuedIdsRef = useRef(new Set<string>());
   const reviewIdempotencyRef = useRef<{
     itemId: string;
     remembered: boolean;
@@ -200,7 +199,6 @@ export function FlashcardDeck({
     setIndex(0);
     setDeckDone(false);
     postedRatingIdsRef.current.clear();
-    requeuedIdsRef.current.clear();
     setRatingsByItemId({});
   }, [data, responseSessionKey]);
 
@@ -369,7 +367,7 @@ export function FlashcardDeck({
               {isFetching ? <Spinner aria-hidden /> : null}
               {isFetching ? "Checking cards…" : "Reload deck"}
             </Button>
-            <Button variant="outline" onClick={onExit}>Back to Study</Button>
+            <Button variant="orange" onClick={onExit}>Back to Study</Button>
           </div>
         }
       />
@@ -430,13 +428,10 @@ export function FlashcardDeck({
               Deck complete
             </p>
             <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-              You reviewed {total} {total === 1 ? "card" : "cards"}.
+              You recalled all {total} {total === 1 ? "card" : "cards"}.
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Missed cards resurface sooner, so your next pass follows your review schedule.
-            </p>
-            <p className="mt-3 text-sm font-medium text-foreground">
-              {reviewCounts.gotIt} got it, {reviewCounts.stillLearning} still learning.
+              You marked every card Got it in this session. Your next review follows your schedule.
             </p>
             {canTest ? (
               <p className="mt-3 text-sm text-muted-foreground">
@@ -470,7 +465,7 @@ export function FlashcardDeck({
   function mark(remembered: boolean) {
     if (reviewInFlightRef.current) return;
     const alreadyPosted = postedRatingIdsRef.current.has(card.itemId);
-    const shouldRequeue = !remembered && !requeuedIdsRef.current.has(card.itemId);
+    const shouldRequeue = !remembered;
     const queueBeforeRating = deckCards;
     const ratingIndex = index;
     const nextQueue = shouldRequeue ? [...queueBeforeRating, card] : queueBeforeRating;
@@ -486,7 +481,6 @@ export function FlashcardDeck({
       );
     };
     if (shouldRequeue) {
-      requeuedIdsRef.current.add(card.itemId);
       setSessionCards(nextQueue);
     }
     advanceToNext(ratingIndex, nextQueue.length);
@@ -540,7 +534,6 @@ export function FlashcardDeck({
           setIndex(ratingIndex);
           setDeckDone(false);
           setPhase("back");
-          if (shouldRequeue) requeuedIdsRef.current.delete(card.itemId);
           setRatingsByItemId((ratings) => {
             const reverted = { ...ratings };
             if (priorRating === undefined) delete reverted[card.itemId];
@@ -584,7 +577,6 @@ export function FlashcardDeck({
     setRatingsByItemId({});
     setSessionCards(data?.cards ?? []);
     postedRatingIdsRef.current.clear();
-    requeuedIdsRef.current.clear();
     refetch();
   }
 
@@ -691,7 +683,7 @@ export function FlashcardDeck({
       bar={
         <SessionBar
           title={practiceSetId ? "Reviewing missed questions" : "Study"}
-          progress={{ current: isSecondLook ? total : Math.min(Object.keys(ratingsByItemId).length + 1, total), total, label: "card" }}
+          progress={{ current: reviewCounts.gotIt, total, label: "recalled" }}
           onBack={() => practiceSetId && onReviewDone
             ? onReviewDone(practiceSetId)
             : onExit()}
