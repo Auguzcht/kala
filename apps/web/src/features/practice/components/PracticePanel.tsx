@@ -12,7 +12,6 @@ import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { BookOpenIcon } from "@/components/ui/book-open";
-import { CheckIcon } from "@/components/ui/check";
 import { MasteryBand } from "@/components/kala";
 import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
@@ -20,6 +19,9 @@ import { celebrate } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSetResults, PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
+
+// Enabled when the attempts API ships (retake brief, Chat 2).
+const SHOW_RETAKE = false;
 
 // Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
 // docs/AI_OVERHAUL_TODO.md). `skillId` is a required prop now, not an
@@ -144,21 +146,25 @@ function PracticeRecap({
             )}
 
             <div className="flex flex-wrap gap-2 border-t pt-4">
-              <Button variant="orange" onClick={onDone}>
-                <CheckIcon size={16} aria-hidden />
-                Done
-              </Button>
-              <Button variant="outline" onClick={onNewSet} disabled={isCreatingSet}>
-                <ArrowRightIcon size={16} aria-hidden />
-                {isCreatingSet ? "Loading new set…" : "New set"}
-              </Button>
               {onStudyThese ? (
                 <Button
-                  variant="outline"
+                  variant="orange"
                   onClick={() => onStudyThese(missed.map((question) => question.itemId))}
                 >
                   <BookOpenIcon size={16} aria-hidden />
                   Review missed
+                </Button>
+              ) : null}
+              <Button variant={onStudyThese ? "outline" : "orange"} onClick={onNewSet} disabled={isCreatingSet}>
+                <ArrowRightIcon size={16} aria-hidden />
+                {isCreatingSet ? "Loading new set…" : "New set"}
+              </Button>
+              <Button variant="outline" onClick={onDone}>
+                Back to tests
+              </Button>
+              {SHOW_RETAKE ? (
+                <Button variant="outline" onClick={() => console.info("retake not wired")}>
+                  Retake this set
                 </Button>
               ) : null}
             </div>
