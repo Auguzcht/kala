@@ -215,7 +215,7 @@ function SetList({
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Select New set below, or study these cards and hit "Test me on these".
-            saved sets land here to retake.
+            Saved sets land here so you can retake them later.
           </p>
         </div>
       ) : null}
@@ -434,9 +434,9 @@ function SetDetail({
       <button
         type="button"
         onClick={onBack}
-        className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+        className="rounded-sm text-xs font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        ← All tests
+        <span aria-hidden="true">←</span> All tests
       </button>
 
       {/* Header repeats the card's color bar AND its tinted border, so grid ->
@@ -466,7 +466,7 @@ function SetDetail({
             disabled={!canStart || createNewSet.isPending}
             className="shrink-0"
           >
-          {startLabel}
+            {startLabel}
             {canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>
