@@ -290,6 +290,7 @@ export function PracticePanel({
   // Position within the fetched batch. Local state, not part of the query:
   // the set is immutable for the session, only the cursor over it moves.
   const [setIndex, setSetIndex] = useState(0);
+  const hasInteractedRef = useRef(false);
   const [showRecap, setShowRecap] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PracticeSubmitResult | null>(null);
@@ -335,6 +336,7 @@ export function PracticePanel({
   // a stale index. Depends on setId, not the items array, so advancing within
   // a batch (which never changes setId) can't trigger a false reset.
   useEffect(() => {
+    hasInteractedRef.current = false;
     setSetIndex(0);
     setShowRecap(false);
   }, [data?.setId]);
@@ -344,6 +346,9 @@ export function PracticePanel({
     const resultsKey = results ? `${results.setId}:${results.attemptId ?? activeAttemptId ?? "1"}` : null;
     if (!results || resultsQuery.isFetching || total === 0 || restoredResultsSetRef.current === resultsKey) return;
     restoredResultsSetRef.current = resultsKey;
+    // The first submission can create an attempt id. Its results refresh must
+    // preserve this question's feedback, rather than resume at the next one.
+    if (hasInteractedRef.current) return;
     const nextIndex = results.questions.findIndex((question) => !question.answered);
     if (nextIndex >= 0) setSetIndex(nextIndex);
   }, [results, resultsQuery.isFetching, total, activeAttemptId]);
@@ -483,6 +488,7 @@ export function PracticePanel({
         onRetake={hasAttemptId(results.attemptId) ? () => {
           startRetake.mutate(results.setId, {
             onSuccess: (retake) => {
+              hasInteractedRef.current = false;
               setActiveAttemptId(retake.attemptId);
               setSetIndex(0);
               setShowRecap(false);
@@ -525,6 +531,7 @@ export function PracticePanel({
   }
 
   function handleAnswer(choiceId: string) {
+    hasInteractedRef.current = true;
     setSelectedChoice(choiceId);
     const attemptSessionId = sessionId ?? fallbackSessionId;
     const attemptSetId = data?.setId ?? setId ?? "practice";
