@@ -5,7 +5,7 @@ import { BookOpenIcon } from "@/components/ui/book-open";
 import { ChevronLeftIcon } from "@/components/ui/chevron-left";
 import { LayersIcon } from "@/components/ui/layers";
 import { ZapIcon } from "@/components/ui/zap";
-import { BloomsLadder, MasteryBand, MasteryRing } from "@/components/kala";
+import { MasteryBand, MasteryRing } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTwin } from "@/features/twin";
@@ -297,20 +297,18 @@ function SkillHubFrame({
       >
         <ChevronLeftIcon size={14} /> All skills
       </button>
-      {/* The ring and ladder show the twin's current estimate and Bloom level;
-          the qualitative band keeps the number in context. */}
+      {/* Keep the mastery band with the skill title across browse modes. */}
       <div className="border bg-card p-6">
         <div className="flex flex-wrap items-start gap-4">
           <MasteryRing estimate={skill.estimate} size={56} />
           <div className="min-w-0 flex-1">
-            <h1 className="font-display text-xl font-semibold text-foreground">{skill.name}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h1 className="min-w-0 flex-1 basis-64 font-display text-xl font-semibold text-foreground">{skill.name}</h1>
+              <MasteryBand band={skill.band} className="shrink-0" />
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {skill.moduleRef ?? "Module not assigned"} · {skill.attempts} {skill.attempts === 1 ? "attempt" : "attempts"}
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <MasteryBand band={skill.band} />
-              <BloomsLadder skills={[skill]} className="w-full max-w-[560px] gap-0.5" />
-            </div>
           </div>
         </div>
       </div>

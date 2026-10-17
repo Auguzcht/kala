@@ -13,10 +13,8 @@ import { useBankStatus } from "@/features/bank";
 import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 
 // The Study tab's browse view — the materials list that sits in front of the
-// sequential flip session, the same browse-then-commit shape the Test tab
-// proved. Unlike Test, there is NO answer-key concern here: Study never grades,
-// so each row shows BOTH sides of the card. That is the point of a materials
-// list — you can see what you're about to review.
+// sequential flip session. Answers stay hidden until the student opts in,
+// so browsing the materials does not reveal them before recall.
 //
 // Data comes from the membership endpoint, independent of the session queue.
 // That keeps Known cards visible while session selection stays due-first.
@@ -232,13 +230,21 @@ export function StudyBrowser({
             aria-pressed={filter === option.id}
             onClick={() => setFilter(option.id)}
             className={cn(
-              "rounded-sm border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               filter === option.id
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            {option.label} <span className="ml-1 font-mono tabular-nums">{option.count}</span>
+            {option.id === "due" ? (
+              <Clock3Icon size={12} className="text-brand-orange" aria-hidden />
+            ) : option.id !== "all" ? (
+              <span
+                className={cn("size-2 shrink-0", cardStatePresentation(option.id).fillClassName)}
+                aria-hidden
+              />
+            ) : null}
+            {option.label} <span className="font-mono tabular-nums">{option.count}</span>
           </button>
         ))}
       </div>
@@ -270,7 +276,7 @@ export function StudyBrowser({
                 )}
               </div>
             ) : (
-              <p className="pl-3 text-sm text-muted-foreground">Answer hidden</p>
+              <p className="text-sm text-muted-foreground">Answer hidden</p>
             )}
           </motion.li>
         ))}
