@@ -19,7 +19,8 @@ select id, embedding, embedded_at from generated_items limit 1;
 select id, embedding from guided_lesson_steps limit 1;
 ```
 
-Both selects succeeded on 2026-10-18. The sampled `generated_items` row
+Both selects succeeded on 2026-10-18, including a read-only recheck after
+the user reported manual application. The sampled `generated_items` row
 returned `embedding = null` and `embedded_at = null`; the sampled
 `guided_lesson_steps` row returned `embedding = null`.
 
