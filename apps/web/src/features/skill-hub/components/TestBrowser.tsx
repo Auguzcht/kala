@@ -291,15 +291,22 @@ function SetList({
                   {set.size} {set.size === 1 ? "question" : "questions"} · {fmtDate(set.createdAt)}
                 </p>
               </div>
-              <div className="mt-auto flex flex-wrap items-center gap-2">
-                <AttemptPill attempt={set} questionCount={set.size} />
-                {set.available === false || set.status === "unavailable" ? (
-                  <span className="text-[11px] text-muted-foreground">This set is no longer available</span>
-                ) : null}
-                {set.lastAttemptedAt ? (
-                  <span className="text-[11px] text-muted-foreground">
-                    last {fmtDate(set.lastAttemptedAt)}
-                  </span>
+              <div className="mt-auto space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <AttemptPill attempt={set} questionCount={set.size} />
+                  {set.available === false || set.status === "unavailable" ? (
+                    <span className="text-[11px] text-muted-foreground">This set is no longer available</span>
+                  ) : null}
+                  {set.lastAttemptedAt ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      last {fmtDate(set.lastAttemptedAt)}
+                    </span>
+                  ) : null}
+                </div>
+                {set.attemptCount !== undefined && set.attemptCount > 1 && set.bestScore ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Best {set.bestScore.correct}/{set.bestScore.total} · {set.attemptCount} attempts
+                  </p>
                 ) : null}
               </div>
             </div>
