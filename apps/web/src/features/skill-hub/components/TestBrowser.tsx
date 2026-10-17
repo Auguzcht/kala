@@ -166,7 +166,6 @@ function SetList({
     ["waiting_content", "building", "error"].includes(bankStatus);
   const isUsable = bank.data?.bankServing !== true || bankSkill?.usable === true;
   const isPreparing = isBuilding && !isUsable && !isNoMaterial;
-  const isBuildingUsable = isBuilding && isUsable;
   const canGenerate = bank.data !== undefined && isUsable && !isNoMaterial;
   const reduceMotion = useReducedMotion();
   const sets = data?.sets ?? [];
@@ -220,11 +219,6 @@ function SetList({
         </div>
       ) : null}
 
-      {isBuildingUsable ? (
-        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-          More questions on the way.
-        </p>
-      ) : null}
       {isPreparing ? (
         <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
           Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0}).

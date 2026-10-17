@@ -250,7 +250,6 @@ export function PracticePanel({
   const bankUsable = !isBankCourse || bankSkill?.usable === true;
   const skillBuilding = ["waiting_content", "building", "error"].includes(bankStatus);
   const bankBuilding = isBankCourse && !bankNoMaterial && skillBuilding && !bankUsable;
-  const bankBuildingUsable = isBankCourse && skillBuilding && bankUsable;
   // Both hooks are always called (Rules of Hooks), but only the active path is
   // enabled. A saved set must never also trigger the POST that creates a new
   // set when the test session mounts.
@@ -649,11 +648,6 @@ export function PracticePanel({
       }
     >
       <StudyStream>
-        {bankBuildingUsable ? (
-          <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-            More questions on the way.
-          </p>
-        ) : null}
         {includesRepeats ? (
           <div className="border border-brand-gold/40 bg-brand-gold/10 px-4 py-3 text-sm text-foreground">
             You&apos;ve seen every question for this skill. Here are the ones worth another look.

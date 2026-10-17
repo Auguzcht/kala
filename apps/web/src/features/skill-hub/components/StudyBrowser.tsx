@@ -202,11 +202,6 @@ export function StudyBrowser({
         </div>
       </div>
 
-      {bank.data?.bankServing && bankSkill?.status === "building" && bankSkill.usable ? (
-        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-          More questions on the way.
-        </p>
-      ) : null}
       {bank.data?.bankServing &&
       ["waiting_content", "building", "error"].includes(bankSkill?.status ?? "waiting_content") &&
       !bankSkill?.usable ? (
