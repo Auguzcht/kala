@@ -1,4 +1,5 @@
 import json
+import math
 
 from app.jobs import bank_build
 
@@ -213,13 +214,18 @@ def test_insert_count_uses_rows_returned_by_supabase(monkeypatch):
     assert result["inserted"] == 0
 
 
-def test_bank_candidate_cosine_dedupe_rejects_any_active_match(monkeypatch):
+def _unit_vector_with_first_component(value):
+    return [value, math.sqrt(1 - value * value)] + [0.0] * 1022
+
+
+def test_bank_candidate_cosine_dedupe_rejects_above_threshold(monkeypatch):
     inserted = []
-    vector = [1.0] + [0.0] * 1023
+    existing_vector = [1.0] + [0.0] * 1023
+    candidate_vector = _unit_vector_with_first_component(0.97)
     monkeypatch.setattr(bank_build, "_live_items", lambda *args: [
-        {"id": "old", "prompt": "An unrelated wording", "choices": [], "embedding": vector},
+        {"id": "old", "prompt": "An unrelated wording", "choices": [], "embedding": existing_vector},
     ])
-    monkeypatch.setattr(bank_build, "embed", lambda text: vector)
+    monkeypatch.setattr(bank_build, "embed", lambda text: candidate_vector)
     monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {"status": "success"}))
     monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: inserted.extend(rows) or rows)
     state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud",
@@ -228,6 +234,26 @@ def test_bank_candidate_cosine_dedupe_rejects_any_active_match(monkeypatch):
     assert result["inserted"] == 0
     assert result["rejection_counts"]["near_duplicate"] == 1
     assert not inserted
+
+
+def test_bank_candidate_cosine_dedupe_keeps_calibrated_distinct_pair(monkeypatch):
+    inserted = []
+    existing_vector = [1.0] + [0.0] * 1023
+    candidate_vector = _unit_vector_with_first_component(0.9205)
+    monkeypatch.setattr(bank_build, "_live_items", lambda *args: [
+        {"id": "old", "prompt": "A different question", "choices": [], "embedding": existing_vector},
+    ])
+    monkeypatch.setattr(bank_build, "embed", lambda text: candidate_vector)
+    monkeypatch.setattr(bank_build, "_call_model", lambda **kwargs: ([_item()], {"status": "success"}))
+    monkeypatch.setattr(bank_build.db, "insert", lambda table, rows: inserted.extend(rows) or rows)
+    state = {"course_id": "c", "skill_id": "s", "institution_id": "i", "name": "Cloud",
+             "bloom_level": "understand", "deadline": 9999999999}
+
+    result = bank_build._build_one(state, [{"id": "chunk", "text": "x" * 1200}], 0)
+
+    assert result["inserted"] == 1
+    assert result["rejection_counts"]["near_duplicate"] == 0
+    assert inserted
 
 
 def test_bank_candidate_checks_old_rows_missing_embeddings(monkeypatch):
