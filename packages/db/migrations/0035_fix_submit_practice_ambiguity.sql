@@ -305,7 +305,7 @@ begin
     v_review_rpc_ms, v_attempts_ms, v_exposure_ms,
     extract(epoch from clock_timestamp() - v_started) * 1000, v_attempt_id, v_attempt_number;
 end;
-$$
+$$;
 
 create or replace function public.start_practice_retake(
   p_institution_id uuid,
@@ -356,7 +356,7 @@ begin
   ) returning public.quiz_set_attempts.id,
              public.quiz_set_attempts.attempt_number;
 end;
-$$
+$$;
 
 notify pgrst, 'reload schema';
 commit;
