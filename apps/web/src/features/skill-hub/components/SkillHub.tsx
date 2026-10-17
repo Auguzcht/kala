@@ -299,10 +299,10 @@ function SkillHubFrame({
       </button>
       {/* Keep the mastery band with the skill title across browse modes. */}
       <div className="border bg-card p-6">
-        <div className="flex flex-wrap items-start gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <MasteryRing estimate={skill.estimate} size={56} />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
               <h1 className="min-w-0 flex-1 basis-64 font-display text-xl font-semibold text-foreground">{skill.name}</h1>
               <MasteryBand band={skill.band} className="shrink-0" />
             </div>
