@@ -197,7 +197,7 @@ export function StudyBrowser({
           <p className="mt-1 text-[11px] text-muted-foreground">due now</p>
           {dueLaterToday > 0 ? <p className="mt-1 text-[11px] text-muted-foreground">{dueLaterToday} due later today</p> : null}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div id="tour-study-actions" className="flex shrink-0 flex-wrap gap-2">
           <Button
             variant="orange"
             onClick={() => onStart(startWithAll ? "all" : "review")}

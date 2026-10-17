@@ -673,6 +673,7 @@ export function FlashcardDeck({
 
   const dockPrimary: ComposeDockPrimary = phase === "front"
     ? {
+        id: "tour-study-show-answer",
         label: "Show answer",
         onClick: () => setPhase("back"),
         icon: ArrowRightIcon,

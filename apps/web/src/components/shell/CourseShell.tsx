@@ -244,8 +244,8 @@ export function CourseShell({
         return;
       }
       const topicSets = sets.filter((set) => set.skillId === chosen.skillId);
-      const set = topicSets.find((set) => (set.attemptedCount ?? 0) < set.size) ?? topicSets.find((set) => (set.attemptCount ?? 0) > 0);
-      useUI.getState().setTourContext({ skillId: chosen.skillId, setId: set?.setId });
+      const set = topicSets.find((set) => (set.attemptedCount ?? 0) < set.size);
+      useUI.getState().setTourContext({ skillId: chosen.skillId, setId: set?.setId, completedOnly: !set && topicSets.length > 0 });
       setConfirmOpen(false);
       useUI.getState().setTourStep(0);
       void navigate({ to: TOUR_STEPS[0].route });

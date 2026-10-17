@@ -204,7 +204,7 @@ function SetList({
   };
 
   return (
-    <div className="space-y-4">
+    <div id="tour-test-menu" className="space-y-4">
       <p className="text-sm text-muted-foreground">
         A graded check on this skill. It moves your mastery. Pick a set to see
         what's in it before you start.

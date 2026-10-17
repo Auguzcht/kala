@@ -6,7 +6,7 @@ Branch: `feat/study-lesson-ui`. Review baseline: `4d8f27a`.
 
 Reviewed the Lesson, Study, and Test surfaces; their queries and mutations; hub search parameters; old course-mode routes; Home's quick-practice entry; the shared session shell; and the student tour. Changes stay inside `apps/web`. No browser access, deployments, live model calls, or database changes were used.
 
-The confirmed frontend defects below have been corrected. One API eligibility discrepancy remains outside the original frontend-only scope. This review does not establish that every live or visual edge case is resolved; the smoke matrix below remains for the user.
+The confirmed frontend defects below have been corrected. The API eligibility mismatch and the 12 unavailable card backs are resolved by the companion API branches shipping with this UI, as confirmed by the planner. This review does not establish that every live or visual edge case is resolved; the smoke matrix below remains for the user.
 
 ## Corrected findings
 
@@ -32,15 +32,11 @@ The confirmed frontend defects below have been corrected. One API eligibility di
 
 Earlier branch fixes were rechecked: untouched claimed cards are excluded from review-due indicators, due-now counts agree with filters/actions, repeated misses remain queued until Got it, grading feedback waits for Next, completion actions have the accepted priority, and Study completion uses the existing reduced-motion-aware celebration.
 
-## Remaining API follow-up
+## Resolved companion API fixes
 
-Membership in `services/api/app/routers/flashcards.py` computes `due` and `dueToday` from timestamps for all scheduled membership items. `services/api/app/learn/srs.py` filters mastered/graduated rows out of `due_cards` using `is_mastered(box, streak)`.
+**Graduated-card due eligibility — resolved.** Per the planner, `fix/membership-due-eligibility` introduces one shared `is_due` predicate in `srs.py` for both membership counts and review selection. It ships together with this UI branch. The previous discrepancy, where a graduated Known card could count as due but not be served, is no longer an outstanding API follow-up. Case 14 below is a joint-release regression check, not a remaining defect. This frontend branch did not independently deploy or live-verify that API branch.
 
-Consequently, a graduated Known card with an expired timestamp can appear in membership's Due count even though Review due will not serve it. Membership supplies the client a memory band, not the box/streak eligibility fields. Excluding every Known card in the UI would also exclude eligible Known cards, so that would be an incorrect workaround.
-
-Proposed API follow-up: use the same eligibility predicate for membership's `due`/`dueToday` and session selection, while keeping every card in the browse list. Add API cases for a graduated overdue card, an eligible overdue Known card, and a future scheduled card. This requires extending the original “apps/web only; no API or schema changes” brief and is not included in this branch.
-
-Cards with unavailable answer labels still require bank-content repair. The UI retains the accepted Answer unavailable display and an exit; this frontend review does not repair stored answer keys.
+**The 12 unavailable card backs — resolved.** Per the planner, the API now falls back to the correct choice label when resolving the card back, shipped with the lesson check branch. Those cards no longer require the bank-content repair previously stated here. The UI's “Answer unavailable” fallback remains for genuinely missing answers.
 
 ## Code-only verification
 
@@ -71,7 +67,7 @@ These checks are not browser or end-to-end coverage. Full web lint, typecheck, a
 11. Visit the old Lessons, Flashcards, and Practice pages. Topic choices should reach the canonical hub. Repeated Home Start practice actions must not reopen an old completed sitting.
 12. Run the student tour through Lesson teaching/checks and Test menu/generation/preview/start/feedback. Check the new wait states with a slow set preparation.
 13. Open hub URLs with `start=false`, `start=0`, invalid tabs, or malformed optional fields. They must not accidentally start a session or crash the route.
-14. Separately verify the graduated-card eligibility case after the API follow-up above. Do not treat the UI-only review as closing that issue.
+14. **Resolved on the API side:** the shared `is_due` eligibility fix ships with this branch. Retain graduated-card eligibility as a joint-release regression check; it is not an outstanding defect.
 
 
 ## Smoke follow-up: cases 7, 9, 11 and 12
@@ -109,26 +105,45 @@ The previous walkthrough independently selected topics through the old Lesson an
 
 The tour now reads bank availability and saved tests before starting, selects one topic with at least five prepared questions, and pins that skill through Lesson, Study and Test. It prefers a ready lesson already in the query cache, then the current topic, with saved tests as another preference. It excludes topics marked no-material. On legacy courses without bank serving, it uses an already prepared lesson or a topic with material and an existing five-question set instead. Cancelling the availability dialog also cancels the pending tour launch. If no suitable topic exists, it reports that immediately instead of entering an unavailable Test flow.
 
-The hub section now demonstrates:
+The hub walkthrough keeps one topic but leaves all saving actions to the student. It opens the Study menu before entering a deck, since opening a deck claims cards and records exposure. Students choose to enter the deck, create/start a Test set, answer checks/questions, rate cards or send chat. Completed-only Test topics stay on the menu, explaining Retake and New set without activating either.
 
-1. Lesson teaching, its Continue/chat dock, a typed sample question, the reply, and the check/feedback when present. Teaching-only steps continue without waiting for a nonexistent check.
-2. Study on the same topic: Show answer, Still learning/Got it controls, chat toggle, a typed sample question and reply.
-3. Test on the same topic: reuse a saved test when available, preferring an unfinished sitting; otherwise create a set. A completed modern set explicitly starts a retake. Then select an answer, show feedback and the Test dock, and demonstrate its chat input/reply.
+Each dock can open and pre-fill an editable sample without submitting it or waiting for a reply. Existing draft text is preserved. Lesson Continue and front-side Show answer remain UI-only actions; Show answer has its own anchor so it can never accidentally activate Got it after a student flips the card first.
 
-Legacy completed sets without modern attempt metadata are not selected for automatic retake; the tour can create a new set instead. Diagnostic and standalone Tutor sections remain outside this follow-up's smoke scope.
+The runner navigates on search changes within the pinned skill, keeps asynchronous waits separate, and observes the outcome of the student's own action. Every student-action wait offers **Skip this step**, which bypasses dependent feedback/chat steps. Waits remain bounded at 120 seconds, and tour cleanup during student navigation no longer dismisses the walkthrough. Diagnostic and instructor controls only highlight or open UI; the standalone Tutor now also pre-fills without sending.
 
-The runner now navigates on search changes even when the skill pathname is unchanged, separates asynchronous wait boundaries, targets each mode's own dock form, and submits the sample prompt **before** advancing. Existing explicit tour IDs remain; the shared dock adds mode-specific anchors. Preparation and reply waits remain bounded at 120 seconds, with an exit message when unavailable. This does not fix a failed or stalled backend generation job.
-
-Sources: `src/components/shell/CourseShell.tsx:219`; `src/components/shell/student-tour.ts:111`; `src/components/shell/TourRunner.tsx:70`, `:95`, `:114`, `:144`, `:252`; `src/components/study/ComposeDock.tsx`.
+Sources: `src/components/shell/CourseShell.tsx`; `src/components/shell/student-tour.ts`; `src/components/shell/TourRunner.tsx`; `src/features/skill-hub/components/StudyBrowser.tsx`; `src/features/flashcards/components/FlashcardDeck.tsx`.
 
 ### Verification and handoff
 
 - Lint: **0 errors, 18 existing warnings**.
 - Typecheck: passed.
 - Production build: passed, with the existing chunk-size advisory.
-- Code-only regression checks: passed for partial/complete/untouched score pills; confirmed cursor and repeated queue persistence; pending-write idempotency state; storage isolation and malformed data; saved-test reuse; no-material rejection; one skill across all three tour modes; actual tour form submission before navigation; earlier repeat-loop, navigation, cache and retake checks.
+- Code-only regression checks: passed for partial/complete/untouched score pills; confirmed cursor and repeated queue persistence; pending-write idempotency state; storage isolation and malformed data; saved-test reuse; no-material rejection; one skill across all three tour modes; editable pre-fill without submission; skippable student-action waits; earlier repeat-loop, navigation, cache and retake checks.
 - Checks used stubbed DOM/query/network callbacks against production functions. They did not open a browser or contact model endpoints. Temporary check scripts are outside the repository.
 
-**User smoke remaining:** repeat case 7; refresh on card two of missed review and again during a repeated miss in case 9; run case 12 from an already opened ready topic, checking all three dock demonstrations and automatic Test activation. Also run the tour when there is no saved test and when only a completed modern set exists. Confirm each hub breadcrumb stays on the same skill.
+**User smoke remaining:** repeat case 7; refresh on card two of missed review and again during a repeated miss in case 9; run case 12 from an already opened ready topic, checking all three dock demonstrations without automatic submission. Also run the tour when there is no saved test and when only completed sets exist; verify student-controlled New set/Start actions and explanatory completed-set menus. Confirm each hub breadcrumb stays on the same skill.
 
-**Closure status:** this addresses the reported frontend regressions, subject to that visual smoke. The previously documented API mismatch between graduated-card membership counts and Review due eligibility remains outside this branch's frontend-only authorization. Do not label the entire hub fully closed until that API issue is resolved or explicitly accepted as a separate follow-up.
+**Closure status:** the reported frontend regressions are addressed, subject to user visual smoke. Both companion API findings are resolved per the planner and ship together with this UI. They are no longer branch-closure blockers.
+
+
+## Tour writes audit — student actions only
+
+Baseline: `80d0770`. This update removes automatic learning writes and chat requests from the tour. Read-only discovery, navigation, opening panels, local card flips and editable drafts remain permitted. Lesson navigation may load or prepare shared course lesson content through the existing GET; it never submits student evidence. The tour makes no direct save/model requests.
+
+| Step before | Automatic action before | Behavior after |
+| --- | --- | --- |
+| Lesson — Check your understanding | Clicked the first choice, submitting a graded check and updating evidence, mastery and scheduling. | Highlights choices with an instruction to pick an answer; observes feedback after the student's click. Skip goes to Study without grading. |
+| Test — Answer a question | Clicked the first choice, saving/grading a Test answer. | “Pick an answer to see feedback.” Waits for student input; Skip bypasses feedback/chat. |
+| Test — New set | Clicked New set, creating a saved set. | Highlights New set and waits for the student's click, with Skip. |
+| Test — Test sitting | Clicked Retake this set when the saved set was complete, creating an attempt. | Completed-only topics show the Test menu and explain Retake/New set. Neither is activated, and no new set is created as a fallback. |
+| Study — entry | Automatically entered `start=true&mode=all`; the deck GET claims cards and records study exposure. | Opens the read-only Study menu. The student chooses Start studying/Review due/Study all; Skip bypasses the deck. |
+| Lesson dock — sample follow-up | Filled and submitted a sample question automatically. | Opens the dock and pre-fills editable text without sending, preserving existing text. Next continues without a reply wait. |
+| Study dock — sample follow-up | Filled and submitted a sample question automatically. | Same editable pre-fill; only the student's Send invokes Kala. |
+| Test dock — sample follow-up | Filled and submitted a sample question automatically. | Same editable pre-fill; only the student's Send invokes Kala. |
+| Standalone Tutor — sample question | Filled/submitted automatically, creating a conversation and sending a model request. | Editable pre-fill only; explains that Send asks Kala. The tour can continue without sending. |
+
+Study's Still learning/Got it controls were **not clicked automatically before** and remain explanation-only. Diagnostic submission was also highlight-only and remains student-controlled. Opening an unfinished Test was previously automatic but read-only; the tour now waits for the student's Start/Continue click too, with Skip. Instructor tour clicks remain panel/tab/navigation actions.
+
+All student-action waits expose Skip during availability waits as well as while awaiting input. Each has a 120-second limit; timeout skips dependent steps. Replies are never required after a sample pre-fill. A front-only Show answer anchor prevents a local flip step from turning into an accidental rating if the student has already flipped the card.
+
+Verification: lint 0 errors / 18 existing warnings, typecheck and production build pass. Code-only checks cover no automatic submit/save targets, preserved drafts, Skip/timeout behavior, student-driven feedback and URL changes, and completed-only/no-set/unfinished-set tour branches. No browser, live model call, deployment or database write was used for verification. User visual smoke remains separate.

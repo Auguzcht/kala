@@ -71,7 +71,7 @@ export function TourRunner({
       (search as Record<string, unknown>)[key] !== value)) return;
 
     let cancelled = false;
-    let submittingSample = false;
+    let finishedAction = false;
     let flowDestroy = false; // we destroyed on purpose (wait-state resolving)
     let instance: ReturnType<typeof driver> | null = null;
 
@@ -101,29 +101,20 @@ export function TourRunner({
     const frame = () =>
       new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-    // Fill the tutor input and submit through the same path the Ask button
-    // uses (native value setter + input event so React's controlled state
-    // picks it up, then requestSubmit on the form). Two frames for React to
-    // flush the state before submit.
-    //
-    // Targets a textarea, not an input: TutorChat's compose box moved onto
-    // ai-elements' PromptInputTextarea (Stage 2 of the AI overhaul), which
-    // renders a <textarea>, not the plain <input> this helper originally
-    // targeted. The native value setter is per-element-type — reusing
-    // HTMLInputElement's setter on a textarea node is a silent no-op, not
-    // an error, so this would have stalled the tour without ever throwing.
-    const askTutor = async (question: string, inputId = "tour-tutor-input") => {
-      const input = document.querySelector<HTMLTextAreaElement>(`#${inputId} textarea`);
-      if (!input) return;
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype,
-        "value"
-      )?.set;
-      setter?.call(input, question);
+    // Editable draft only: never submit or replace text the student wrote.
+    const prefillInput = (sample: NonNullable<TourStepConfig["prefill"]>) => {
+      const input = document.querySelector<HTMLTextAreaElement>(`#${sample.inputId} textarea`);
+      if (!input || input.value.trim()) return;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(input, sample.question);
       input.dispatchEvent(new Event("input", { bubbles: true }));
-      await frame();
-      await frame();
-      if (!cancelled) document.querySelector<HTMLFormElement>(`#${inputId}`)?.requestSubmit();
+    };
+    const skipAction = (action: NonNullable<TourStepConfig["studentAction"]>) => {
+      if (cancelled || finishedAction) return;
+      finishedAction = true;
+      const target = steps.findIndex((candidate) => candidate.key === action.skipTo);
+      if (target < 0) exit();
+      else advanceTo(target);
     };
 
     const scrollThenDrive = async (el: Element | null) => {
@@ -131,20 +122,25 @@ export function TourRunner({
         el.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
         await frame();
       }
-      if (!cancelled && instance) instance.drive();
+      if (!cancelled && !finishedAction && instance) {
+        if (step.prefill) prefillInput(step.prefill);
+        instance.drive();
+      }
     };
 
-    // Instance boundary: contiguous steps on the same route; a click step
-    // or a tutorAsk step always closes its own instance (their Next swaps
-    // the page content / fires a request the following steps must wait on).
+    // Keep navigation, editable drafts and student-action waits in separate
+    // instances. Skipping an action also skips all steps that depend on it.
     let end = tourStep + 1;
     while (
       end < steps.length &&
       steps[end].route === step.route &&
       !steps[end].search &&
       !steps[end].waitFor &&
+      !steps[end].prefill &&
+      !steps[end].studentAction &&
       !steps[end - 1].click &&
-      !steps[end - 1].tutorAsk
+      !steps[end - 1].prefill &&
+      !steps[end - 1].studentAction
     ) {
       end++;
     }
@@ -153,12 +149,20 @@ export function TourRunner({
       // Fires on ANY destroy: ours (advance/exit/cleanup) or the user's
       // (Escape/overlay click). Only treat it as an exit if the tour is
       // still on THIS step — after `advanceTo` the store already moved.
-      if (!flowDestroy && useUI.getState().tourStep === tourStep) exit();
+      if (!cancelled && !flowDestroy && useUI.getState().tourStep === tourStep) exit();
     };
 
     const first = steps[tourStep];
+    const finishActionIfReady = () => {
+      if (!first.studentAction || !document.querySelector(first.studentAction.completeWhen)) return false;
+      finishedAction = true;
+      advanceTo(tourStep + 1);
+      return true;
+    };
+    if (finishActionIfReady()) return;
+    const readySelector = [first.waitFor, first.studentAction?.completeWhen].filter(Boolean).join(", ");
 
-    if (first.waitFor && !document.querySelector(first.waitFor) && first.waitState) {
+    if (first.waitFor && !document.querySelector(readySelector) && first.waitState) {
       // Content not ready (guided lesson still generating, sheet still
       // loading): drive the wait-state popover on the generating panel,
       // poll for the real content, then restart this instance on it.
@@ -174,7 +178,9 @@ export function TourRunner({
               description: first.waitState.description,
               side: "bottom",
               align: "start",
-              showButtons: ["close"],
+              showButtons: first.studentAction ? ["next", "close"] : ["close"],
+              nextBtnText: "Skip this step",
+              onNextClick: first.studentAction ? () => skipAction(first.studentAction!) : undefined,
               onCloseClick: exit,
             },
           },
@@ -182,9 +188,14 @@ export function TourRunner({
         onDestroyed,
       });
       void scrollThenDrive(document.querySelector(first.waitState.selector));
-      void waitForElement(first.waitFor, { timeout: 120_000 }).then((element) => {
-        if (cancelled) return;
-        if (!element) { unavailable(); return; }
+      void waitForElement(readySelector, { timeout: 120_000 }).then((element) => {
+        if (cancelled || finishedAction) return;
+        if (!element) {
+          if (first.studentAction) skipAction(first.studentAction);
+          else unavailable();
+          return;
+        }
+        if (finishActionIfReady()) return;
         flowDestroy = true;
         instance?.destroy();
         setRecheck((r) => r + 1);
@@ -205,7 +216,10 @@ export function TourRunner({
           nextBtnText: isLastGlobal ? "Done" : "Next",
           onCloseClick: exit,
         };
-        if (s.click) {
+        if (s.studentAction) {
+          popover.nextBtnText = "Skip this step";
+          popover.onNextClick = () => skipAction(s.studentAction!);
+        } else if (s.click) {
           // Click a target (clickSelector when the click target differs
           // from the highlighted element, else the highlighted element
           // itself), then move on — the store advance swaps the page
@@ -247,14 +261,6 @@ export function TourRunner({
             }
             advanceTo(globalIndex + 1);
           };
-        } else if (s.tutorAsk) {
-          popover.onNextClick = () => {
-            if (submittingSample) return;
-            submittingSample = true;
-            void askTutor(s.tutorAsk!.question, s.tutorAsk!.inputId).then(() => {
-              if (!cancelled) advanceTo(globalIndex + 1);
-            });
-          };
         } else if (isInstanceLast) {
           popover.onNextClick = () => advanceTo(end);
         }
@@ -262,16 +268,32 @@ export function TourRunner({
       });
       instance = driver({
         showProgress: true,
+        disableActiveInteraction: false,
         overlayColor: OVERLAY_COLOR,
         overlayClickBehavior: "close",
         smoothScroll: !reduceMotion,
         steps: instanceSteps,
         onDestroyed,
       });
-      void waitForElement(first.selector, { timeout: 8000 }).then((el) => {
-        if (cancelled) return;
+      const targetSelector = [first.selector, first.studentAction?.completeWhen].filter(Boolean).join(", ");
+      void waitForElement(targetSelector, { timeout: 8000 }).then((el) => {
+        if (cancelled || finishedAction) return;
+        if (finishActionIfReady()) return;
         if (!el) { unavailable(); return; }
         void scrollThenDrive(el);
+        if (first.studentAction) {
+          const action = first.studentAction;
+          void waitForElement(action.completeWhen, { timeout: 120_000 }).then((result) => {
+            if (cancelled || finishedAction) return;
+            if (!result) {
+              toast.info("No action taken yet. Continuing to the next part of the tour.");
+              skipAction(action);
+              return;
+            }
+            finishedAction = true;
+            advanceTo(tourStep + 1);
+          });
+        }
       });
     }
 
