@@ -112,6 +112,13 @@ export function StudyBrowser({
   const counts = data?.counts ?? { new: 0, learning: 0, slipping: 0, known: 0, dueToday: 0 };
   const dueNow = cards.filter(isDueNow).length;
   const dueLaterToday = Math.max(0, counts.dueToday - dueNow);
+  const hasNewCards = counts.new > 0;
+  const startWithAll = dueNow === 0 && hasNewCards;
+  const studyLabel = dueNow > 0
+    ? `Review due (${dueNow})`
+    : hasNewCards
+      ? counts.new === cards.length ? "Start studying" : "Continue studying"
+      : "All caught up";
   const memoryTotal = counts.new + counts.learning + counts.slipping + counts.known;
   const summaryStates = ["new", "learning", "slipping", "known"] as const;
   const filterOptions: { id: CardFilter; label: string; count: number }[] = [
@@ -190,15 +197,17 @@ export function StudyBrowser({
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             variant="orange"
-            onClick={() => onStart("review")}
-            disabled={dueNow === 0}
+            onClick={() => onStart(startWithAll ? "all" : "review")}
+            disabled={dueNow === 0 && !hasNewCards}
           >
-            {dueNow === 0 ? "All caught up" : `Review due (${dueNow})`}
+            {studyLabel}
             <ArrowRightIcon size={16} />
           </Button>
-          <Button variant="outline" onClick={() => onStart("all")}>
-            Study all
-          </Button>
+          {!startWithAll ? (
+            <Button variant="outline" onClick={() => onStart("all")}>
+              Study all
+            </Button>
+          ) : null}
         </div>
       </div>
 
