@@ -174,6 +174,63 @@
         }
       }
     },
+    "/courses/{course_id}/memory/summary": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "summary": "Memory Summary",
+        "description": "Per-skill card-memory counts. Reading the summary never creates SRS rows.",
+        "operationId": "memory_summary_courses__course_id__memory_summary_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/courses/{course_id}/roster": {
       "get": {
         "tags": [
@@ -348,7 +405,7 @@
           "diagnostic"
         ],
         "summary": "Propose Course Skills",
-        "description": "On-demand trigger for AI skill proposal, standalone, no relaunch\nneeded. This was previously only ever fired as a side effect buried\ninside the LTI launch handler, meaning re-testing or re-running it\nrequired faking a fresh Blackboard launch each time. Same underlying\npipeline (ai/skill_proposer.seed_course_skills), same idempotency\nbehavior: if this course already has any skill rows, approved or\nproposed, this is a no-op, delete them first (in Supabase) if you\ngenuinely want a from-scratch re-proposal, e.g. after fixing a bug in\nthe proposal logic itself, or want to re-run against changed course\ncontent.",
+        "description": "Queue proposal work; the worker owns all model and content work.",
         "operationId": "propose_course_skills_courses__course_id__skills_propose_post",
         "parameters": [
           {
@@ -378,7 +435,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -594,7 +651,7 @@
           "diagnostic"
         ],
         "summary": "Reset Tagging",
-        "description": "Clear the \"already attempted\" mark on UNMATCHED content so it can be\ntagged again against a changed skill set.\n\nWHY THIS IS NEEDED AND WHY IT IS EXPLICIT. Ingest is resumable via\n`tag_attempted_at`: a chunk that has been through the tagger stops being\npending, whether or not it matched a skill. That is what stops untaggable\ncontent looping forever \u2014 but it also means a plain re-run of /ingest\nretries NOTHING. Approving new skills and calling /ingest again would skip\nevery chunk that previously found no match, which is precisely the content\nthe new skills were approved to catch.\n\nSo this is the deliberate second half of \"approve skills, then retag\":\nreset first, then ingest. Returns how many rows were reopened so the caller\nknows whether a re-tag is even worth running (0 means nothing to do).\n\nOnly touches skill_id IS NULL rows. A chunk that already matched a skill\nkeeps its tag and is not re-sent to the model \u2014 re-tagging matched content\nwould be wasted calls and could reshuffle a correct match to a worse one.\n\nStaff-gated at both layers, like the upload endpoint: course_id is\ncaller-supplied, so \"staff somewhere\" is not sufficient.",
+        "description": "Recompute every embedded course chunk against approved skill vectors.\n\nThe operation is a single database RPC, performs no model calls, and is\nintentionally a full recompute so rejected or newly approved skills are\nreflected immediately.",
         "operationId": "reset_tagging_courses__course_id__content_retag_post",
         "parameters": [
           {
@@ -1349,6 +1406,155 @@
         }
       }
     },
+    "/practice/{course_id}/sets/{set_id}/retake": {
+      "post": {
+        "tags": [
+          "practice"
+        ],
+        "summary": "Start Practice Retake",
+        "description": "Create the next server-owned attempt after the latest one is complete.",
+        "operationId": "start_practice_retake_practice__course_id__sets__set_id__retake_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/practice/{course_id}/sets/{set_id}/results": {
+      "get": {
+        "tags": [
+          "practice"
+        ],
+        "summary": "Get Set Results",
+        "description": "Return the durable recap for this student's answers in one set.\n\nOnly practice_answer_results rows expose answer keys. Unanswered set items\nare assembled from prompt/choices columns alone.",
+        "operationId": "get_set_results_practice__course_id__sets__set_id__results_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Set Id"
+            }
+          },
+          {
+            "name": "attemptId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attemptid"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/practice/{course_id}/submit": {
       "post": {
         "tags": [
@@ -1415,6 +1621,72 @@
         }
       }
     },
+    "/flashcards/{course_id}/skills/{skill_id}/cards": {
+      "get": {
+        "tags": [
+          "flashcards"
+        ],
+        "summary": "Skill Cards",
+        "description": "Read the complete live card membership for one approved skill.\n\nThis is a browse list, not a session selector. It never creates schedule,\nexposure, review, or mastery rows.",
+        "operationId": "skill_cards_flashcards__course_id__skills__skill_id__cards_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "skill_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/flashcards/{course_id}/deck": {
       "get": {
         "tags": [
@@ -1438,8 +1710,14 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "default": 10,
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Limit"
             }
           },
@@ -1473,6 +1751,36 @@
                 }
               ],
               "title": "Skill Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "review",
+                    "all"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
             }
           },
           {
@@ -2685,6 +2993,72 @@
         }
       }
     },
+    "/dashboard/{course_id}/skills/{skill_id}/reject-approved": {
+      "post": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Reject Approved Skill",
+        "description": "Retire an approved skill's bank items atomically with its rejection.",
+        "operationId": "reject_approved_skill_dashboard__course_id__skills__skill_id__reject_approved_post",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "skill_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Skill Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/dashboard/{course_id}/skills/{skill_id}/detach": {
       "patch": {
         "tags": [
@@ -3644,19 +4018,69 @@
             "title": "Item Id"
           },
           "remembered": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Remembered"
           },
           "latency_ms": {
             "type": "integer",
             "title": "Latency Ms",
             "default": 0
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "again",
+                  "good"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "mode": {
+            "type": "string",
+            "const": "flashcard",
+            "title": "Mode",
+            "default": "flashcard"
           }
         },
         "type": "object",
         "required": [
-          "item_id",
-          "remembered"
+          "item_id"
         ],
         "title": "ReviewBody"
       },
@@ -3810,6 +4234,41 @@
               }
             ],
             "title": "Set Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "attemptId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attemptid"
           }
         },
         "type": "object",

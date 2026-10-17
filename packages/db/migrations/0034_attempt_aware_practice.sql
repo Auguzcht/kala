@@ -267,7 +267,7 @@ begin
     p_mode, p_outcome, v_was_due, v_counted, p_idempotency_key
   );
 
-  if p_mode <> 'quiz' or p_affects_mastery then
+  if p_affects_mastery then
     insert into public.evidence_events (
       institution_id, user_id, course_id, skill_id, type, correct, latency_ms, hints_used
     ) values (
