@@ -15,7 +15,7 @@ import { BookOpenIcon } from "@/components/ui/book-open";
 import { MasteryBand } from "@/components/kala";
 import { usePracticeSet, usePracticeSetById, usePracticeSetResults, useSubmitPractice, useGenerateSet } from "@/features/practice/hooks/use-practice";
 import { useBankStatus } from "@/features/bank";
-import { celebrate } from "@/lib/celebrate";
+import { celebrateOnce } from "@/lib/celebrate";
 import { useGamification } from "@/features/gamification";
 import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSetResults, PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
@@ -255,9 +255,6 @@ export function PracticePanel({
   // Reduced-motion is respected at the CALL SITE (celebrate() itself is a
   // plain side effect with no React dependency — see lib/celebrate.ts).
   const reduceMotion = useReducedMotion();
-  // Guards the celebration to fire exactly once per set when the recap is
-  // ready. A ref keeps rerenders and result refetches from repeating it.
-  const celebratedSetRef = useRef<string | null>(null);
 
   // The gamification summary is derived from immutable evidence; when the
   // submit invalidates it, the refetched delta IS the real +XP for that
@@ -324,11 +321,8 @@ export function PracticePanel({
   // from firing the same celebration twice during this mount.
   useEffect(() => {
     if (!recapVisible || !completeOnServer || resultsQuery.isFetching || resultsQuery.isError || !results?.setId) return;
-    const key = results.setId;
-    if (celebratedSetRef.current === key) return;
-    celebratedSetRef.current = key;
-    if (!reduceMotion) celebrate();
-  }, [recapVisible, completeOnServer, resultsQuery.isFetching, resultsQuery.isError, results?.setId, reduceMotion]);
+    if (!reduceMotion) celebrateOnce(`${results.setId}:${results.attemptId ?? "1"}`);
+  }, [recapVisible, completeOnServer, resultsQuery.isFetching, resultsQuery.isError, results?.setId, results?.attemptId, reduceMotion]);
 
   if (!usingSaved && bank.isLoading)
     return <LoadingPanel label="Checking question availability…" lines={4} />;

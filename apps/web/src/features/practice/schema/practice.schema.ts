@@ -126,6 +126,7 @@ export const practiceResultsQuestionSchema = z.object({
 export const practiceSetResultsSchema = z.object({
   courseId: z.string(),
   setId: z.string(),
+  attemptId: z.string().optional(),
   score: z.object({
     correct: z.number().int().nonnegative(),
     answered: z.number().int().nonnegative(),
