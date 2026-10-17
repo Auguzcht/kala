@@ -130,15 +130,19 @@ def main() -> int:
     common = {"item_id": selected["id"], "set_id": set_id, "session_id": session_id}
     first_status, first = request(submit_path, {
         **common, "choice_id": choices[0]["id"], "idempotency_key": f"smoke-{session_id}",
+        **({"attemptId": selected_set["attemptId"]} if selected_set.get("attemptId") else {}),
     })
     repeat_status, repeated = request(submit_path, {
-        **common, "choice_id": choices[1]["id"],
-        "idempotency_key": f"smoke-repeat-{session_id}",
+        **common, "choice_id": choices[0]["id"], "idempotency_key": f"smoke-{session_id}",
+        **({"attemptId": selected_set["attemptId"]} if selected_set.get("attemptId") else {}),
     })
     assert first_status == repeat_status == 200
     assert first == repeated, "repeat submit did not return the original stored result"
 
-    recap_status, recap = request(f"/practice/{COURSE_ID}/sets/{set_id}/results")
+    recap_path = f"/practice/{COURSE_ID}/sets/{set_id}/results"
+    if first.get("attemptId"):
+        recap_path += f"?attemptId={first['attemptId']}"
+    recap_status, recap = request(recap_path)
     assert recap_status == 200
     assert recap["score"]["answered"] == selected_results["score"]["answered"] + 1
     assert recap["totalXp"] == selected_results["totalXp"] + first["xpAwarded"]

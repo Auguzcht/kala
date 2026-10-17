@@ -20,7 +20,8 @@
     "aws": "sh ./scripts/aws-cli.sh",
     "terraform": "sh ./scripts/terraform.sh",
     "api:dev": "cd services/api && uv run uvicorn app.main:app --reload --port 8000",
-    "worker:run": "cd services/worker && uv run python -c \"from app.handler import handler; handler({}, None)\""
+    "worker:run": "cd services/worker && uv run python -c \"from app.handler import handler; handler({}, None)\"",
+    "context:claude:scaffold": "node scripts/claude-context-scaffold.mjs"
   },
   "devDependencies": {
     "supabase": "^2.114.0"

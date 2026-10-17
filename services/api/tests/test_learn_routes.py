@@ -934,9 +934,13 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
 
     def fake_select(table, params):
         if table == "quiz_set_attempts":
-            # set-2 attempted once, correct; set-1 never attempted (absent).
-            return [{"set_id": "set-2", "attempted_count": 3, "correct_count": 2,
-                     "last_attempted_at": "2026-02-03T00:00:00Z"}]
+            # The latest attempt is 2/5; the prior attempt is the best at 4/5.
+            return [
+                {"id": "attempt-1", "set_id": "set-2", "attempt_number": 1,
+                 "attempted_count": 5, "correct_count": 4, "last_attempted_at": "2026-02-02T00:00:00Z"},
+                {"id": "attempt-2", "set_id": "set-2", "attempt_number": 2,
+                 "attempted_count": 3, "correct_count": 2, "last_attempted_at": "2026-02-03T00:00:00Z"},
+            ]
         if table == "generated_items":
             # The count is now DERIVED from the items, not read off the
             # quiz_sets.size column (which can go stale when a partial batch's
@@ -968,6 +972,9 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
     assert body["sets"][0]["attemptedCount"] == 3
     assert body["sets"][0]["correctCount"] == 2
     assert body["sets"][0]["lastAttemptedAt"] == "2026-02-03T00:00:00Z"
+    assert body["sets"][0]["latestScore"] == {"correct": 2, "total": 5}
+    assert body["sets"][0]["bestScore"] == {"correct": 4, "total": 5}
+    assert body["sets"][0]["attemptCount"] == 2
     # Never attempted -> explicit nulls, not missing keys.
     assert body["sets"][1]["attemptedCount"] is None
     assert body["sets"][1]["correctCount"] is None
@@ -1129,6 +1136,7 @@ def test_submit_increments_set_attempts_when_item_belongs_to_a_set(monkeypatch) 
     assert rpc_calls[0][1]["p_set_id"] == "00000000-0000-4000-8000-000000000020"
     assert rpc_calls[0][1]["p_session_id"] == "00000000-0000-4000-8000-000000000020"
     assert rpc_calls[0][1]["p_idempotency_key"] == "attempt-set-1"
+    assert rpc_calls[0][1]["p_attempt_id"] is None
 
 
 def test_submit_creates_a_fresh_attempt_row_when_none_exists(monkeypatch) -> None:
@@ -1275,3 +1283,195 @@ def test_list_sets_reports_actual_item_count_not_the_stale_size_column(monkeypat
 
     assert response.status_code == 200
     assert response.json()["sets"][0]["size"] == 3  # derived, not the column's 5
+
+
+def _practice_rpc_error(code: str, message: str) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", "http://supabase.test/rest/v1/rpc")
+    response = httpx.Response(400, json={"code": code, "message": message}, request=request)
+    return httpx.HTTPStatusError("RPC failed", request=request, response=response)
+
+
+def test_practice_retake_returns_201_with_new_attempt(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    calls = []
+
+    def select(table, params):
+        assert table == "quiz_sets"
+        assert params["institution_id"] == "eq.institution-1"
+        return [{"id": "00000000-0000-4000-8000-000000000020"}]
+
+    monkeypatch.setattr(practice.db, "select", select)
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: calls.append((fn, args)) or [{
+        "attempt_id": "00000000-0000-4000-8000-000000000021", "attempt_number": 2,
+    }])
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/retake",
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 201
+    assert response.json() == {
+        "setId": "00000000-0000-4000-8000-000000000020",
+        "attemptId": "00000000-0000-4000-8000-000000000021",
+        "attemptNumber": 2,
+    }
+    assert calls[0][0] == "start_practice_retake"
+
+
+def test_practice_retake_returns_409_when_latest_attempt_in_progress(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", lambda table, params: [{"id": "set-1"}])
+
+    def rpc(fn, args):
+        raise _practice_rpc_error("P0001", "attempt_in_progress")
+
+    monkeypatch.setattr(practice.db, "rpc", rpc)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/retake")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+    assert response.json() == {"code": "attempt_in_progress"}
+
+
+def test_practice_retake_returns_409_when_no_attempt_exists(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", lambda table, params: [{"id": "set-1"}])
+
+    def rpc(fn, args):
+        raise _practice_rpc_error("P0001", "no_attempt")
+
+    monkeypatch.setattr(practice.db, "rpc", rpc)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/retake")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+    assert response.json() == {"code": "no_attempt"}
+
+
+def test_submit_passes_attempt_id_and_returns_attempt_metadata(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    calls = []
+    result = practice_result_row()
+    result.update({"attempt_id": "00000000-0000-4000-8000-000000000021", "attempt_number": 2})
+    monkeypatch.setattr(practice.db, "rpc", lambda fn, args: calls.append(args) or [result])
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/00000000-0000-4000-8000-000000000001/submit",
+                json={"item_id": "item-1", "choice_id": "a", "set_id": "set-1",
+                      "attemptId": "00000000-0000-4000-8000-000000000021"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert calls[0]["p_attempt_id"] == "00000000-0000-4000-8000-000000000021"
+    assert response.json()["attemptId"] == "00000000-0000-4000-8000-000000000021"
+    assert response.json()["attemptNumber"] == 2
+
+
+def test_submit_to_completed_attempt_returns_409(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+
+    def rpc(fn, args):
+        raise _practice_rpc_error("P0001", "attempt_complete")
+
+    monkeypatch.setattr(practice.db, "rpc", rpc)
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/practice/00000000-0000-4000-8000-000000000001/submit",
+                json={"item_id": "item-1", "choice_id": "a", "set_id": "set-1",
+                      "attemptId": "00000000-0000-4000-8000-000000000021"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+    assert response.json() == {"code": "attempt_complete"}
+
+
+def _attempt_results_fixture(*, selected_id: str):
+    attempt_ids = [
+        "00000000-0000-4000-8000-000000000021",
+        "00000000-0000-4000-8000-000000000022",
+    ]
+    attempts = [
+        {"id": attempt_ids[0], "attempt_number": 1, "attempted_count": 2,
+         "correct_count": 1, "completed_at": "2026-10-16T00:00:00Z"},
+        {"id": attempt_ids[1], "attempt_number": 2, "attempted_count": 2,
+         "correct_count": 2, "completed_at": "2026-10-17T00:00:00Z"},
+    ]
+    answers = []
+    for attempt_id, correct, xp in ((attempt_ids[0], False, 2), (attempt_ids[1], True, 0)):
+        answers.append({
+            "attempt_id": attempt_id, "item_id": "item-1", "prompt": "Question",
+            "choices": [{"id": "a", "label": "A"}], "choice_id": "a", "choice_text": "A",
+            "correct_option_id": "a", "correct_answer_text": "A", "explanation": "Because",
+            "correct": correct, "xp_awarded": xp, "mastery_before": 0.5,
+            "mastery_before_level": "Proficient", "mastery_after": 0.5,
+            "mastery_after_level": "Proficient", "created_at": "2026-10-17T00:00:00Z",
+        })
+
+    def select(table, params):
+        if table == "quiz_sets":
+            return [{"id": "00000000-0000-4000-8000-000000000020", "skill_id": "skill-1"}]
+        if table == "quiz_set_attempts":
+            return attempts
+        if table == "quiz_set_items":
+            return [{"item_id": "item-1", "position": 0}, {"item_id": "item-2", "position": 1}]
+        if table == "generated_items":
+            return [{"id": "item-2", "prompt": "Question 2", "choices": []}]
+        if table == "practice_answer_results":
+            return answers
+        return []
+
+    return select, attempt_ids
+
+
+def test_results_default_to_latest_attempt_and_return_attempt_summaries(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    select, attempt_ids = _attempt_results_fixture(selected_id="latest")
+    monkeypatch.setattr(practice.db, "select", select)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/results")
+    finally:
+        app.dependency_overrides.clear()
+    body = response.json()
+    assert response.status_code == 200
+    assert body["attemptId"] == attempt_ids[1]
+    assert body["attemptNumber"] == 2
+    assert body["score"] == {"correct": 1, "answered": 1, "total": 2, "percent": 100.0}
+    assert body["totalXp"] == 0
+    assert body["xpNote"] == "Retakes don't earn XP. Your first try counts."
+    assert body["attempts"] == [
+        {"attemptId": attempt_ids[0], "attemptNumber": 1, "correct": 0, "answered": 1,
+         "total": 2, "completedAt": "2026-10-16T00:00:00Z"},
+        {"attemptId": attempt_ids[1], "attemptNumber": 2, "correct": 1, "answered": 1,
+         "total": 2, "completedAt": "2026-10-17T00:00:00Z"},
+    ]
+
+
+def test_results_accept_explicit_attempt_id(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = authenticated_user
+    select, attempt_ids = _attempt_results_fixture(selected_id="first")
+    monkeypatch.setattr(practice.db, "select", select)
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/results"
+                f"?attemptId={attempt_ids[0]}"
+            )
+    finally:
+        app.dependency_overrides.clear()
+    body = response.json()
+    assert response.status_code == 200
+    assert body["attemptId"] == attempt_ids[0]
+    assert body["attemptNumber"] == 1
+    assert body["score"]["correct"] == 0
+    assert body["totalXp"] == 2
