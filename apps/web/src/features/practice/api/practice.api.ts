@@ -8,6 +8,7 @@ import {
   practiceSetSchema,
   practiceSubmitResultSchema,
   practiceSetResultsSchema,
+  practiceRetakeResponseSchema,
   type PracticeNext,
   type PracticeBridgeSet,
   type PracticeSavedSet,
@@ -15,6 +16,7 @@ import {
   type PracticeSetList,
   type PracticeSubmitResult,
   type PracticeSetResults,
+  type PracticeRetakeResponse,
 } from "@/features/practice/schema/practice.schema";
 
 export async function fetchNextPracticeItem(courseId: string, skillId?: string): Promise<PracticeNext> {
@@ -70,10 +72,18 @@ export async function fetchPracticeSetById(
 export async function fetchPracticeSetResults(
   courseId: string,
   setId: string,
+  attemptId?: string,
 ): Promise<PracticeSetResults> {
-  const endpoint = `/practice/${courseId}/sets/${setId}/results`;
+  const query = attemptId ? `?attemptId=${encodeURIComponent(attemptId)}` : "";
+  const endpoint = `/practice/${courseId}/sets/${setId}/results${query}`;
   const data = await api<unknown>(endpoint);
   return parseApiResponse(practiceSetResultsSchema, data, endpoint);
+}
+
+export async function startRetake(courseId: string, setId: string): Promise<PracticeRetakeResponse> {
+  const endpoint = `/practice/${courseId}/sets/${setId}/retake`;
+  const data = await api<unknown>(endpoint, { method: "POST" });
+  return parseApiResponse(practiceRetakeResponseSchema, data, endpoint);
 }
 
 // The retake list for a skill (or the whole course when skillId is omitted).
@@ -93,6 +103,7 @@ export async function submitPracticeAttempt(
     choiceId: string;
     latencyMs: number;
     setId?: string | null;
+    attemptId?: string;
     sessionId: string;
     idempotencyKey: string;
   }
@@ -104,6 +115,7 @@ export async function submitPracticeAttempt(
       choice_id: args.choiceId,
       latency_ms: args.latencyMs,
       ...(args.setId ? { set_id: args.setId } : {}),
+      ...(args.attemptId ? { attempt_id: args.attemptId } : {}),
       session_id: args.sessionId,
       idempotency_key: args.idempotencyKey,
     }),
