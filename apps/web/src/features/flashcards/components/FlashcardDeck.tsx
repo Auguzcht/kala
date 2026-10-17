@@ -1,5 +1,4 @@
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { BrainIcon } from "@/components/ui/brain";
@@ -19,13 +18,14 @@ import { RotateCCWIcon } from "@/components/ui/rotate-ccw";
 import { Clock3Icon } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { celebrateOnce } from "@/lib/celebrate";
 import { cn } from "@/lib/utils";
 import {
   useFlashcardDeck,
   useFlashcardMembership,
   useReviewFlashcard,
 } from "@/features/flashcards/hooks/use-flashcards";
-import { useCreateSetFromItems, usePracticeSetResults } from "@/features/practice";
+import { usePracticeSetResults } from "@/features/practice";
 import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
 import { useTutorAsk } from "@/features/tutor";
@@ -36,9 +36,8 @@ import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 // to the back (answer label + explanation), and the student marks it "Got it"
 // or "Still learning" themselves. That self-mark advances the spaced-repetition
 // schedule so weak cards resurface sooner, but it does NOT feed the twin —
-// self-report is not assessment (see routers/flashcards.py). To turn what you
-// studied into a mastery signal, "Test me on these" hands the same skill to
-// the graded quiz surface.
+// self-report is not assessment (see routers/flashcards.py). Test sessions
+// are started separately from the skill hub's Test tab.
 //
 // The contrast with PracticePanel is the whole point of the split: practice is
 // a graded MCQ (server decides correctness, moves mastery), study is a flip
@@ -111,7 +110,6 @@ export function FlashcardDeck({
   const replySessionId = useId();
   const [reviewSessionId] = useState(() => crypto.randomUUID());
   const [offset, setOffset] = useState(0);
-  const navigate = useNavigate();
   const { data: twin } = useTwin(courseId);
   const deckQuery = useFlashcardDeck(courseId, 20, skillId, mode, offset, { enabled: !practiceSetId });
   const practiceResults = usePracticeSetResults(courseId, practiceSetId ?? null, Boolean(practiceSetId));
@@ -159,7 +157,6 @@ export function FlashcardDeck({
   const membership = useFlashcardMembership(courseId, skillId ?? "");
   const bank = useBankStatus(courseId);
   const review = useReviewFlashcard(courseId);
-  const testMe = useCreateSetFromItems(courseId);
   const hint = useTutorAsk(courseId);
   const explain = useTutorAsk(courseId);
   const followUp = useTutorAsk(courseId);
@@ -187,6 +184,7 @@ export function FlashcardDeck({
     key: string;
   } | null>(null);
   const initializedSessionRef = useRef<string | null>(null);
+  const celebrationRoundRef = useRef(0);
   const markRef = useRef<((remembered: boolean) => void) | null>(null);
   const responseSessionKey = data?.sessionId ?? (data
     ? `${courseId}:${offset}:${data.cards.map((item) => item.itemId).join(",")}`
@@ -232,6 +230,11 @@ export function FlashcardDeck({
       : { ...counts, stillLearning: counts.stillLearning + 1 },
     { gotIt: 0, stillLearning: 0 },
   );
+  useEffect(() => {
+    if (!deckDone || practiceSetId || review.isPending || reduceMotion || originalCardIds.size === 0 || reviewCounts.gotIt !== originalCardIds.size) return;
+    celebrateOnce(`study:${reviewSessionId}:${offset}:${celebrationRoundRef.current}`);
+  }, [deckDone, practiceSetId, review.isPending, reduceMotion, reviewCounts.gotIt, originalCardIds.size, reviewSessionId, offset]);
+
   const activeItemId = deckCards[index]?.itemId;
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -395,7 +398,6 @@ export function FlashcardDeck({
         </StudySurface>
       );
     }
-    const canTest = Boolean(skillId) && data.cards.length > 0;
     return (
       <StudySurface
         bar={
@@ -411,13 +413,7 @@ export function FlashcardDeck({
         dock={
           <ComposeDock
             primary={{ label: "Return to menu", onClick: onExit, icon: ArrowRightIcon }}
-            secondary={canTest ? {
-              label: testMe.isPending ? "Building your test…" : "Test me on these",
-              onClick: testMeOnThese,
-              disabled: testMe.isPending,
-              pending: testMe.isPending,
-              icon: ArrowRightIcon,
-            } : undefined}
+            secondary={{ label: "Reload deck", onClick: reloadDeck, icon: RotateCCWIcon }}
           />
         }
       >
@@ -425,25 +421,20 @@ export function FlashcardDeck({
           <div className="relative border bg-card p-6">
             <CornerBrackets />
             <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
-              Deck complete
+              Study complete
             </p>
-            <p className="mt-1.5 font-display text-lg font-semibold text-foreground">
-              You recalled all {total} {total === 1 ? "card" : "cards"}.
+            <p className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+              {total}<span className="text-muted-foreground">/{total}</span>
+              <span className="ml-2 text-sm font-medium tracking-normal text-muted-foreground">{total === 1 ? "card" : "cards"} recalled</span>
+            </p>
+            <p className="mt-3 font-display text-lg font-semibold text-foreground">
+              You recalled every card.
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               You marked every card Got it in this session. Your next review follows your schedule.
             </p>
-            {canTest ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Ready to prove it? A test on these same cards is graded, and it moves your
-                mastery. Studying alone does not.
-              </p>
-            ) : null}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={reloadDeck}>
-                Reload deck
-              </Button>
-              {mode === "all" && data.hasMore ? (
+            {mode === "all" && data.hasMore ? (
+              <div className="mt-4">
                 <Button
                   variant="outline"
                   size="sm"
@@ -451,8 +442,8 @@ export function FlashcardDeck({
                 >
                   Continue with next 20
                 </Button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </div>
         </StudyStream>
       </StudySurface>
@@ -565,6 +556,7 @@ export function FlashcardDeck({
   }
 
   function reloadDeck() {
+    celebrationRoundRef.current += 1;
     // A one-card deck already sits at index 0, so changing only the index
     // would not rerun the reset effect. Clear the terminal state explicitly.
     setDeckDone(false);
@@ -589,26 +581,6 @@ export function FlashcardDeck({
     setFollowUpTurns([]);
     setPendingFollowUp(null);
     setOffset((current) => current + 20);
-  }
-
-  // The study -> test bridge. Groups the exact cards just studied into a quiz
-  // set (no regeneration) and enters test mode on it. Only offered for a
-  // single-skill deck: a set is per-skill, so the cross-skill "review what's
-  // due" deck has no one topic to test against.
-  function testMeOnThese() {
-    if (!data || !skillId) return;
-    testMe.mutate(
-      data.cards.map((c) => c.itemId),
-      {
-        onSuccess: (set) => {
-          if (!set.setId) return;
-          navigate({
-            to: "/course/practice",
-            search: { skillId, setId: set.setId },
-          });
-        },
-      }
-    );
   }
 
   function askHint() {
