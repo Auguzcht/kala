@@ -49,6 +49,31 @@ def test_assembly_kicks_check_assignment_without_writing_checks(monkeypatch):
     assert not updates
 
 
+def test_assembly_does_not_kick_when_all_checks_are_assigned(monkeypatch):
+    calls = []
+
+    def fake_select(table, params):
+        if table == "guided_lesson_steps":
+            return [{"id": "step", "position": 0, "summary": "Topic",
+                     "detail_points": [], "bloom_level": "remember", "check_item_id": "item"}]
+        if table == "courses":
+            return [{"bank_serving": True}]
+        if table == "skill_bank_state":
+            return [{"status": "ready", "mcq_ready": 6}]
+        if table == "generated_items":
+            return [{"id": "item", "prompt": "Prompt", "choices": []}]
+        return []
+
+    monkeypatch.setattr(lessons.db, "select", fake_select)
+    monkeypatch.setattr(lessons, "kick_lesson_checks", lambda *args: calls.append(args))
+    result = lessons._assemble_lesson(
+        lesson_row={"id": "lesson", "course_id": "course", "skill_id": "skill",
+                    "title": "Lesson", "status": "ready"}, institution_id="institution",
+    )
+    assert result["steps"][0]["check"]["itemId"] == "item"
+    assert calls == []
+
+
 def test_ready_lesson_fast_path_selects_guided_lessons_only_once(monkeypatch):
     """The perf fix: get_or_generate_lesson's existence check already fetches
     every field the assembly step needs, so a lesson already at 'ready'

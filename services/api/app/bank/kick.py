@@ -39,8 +39,37 @@ def kick_bank(course_id: str, trigger: str) -> bool:
 
 
 def kick_lesson_checks(course_id: str, lesson_id: str) -> bool:
-    """Wake one lesson's resumable checker without a course-wide debounce."""
+    """Wake one lesson's resumable checker at most once per minute."""
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(seconds=60)
+    key = f"lesson_check_kick:{lesson_id}"
     try:
+        filters = {
+            "key": f"eq.{key}",
+            # Like kick_bank's conditional course timestamp update, this is a
+            # single atomic update. It also refuses to kick during a live job lease.
+            "and": (
+                f"(or(updated_at.is.null,updated_at.lt.{cutoff.isoformat()}),"
+                f"or(value->>lease_until.is.null,value->>lease_until.lt.{now.isoformat()}))"
+            ),
+        }
+        claimed = db.update("worker_state", filters, {
+            "updated_at": now.isoformat(), "value": {"lease_until": None},
+        })
+        if not claimed:
+            # The first request creates the per-lesson row and owns its initial
+            # kick. A concurrent insert loses on worker_state.key's primary key.
+            try:
+                claimed = db.insert("worker_state", [{
+                    "key": key, "value": {"lease_until": None},
+                    "updated_at": now.isoformat(),
+                }])
+            except Exception as exc:  # noqa: BLE001 - concurrent first insert is expected
+                if getattr(getattr(exc, "response", None), "status_code", None) == 409:
+                    return False
+                raise
+        if not claimed:
+            return False
         settings = get_settings()
         if not settings.worker_function_arn:
             raise RuntimeError("WORKER_FUNCTION_ARN is not configured")
