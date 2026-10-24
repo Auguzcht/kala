@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import type { ReactNode } from "react";
 import { InView } from "@/components/motion/in-view";
 import {
@@ -9,6 +10,7 @@ import {
 import { MasteryBand } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { groupByModule } from "@/features/twin";
 import type { TwinSkill } from "@/features/twin";
 import type { BankStatus } from "@/features/bank/schema/bank-status.schema";
@@ -51,10 +53,10 @@ export function TopicLanding({
 }) {
   if (isLoading) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
+      <LoadingRegion className="grid gap-3 sm:grid-cols-2">
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-20 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 
@@ -155,7 +157,8 @@ function TopicBankState({
     return <p className="mt-2 text-xs text-muted-foreground">This skill doesn&apos;t have course material yet.</p>;
   }
   return (
-    <p className="mt-2 text-xs text-muted-foreground">
+    <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+      {entry.status === "building" ? <Spinner className="size-3.5" aria-hidden /> : null}
       Preparing questions ({entry.mcqReady} of {entry.mcqTarget}).
     </p>
   );

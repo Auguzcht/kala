@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { ChevronDown } from "lucide-react";
 import { useAutoMatchedSkills, useDetachAutoMatchedSkill } from "@/features/instructor";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,10 @@ export function AutoMatchedSection({ courseId }: { courseId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion className="space-y-2">
         <Skeleton className="h-5 w-72" />
         <Skeleton className="h-12 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 

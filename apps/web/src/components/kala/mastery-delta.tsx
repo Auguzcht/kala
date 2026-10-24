@@ -75,13 +75,14 @@ function MasteryTrack({
         <span
           key={step}
           className={cn(
-            "h-full flex-1 rounded-full transition-opacity duration-500",
+            "h-full flex-1 rounded-full transition-opacity duration-500 motion-reduce:transition-none",
             STEP_FILL[step],
             i <= posteriorIndex ? "opacity-100" : "opacity-30"
           )}
         />
       ))}
       <motion.span
+        data-mastery-marker
         className={cn(
           "absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border-2 border-card shadow-sm",
           advanced ? "bg-brand-orange" : "bg-foreground/70"
@@ -144,7 +145,7 @@ export function MasteryDelta({
 
   return (
     <div className="border bg-card p-5">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold uppercase tracking-[0.05em] text-brand-slate">
           Your twin just updated
         </span>
@@ -162,11 +163,11 @@ export function MasteryDelta({
             <div
               key={row.skillId}
               className={cn(
-                "flex items-center gap-3 py-2.5 transition-all duration-300",
+                "flex flex-col items-start gap-2 py-2.5 transition-all duration-300 motion-reduce:transition-none sm:flex-row sm:items-center sm:gap-3",
                 isRevealed ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0"
               )}
             >
-              <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">
+              <span className="w-full min-w-0 text-[13px] text-foreground sm:w-auto sm:flex-1 sm:truncate" title={row.skillName}>
                 {row.skillName}
               </span>
               <MasteryTrack

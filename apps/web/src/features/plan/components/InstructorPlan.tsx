@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useNavigate } from "@tanstack/react-router";
 import { usePlan } from "@/features/plan/hooks/use-plan";
 import type { PlanItemKind } from "@/features/plan/schema/plan.schema";
@@ -53,7 +54,7 @@ export function InstructorPlan({ courseId }: { courseId: string }) {
   const { data, isLoading } = usePlan(courseId);
   const navigate = useNavigate();
 
-  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  if (isLoading) return <LoadingRegion><Skeleton className="h-40 w-full" /></LoadingRegion>;
 
   const items = data?.plan ?? [];
   // An empty plan is not a broken screen: most of the time a teacher has

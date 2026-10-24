@@ -27,7 +27,7 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 
 ### DIAG-REQ-001: Explain the Diagnostic's purpose with a compact introduction
 
-- Rule: While answering, show the shared PageHeader pattern used by Skills: Diagnostic eyebrow, "Find your starting point" title, and "Answer a few questions so Kala can understand what you already know and where to begin." explanation. Keep it compact, aligned with the question column, above a full-width hairline separator. It stays outside the question scroll region and is removed for the submitted-result reveal. Omit the old "Build your baseline" copy and "Topics without course material are not included." note. Keep loading, error, preparing, no-material and caught-up states.
+- Rule: While answering, show the shared PageHeader pattern used by Skills: Diagnostic eyebrow, "Find your starting point" title, and "Answer a few questions so Kala can understand what you already know and where to begin." explanation. Keep it compact at the page's left gutter, aligned with the shell breadcrumb rather than the centered question column, above a full-width hairline separator. It stays outside the question scroll region and is removed for the submitted-result reveal. Omit the old "Build your baseline" copy and "Topics without course material are not included." note. Keep loading, error, preparing, no-material and caught-up states.
 - Acceptance: At desktop and mobile widths the purpose is visible without a separate start screen, timer or progress bar; heading and description use Skills' existing typography and fit the viewport; existing non-ready states and mastery-delta result remain available.
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; synthetic screenshots at 1440px and 375px in docs/work/handover-2026/evidence/ui-overhaul.md.
@@ -35,7 +35,7 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 ### DIAG-REQ-002: Put answered count beside submission
 
 - Rule: Diagnostic has no SessionBar back chevron or progress bar. Show "{answered} of {total} answered" beside the submit action. Submission remains disabled until all displayed questions are answered and while submission is pending. Preserve the tour anchors and the submitted-result exit.
-- Rule: The header, question cards, answer count and submit button share one maximum-width column and responsive horizontal padding. Keep the footer's top border full width; its content aligns with the outer left/right card edges. Error copy follows the same column.
+- Rule: Question cards, answer count and submit button share one maximum-width column and responsive horizontal padding. Keep the footer's top border full width; its content aligns with the outer left/right card edges. Error copy follows the same column. The footer is present only while answering.
 - Acceptance: Selecting an answer updates the adjacent count; the question view has no back chevron or progress bar; the enabled submit action sends the existing answer payload once all questions are answered.
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; authenticated acceptance remains pending.
@@ -77,6 +77,21 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 - Acceptance: Clicking an answer while leaving the pointer over it does not wash out selection; moving away and returning keeps it selected; selecting another answer moves the selection without increasing the answered count. Keyboard selection exposes the same state. Existing Study/Practice grading and pending protections remain intact.
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; shared Study regressions and synthetic desktop/mobile captures in the Lane U evidence.
+
+### DIAG-REQ-007: Show one persistent completion view with mastery progression
+
+- Rule: On successful submission, replace answering with a Test/Study-style results panel. Show “Diagnostic complete”, “Baseline set” and the returned mastery progression, animated once on entry with existing MasteryDelta rows/tracks. Celebrate once with Kala's existing confetti helper, gated by reduced motion. Never invent a score or mastery movement. Offer one primary “Back to workspace” and one secondary “View your twin” action within the panel. Remove the auto-opening completion dialog and answering footer entirely from results.
+- Rule: Successful results take precedence over loading/empty/error question refetches for the mounted sitting. A later genuine visit reads the current backend state, including the caught-up view when nothing is due. Completion does not automatically navigate or restart the sitting. Handle empty mastery rows, long names, mobile widths and reduced motion without clipping or forced waiting before exit actions.
+- Acceptance: Submission yields one results panel, no modal and exactly one action per destination. Mastery progression and confetti run once when motion is allowed and stay static/absent when reduced motion is requested. Both destinations work, no repeated submit occurs, a refetch cannot replace the results, and revisiting an empty diagnostic shows caught up.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; completion, navigation, refetch, mobile, confetti and reduced-motion evidence in docs/work/handover-2026/evidence/ui-overhaul.md.
+
+### DIAG-REQ-008: Use the shared Spinner for actual waiting states across Kala
+
+- Rule: Fred's app-wide visual correction uses the existing Spinner for real loading/submitting/mutating states: one per loading region or waiting label, and in place of action icons while that action is pending. Shared loading panels, skeleton regions, assistant waiting labels, Tutor save/pin/delete/preview, Diagnostic preparation/submission and notification loading use the same primitive. Keep existing indicators where already present. Preserve skeleton layouts, shimmer, request ownership, pending locks and timing; do not infer activity from arbitrary ellipses in placeholders, truncated text or menu icons. Do not add spinners to static empty/error states.
+- Acceptance: Representative student/instructor loading regions and pending actions expose the spinner and an accessible waiting label; resolved content removes it; reduced motion leaves the same icon static. No request, auth, grading or navigation behavior changes solely for this visual pass.
+- Status: implemented
+- Verified by: source inventory and shared loading browser fixtures in apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; Study/Tutor regressions and checks recorded in docs/work/handover-2026/evidence/ui-overhaul.md.
 
 ## API contract
 
@@ -125,3 +140,4 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 | 2026-10-25 | Define local file staging, retry-safe upload-before-send, finite dock corners and raw-text preview dialog before implementation | Fred selected file cards plus raw-text preview modal in this chat; coordinator-owned Tutor/Design integration amendment pending | DIAG-REQ-005 |
 | 2026-10-25 | Define clickable attachment metadata fallback, equal card insets, format accents and published Upload drop glyph; restore shared toast contrast | Fred's direct attachment and notification feedback; existing backend type limits retained | DIAG-REQ-005 |
 | 2026-10-25 | Restore a compact Skills-pattern purpose header with a separator, align submission with the question column, and preserve selected-answer styling on hover | Fred's direct Diagnostic UX feedback supersedes the earlier header-removal direction; no Diagnostic API or due-rule change | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-003, DIAG-REQ-006 |
+| 2026-10-25 | Align the introduction to the shell's left gutter, replace duplicate completion/modal exits with one celebrated mastery-results view, and unify real waiting indicators across Kala | Fred's direct follow-up explicitly expands visual write scope across the app; retain feature behavior and backend contracts | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-007, DIAG-REQ-008 |

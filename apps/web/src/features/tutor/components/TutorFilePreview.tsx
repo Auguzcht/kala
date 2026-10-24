@@ -10,6 +10,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { XIcon } from "@/components/ui/x";
 import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import {
@@ -119,8 +120,8 @@ export function TutorFilePreview({
                   : "File contents aren't available in this session. Raw-text preview is available for TXT and MD files selected in this chat. Select the original file again to preview its contents locally."}
               </p>
             ) : !content ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                Loading preview…
+              <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner aria-hidden /> Loading preview…
               </p>
             ) : content.failed ? (
               <p role="alert" className="text-sm">

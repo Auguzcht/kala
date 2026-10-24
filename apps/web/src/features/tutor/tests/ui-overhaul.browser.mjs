@@ -81,6 +81,13 @@ async function fixture(
     holdUpload: null,
     submit: null,
     holdAsk: null,
+    diagnosticCompleted: false,
+    holdDiagnosticSubmit: null,
+    masteryRows: [
+      {skillId:'storage',skillName:'Choose durable cloud storage and apply appropriate access controls',priorEstimate:null,priorBand:'no-evidence',posteriorEstimate:0.7,posteriorBand:'proficient'},
+      {skillId:'network',skillName:'Networking fundamentals',priorEstimate:0.3,priorBand:'developing',posteriorEstimate:0.9,posteriorBand:'mastered'},
+      {skillId:'security',skillName:'Security responsibilities',priorEstimate:0.7,priorBand:'proficient',posteriorEstimate:0.7,posteriorBand:'proficient'},
+    ],
   };
   if (legacy)
     state.rows = [
@@ -102,6 +109,11 @@ async function fixture(
         contentType: "application/javascript",
         body: `export async function api(path,init){const r=await fetch('/__lane_u_api__'+path,init);if(!r.ok)throw new Error('API '+r.status+': '+await r.text());return r.json();}`,
       });
+    if (url.pathname.endsWith('/src/lib/celebrate.ts')) {
+      const response = await route.fetch();
+      const source = await response.text();
+      return route.fulfill({response,body:source.replace('celebrated.add(key);', 'celebrated.add(key); (window.__celebrations ??= []).push(key);')});
+    }
     if (!url.pathname.startsWith("/__lane_u_api__")) return route.continue();
     const path = url.pathname.slice("/__lane_u_api__".length),
       method = route.request().method();
@@ -143,16 +155,18 @@ async function fixture(
     if (path.endsWith("/diagnostic/status"))
       return reply({
         courseId: "synthetic-course",
-        due: true,
-        dueSkillCount: 6,
+        due: !state.diagnosticCompleted,
+        dueSkillCount: state.diagnosticCompleted ? 0 : 6,
       });
     if (path.endsWith("/diagnostic/submit")) {
       state.submit = route.request().postDataJSON();
+      if (state.holdDiagnosticSubmit) await state.holdDiagnosticSubmit();
+      state.diagnosticCompleted = true;
       return reply({
         correctCount: 6,
         total: 6,
         results: [],
-        masteryDelta: [],
+        masteryDelta: state.masteryRows,
       });
     }
     if (path.endsWith("/diagnostic"))
@@ -160,7 +174,7 @@ async function fixture(
         courseId: "synthetic-course",
         status: "ready",
         readyCount: 6,
-        questions,
+        questions: state.diagnosticCompleted ? [] : questions,
         pendingSkillIds: [],
         failedSkillIds: [],
         skippedSkillCount: 0,
@@ -313,7 +327,7 @@ try {
     await page.goto("http://localhost:5173/course/diagnostic");
     await page
       .getByRole("button", { name: "Submit diagnostic", exact: true })
-      .waitFor();
+      .waitFor().catch(async (error) => { throw new Error(`Diagnostic fixture: ${errors.join('; ')}; ${await page.locator('body').innerText()}; ${error.message}`); });
     check(
       await page.getByText("0 of 6 answered", { exact: true }).isVisible(),
       "DIAG-REQ-002 initial count",
@@ -339,9 +353,9 @@ try {
       const footer=surface.querySelector('footer');
       const count=footer.querySelector('[role=status]').getBoundingClientRect();
       const submit=footer.querySelector('button').getBoundingClientRect();
-      return Math.abs(card.left-title.left)<1 && Math.abs(card.left-count.left)<1 && Math.abs(card.right-submit.right)<1 &&
+      return Math.abs(title.left-surface.getBoundingClientRect().left-20)<1 && Math.abs(card.left-count.left)<1 && Math.abs(card.right-submit.right)<1 &&
         getComputedStyle(surface.querySelector('header')).borderBottomWidth==='1px';
-    }), 'DIAG-REQ-002 header/card/footer share aligned edges and top separator');
+    }), 'DIAG-REQ-001/002 title aligns to shell gutter; footer aligns to cards');
     await screenshot(page,'diagnostic-introduction',width);
     const choices=page.locator('#tour-diagnostic-choices').getByRole('button');
     await choices.nth(0).hover();
@@ -422,6 +436,30 @@ try {
         state.submit.answers.every((x) => x.choice_id === "a"),
       "DIAG-REQ-002 existing payload",
     );
+    check((await page.getByRole('dialog').count())===0 && (await page.locator('footer').count())===0,
+      'DIAG-REQ-007 completion has no modal or duplicate footer');
+    check((await page.getByRole('button',{name:'Back to workspace',exact:true}).count())===1 &&
+      (await page.getByRole('button',{name:'View your twin',exact:true}).count())===1,
+      'DIAG-REQ-007 exactly one action per destination');
+    check(await page.getByText('Networking fundamentals',{exact:true}).isVisible(),
+      'DIAG-REQ-007 returned skill progression remains available');
+    check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      'DIAG-REQ-007 long mastery names fit mobile');
+    check(await page.locator('[data-mastery-marker]').evaluateAll(markers=>markers.every(marker=>{
+      const track=marker.parentElement.getBoundingClientRect();
+      const label=marker.parentElement.nextElementSibling.getBoundingClientRect();
+      return track.right<=label.left || track.bottom<=label.top || label.right<=track.left || label.bottom<=track.top;
+    })), 'DIAG-REQ-007 mastery tracks never overlap prior/posterior labels');
+    check(await page.evaluate(() => !(window.__celebrations?.length)),
+      'DIAG-REQ-007 reduced motion suppresses confetti');
+    await screenshot(page,'diagnostic-results',width);
+    await page.getByRole('button',{name:width===1440?'Back to workspace':'View your twin',exact:true}).click();
+    await page.waitForURL(width===1440?'http://localhost:5173/course':'http://localhost:5173/course/twin');
+    check(true,'DIAG-REQ-007 completion destination navigation');
+    await page.goto('http://localhost:5173/course/diagnostic');
+    await page.getByText("You're all caught up",{exact:true}).waitFor();
+    check((await page.locator('[data-diagnostic-results]').count())===0,
+      'DIAG-REQ-007 later visit uses actual caught-up state');
 
     await page.goto("http://localhost:5173/course/tutor");
     const input = page.getByPlaceholder("Ask Kala…");
@@ -990,6 +1028,48 @@ try {
     check(managed.errors.length === 0, "no sidebar browser exceptions");
     await managed.context.close();
   }
+  const completed = await fixture(1440,{empty:true,reducedMotion:'no-preference'});
+  let finishDiagnostic;
+  const diagnosticGate = new Promise(resolve=>{finishDiagnostic=resolve});
+  completed.state.holdDiagnosticSubmit=()=>diagnosticGate;
+  await completed.page.goto('http://localhost:5173/course/diagnostic');
+  await completed.page.locator('#tour-diagnostic-choices').waitFor();
+  for(let i=0;i<6;i++) await completed.page.locator('#tour-diagnostic-card').getByRole('button').nth(i*3).click();
+  await completed.page.getByRole('button',{name:'Submit diagnostic',exact:true}).click();
+  const submitting = completed.page.getByRole('button',{name:'Building your baseline…',exact:true});
+  check(await submitting.isDisabled() && await submitting.locator('svg.animate-spin').count()===1,
+    'DIAG-REQ-008 submission displays the shared spinner while locked');
+  finishDiagnostic();
+  await completed.page.locator('[data-diagnostic-results]').waitFor();
+  const marker=completed.page.locator('[data-mastery-marker]').first();
+  const initialPosition=await marker.evaluate(el=>parseFloat(getComputedStyle(el).left));
+  await completed.page.clock.runFor(1800);
+  const finalPosition=await marker.evaluate(el=>parseFloat(getComputedStyle(el).left));
+  check(finalPosition>initialPosition+10,'DIAG-REQ-007 mastery marker animates from prior to returned band on show');
+  check(await completed.page.evaluate(()=>window.__celebrations?.length===1),
+    'DIAG-REQ-007 completion celebrates exactly once');
+  await completed.page.waitForTimeout(300);
+  await screenshot(completed.page,'diagnostic-results-motion',1440);
+  const refetched=completed.page.waitForResponse(r=>r.url().endsWith('/__lane_u_api__/courses/synthetic-course/diagnostic'));
+  await completed.page.evaluate(()=>window.dispatchEvent(new Event('visibilitychange')));
+  await refetched;
+  check(await completed.page.getByRole('heading',{name:'Baseline set',exact:true}).isVisible() &&
+    await completed.page.evaluate(()=>window.__celebrations.length===1),
+    'DIAG-REQ-007 refetch retains completion without restarting celebration');
+  check(completed.errors.length===0,'Diagnostic completion has no browser exceptions');
+  await completed.context.close();
+
+  const noRows = await fixture(375,{empty:true});
+  noRows.state.masteryRows=[];
+  await noRows.page.goto('http://localhost:5173/course/diagnostic');
+  await noRows.page.locator('#tour-diagnostic-choices').waitFor();
+  for(let i=0;i<6;i++) await noRows.page.locator('#tour-diagnostic-card').getByRole('button').nth(i*3).click();
+  await noRows.page.getByRole('button',{name:'Submit diagnostic',exact:true}).click();
+  await noRows.page.getByText('Your answers are saved. View your twin to explore your current skill profile.',{exact:true}).waitFor();
+  check((await noRows.page.getByRole('button',{name:'Back to workspace',exact:true}).count())===1,
+    'DIAG-REQ-007 empty mastery response retains one useful results exit');
+  await noRows.context.close();
+
   const focus = await fixture(1440);
   const ariaWarnings = [];
   focus.page.on("console", (message) => {
@@ -1103,14 +1183,21 @@ try {
     import {TutorComposer} from '/src/features/tutor/components/TutorComposer.tsx';
     import {StudySurface} from '/src/components/study/StudySurface.tsx';
     import {StudyStream} from '/src/components/study/StudyStream.tsx';
+    import {LoadingRegion} from '/src/components/shared/LoadingRegion.tsx';
+    import {LoadingPanel} from '/src/components/shared/LoadingPanel.tsx';
+    import {AssistantBlock} from '/src/components/study/AssistantBlock.tsx';
+    import {Skeleton} from '/src/components/ui/skeleton.tsx';
     window.fixtureResult={external:0,submitted:0};
     function Probe(){const a=usePromptInputAttachments();return React.createElement('span',{'data-file-count':a.files.length},a.files.length)}
     function FloatingStudy(){return React.createElement('section',{id:'floating-study',style:{height:400}},React.createElement(StudySurface,{dock:React.createElement(ComposeDock,{onAsk:()=>{},placeholder:'Floating dock'})},React.createElement(StudyStream,null,...Array.from({length:30},(_,i)=>React.createElement('p',{key:i},'Synthetic study explanation '+i)),React.createElement('button',{id:'last-study-action'},'Last study action'))))}
-    function App(){const target=React.useRef(null);const [files,setFiles]=React.useState([]);window.setFixtureFiles=setFiles;return React.createElement('main',null,
+    function App(){const target=React.useRef(null);const [files,setFiles]=React.useState([]);const [busy,setBusy]=React.useState(true);window.setLoadingFixture=setBusy;window.setFixtureFiles=setFiles;return React.createElement('main',null,
       React.createElement('section',{id:'study-composer'},React.createElement(ComposeDock,{onAsk:()=>{},placeholder:'Shared dock'})),
       React.createElement('section',{id:'tutor-composer'},React.createElement(TutorComposer,{dropTarget:target,dragging:false,onDragChange:()=>{},attachments:files,onFiles:()=>{},onRemove:()=>setFiles([]),onAsk:()=>{},onTyping:()=>{},pending:false,uploading:false,removingId:null})),
       React.createElement('div',{id:'default-outer'},React.createElement(PromptInput,{id:'default-prompt',onSubmit:m=>{window.fixtureResult.submitted=m.files.length}},React.createElement(Probe),React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),
-      React.createElement('div',{id:'opt-in-outer',ref:target},React.createElement(PromptInput,{id:'opt-in-prompt',dropTarget:target,onFilesSelected:files=>{window.fixtureResult.external+=files.length},onSubmit:()=>{}},React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),React.createElement(FloatingStudy))}
+      React.createElement('div',{id:'opt-in-outer',ref:target},React.createElement(PromptInput,{id:'opt-in-prompt',dropTarget:target,onFilesSelected:files=>{window.fixtureResult.external+=files.length},onSubmit:()=>{}},React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),React.createElement(FloatingStudy),
+      React.createElement('section',{id:'loading-fixtures'},busy?React.createElement(React.Fragment,null,
+        React.createElement(LoadingRegion,{label:'Loading roster',className:'grid grid-cols-2 gap-3'},React.createElement(Skeleton,{className:'h-16'}),React.createElement(Skeleton,{className:'h-16'})),
+        React.createElement(LoadingPanel,{label:'Preparing baseline…',lines:2}),React.createElement(AssistantBlock,{pending:true,pendingLabel:'Thinking…'})):React.createElement('p',null,'Ready')))}
     ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
     </script></body></html>`,
     }),
@@ -1169,6 +1256,15 @@ try {
       `WI-22 leading circular attachment at ${width}`,
     );
   }
+  check((await primitive.page.locator('#loading-fixtures svg.animate-spin').count())===3,
+    'DIAG-REQ-008 one shared spinner per skeleton, loading panel and assistant region');
+  check(await primitive.page.locator('#loading-fixtures svg.animate-spin').evaluateAll(elements=>
+    elements.every(el=>getComputedStyle(el).animationName==='none')),
+    'DIAG-REQ-008 waiting spinners honor reduced motion');
+  await primitive.page.evaluate(()=>window.setLoadingFixture(false));
+  await primitive.page.locator('#loading-fixtures').getByText('Ready',{exact:true}).waitFor();
+  check((await primitive.page.locator('#loading-fixtures svg').count())===0,
+    'DIAG-REQ-008 resolved content removes waiting indicators');
   await primitive.page.evaluate(() =>
     window.setFixtureFiles([
       { id: "fixture-file", filename: "notes.txt", sizeBytes: 15, status: "ready" },

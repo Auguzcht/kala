@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useEffect, useRef, useState } from "react";
 import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type ProposeSkillsResult } from "@/features/instructor";
 import { CornerBrackets } from "@/components/kala";
@@ -57,12 +58,13 @@ function RefreshStatus({
   isPolling: boolean;
   fallbackExpired: boolean;
 }) {
+  const waiting = (
+    <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+      <Spinner className="size-3.5" aria-hidden /> Refreshing proposals. This can take a few minutes.
+    </p>
+  );
   if (isPending) {
-    return (
-      <p className="mt-3 text-xs text-muted-foreground">
-        Refreshing proposals. This can take a few minutes.
-      </p>
-    );
+    return waiting;
   }
   if (isError) {
     return (
@@ -82,10 +84,10 @@ function RefreshStatus({
     return <p className="mt-3 text-xs text-destructive">Refresh failed. Try again later.</p>;
   }
   if (isSuccess && data?.status === "queued" && (proposalStatus === "queued" || proposalStatus === "running")) {
-    return <p className="mt-3 text-xs text-muted-foreground">Refreshing proposals. This can take a few minutes.</p>;
+    return waiting;
   }
   if (isSuccess && data?.status === "queued" && isPolling) {
-    return <p className="mt-3 text-xs text-muted-foreground">Refreshing proposals. This can take a few minutes.</p>;
+    return waiting;
   }
   if (isSuccess && data?.status === "queued" && fallbackExpired) {
     return <p className="mt-3 text-xs text-muted-foreground">Refresh may still be processing. Check this list again later.</p>;
@@ -99,11 +101,13 @@ function RefreshStatus({
 // still fires the same mutation the panel drives.
 function ReviewActions({
   disabled,
+  busyAction,
   isFirst,
   onApprove,
   onReject,
 }: {
   disabled: boolean;
+  busyAction?: "approved" | "rejected";
   isFirst: boolean;
   onApprove: () => void;
   onReject: () => void;
@@ -117,23 +121,25 @@ function ReviewActions({
         variant="green"
         size="sm"
         disabled={disabled}
+        aria-busy={busyAction === "approved" || undefined}
         onClick={onApprove}
         onMouseEnter={() => checkRef.current?.startAnimation()}
         onMouseLeave={() => checkRef.current?.stopAnimation()}
         className="h-7 px-2.5 text-[12px] [&_svg]:size-3"
       >
-        <CheckIcon ref={checkRef} size={13} /> Approve
+        {busyAction === "approved" ? <Spinner aria-hidden /> : <CheckIcon ref={checkRef} size={13} />} Approve
       </Button>
       <Button
         variant="outline"
         size="sm"
         disabled={disabled}
+        aria-busy={busyAction === "rejected" || undefined}
         onClick={onReject}
         onMouseEnter={() => xRef.current?.startAnimation()}
         onMouseLeave={() => xRef.current?.stopAnimation()}
         className="h-7 px-2.5 text-[12px] [&_svg]:size-3"
       >
-        <XIcon ref={xRef} size={13} /> Reject
+        {busyAction === "rejected" ? <Spinner aria-hidden /> : <XIcon ref={xRef} size={13} />} Reject
       </Button>
     </div>
   );
@@ -176,11 +182,11 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion className="space-y-2">
         <Skeleton className="h-5 w-56" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 
@@ -356,6 +362,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
                     <TableCell className="text-right">
                       <ReviewActions
                         disabled={review.isPending}
+                        busyAction={review.isPending && review.variables?.skillId === s.id ? review.variables.status : undefined}
                         isFirst={slice[0].id === s.id}
                         onApprove={() => review.mutate({ skillId: s.id, status: "approved" })}
                         onReject={() => review.mutate({ skillId: s.id, status: "rejected" })}

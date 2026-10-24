@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState } from "react";
 import { useAtRisk, useLearnerRecord } from "@/features/instructor";
 import { DecisionCenter } from "@/features/instructor/components/DecisionCenter";
@@ -34,11 +35,11 @@ export function LearnerTriage({
 
   if (record.isLoading) {
     return (
-      <div className="space-y-4">
+      <LoadingRegion className="space-y-4">
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-56 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 

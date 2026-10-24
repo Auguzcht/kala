@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { PlusIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -174,13 +175,13 @@ function SetList({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+      <LoadingRegion className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {/* Skeletons match a real card's min-height so the grid does not
             resize when the data lands. */}
         <Skeleton className="h-[116px] w-full" />
         <Skeleton className="h-[116px] w-full" />
         <Skeleton className="h-[116px] w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
   if (isError) {
@@ -328,7 +329,7 @@ function SetList({
           )}
         >
           <div className="grid size-9 place-items-center rounded-sm border border-dashed border-muted-foreground/40">
-            {generate.isPending ? (
+            {generate.isPending || isPreparing || bank.isLoading ? (
               <Spinner className="size-4 text-brand-orange" />
             ) : (
               <PlusIcon size={18} className="text-muted-foreground" />
@@ -380,11 +381,11 @@ function SetDetail({
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
+      <LoadingRegion className="space-y-3">
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
   if (isError || !data) {

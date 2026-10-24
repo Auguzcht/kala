@@ -2,6 +2,7 @@ import { useState } from "react";
 import { MoreHorizontal, Pin, PinOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -90,8 +91,10 @@ export function TutorConversationRow({
               size="sm"
               type="submit"
               disabled={!title.trim() || update.isPending}
+              aria-busy={update.isPending || undefined}
             >
-              Save
+              {update.isPending ? <Spinner aria-hidden /> : null}
+              {update.isPending ? "Saving…" : "Save"}
             </Button>
             <Button
               size="sm"
@@ -153,7 +156,7 @@ export function TutorConversationRow({
                   disabled={update.isPending}
                   onSelect={() => pin()}
                 >
-                  {conversation.pinnedAt ? <PinOff /> : <Pin />}
+                  {update.isPending ? <Spinner aria-hidden /> : conversation.pinnedAt ? <PinOff /> : <Pin />}
                   {conversation.pinnedAt ? "Unpin" : "Pin"}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="mx-1 my-2" />
@@ -176,9 +179,10 @@ export function TutorConversationRow({
             className="size-7 rounded-lg focus-visible:ring-inset focus-visible:ring-offset-0"
             aria-label={`${conversation.pinnedAt ? "Unpin" : "Pin"} ${name}`}
             disabled={update.isPending}
+            aria-busy={update.isPending || undefined}
             onClick={() => pin()}
           >
-            {conversation.pinnedAt ? <PinOff size={14} /> : <Pin size={14} />}
+            {update.isPending ? <Spinner aria-hidden /> : conversation.pinnedAt ? <PinOff size={14} /> : <Pin size={14} />}
           </Button>
         ) : null}
       </div>

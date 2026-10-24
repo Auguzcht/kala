@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtRisk } from "@/features/instructor";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,11 +52,11 @@ export function AtRiskList({
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion className="space-y-2">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 

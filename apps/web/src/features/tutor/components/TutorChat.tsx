@@ -14,6 +14,7 @@ import { UserBlock } from "@/components/study/UserBlock";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { apiErrorReason } from "@/lib/api-error";
@@ -296,7 +297,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
     <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
       <div className={cn("flex min-h-0 flex-1 flex-col", empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
       {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
-        {activeId && active.isLoading ? <Shimmer>Loading conversation…</Shimmer> : null}
+        {activeId && active.isLoading ? <div role="status" className="flex items-center gap-2"><Spinner aria-hidden /><Shimmer>Loading conversation…</Shimmer></div> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
         {messages.map((m) => m.role === "user" ? (
           <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />

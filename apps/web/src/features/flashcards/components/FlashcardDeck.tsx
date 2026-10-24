@@ -442,7 +442,7 @@ export function FlashcardDeck({
           <ComposeDock
             tourId="tour-study-dock"
             primary={{ label: "Go through these again", onClick: replayDeck, disabled: review.isPending, icon: RotateCCWIcon }}
-            secondary={{ label: "Check for more cards", onClick: reloadDeck, disabled: review.isPending || isFetching, icon: ArrowRightIcon }}
+            secondary={{ label: "Check for more cards", onClick: reloadDeck, disabled: review.isPending || isFetching, pending: isFetching, icon: ArrowRightIcon }}
           />
         }
       >
@@ -470,7 +470,9 @@ export function FlashcardDeck({
                   variant="outline"
                   size="sm"
                   onClick={continueNextGroup}
+                  aria-busy={isFetching || undefined}
                 >
+                  {isFetching ? <Spinner aria-hidden /> : null}
                   Continue with next 20
                 </Button>
               </div>

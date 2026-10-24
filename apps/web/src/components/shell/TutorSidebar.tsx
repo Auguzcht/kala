@@ -230,6 +230,7 @@ export function TutorSidebar({
               disabled={remove.isPending}
               onClick={confirmDelete}
             >
+              {remove.isPending ? <Spinner aria-hidden /> : null}
               {remove.isPending ? "Deleting…" : "Delete chat"}
             </Button>
           </DialogFooter>

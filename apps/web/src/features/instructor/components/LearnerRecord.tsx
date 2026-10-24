@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useAtRisk, useLearnerRecord } from "@/features/instructor";
@@ -54,11 +55,11 @@ export function LearnerRecord({
 
   if (record.isLoading) {
     return (
-      <div className="space-y-4">
+      <LoadingRegion className="space-y-4">
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 

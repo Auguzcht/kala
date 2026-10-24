@@ -12,6 +12,7 @@ import { InstructorPlan } from "@/features/plan";
 import { MasteryBand } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 
 export const Route = createFileRoute("/course/")({
   component: WorkspaceHome,
@@ -36,7 +37,7 @@ function WorkspaceHome() {
   const session = useSession();
   const navigate = useNavigate();
   const courseId = session?.courseId ?? "";
-  const { data: course } = useCourse(courseId);
+  const { data: course, isLoading: courseLoading } = useCourse(courseId);
   const { data: nextUp, isLoading: nextLoading } = useNextUp(courseId);
   const { data: twin, isLoading: twinLoading } = useTwin(courseId);
   const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
@@ -55,7 +56,7 @@ function WorkspaceHome() {
         {course ? (
           <p className="mt-1 text-sm text-muted-foreground">{course.title}</p>
         ) : (
-          <Skeleton className="mt-2 h-4 w-56" />
+          <LoadingRegion busy={courseLoading} label="Loading course" className="mt-2 w-56"><Skeleton className="h-4 w-full" /></LoadingRegion>
         )}
       </div>
 
@@ -128,7 +129,7 @@ function WorkspaceHome() {
           )}
         </div>
         {nextLoading ? (
-          <Skeleton className="h-9 w-36 shrink-0 rounded-md bg-primary-foreground/20" />
+          <LoadingRegion label="Loading your next step" className="shrink-0 text-primary-foreground"><Skeleton className="h-9 w-36 rounded-md bg-primary-foreground/20" /></LoadingRegion>
         ) : next ? (
           <Button
             variant="orange"
@@ -194,11 +195,11 @@ function WorkspaceHome() {
             </button>
           </div>
           {twinLoading ? (
-            <div className="space-y-2">
+            <LoadingRegion label="Loading your twin" className="space-y-2">
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
-            </div>
+            </LoadingRegion>
           ) : skills.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
               No skills mapped for this course yet.

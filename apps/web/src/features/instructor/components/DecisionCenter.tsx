@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState, useRef, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
@@ -149,10 +150,10 @@ export function DecisionCenter({
       </div>
 
       {isLoading ? (
-        <div className="space-y-3">
+        <LoadingRegion className="space-y-3">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-16 w-full" />
-        </div>
+        </LoadingRegion>
       ) : pending.length === 0 && decided.length === 0 ? (
         <div className="border border-dashed bg-card px-5 py-8 text-center">
           <p className="text-[13px] font-semibold text-foreground">No recommendations yet</p>

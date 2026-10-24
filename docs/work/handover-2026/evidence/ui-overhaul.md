@@ -393,3 +393,82 @@ Evidence added: this report and synthetic desktop/mobile screenshots.
 Anything not done, and why: no Diagnostic API, due logic, grade flow or infrastructure change; no push, merge or deployment.
 Risks or questions for the planner: Fred's live visual acceptance remains; mobile footer intentionally wraps to retain readable controls and aligned outer edges.
 Secrets printed: none (confirmed); environment contents were not read.
+
+
+## Diagnostic completion and app-wide waiting indicators — 2026-10-25
+
+Base `6e368ae`. Fred directly requested left alignment to the shell header, one Test/Study-style completion view with confetti and animated mastery progression, a primary workspace exit and secondary twin exit, and the shared animated Spinner throughout actual waiting states. This direct request expands the visual write scope beyond the earlier Lane U paths. The owned Diagnostic spec was amended before implementation; coordinator-owned Tutor/Design specs were not edited.
+
+Implementation and findings:
+
+- The Diagnostic introduction now uses the shell breadcrumb's 20px left gutter. Question cards and submission keep their shared 800px maximum column and responsive padding; the answering footer is removed from results.
+- A focused, persistent results panel replaces the old completion card/dialog/footer combination. It presents the returned answer count and mastery rows, one “Back to workspace” action and one “View your twin” action. Successful submission takes precedence over question-query refetch states until the sitting unmounts. A fresh visit uses the existing backend due state. Empty mastery rows retain saved-answer copy and both exits. No score, answer key or mastery movement is invented.
+- The existing MasteryDelta reveal and prior-to-posterior marker animation run from stable response rows. Kala's existing celebrateOnce helper runs once per submitted sitting when motion is allowed. Reduced motion shows final progression without confetti. The exit icons use existing published lucide-animated components driven from whole-button hover/focus, with reduced-motion gating; no shared wiggle preset.
+- Visual review found mastery labels overlapping at 375px. Mobile rows now stack skill name, track and labels; desktop rows stay inline. Long mobile names wrap and desktop names retain a full-name title. Browser checks assert internal track/label separation, not only absence of viewport overflow.
+- Shared LoadingRegion preserves skeleton layouts and adds one accessible Spinner per region. LoadingPanel, assistant thinking labels and loading toasts now reuse the same primitive. Student coverage includes workspace, Skills/topic pickers, Study/Test browsers, Twin, gamification, lesson checks, Tutor conversation/preview/save/pin/delete, Diagnostic preparation/submission and Study continuation. Instructor coverage includes plan, roster, stats/charts, heatmap, at-risk/triage/record/drill-down, recommendations, matching and proposal review/refresh. Building notices receive indicators only for actual building states. Existing Spinner coverage in launch, ComposeDock, PromptInput and Study/Test actions remains.
+- The waiting inventory distinguishes actual request flags from placeholder ellipses, truncated names, menu dots, static errors, unavailable content and no-data fallbacks. No request, auth, grading, state ownership or pending-lock behavior was changed for the spinner pass. Source inventory: `/tmp/kala-waiting-inventory.txt`.
+
+Verification:
+
+| Command | Result |
+| --- | --- |
+| Browser command recorded above, with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-completion` | 211 assertions passed against final source |
+| `pnpm --filter web exec node --test src/features/tutor/components/TutorChat.test.mjs src/features/tutor/schema/tutor.schema.test.ts src/lib/api-error.test.ts src/features/tutor/tests/presentation.test.mjs` | 21 passed |
+| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed after Study continuation changes; existing renderer/VM notices |
+| `pnpm --filter web lint` | Passed; 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-completion-lint.log` |
+| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-completion-typecheck.log` |
+| `pnpm --filter web build` | Passed, including project-reference TypeScript build; existing chunk-size warning; `/tmp/kala-completion-build.log` |
+| `git diff --check` | Passed |
+
+Browser coverage includes left-header geometry, shared card/footer alignment, pending submission lock and Spinner, exactly one exit per destination, no dialog/footer on results, real marker movement, once-only real confetti, reduced motion, refetch retention, empty mastery rows, fresh caught-up visit, both navigation destinations, mobile long names and shared loading region resolution. Synthetic auth/API interception and non-localhost blocking prevent live submissions or uploads. Desktop introduction, desktop results/confetti and mobile results captures were visually inspected in `/tmp/kala-lane-u-completion/`, notably `diagnostic-introduction-1440.png`, `diagnostic-results-1440.png`, `diagnostic-results-motion-1440.png` and `diagnostic-results-375.png`.
+
+An intermediate invalid animated-icon import was caught by the actual project-reference build and corrected to the existing ChevronLeft component. The final build and browser run pass. The user's supplied session was refreshed through the existing local launch route and course navigation was verified; that is session restoration only, not authenticated Diagnostic feature acceptance. No credential was printed or persisted in source, evidence or screenshots.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / Diagnostic completion and app-wide Spinner visual correction
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: 6e368ae
+Files changed:
+- apps/web/src/components/kala/mastery-delta.tsx
+- apps/web/src/components/shared/LoadingPanel.tsx
+- apps/web/src/components/shared/LoadingRegion.tsx
+- apps/web/src/components/shell/CourseShell.tsx
+- apps/web/src/components/shell/TutorSidebar.tsx
+- apps/web/src/components/study/AssistantBlock.tsx
+- apps/web/src/components/study/TopicLanding.tsx
+- apps/web/src/components/ui/sonner.tsx
+- apps/web/src/features/diagnostic/components/DiagnosticPanel.tsx
+- apps/web/src/features/diagnostic/components/DiagnosticResults.tsx
+- apps/web/src/features/flashcards/components/FlashcardDeck.tsx
+- apps/web/src/features/gamification/components/GamificationSummary.tsx
+- apps/web/src/features/instructor/components/AtRiskList.tsx
+- apps/web/src/features/instructor/components/AutoMatchedSection.tsx
+- apps/web/src/features/instructor/components/CohortCharts.tsx
+- apps/web/src/features/instructor/components/CohortStats.tsx
+- apps/web/src/features/instructor/components/DecisionCenter.tsx
+- apps/web/src/features/instructor/components/Heatmap.tsx
+- apps/web/src/features/instructor/components/LearnerRecord.tsx
+- apps/web/src/features/instructor/components/LearnerTriage.tsx
+- apps/web/src/features/instructor/components/RosterTable.tsx
+- apps/web/src/features/instructor/components/SkillReviewPanel.tsx
+- apps/web/src/features/instructor/components/StudentDrillDown.tsx
+- apps/web/src/features/lessons/components/LessonChat.tsx
+- apps/web/src/features/plan/components/InstructorPlan.tsx
+- apps/web/src/features/skill-hub/components/SkillHub.tsx
+- apps/web/src/features/skill-hub/components/StudyBrowser.tsx
+- apps/web/src/features/skill-hub/components/TestBrowser.tsx
+- apps/web/src/features/tutor/components/TutorChat.tsx
+- apps/web/src/features/tutor/components/TutorConversationRow.tsx
+- apps/web/src/features/tutor/components/TutorFilePreview.tsx
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- apps/web/src/features/twin/components/TwinView.tsx
+- apps/web/src/routes/course/index.tsx
+- docs/features/diagnostic/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-001, 002, 003, 007, 008; WI-22
+Commands run and results (tests, lint, typecheck, build): 211 browser assertions, 21 frontend unit tests and 4 Study tests passed; lint/typecheck/build/diff check passed with existing warnings.
+Spec changes made: left shell-gutter introduction; single persistent completion with returned mastery animation, once-only confetti and two exits; real shared waiting indicators across Kala, defined before implementation and marked implemented with evidence.
+Evidence added: this report, waiting-state inventory, synthetic desktop/mobile results and motion screenshots, browser completion/loading/navigation regressions.
+Anything not done, and why: human live feature acceptance remains; no backend/due-rule/schema/grading change, push, merge, deploy, migration, hosted write or infrastructure change.
+Risks or questions for the planner: direct user scope spans shared student/instructor presentation; review integration with other worktrees and obtain lead designer/live acceptance. Returned empty mastery rows are supported; no synthetic mastery data is shown in production.
+Secrets printed: none (confirmed); environment contents were not read.

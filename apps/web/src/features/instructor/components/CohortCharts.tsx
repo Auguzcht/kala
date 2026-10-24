@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import type { ReactNode } from "react";
 import {
   Area,
@@ -181,10 +182,10 @@ export function CohortCharts({ courseId }: { courseId: string }) {
 
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      <LoadingRegion busy={isLoading} className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <Skeleton className="h-64 w-full lg:col-span-7" />
         <Skeleton className="h-64 w-full lg:col-span-5" />
-      </div>
+      </LoadingRegion>
     );
   }
 

@@ -440,6 +440,7 @@ export function CourseShell({
               className="rounded-[3px] bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
             >
               {preparingTour ? <Spinner className="mr-1 inline-block" aria-hidden /> : null}
+              {preparingTour ? <Spinner aria-hidden className="mr-2 inline-block size-3.5 align-middle" /> : null}
               {preparingTour ? "Checking topics…" : "Start tour"}
             </button>
           </DialogFooter>

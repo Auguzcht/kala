@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useAtRisk, useStudentTwin } from "@/features/instructor";
 import { TwinBody } from "@/features/twin/components/TwinBody";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -13,10 +14,10 @@ export function StudentDrillDown({ courseId, userId }: { courseId: string; userI
 
   if (twin.isLoading) {
     return (
-      <div className="space-y-4">
+      <LoadingRegion className="space-y-4">
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
   if (twin.isError || !twin.data) {
