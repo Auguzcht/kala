@@ -622,3 +622,27 @@ Evidence added: this report, desktop/mobile/wide-screen screenshots, ring/ledger
 Anything not done, and why: no full-history backend pagination (existing recent-window contracts retained), deployment, push, hosted mutation, migration, dependency or infrastructure change. Human visual acceptance remains.
 Risks or questions for the planner: integrate focused Twin spec with WI-08; student/instructor response caps remain 20/200; shared rings and ledger intentionally apply to both student and instructor callers.
 Secrets printed: none (confirmed); no environment values or credentials read for this task.
+
+
+## Final frontend audit and handoff — 2026-10-25
+
+Application base `47b9700`. Fred requested a comprehensive student/instructor UI/UX handoff, remaining flows/stale paths and detailed high-priority bug traces. The [frontend finalization handoff](frontend-finalization-handoff.md) consolidates the implemented work, fixed-bug register, Alfred/Hanna identity split, Diagnostic availability mismatch, shared provider dependency, API-capability integration, route inventory and remaining acceptance matrix. It is an audit, not a claim of production acceptance or permission for hosted repair.
+
+Current-source findings not fixed by this documentation task: inert Diagnostic load-error Retry; older roster/proposal/Twin-skill pagers without keyboard-focusable anchors; Skills/legacy picker fetch failures conflated with empty courses; Twin Focus area's Practice this losing its skill context; role-insensitive root-error/not-found destinations; public scaffold and stale session-expiry copy; bounded evidence/count semantics requiring explicit contracts. Exact file/line locations and proposed acceptance are in the handoff. Data-dependent tour branches and full live student/instructor flows remain to be rehearsed rather than claimed tested.
+
+Correction to the previous section's instructor window statement: `cohort.learner_record` reads up to 200 events for statistics but serializes only `events[:25]` into the response evidence array. Student Twin returns up to 20. The shared ledger's synthetic 200-event test proves component capacity, not a 200-event live response. The focused Twin spec's observed API description is corrected; historical verification records remain intact.
+
+Verification for this documentation-only task: source/route/spec/evidence inspection and read-only inspection of the separate provider lane's evidence. Relative-link checks and `git diff --check` passed. Application tests/lint/typecheck/build were not rerun without application changes; the handoff names their recorded revisions and limits. No new hosted reads, model calls, mutations, decisions, migration, push or deployment occurred. No message was sent to another task or external recipient.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / final student and instructor frontend UI/UX handoff
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: 47b9700
+Files changed: docs/work/handover-2026/evidence/frontend-finalization-handoff.md; docs/work/handover-2026/evidence/ui-overhaul.md; docs/features/twin/README.md
+REQ / WI IDs touched: DIAG-REQ-001–008, TUTOR-REQ-001–011, INSTR-REQ-001/002, TWIN-REQ-001/002/003 referenced; WI-22; related integration dependencies recorded, no new IDs allocated.
+Commands run and results (tests, lint, typecheck, build): source/route/evidence review; relative-link and diff-whitespace checks passed. Existing revision-specific tests/build reported; not rerun for documentation-only changes.
+Spec changes made: correct observed instructor ledger response from 200 to 25 rows, distinguishing the internal read; no behavior change.
+Evidence added: comprehensive linked handoff and explicit correction above.
+Anything not done, and why: no application fixes in this audit; live acceptance, identity repair, availability contract and provider recovery remain separate approved work. No hosted writes, merge, push, deploy, migrations or external messages.
+Risks or questions for the planner: identity and availability correctness, provider recovery, keyboard/recovery/navigation findings and bounded data semantics must be resolved before unconditional sign-off; coordinator specification/API integration remains.
+Secrets printed: none (confirmed).
