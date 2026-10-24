@@ -42,7 +42,7 @@ def test_course_data_routes_require_lti_bearer_token() -> None:
     assert response.json() == {"detail": "missing bearer token"}
 
 
-def test_course_data_routes_are_authenticated_and_tenant_scoped(monkeypatch) -> None:
+def test_INGEST_REQ_001_course_data_routes_are_authenticated_and_tenant_scoped(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     app.dependency_overrides[get_lms_connector] = FakeConnector
     monkeypatch.setattr(diagnostic.db, "select", fake_course_select)
@@ -61,14 +61,9 @@ def test_course_data_routes_are_authenticated_and_tenant_scoped(monkeypatch) -> 
 
     assert content.status_code == 200
     assert content.json() == [{"lms_content_id": "content-1", "title": "Lesson"}]
-    assert assessments.status_code == 200
-    assert assessments.json() == [{"lms_column_id": "column-1", "name": "Quiz"}]
+    assert assessments.status_code == 403
+    assert assessments.json() == {"detail": "insufficient role"}
     assert roster.status_code == 200
     assert roster.json() == [{"lms_user_id": "00000000-0000-4000-8000-000000000040", "role": "Student"}]
-    assert grade.status_code == 200
-    assert grade.json() == {
-        "courseId": "00000000-0000-4000-8000-000000000001",
-        "columnId": "_8_1",
-        "userId": "_6_1",
-        "score": 85.0,
-    }
+    assert grade.status_code == 403
+    assert grade.json() == {"detail": "insufficient role"}

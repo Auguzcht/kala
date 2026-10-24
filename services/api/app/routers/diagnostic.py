@@ -161,9 +161,17 @@ def get_content(
 @router.get("/{course_id}/assessments")
 def get_assessments(
     course_id: str = Depends(require_valid_course_id),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
+    try:
+        _assert_teaches_course(user=user, course_id=course_id)
+    except HTTPException as exc:
+        # These gradebook routes expose course authorization denials as 403.
+        # Keep the shared upload gate's 404 contract unchanged elsewhere.
+        if exc.status_code != status.HTTP_404_NOT_FOUND:
+            raise
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient course access") from exc
     return connector.get_assessments(_course_ref(course_id, user.institution_id))
 
 
@@ -301,12 +309,12 @@ def upload_course_content(
         logger.warning("could not archive %s for course %s: %s", filename, course_id, exc)
         stored_original = False
 
-    # Store the chunks and embed them here — both fast and bound to the
-    # request. Tagging is NOT run here: embedding tagging is handled by the
-    # worker's tag_recompute job. A large PDF therefore cannot
-    # time out this request; its chunks simply queue for the next worker run.
-    # The same _embed_pending the ingest path uses is reused so the two
-    # surfaces stay identical in how they store and embed.
+    # Store chunks here, then reuse ingest's _embed_pending. Its 12s phase
+    # budget is checked between chunks; it does not cancel an in-flight
+    # embedding or DB call. Extraction, original storage, chunk inserts, and
+    # the pending query are outside that budget. There is no whole-request
+    # deadline, so a large PDF or slow dependency can exceed the 30s Lambda
+    # ceiling. Tagging is queued for the worker's tag_recompute job.
     clean = strip_pii(text)
     rows = []
     for chunk in chunk_text(clean):
@@ -431,9 +439,16 @@ def post_grade(
     body: GradeBody,
     column_id: str,
     course_id: str = Depends(require_valid_course_id),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
+    try:
+        _assert_teaches_course(user=user, course_id=course_id)
+    except HTTPException as exc:
+        # Match assessment reads without changing the shared upload gate.
+        if exc.status_code != status.HTTP_404_NOT_FOUND:
+            raise
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient course access") from exc
     connector.post_grade(
         _course_ref(course_id, user.institution_id),
         column_id,
