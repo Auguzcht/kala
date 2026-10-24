@@ -101,40 +101,12 @@ def get_or_create_institution(*, iss: str, deployment_id: str, name: str, lms_ty
 
 def resolve_user(*, institution_id: str, lms_user_id: str, role: str,
                  display_name: str | None, email: str | None) -> dict:
-    """Resolve an LMS identity to the ONE Kala user it belongs to, creating one
-    only if genuinely new. This is the fix for duplicate accounts — see
-    migration 0015 for the full WHY.
+    """Resolve an institution-scoped exact identity (AUTH-REQ-002/006).
 
-    Resolution order, and each step exists for a reason:
-
-      1. ALIAS LOOKUP (exact, stable). `lms_identity_aliases` maps any LMS
-         identifier Kala has seen to a user. This is the fast path once a
-         person has launched once, and it does not care whether the identifier
-         is an LTI `sub` or a REST `userId`.
-
-      2. EMAIL MATCH (discovery). `users.lms_user_id` is written from `sub` on
-         launch and from the connector's `userId` on roster sync — two
-         different values for the same person. If the launch's email matches an
-         existing profile, that IS the same human, so resolve to them instead of
-         minting a twin. Both paths already fetch email; it matched exactly in
-         every observed duplicate pair.
-
-      3. CREATE. Nothing matched, so this really is a new person.
-
-    NOTHING HERE IS OPTIONAL. Two hard requirements:
-
-      - The `lms_user_id` fallback in step 3 STAYS. Email can be absent from an
-        LTI launch and is not guaranteed unique; if resolution depended on it,
-        a launch without an email would stop working entirely.
-      - The alias is written on EVERY successful resolution (step 4), not just
-        for new users. Recording the pair the first time it is OBSERVED is what
-        lets step 1 take over later — and it also back-fills the other
-        identifier for a user who was matched by email, so the NEXT launch hits
-        the exact path.
-
-    Matching on email is deliberately a discovery signal, never a permanent
-    key: email is mutable, and an address change must not fork an account. The
-    alias row is what makes the resolution durable.
+    Blackboard roster UUID and launch subject are the same identifier. Email
+    and display name are profile data, not proof that two users are one person.
+    Historical aliases remain authoritative unless they conflict with an exact
+    user row; conflicts require the separately authorized H01(b) repair.
     """
     # 1. Exact alias hit.
     aliases = select("lms_identity_aliases", {
@@ -142,31 +114,36 @@ def resolve_user(*, institution_id: str, lms_user_id: str, role: str,
         "lms_user_id": f"eq.{lms_user_id}",
         "select": "user_id", "limit": "1",
     })
+    exact = select("users", {
+        "institution_id": f"eq.{institution_id}",
+        "lms_user_id": f"eq.{lms_user_id}",
+        "select": "id,institution_id,lms_user_id,role", "limit": "1",
+    })
     if aliases:
         user = _user_by_id(aliases[0]["user_id"])
-        if user:
-            _touch_profile(user_id=user["id"], display_name=display_name, email=email)
-            record_identity_alias(
-                institution_id=institution_id, lms_user_id=lms_user_id,
-                user_id=user["id"], source="launch",
-            )
-            return user
+        if (
+            not user or user["institution_id"] != institution_id
+            or (exact and exact[0]["id"] != user["id"])
+        ):
+            raise ValueError("conflicting LMS identity mapping")
+        _touch_profile(user_id=user["id"], display_name=display_name, email=email)
+        record_identity_alias(
+            institution_id=institution_id, lms_user_id=lms_user_id,
+            user_id=user["id"], source="launch",
+        )
+        return user
 
-    # 2. Email match against an existing profile (same institution).
-    if email:
-        matched = _user_by_email(institution_id=institution_id, email=email)
-        if matched:
-            # Adopt this launch's identifier as an alias for that user, so the
-            # sub and the roster userId converge on ONE account from here on.
-            record_identity_alias(
-                institution_id=institution_id, lms_user_id=lms_user_id,
-                user_id=matched["id"], source="email_match",
-            )
-            _touch_profile(user_id=matched["id"], display_name=display_name, email=email)
-            return matched
+    # Exact user rows also resolve when their alias has not yet been recorded.
+    if exact:
+        user = exact[0]
+        _touch_profile(user_id=user["id"], display_name=display_name, email=email)
+        record_identity_alias(
+            institution_id=institution_id, lms_user_id=lms_user_id,
+            user_id=user["id"], source="launch",
+        )
+        return user
 
-    # 3. Genuinely new. The lms_user_id fallback stays: a launch with no email
-    #    must still work.
+    # New exact identity; a missing or shared email does not change the key.
     rows = upsert("users", [{
         "institution_id": institution_id,
         "lms_user_id": lms_user_id,

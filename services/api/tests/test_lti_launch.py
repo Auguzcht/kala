@@ -74,8 +74,8 @@ def _patch_launch(monkeypatch, payload: dict, connector,
     users: list[dict] = []
     removals: list[dict] = []
     aliases: list[dict] = []
-    # email -> existing user id. Empty by default; a test that wants to prove
-    # the launch RESOLVES instead of duplicating seeds this.
+    # Exact LMS identifier -> existing user id. The resolver never discovers
+    # identity by email (AUTH-REQ-006).
     resolved_ids = resolved_ids or {}
     monkeypatch.setattr(get_settings(), "skill_seed_on_launch", True)
     monkeypatch.setattr(lti_routes, "verify_state", lambda cookie: {"state": "state-1", "nonce": "nonce-1"})
@@ -89,12 +89,12 @@ def _patch_launch(monkeypatch, payload: dict, connector,
         # depends on: it returns the resolved user, and it records the
         # identifier->user alias on EVERY resolution (not only new users).
         users.append({"lms_user_id": lms_user_id, "role": role, "email": email})
-        existing = resolved_ids.get(email) if email else None
+        existing = resolved_ids.get(lms_user_id)
         user_id = existing or f"user-{lms_user_id}"
         aliases.append({
             "institution_id": institution_id, "lms_user_id": lms_user_id,
             "user_id": user_id,
-            "source": "email_match" if existing else "launch",
+            "source": "launch",
         })
         return {"id": user_id}
 
@@ -154,19 +154,18 @@ def _patch_launch(monkeypatch, payload: dict, connector,
 
     monkeypatch.setattr(lti_routes.db, "upsert_enrollment", fake_upsert_enrollment)
 
-    # Roster reconciliation's other half. Recorded (not left unmocked) for
-    # two reasons: an unmocked call would hit the real Supabase client with
-    # no credentials in a test run, and the call args are exactly what the
-    # new reconciliation tests below assert on — which user ids survived
-    # into keep_user_ids is the whole point of the feature.
-    def fake_remove_stale(*, institution_id: str, course_id: str, keep_user_ids: list[str]) -> list[dict]:
+    # Complete-pull reconciliation removes stale enrollments for all roles.
+    def fake_delete(table: str, filters: dict) -> list[dict]:
+        assert table == "enrollments"
+        assert "role" not in filters
         removals.append({
-            "institution_id": institution_id, "course_id": course_id,
-            "keep_user_ids": list(keep_user_ids),
+            "institution_id": filters["institution_id"].removeprefix("eq."),
+            "course_id": filters["course_id"].removeprefix("eq."),
+            "keep_user_ids": filters["user_id"].removeprefix("not.in.(").removesuffix(")").split(","),
         })
         return []
 
-    monkeypatch.setattr(lti_routes.db, "remove_stale_student_enrollments", fake_remove_stale)
+    monkeypatch.setattr(lti_routes.db, "delete", fake_delete)
     app.dependency_overrides[get_lms_connector] = lambda: connector
     return {"enrollments": enrollments, "users": users, "removals": removals,
             "aliases": aliases, "local_courses": local_courses, "stamped": stamped,
@@ -265,16 +264,7 @@ def test_roster_failure_does_not_block_the_instructor_launch(monkeypatch) -> Non
 
 
 def test_instructor_launch_reconciles_stale_enrollments(monkeypatch) -> None:
-    """The half of roster sync that didn't exist before this change: anyone
-    Kala has as a student in this course who is NOT in the fresh pull must
-    be passed to remove_stale_student_enrollments — this is what turns a
-    one-off test launch or a dropped student into something that heals on
-    the next instructor launch instead of persisting forever.
-
-    The fixture includes the launching instructor's own membership, which
-    is realistic: Blackboard's course/users listing reports every member,
-    including the instructor doing the launching, not just their students.
-    """
+    """AUTH-REQ-006: a complete pull supplies the full keep-list, all roles."""
     roster = [
         {"lms_user_id": "lms-teacher-1", "role": "Instructor", "name": "Prof. Ada", "email": None},
         {"lms_user_id": "stu-1", "role": "Student", "name": "Mica V.", "email": "m@mmcm.edu"},
@@ -292,16 +282,7 @@ def test_instructor_launch_reconciles_stale_enrollments(monkeypatch) -> None:
     assert len(recorded["removals"]) == 1
     call = recorded["removals"][0]
     assert call["course_id"] == "00000000-0000-4000-8000-000000000001"
-    # keep_user_ids is exactly what this pull produced. Anyone Kala has
-    # enrolled as a STUDENT for this course outside that set is what gets
-    # removed — asserted here as "the call carries the right keep-list",
-    # since the actual delete is a real db.py function this test
-    # intentionally does not re-implement. Note deletion is also
-    # role-scoped in remove_stale_student_enrollments itself (role='student'
-    # only): even if a launching instructor were somehow absent from a
-    # pull, their own role='instructor' row could never match that filter,
-    # so this isn't the only thing standing between an instructor and
-    # accidentally reconciling away their own access.
+    # The absence filter is scoped to course and institution, including staff.
     assert set(call["keep_user_ids"]) == {"user-lms-teacher-1", "user-stu-1"}
 
 
@@ -440,11 +421,8 @@ def test_skill_seed_failure_does_not_block_the_launch(monkeypatch) -> None:
 # and the alias is recorded on EVERY resolution (not just new users).
 
 
-def test_launch_resolves_to_the_rostered_account_by_email(monkeypatch) -> None:
-    """THE bug. A launch whose `sub` is unseen, but whose email matches an
-    existing (rostered) profile, must resolve to that account instead of
-    minting a twin. Before the fix this created a second user row and split the
-    student's progress in half."""
+def test_launch_resolves_to_the_rostered_account_by_exact_subject(monkeypatch) -> None:
+    """AUTH-REQ-006: the roster UUID and launch subject share one identity."""
     connector = _fake_connector([])
     payload = _launch_payload(
         [C._ROLE_LEARNER], sub="2aca8e5459054620993530550b5f0a93",
@@ -452,8 +430,8 @@ def test_launch_resolves_to_the_rostered_account_by_email(monkeypatch) -> None:
     )
     recorded = _patch_launch(
         monkeypatch, payload, connector,
-        # The rostered account already exists under Blackboard's userId form.
-        resolved_ids={"kala.student1@example.com": "rostered-user-id"},
+        # The rostered account already exists under the matching UUID.
+        resolved_ids={payload["sub"]: "rostered-user-id"},
     )
     _launch(connector)
 
@@ -465,18 +443,18 @@ def test_launch_resolves_to_the_rostered_account_by_email(monkeypatch) -> None:
 def test_launch_records_the_alias_on_every_resolution(monkeypatch) -> None:
     """Requirement 2: the alias write is NOT conditional on the user being new.
     Recording the identifier pair the first time it is OBSERVED is what makes
-    the next launch an exact lookup instead of another email guess."""
+    the next launch an exact lookup without depending on email."""
     connector = _fake_connector([])
     payload = _launch_payload(
         [C._ROLE_LEARNER], sub="sub-hash-abc", email="kala.student5@example.com",
     )
     recorded = _patch_launch(
         monkeypatch, payload, connector,
-        resolved_ids={"kala.student5@example.com": "existing-user-id"},
+        resolved_ids={payload["sub"]: "existing-user-id"},
     )
     _launch(connector)
 
-    assert recorded["aliases"], "an alias must be written on an email resolution"
+    assert recorded["aliases"], "an alias must be written on an exact resolution"
     alias = recorded["aliases"][0]
     assert alias["lms_user_id"] == "sub-hash-abc"
     assert alias["user_id"] == "existing-user-id"
