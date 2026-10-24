@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from functools import wraps
 
 import httpx
 
@@ -25,6 +26,61 @@ logger = logging.getLogger(__name__)
 # How long to wait before retrying a rate-limited/overloaded primary on the
 # fallback model. See converse().
 _FALLBACK_BACKOFF_SECONDS = 1.5
+
+
+def _tutor_diagnostics(*, stage: str, provider: str, model_setting: str | None = None):
+    """Observe budgeted attempts without changing exception/response behavior.
+
+    Even previously unwrapped SDK/response-shape errors stay unwrapped. Only
+    allowlisted metadata is emitted; never render an exception or its body.
+    """
+    def decorate(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            budget = kwargs.get("budget")
+            if budget is None:
+                return fn(*args, **kwargs)
+            try:
+                return fn(*args, **kwargs)
+            except TutorTimeout:
+                raise
+            except Exception as exc:
+                model = kwargs.get("model_id")
+                status_source = exc
+                http_status = None
+                if isinstance(exc, ModelUnavailableError):
+                    model = exc.model_id
+                    http_status = exc.status_code
+                    if exc.__cause__ is not None:
+                        status_source = exc.__cause__
+                if http_status is None:
+                    response = getattr(status_source, "response", None)
+                    if isinstance(response, httpx.Response):
+                        http_status = response.status_code
+                    if isinstance(response, dict):
+                        metadata = response.get("ResponseMetadata")
+                        if isinstance(metadata, dict):
+                            http_status = metadata.get("HTTPStatusCode")
+                if model is None and model_setting is not None:
+                    try:
+                        model = getattr(get_settings(), model_setting)
+                    except Exception:  # noqa: BLE001 - enrichment must preserve the original error
+                        model = None
+                if type(http_status) is not int or not 100 <= http_status <= 599:
+                    http_status = None
+                logger.error("tutor_provider_error %s", json.dumps({
+                    "stage": stage,
+                    "provider": provider,
+                    "model": model,
+                    "http_status": http_status,
+                    "request_id": budget.request_id,
+                    "error_code": {
+                        401: "unauthorized", 402: "payment_required", 403: "forbidden",
+                    }.get(http_status, "provider_error"),
+                }))
+                raise
+        return wrapped
+    return decorate
 
 # ---------------------------------------------------------------------------
 # READ THIS BEFORE PASSING max_tokens.
@@ -192,6 +248,7 @@ def _bedrock_runtime(*, budget: RequestBudget | None = None):
     )
 
 
+@_tutor_diagnostics(stage="chat", provider="bedrock")
 def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int,
                       budget: RequestBudget | None = None) -> str:
     try:
@@ -209,8 +266,6 @@ def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_t
         # is one typed, non-500 failure rather than a provider-specific throw.
         if budget is None:
             logger.error("bedrock converse failed (model=%s): %s", model_id, exc)
-        else:
-            logger.error("tutor_provider_error provider=bedrock stage=chat")
         raise ModelUnavailableError(
             "The model provider could not be reached. Please try again.",
             provider="bedrock", model_id=model_id,
@@ -219,6 +274,7 @@ def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_t
     return "".join(p.get("text", "") for p in parts)
 
 
+@_tutor_diagnostics(stage="embed", provider="bedrock", model_setting="bedrock_embed_model")
 def _bedrock_embed(text: str, *, input_type: str, budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
     resp = (_bedrock_runtime() if budget is None else _bedrock_runtime(budget=budget)).invoke_model(
@@ -263,6 +319,7 @@ def _flatten_text(content) -> str:
     return "".join(part.get("text", "") for part in content)
 
 
+@_tutor_diagnostics(stage="chat", provider="openrouter")
 def _openrouter_converse(
     *,
     model_id: str,
@@ -317,8 +374,6 @@ def _openrouter_converse(
             except httpx.HTTPError as retry_exc:
                 if budget is None:
                     logger.error("OpenRouter request errored (model=%s): %s", model_id, retry_exc)
-                else:
-                    logger.error("tutor_provider_error stage=provider_call")
                 raise ModelUnavailableError(
                     "Kala's model provider is unavailable right now. Please try again.",
                     provider="openrouter", model_id=model_id,
@@ -341,16 +396,12 @@ def _openrouter_converse(
                     "to a current id (see https://openrouter.ai/models). Body: %s",
                     model_id, exc.response.text[:300],
                 )
-            else:
-                logger.error("tutor_provider_error stage=provider_call")
         else:
             if budget is None:
                 logger.error(
                     "OpenRouter chat request failed (model=%s, status=%s): %s",
                     model_id, status_code, exc.response.text[:300],
                 )
-            else:
-                logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=model_id,
@@ -361,8 +412,6 @@ def _openrouter_converse(
         # response object to read a status from. Same typed failure.
         if budget is None:
             logger.error("OpenRouter request errored (model=%s): %s", model_id, exc)
-        else:
-            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=model_id,
@@ -477,6 +526,7 @@ def _openrouter_content(data: dict) -> str:
     return choices[0].get("message", {}).get("content") or ""
 
 
+@_tutor_diagnostics(stage="embed", provider="openrouter", model_setting="openrouter_embed_model")
 def _openrouter_embed(text: str, *, input_type: str, budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
     try:
@@ -497,8 +547,6 @@ def _openrouter_embed(text: str, *, input_type: str, budget: RequestBudget | Non
                 ", model id likely retired" if model_not_found else "",
                 exc.response.text[:300],
             )
-        else:
-            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=s.openrouter_embed_model,
@@ -508,8 +556,6 @@ def _openrouter_embed(text: str, *, input_type: str, budget: RequestBudget | Non
         if budget is None:
             logger.error("OpenRouter embedding request errored (model=%s): %s",
                          s.openrouter_embed_model, exc)
-        else:
-            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=s.openrouter_embed_model,
@@ -586,6 +632,7 @@ def _openai_client(*, budget: RequestBudget | None = None) -> httpx.Client:
     )
 
 
+@_tutor_diagnostics(stage="embed", provider="openai", model_setting="openai_embed_model")
 def _openai_embed(text: str, *, input_type: str, budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
     try:
@@ -603,8 +650,6 @@ def _openai_embed(text: str, *, input_type: str, budget: RequestBudget | None = 
                 "OpenAI embedding request failed (model=%s, status=%s): %s",
                 s.openai_embed_model, exc.response.status_code, exc.response.text[:300],
             )
-        else:
-            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openai", model_id=s.openai_embed_model,
@@ -615,8 +660,6 @@ def _openai_embed(text: str, *, input_type: str, budget: RequestBudget | None = 
         if budget is None:
             logger.error("OpenAI embedding request errored (model=%s): %s",
                          s.openai_embed_model, exc)
-        else:
-            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openai", model_id=s.openai_embed_model,
