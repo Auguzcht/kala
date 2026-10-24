@@ -34,7 +34,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TopBar } from "@/components/shell/TopBar";
-import { TutorSidebar, TUTOR_SIDEBAR_COLLAPSED_PX, TUTOR_SIDEBAR_EXPANDED_PX } from "@/components/shell/TutorSidebar";
+import { TutorSidebar } from "@/components/shell/TutorSidebar";
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { PanelLeft } from "lucide-react";
 import { useTwin } from "@/features/twin";
 import { GamificationSummary } from "@/features/gamification";
 import { useDiagnosticStatus } from "@/features/diagnostic";
@@ -144,25 +147,7 @@ export function CourseShell({
   // Tutor gets its own persistent left-rail extension (chat history — see
   // TutorSidebar), on every other route the icon rail is the whole story.
   const isTutorRoute = pathname.startsWith("/course/tutor");
-  const tutorSidebarKey = session?.userId
-    ? `kala.tutor-sidebar-collapsed.${session.userId}`
-    : null;
-  const [tutorSidebarCollapsed, setTutorSidebarCollapsed] = useState(
-    () => (tutorSidebarKey ? localStorage.getItem(tutorSidebarKey) === "1" : false)
-  );
-  const toggleTutorSidebar = () => {
-    setTutorSidebarCollapsed((collapsed) => {
-      const next = !collapsed;
-      if (tutorSidebarKey) localStorage.setItem(tutorSidebarKey, next ? "1" : "0");
-      return next;
-    });
-  };
-  // The rail (56px) plus, on the tutor route only, TutorSidebar's own
-  // width — collapsed or expanded. Off that route it's just the rail,
-  // same as every other page today.
-  const contentOffsetPx = isTutorRoute
-    ? 56 + (tutorSidebarCollapsed ? TUTOR_SIDEBAR_COLLAPSED_PX : TUTOR_SIDEBAR_EXPANDED_PX)
-    : 56;
+  const [tutorHistoryOpen, setTutorHistoryOpen] = useState(false);
   const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
   const diagnosticDue = diagnosticStatus?.due ?? false;
 
@@ -335,20 +320,14 @@ export function CourseShell({
       </nav>
 
       {isTutorRoute ? (
-        <TutorSidebar
-          courseId={courseId}
-          collapsed={tutorSidebarCollapsed}
-          onToggleCollapsed={toggleTutorSidebar}
-        />
+        <aside aria-label="Tutor chats" className="fixed inset-y-0 left-14 z-10 hidden w-64 border-r lg:block">
+          <TutorSidebar courseId={courseId} />
+        </aside>
       ) : null}
 
-      {/* Content column. This is the real height root for active study
-          sessions; ordinary course pages keep their own scroll region.
-          Left padding is computed, not a static class, because it has to
-          track TutorSidebar's width (or absence) on the tutor route. */}
       <div
-        className="flex h-dvh flex-col overflow-hidden"
-        style={{ paddingLeft: contentOffsetPx }}
+        className={cn("flex h-dvh flex-col overflow-hidden", isTutorRoute && "pl-14 lg:pl-[312px]")}
+        style={{ paddingLeft: isTutorRoute ? undefined : 56 }}
       >
         <div className="shrink-0">
           <TopBar
@@ -356,8 +335,18 @@ export function CourseShell({
             section={section}
             subsection={subsection}
             right={
-            <div className="flex items-center gap-4">
-              <GamificationSummary courseId={courseId} />
+            <div className={cn("flex items-center gap-4", isTutorRoute && "gap-2 sm:gap-4")}>
+              {isTutorRoute ? (
+                <Sheet open={tutorHistoryOpen} onOpenChange={setTutorHistoryOpen}>
+                  <SheetTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chat history"><PanelLeft size={18} /></Button></SheetTrigger>
+                  <SheetContent side="left" className="gap-0 p-0 motion-reduce:animate-none motion-reduce:transition-none">
+                    <SheetTitle className="sr-only">Chat history</SheetTitle>
+                    <SheetDescription className="sr-only">Choose a saved conversation or start a new chat.</SheetDescription>
+                    <TutorSidebar courseId={courseId} onSelect={() => setTutorHistoryOpen(false)} />
+                  </SheetContent>
+                </Sheet>
+              ) : null}
+              {isTutorRoute ? <div className="hidden sm:block"><GamificationSummary courseId={courseId} /></div> : <GamificationSummary courseId={courseId} />}
               {/* One affordance, always: the quiet compass nav button. The
                   banner is the loud CTA when it is up; off-workspace there
                   is no banner, so the icon carries it — never a text

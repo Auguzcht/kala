@@ -10,6 +10,7 @@ import { runInNewContext } from "node:vm";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
+import * as presentation from "../lib/presentation.ts";
 import { apiErrorReason } from "../../../lib/api-error.ts";
 
 const require = createRequire(import.meta.url);
@@ -41,7 +42,7 @@ function mount({ messages = [], error, refetch } = {}) {
   const hooks = {
     useState(initial) {
       const index = cursor++;
-      if (!(index in state)) state[index] = initial;
+      if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
       return [state[index], (value) => {
         state[index] = typeof value === "function" ? value(state[index]) : value;
       }];
@@ -92,6 +93,11 @@ function mount({ messages = [], error, refetch } = {}) {
     },
     "@tanstack/react-router": { useNavigate: () => () => {}, useSearch: () => search },
     sonner: { toast: { error: (...args) => toasts.push(args) } },
+    "@/features/tutor/lib/presentation": presentation,
+    "@/features/tutor/components/TutorComposer": uiModule("TutorComposer"),
+    "@/features/tutor/components/TutorWelcome": uiModule("TutorWelcome"),
+    "@/features/courses": { useCourse: () => ({ data: { title: "AWS101" } }) },
+    "@/features/twin": { useTwin: () => ({ data: { skills: [] } }) },
     "@/lib/auth/AuthProvider": { useSession: () => null },
     "@/lib/utils": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/lib/api-error": { apiErrorReason },
@@ -121,6 +127,7 @@ function mount({ messages = [], error, refetch } = {}) {
   const exports = {};
   runInNewContext(compiled, {
     exports,
+    window: { setTimeout, clearTimeout },
     require(id) {
       if (id in modules) return modules[id];
       if (id.startsWith("@/components/")) {
@@ -150,7 +157,7 @@ function mount({ messages = [], error, refetch } = {}) {
   return {
     active, toasts, render,
     async ask(q = question) {
-      elements(tree, "ComposeDock")[0].props.onAsk(q);
+      elements(tree, "TutorComposer")[0].props.onAsk(q);
       await mutationTask;
       return render();
     },

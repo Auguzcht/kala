@@ -1,24 +1,22 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TutorComposer } from "@/features/tutor/components/TutorComposer";
+import { TutorWelcome } from "@/features/tutor/components/TutorWelcome";
+import { pickGreeting, starterSuggestions, validateTutorFile, createConversationResolver } from "@/features/tutor/lib/presentation";
+import { Suggestion } from "@/components/ai-elements/suggestion";
+import { useCourse } from "@/features/courses";
+import { useTwin } from "@/features/twin";
+import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ComposeDock } from "@/components/study/ComposeDock";
-import { SessionBar } from "@/components/study/SessionBar";
-import { StudySurface } from "@/components/study/StudySurface";
 import { StudyStream } from "@/components/study/StudyStream";
 import { UserBlock } from "@/components/study/UserBlock";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Spinner } from "@/components/ui/spinner";
-import { FileTextIcon } from "@/components/ui/file-text";
-import { XIcon } from "@/components/ui/x";
 import { useSession } from "@/lib/auth/AuthProvider";
-import { cn } from "@/lib/utils";
 import { apiErrorReason } from "@/lib/api-error";
-import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { askTutor, createTutorConversation } from "@/features/tutor/api/tutor.api";
 import {
   useTutorConversations,
@@ -26,7 +24,7 @@ import {
   useUploadTutorAttachment,
   useDeleteTutorAttachment,
 } from "@/features/tutor";
-import type { TutorStyle, TutorAttachment, TutorConversationDetail } from "@/features/tutor";
+import type { TutorStyle, TutorConversationDetail } from "@/features/tutor";
 
 type UnconfirmedTurn = {
   id: number;
@@ -45,89 +43,13 @@ function hasSavedTurn(messages: TutorConversationDetail["messages"], turn: Omit<
     && newMessages.some((message) => message.role === "assistant" && message.content === turn.answer);
 }
 
-// Tutor as a real, resumable chat (Stage 2 of the AI overhaul, see
-// docs/AI_OVERHAUL_TODO.md). Migrated onto the shared StudySurface +
-// SessionBar + ComposeDock shell per docs/ai-overhaul-v2/05_TUTOR_AND_
-// HIERARCHY.md, WITH ONE DEVIATION from that doc: the conversation switcher
-// no longer lives in SessionBar's right slot as a Select dropdown. It's now
-// TutorSidebar, a persistent extension of the left icon rail (see
-// components/shell/CourseShell.tsx / TutorSidebar.tsx) — the same
-// always-visible chat-history treatment ChatGPT/Claude/Perplexity give
-// theirs, rather than a dropdown buried in the session bar.
-//
-// That move changes where the "which conversation is active" state lives:
-// it's the /course/tutor route's `conversation` search param now, not local
-// component state, because TutorSidebar (rendered by CourseShell) and this
-// component are siblings, not parent/child — a URL param is the one thing
-// both can read and write without a new global store.
-//
-// The compose input is ALWAYS mounted, not gated behind picking or
-// creating a conversation first — the student tour drives this surface by
-// finding #tour-tutor-input, filling it, and calling requestSubmit() on
-// it directly (see TourRunner.tsx), synchronously on arrival at this
-// route, so the input existing only after some async setup would break
-// it. Conversation creation instead happens transparently inside the
-// send flow the first time a message actually goes out, exactly as
-// before — only WHERE the resulting id is stored changed (the URL, not
-// useState).
-//
-// Stage 4: private study-aid uploads. A student's own file (.txt, .md,
-// .pdf, 5MB cap), scoped to exactly this conversation — never the shared
-// RAG corpus (see migration 0011's own comment for why). Deliberately NOT
-// wired through PromptInput's own built-in attachment staging (drag-drop,
-// paste, multi-file compose-then-send) — that system stages files as
-// blob-URLs meant to travel together with the next chat message, and
-// round-tripping a real File back out of that just to upload it
-// immediately and independently of any text message is more complexity
-// than this needs. A plain file input covers the actual model here:
-// attach, upload right away, show it as a chip. ComposeDock is a layout
-// shell for this, not a new owner of upload state — the hidden <input>,
-// its ref, and handleFileSelect all stay here, same as before.
-
-function AttachmentChip({
-  attachment,
-  onRemove,
-  removing,
-}: {
-  attachment: TutorAttachment;
-  onRemove: () => void;
-  removing: boolean;
-}) {
-  return (
-    <span className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs">
-      {attachment.status === "processing" ? (
-        <Spinner className="size-3 shrink-0" />
-      ) : (
-        <FileTextIcon
-          size={12}
-          className={cn(
-            "shrink-0",
-            attachment.status === "failed" ? "text-destructive" : "text-muted-foreground"
-          )}
-        />
-      )}
-      <span className="truncate">{attachment.filename}</span>
-      {attachment.status === "failed" ? (
-        <span className="shrink-0 text-destructive">couldn't read</span>
-      ) : null}
-      <button
-        type="button"
-        onClick={onRemove}
-        disabled={removing}
-        aria-label={`Remove ${attachment.filename}`}
-        className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
-      >
-        <XIcon size={12} />
-      </button>
-    </span>
-  );
-}
-
+// URL search state is shared with the shell sidebar. Saved data stays in Query;
+// only in-flight and unconfirmed turns are retained locally.
 export function TutorChat({ courseId }: { courseId: string }) {
   const session = useSession();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  // Same fix as TutorSidebar (see its comment): strict useSearch({ from })
+  // The shell renders while router matches are transitioning, so strict useSearch({ from })
   // requires the route to already be in the router's resolved match array,
   // which raced and crashed during real navigations. strict: false doesn't
   // have that requirement.
@@ -156,7 +78,18 @@ export function TutorChat({ courseId }: { courseId: string }) {
   // failed refetch) live here. Stored conversation data stays in Query.
   const [unconfirmedTurns, setUnconfirmedTurns] = useState<UnconfirmedTurn[]>([]);
   const localTurnId = useRef(0);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dropTarget = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadsInFlight = useRef(0);
+  const [hasTyped, setHasTyped] = useState(false);
+  const [greetingDate] = useState(() => new Date());
+  const course = useCourse(courseId);
+  const twin = useTwin(courseId);
+  const resolveConversation = useRef(createConversationResolver());
+  const epoch = useRef(0);
+  const [waitingLong, setWaitingLong] = useState(false);
+  const askingSince = useRef(0);
   const uploadAttachment = useUploadTutorAttachment();
   const deleteAttachment = useDeleteTutorAttachment();
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -167,37 +100,28 @@ export function TutorChat({ courseId }: { courseId: string }) {
     .join("")
     .toUpperCase();
 
-  // Distinguishes "the active id changed because TutorSidebar (or a
-  // bookmarked link) pointed us somewhere else" from "the active id changed
-  // because OUR OWN send/attach flow just created a conversation and set the
-  // param itself" — only the former should drop an in-flight optimistic
-  // turn; the latter is that turn's own conversation coming into existence.
+  // Our own lazy creation preserves the draft and in-flight turn.
   const selfNavigatedRef = useRef(false);
   useEffect(() => {
     if (selfNavigatedRef.current) {
       selfNavigatedRef.current = false;
       return;
     }
+    epoch.current += 1;
+    resolveConversation.current = createConversationResolver();
+    setHasTyped(false);
     setPendingTurn(null);
     setUnconfirmedTurns([]);
     setLastQuestion(null);
   }, [activeId]);
 
-  // Auto-resume the most recently active conversation once the list loads
-  // — a returning student sees their history without an extra click. Same
-  // query key TutorSidebar's own useTutorConversations call uses, so React
-  // Query dedupes the network request; this hook call is a shared cache
-  // subscription, not a second fetch, and (unlike a one-shot getQueryData
-  // read) it correctly re-renders once the data actually arrives instead
-  // of only checking once and giving up. Runs ONCE off the initial load
-  // only, and only when the URL didn't already name a conversation — a
-  // fresh "New chat" (search cleared) must not snap back to the old thread.
+  // Resume once on entry; a later explicit New chat must stay empty.
   const conversations = useTutorConversations(courseId);
   const autoResumedRef = useRef(false);
   useEffect(() => {
     if (autoResumedRef.current || activeId || conversations.isLoading) return;
     autoResumedRef.current = true;
-    const mostRecent = conversations.data?.[0];
+    const mostRecent = [...(conversations.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
     if (mostRecent) {
       selfNavigatedRef.current = true;
       void navigate({
@@ -208,23 +132,21 @@ export function TutorChat({ courseId }: { courseId: string }) {
     }
   }, [activeId, conversations.data, conversations.isLoading, navigate]);
 
-  // One mutation covers both "create a conversation if this is the first
-  // message" and "ask within it" — a single composite step, not two
-  // separate hook calls coordinated by outer state. That coordination is
-  // exactly where a stale-closure bug lives: if creation and asking were
-  // two different useMutation objects, the ask mutation's closure could
-  // still be holding the pre-creation (null) conversationId depending on
-  // timing. Threading the resolved id through this mutation's OWN return
-  // value instead of reading outer state in onSuccess avoids that.
+  async function ensureConversation() {
+    return resolveConversation.current(activeId, async () => {
+      const origin = epoch.current;
+      const conversation = await createTutorConversation(courseId);
+      if (origin !== epoch.current) throw new Error("Chat changed before creation finished. Please try again.");
+      selfNavigatedRef.current = true;
+      void navigate({ to: "/course/tutor", search: { conversation: conversation.id }, replace: true });
+      void queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
+      return conversation.id;
+    });
+  }
+
   const send = useMutation({
-    mutationFn: async ({ question, style }: { question: string; style: TutorStyle }) => {
-      let id = activeId;
-      if (!id) {
-        const convo = await createTutorConversation(courseId);
-        id = convo.id;
-        selfNavigatedRef.current = true;
-        void navigate({ to: "/course/tutor", search: { conversation: id }, replace: true });
-      }
+    mutationFn: async ({ question, style }: { question: string; style: TutorStyle; origin: number }) => {
+      const id = await ensureConversation();
       const previousMessageIds = queryClient.getQueryData<TutorConversationDetail>(
         ["tutor-conversation", id],
       )?.messages.map((message) => message.id) ?? [];
@@ -232,6 +154,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
       return { ...result, conversationId: id, previousMessageIds };
     },
     onSuccess: async (data, variables) => {
+      if (variables.origin !== epoch.current) return;
       setLastQuestion(variables.question);
       // Preserve the normal saved-response handoff. A failed/missing save
       // must not discard an answer already returned by the tutor.
@@ -261,6 +184,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
       setPendingTurn(null);
     },
     onError: (error, variables) => {
+      if (variables.origin !== epoch.current) return;
       // Keep the question and the server's retry message visible together.
       const message = apiErrorReason(error) ?? "Check your connection and try again.";
       setPendingTurn({ status: "failed", question: variables.question, style: variables.style, message });
@@ -269,50 +193,39 @@ export function TutorChat({ courseId }: { courseId: string }) {
   });
 
   function askQuestion(question: string, style: TutorStyle = "default") {
-    if (!question.trim() || send.isPending) return;
+    if (!question.trim() || send.isPending || uploadsInFlight.current > 0) return;
+    setHasTyped(true);
     // The student's turn appears immediately, before the request is even
     // sent — this is the whole point of the optimistic turn.
+    askingSince.current = Date.now();
     setPendingTurn({ status: "asking", question, style });
-    send.mutate({ question, style });
+    send.mutate({ question, style, origin: epoch.current });
   }
 
   function retryLastTurn() {
     if (!pendingTurn || send.isPending) return;
     const { question, style } = pendingTurn;
+    askingSince.current = Date.now();
     setPendingTurn({ status: "asking", question, style });
-    send.mutate({ question, style });
+    send.mutate({ question, style, origin: epoch.current });
   }
 
-  // Same "create transparently on first use" shape as askQuestion — a
-  // student attaching a file before ever typing anything still needs
-  // somewhere for it to live.
-  async function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // reset so picking the same file again still fires onChange
-    if (!file) return;
-
-    let id = activeId;
-    if (!id) {
-      try {
-        const convo = await createTutorConversation(courseId);
-        id = convo.id;
-        selfNavigatedRef.current = true;
-        void navigate({ to: "/course/tutor", search: { conversation: id }, replace: true });
-      } catch {
-        toast.error("Couldn't start a chat for that file");
-        return;
+  async function handleFiles(files: File[]) {
+    if (!files.length) return;
+    uploadsInFlight.current += 1;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const reason = validateTutorFile(file);
+        if (reason) { toast.error("Couldn't attach that file", { description: reason }); continue; }
+        try {
+          const id = await ensureConversation();
+          await uploadAttachment.mutateAsync({ conversationId: id, file });
+        } catch (error) {
+          toast.error("Couldn't attach that file", { description: apiErrorReason(error) ?? "Please try again." });
+        }
       }
-    }
-    uploadAttachment.mutate(
-      { conversationId: id, file },
-      {
-        onError: () => {
-          toast.error("Couldn't attach that file", {
-            description: "Only .txt, .md, and .pdf under 5MB are supported.",
-          });
-        },
-      }
-    );
+    } finally { uploadsInFlight.current -= 1; setUploading(uploadsInFlight.current > 0); }
   }
 
   function handleRemoveAttachment(attachmentId: string) {
@@ -333,89 +246,30 @@ export function TutorChat({ courseId }: { courseId: string }) {
     (turn) => turn.conversationId === activeId && !hasSavedTurn(messages, turn),
   );
 
-  return (
-    <StudySurface
-      // No fallback to "Ask Kala": that text sat directly above the
-      // EmptyState's own "Ask anything about this course" heading and just
-      // duplicated it. Once a real conversation exists this shows its
-      // actual title; until then the bar is quietly blank and the
-      // EmptyState alone carries the introduction.
-      bar={<SessionBar title={active.data?.title || undefined} />}
-      dock={
-        <ComposeDock
-          inputId="tour-tutor-input"
-          onAsk={askQuestion}
-          askPending={send.isPending}
-          placeholder="Ask about this course…"
-          attachmentSlot={
-            <PromptInputButton
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadAttachment.isPending}
-              aria-label="Attach a file"
-            >
-              {uploadAttachment.isPending ? (
-                <Spinner className="size-3.5" />
-              ) : (
-                <FileTextIcon size={15} />
-              )}
-            </PromptInputButton>
-          }
-          attachmentChips={
-            active.data?.attachments && active.data.attachments.length > 0
-              ? active.data.attachments.map((a) => (
-                  <AttachmentChip
-                    key={a.id}
-                    attachment={a}
-                    removing={removingId === a.id}
-                    onRemove={() => handleRemoveAttachment(a.id)}
-                  />
-                ))
-              : undefined
-          }
-        />
-      }
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".txt,.md,text/plain,text/markdown,application/pdf"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
+  const asking = pendingTurn?.status === "asking";
+  useEffect(() => {
+    const elapsed = asking ? Date.now() - askingSince.current : 0;
+    setWaitingLong(asking && elapsed >= 8000);
+    if (!asking) return;
+    const timer = window.setTimeout(() => setWaitingLong(true), Math.max(0, 8000 - elapsed));
+    return () => window.clearTimeout(timer);
+  }, [asking, activeId]);
+  const empty = !active.isLoading && !active.isError && messages.length === 0 && localTurns.length === 0 && !pendingTurn;
+  const suggestions = starterSuggestions(twin.data?.skills ?? []);
 
-      <StudyStream>
-        {activeId && active.isLoading ? (
-          <Shimmer>Loading conversation…</Shimmer>
-        ) : messages.length === 0 && localTurns.length === 0 && !pendingTurn ? (
-          // Gated on !pendingTurn too — without this, starting a brand new
-          // chat showed the EmptyState AND the just-sent question/answer at
-          // the same time (zero persisted messages yet, but a turn already
-          // in flight), stacked on top of each other. Once a turn exists,
-          // the stream should show IT, not the "nothing here yet" card.
-          <EmptyState
-            title="Ask anything about this course"
-            description="Kala answers grounded in the actual course content, and never the answer to something graded."
-          />
+  return (
+    <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
+      {active.data?.title ? <div className="shrink-0 border-b px-4 py-3 font-display text-sm font-medium sm:px-6">{active.data.title}</div> : null}
+      <div className={cn("flex min-h-0 flex-1 flex-col", empty && "justify-center overflow-y-auto py-8")}>
+      {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream className="[&_button]:rounded-md [&_.rounded-3xl]:rounded-md">
+        {activeId && active.isLoading ? <Shimmer>Loading conversation…</Shimmer> : null}
+        {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
+        {messages.map((m) => m.role === "user" ? (
+          <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />
         ) : (
-          messages.map((m) =>
-            m.role === "user" ? (
-              <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />
-            ) : (
-              <AssistantBlock
-                key={m.id}
-                text={m.content}
-                id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
-                // Only the newest reply types itself out. Replaying the
-                // reveal on every message would make opening an existing
-                // thread look like the whole conversation is being
-                // regenerated.
-                animate={m.id === lastMessage?.id}
-                animationKey={m.id === lastMessage?.id ? `${courseId}:tutor:${m.id}` : undefined}
-              />
-            )
-          )
-        )}
+          <AssistantBlock key={m.id} text={m.content} id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
+            animate={m.id === lastMessage?.id} animationKey={m.id === lastMessage?.id ? `${courseId}:tutor:${m.id}` : undefined} />
+        ))}
 
         {localTurns.map((turn, index) => (
           <div key={turn.id} className="mr-auto w-full max-w-full">
@@ -442,7 +296,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
               <AssistantBlock
                 id="tour-tutor-thinking"
                 pending
-                pendingLabel="Kala is thinking…"
+                pendingLabel={waitingLong ? "Still working on it" : "Thinking"}
               />
             ) : (
               <div className="mr-auto flex w-full max-w-full items-center gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -462,11 +316,23 @@ export function TutorChat({ courseId }: { courseId: string }) {
         ) : null}
 
         {!send.isPending && lastQuestion ? (
-          <div className="mr-auto max-w-[88%]">
+          <div className="mr-auto w-full">
             <FollowUpChips onPick={(style) => askQuestion(lastQuestion, style)} />
           </div>
         ) : null}
-      </StudyStream>
-    </StudySurface>
+      </StudyStream>}
+      <div className={cn("shrink-0 px-4 pb-4 pt-3 sm:px-6", !empty && "border-t bg-background")}>
+        <div className="mx-auto w-full max-w-[800px]">
+          <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} dragging={dragging} onDragChange={setDragging}
+            attachments={active.data?.attachments ?? []} onFiles={(files) => void handleFiles(files)}
+            onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
+            onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />
+          {empty && suggestions.length ? <div className="mt-4 flex flex-wrap justify-center gap-2">{suggestions.map((suggestion) => <Suggestion key={suggestion} suggestion={suggestion} className="h-auto max-w-full whitespace-normal rounded-md px-3 py-2 text-left text-xs" disabled={uploading || send.isPending} onClick={(question) => { setHasTyped(true); askQuestion(question); }} />)}</div> : null}
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">Course-grounded help · De-identified before model calls</p>
+        </div>
+      </div>
+      </div>
+      {dragging ? <div aria-live="polite" className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/95 p-6 text-center"><p className="font-display text-lg font-medium">Drop files to attach</p></div> : null}
+    </div>
   );
 }
