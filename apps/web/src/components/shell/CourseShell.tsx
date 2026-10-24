@@ -42,7 +42,7 @@ import { PanelLeft } from "lucide-react";
 import { useTwin } from "@/features/twin";
 import { TutorHistoryResizeHandle, useTutorHistoryWidth } from "@/features/tutor";
 import { GamificationSummary } from "@/features/gamification";
-import { useDiagnosticStatus } from "@/features/diagnostic";
+import { isDiagnosticDue, useDiagnosticStatus } from "@/features/diagnostic";
 import { TourStepRunner } from "@/components/shell/StudentTour";
 import {
   TOUR_STEPS,
@@ -152,7 +152,7 @@ export function CourseShell({
   const [tutorHistoryOpen, setTutorHistoryOpen] = useState(false);
   const tutorHistory = useTutorHistoryWidth(isTutorRoute);
   const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
-  const diagnosticDue = diagnosticStatus?.due ?? false;
+  const diagnosticDue = isDiagnosticDue(diagnosticStatus);
 
   // One ref per rail icon; the active route's icon animates, the rest are
   // stopped. Passing a ref is what disables each icon's own hover trigger.

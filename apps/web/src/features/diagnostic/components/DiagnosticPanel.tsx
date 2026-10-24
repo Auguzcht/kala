@@ -18,7 +18,7 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 // things follow from that, both deliberate departures from how
 // practice/flashcards work:
 //   1. This screen only ever shows skills THIS student has never given
-//      diagnostic evidence for (see routers/diagnostic.py's due-check) —
+//      learning evidence for (see routers/diagnostic.py's due-check) —
 //      it is not an always-open tab, it surfaces only when there is
 //      something new to baseline.
 //   2. Answers are never revealed per-question while the student is
@@ -29,7 +29,7 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 //      progression and exit actions without a per-question answer key.
 //
 export function DiagnosticPanel({ courseId }: { courseId: string }) {
-  const { data, isLoading, isError } = useDiagnostic(courseId);
+  const { data, isLoading, isError, refetch } = useDiagnostic(courseId);
   const bank = useBankStatus(courseId);
   const submit = useSubmitDiagnostic(courseId);
   const [selections, setSelections] = useState<Record<string, string>>({});
@@ -71,23 +71,24 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
 
   if (isLoading)
     return <LoadingPanel label="Checking your baseline…" lines={4} />;
-  if (isError)
+  if (isError && !data?.questions.length)
     return (
       <EmptyState
         title="We could not load the diagnostic"
         description="Check your connection and try again."
-        action={<Button variant="outline">Retry</Button>}
+        action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
       />
     );
   if (data?.status === "generating" && data.questions.length === 0)
     return (
       <LoadingPanel
-        label={`Preparing your baseline. ${data.readyCount} question${data.readyCount === 1 ? " is" : "s are"} ready.`}
+        label={`Waiting for baseline questions. ${data.readyCount} question${data.readyCount === 1 ? " is" : "s are"} ready.`}
         lines={4}
       />
     );
   if (
     data?.status === "failed" &&
+    data.questions.length === 0 &&
     data.failedSkillIds.length > 0 &&
     bank.isLoading
   )
@@ -99,7 +100,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         description="These skills don’t have course material yet."
       />
     );
-  if (data?.status === "failed")
+  if (data?.status === "failed" && data.questions.length === 0)
     return (
       <EmptyState
         title="Your baseline is not ready yet"
@@ -107,7 +108,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
       />
     );
   // Nothing due is the common, GOOD state here, not a missing-content
-  // error: either every mapped skill already has this student's diagnostic
+  // error: either every candidate skill already has this student's learning
   // evidence, or the instructor hasn't approved any skills yet. Either
   // way there is nothing to baseline right now, so this reads as caught up
   // rather than empty. BUT once a sitting has been submitted, this guard
@@ -118,6 +119,13 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   // (invalidation, window refocus) resolves to empty here — the reveal is
   // the thing on screen, so it wins over the empty state until the panel
   // is visited fresh again.
+  if (data?.questions.length === 0 && (data.waitingForMaterialCount ?? 0) > 0)
+    return (
+      <EmptyState
+        title="Waiting for course material"
+        description={`${data.waitingForMaterialCount} ${data.waitingForMaterialCount === 1 ? "topic is" : "topics are"} waiting for course material. Your course team can make these topics available after adding material.`}
+      />
+    );
   if (!data || data.questions.length === 0)
     return (
       <EmptyState
@@ -153,7 +161,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
           {data.pendingSkillIds.length > 0 ? (
             <p role="status" className="flex items-center gap-2 border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
               <Spinner aria-hidden />
-              <span>Preparing questions for {data.pendingSkillIds.length} more {data.pendingSkillIds.length === 1 ? "topic" : "topics"}. Ready questions are below.</span>
+              <span>Waiting for questions for {data.pendingSkillIds.length} more {data.pendingSkillIds.length === 1 ? "topic" : "topics"}. Ready questions are below.</span>
             </p>
           ) : null}
           {data.questions.map((q, qi) => (

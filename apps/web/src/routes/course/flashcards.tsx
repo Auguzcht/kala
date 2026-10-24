@@ -16,7 +16,7 @@ export const Route = createFileRoute("/course/flashcards")({
 function FlashcardsPage() {
   const navigate = useNavigate();
   const courseId = useSession()?.courseId ?? "";
-  const { data: twin, isLoading } = useTwin(courseId);
+  const { data: twin, isLoading, isError, refetch } = useTwin(courseId);
   // limit=0 returns the course-wide review counts without fetching cards.
   const { data: peek } = useFlashcardDeck(courseId, 0);
   const [session, setSession] = useState<{ skillId?: string } | null>(null);
@@ -40,6 +40,8 @@ function FlashcardsPage() {
       />
       <TopicLanding
         isLoading={isLoading}
+        isError={isError}
+        onRetry={() => { void refetch(); }}
         skills={twin?.skills ?? []}
         onChoose={(skillId) => navigate({ to: "/course/skill/$skillId", params: { skillId }, search: { tab: "study" } })}
         caption="spaced recall card"

@@ -113,7 +113,8 @@ function ActivityChart({ evidence }: { evidence: Twin["evidence"] }) {
 function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(skills.length / PAGE_SIZE));
-  const slice = skills.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const safePage = Math.min(page, pages - 1);
+  const slice = skills.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
     <div className="space-y-1">
@@ -145,15 +146,19 @@ function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className={page === 0 ? "pointer-events-none opacity-40" : undefined}
+                href="#"
+                aria-disabled={safePage === 0}
+                tabIndex={safePage === 0 ? -1 : undefined}
+                onClick={(event) => { event.preventDefault(); setPage(Math.max(0, safePage - 1)); }}
+                className={safePage === 0 ? "pointer-events-none opacity-40" : undefined}
               />
             </PaginationItem>
             {Array.from({ length: pages }).map((_, i) => (
               <PaginationItem key={i}>
                 <PaginationLink
-                  isActive={i === page}
-                  onClick={() => setPage(i)}
+                  href="#"
+                  isActive={i === safePage}
+                  onClick={(event) => { event.preventDefault(); setPage(i); }}
                 >
                   {i + 1}
                 </PaginationLink>
@@ -161,8 +166,11 @@ function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
             ))}
             <PaginationItem>
               <PaginationNext
-                onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
-                className={page >= pages - 1 ? "pointer-events-none opacity-40" : undefined}
+                href="#"
+                aria-disabled={safePage >= pages - 1}
+                tabIndex={safePage >= pages - 1 ? -1 : undefined}
+                onClick={(event) => { event.preventDefault(); setPage(Math.min(pages - 1, safePage + 1)); }}
+                className={safePage >= pages - 1 ? "pointer-events-none opacity-40" : undefined}
               />
             </PaginationItem>
           </PaginationContent>
@@ -339,7 +347,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => navigate({ to: "/course/practice" })}
+                  onClick={() => navigate({ to: "/course/skill/$skillId", params: { skillId: focus.skillId }, search: { tab: "test" } })}
                 >
                   Practice this <ArrowRightIcon size={14} />
                 </Button>
@@ -457,6 +465,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Evidence ledger</CardTitle>
+          <p className="text-xs text-muted-foreground">Last 20 events</p>
         </CardHeader>
         <CardContent>
           <EvidenceLedger events={twin.evidence} />

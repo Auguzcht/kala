@@ -85,3 +85,53 @@ Evidence added: proposal, owned scope, command/dependency list, PID/port yield a
 Anything not done, and why: H05/H07/H02 held until named spec commit; final verification held until integrated rebase and 5173 release; no hosted writes, deployment, push, migration or identity repair
 Risks or questions for the planner: please commit the exact proposed U contract separately from G's 009–011 and release its SHA; preserve optional legacy fields and coordinate any new question waiting fields before UI implementation
 Secrets printed: none (confirmed)
+
+## Final implementation and verification after spec release
+
+The coordinator released main `3128e2c`, with G's DIAG-REQ-009–011 in separate commit `1af50f1` and U's DIAG-REQ-012/013 plus the cross-surface amendment in `3128e2c`. U rebased onto that exact revision before restoring the held H05/H07 patch or implementing H02 compatibility. The earlier holds above are historical and are now resolved. U never edited the Diagnostic, Tutor, AI or DESIGN specs. G's backend availability implementation and I's identity convergence remain separate integration lanes; this branch supplies the compatible frontend.
+
+Implemented:
+
+- H05: Diagnostic Retry refetches the existing query; pointer and keyboard recovery tested, without submission.
+- H06: roster, proposal and Twin skill pagers have real hrefs, keyboard activation, explicit aria-disabled/tab-order endpoints, unchanged 40px controls and prevent hash navigation. Navigation uses the clamped page after data shrink.
+- H07: Skills/retained Lessons/Flashcards pickers distinguish a failed fetch with Retry from an empty successful response. Learner-facing empty copy replaces ingest/proposal jargon. Existing course-wide deck error/Retry remains and its no-material copy is learner-facing.
+- H08: Focus area's Practice this retains the shown skill ID in the canonical Test browse route; no start parameter.
+- H09: not-found/root-error links use /course for students and /class for staff; no-session fallback uses the approved Blackboard session-ended instruction without a dead link. AppProviders is above the router, so the root error fallback retains session access without an auth architecture change.
+- H10/H11: root scaffold replaced by the approved Blackboard entry instruction; expiry gives the exact approved instruction and no Re-launch button or standalone login copy.
+- H12 copy: Twin ledger labels Last 20 events; learner record labels Last 25 events and earlier rows omitted; learner standing identifies up-to-200 recent evidence and Based on recent activity; cohort accuracy labels recent graded events and explains its 2,000-course-event window in the existing tooltip. No arithmetic/query/history contract changed.
+- Legacy: unscoped Practice replaces itself with Skills; existing skillId/setId links still replace into Test browse, with no automatic sitting. Lessons and the course-wide Flashcards deck remain. Stale Tutor SessionBar commentary corrected.
+- H02 copy: Zod accepts optional actionable/material counts on status and optional material count on questions. Shared isDiagnosticDue applies supplied count precedence in both rail/workspace, including explicit zero over due=true. Legacy responses keep the boolean and count-free copy. Positive material count shows quiet singular/plural copy without an action; omitted/zero is hidden. Available question rows win, empty preparation/failure keeps its status, material-only waiting is distinct, and legacy empty remains caught up. Waiting text does not claim a worker is actively generating for exhausted pools.
+
+| Command / evidence | Result |
+| --- | --- |
+| `node apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs`, with the bundled browser env variables documented above | **110 assertions passed**, /tmp/kala-ui-closeout-browser.log |
+| Existing Tutor/Diagnostic browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-retained | **219 assertions passed**, /tmp/kala-ui-closeout-retained.log |
+| Existing instructor feedback browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-instructor | **63 assertions passed**, /tmp/kala-ui-closeout-instructor.log |
+| Existing Twin presentation browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-twin | **148 assertions passed**, /tmp/kala-ui-closeout-twin.log |
+| Frontend Node command above | **21 passed**, /tmp/kala-ui-closeout-unit.log |
+| Study renderer command above, rerun after rebase | **4 passed**, /tmp/kala-ui-closeout-study.log; existing experimental VM/renderer notices |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; /tmp/kala-ui-closeout-lint.log |
+| `pnpm --filter web typecheck` | Passed, existing route-generator circular warning; /tmp/kala-ui-closeout-typecheck.log |
+| `pnpm --filter web build` | Passed, existing chunk-size warning; /tmp/kala-ui-closeout-build.log |
+| `git diff --check` and new browser script syntax check | Passed |
+
+New synthetic captures are /tmp/kala-frontend-closeout/{diagnostic-error,skills-error,lessons-error,flashcards-error,not-found-student,not-found-instructor,not-found-no-session,root-error-student,root-error-instructor,public-root,session-expired}-{375,1440}.png. The ten requested Diagnostic error, Skills error, instructor not-found, root and expiry captures at both sizes were visually inspected. All contexts mock session/API and block non-localhost traffic, including mutation attempts. No live ask, submission, upload, teacher decision or hosted data access occurred.
+
+The new test's initial synthetic session response omitted parentheses around an arrow-function object expression; this caused a fixture-only syntax error and was corrected. Another initial fixture selector used the module name where Twin groups by Bloom level; it was corrected to the real group. Final passing runs supersede these harness failures. No application change was made to satisfy either incorrect fixture.
+
+Port 5173 was restarted only after the coordinator's release. Current Vite PID is **34528**, started from this worktree with `pnpm --filter web exec vite --port 5173 --strictPort` (exec session 77582), output /tmp/kala-ui-closeout-vite.log. Keep it running for Fred unless the coordinator needs it for final combined checks. No second listener or alternate port was used.
+
+No feature-spec status is changed by U: coordinator can mark DIAG-REQ-012/013 implemented after reviewing this evidence. Full-history paging stays deferred. G's optional-field backend and I's code convergence still need final combined integration; existing split dev-hosted Alfred/Hanna data is explicitly deferred by APPROVAL-06 and was not repaired. FG-1 provider config, FG-3 migration, FG-4 deploy and FG-5 real click-through remain Fred/coordinator gates; these synthetic UI checks do not close them.
+
+AUDIT REPORT
+Task / brief ID: APPROVAL-06 rev 2 Lane U / H05–H11, H12 copy, legacy routes and H02 compatible copy
+Branch and worktree: codex/ui-closeout; /Users/fred/.codex/worktrees/2e93/kala; approved codex/ui-overhaul remains e1b0250
+Base revision: integrated/spec release 3128e2c, rebased before held H05/H07/H02 implementation
+Files changed: frontend shell/shared picker; Diagnostic schema/public surface/helper/panel and dedicated tests; selected student routes; instructor pager/count-copy components; TwinBody; FlashcardDeck copy; this dedicated evidence file. Exact manifest is the final commit diff.
+REQ / WI IDs touched: DIAG-REQ-012/013 and APPROVAL-06 cross-surface amendment; DIAG-REQ-009–011 compatibility; existing TWIN-REQ-002/003 and INSTR presentation compatibility; WI-22
+Commands run and results (tests, lint, typecheck, build): 110 close-out + 219 retained + 148 Twin + 63 instructor browser assertions; 21 frontend + 4 Study tests; lint/typecheck/build/diff check passed with existing warnings
+Spec changes made: none by U; exact proposed text was committed by the coordinator at 3128e2c before the held implementation resumed
+Evidence added: final implementation mapping, synthetic browser suite/captures, exact logs and port handoff
+Anything not done, and why: no merge/push/deploy, migration, hosted writes or identity repair; backend I/G and real acceptance remain coordinator/Fred work
+Risks or questions for the planner: integrate I then G then this lane with full combined checks; retain optional legacy compatibility; mark spec statuses after review; H12 remains bounded history, not full-history paging
+Secrets printed: none (confirmed)

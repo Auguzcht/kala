@@ -24,6 +24,7 @@ export const diagnosticSchema = z.object({
   pendingSkillIds: z.array(z.string()),
   failedSkillIds: z.array(z.string()),
   skippedSkillCount: z.number().int().nonnegative(),
+  waitingForMaterialCount: z.number().int().nonnegative().optional(),
 });
 
 // The due-check. No questions here, just whether anything needs a
@@ -32,7 +33,8 @@ export const diagnosticSchema = z.object({
 export const diagnosticStatusSchema = z.object({
   courseId: z.string(),
   due: z.boolean(),
-  dueSkillCount: z.number().int().nonnegative(),
+  dueSkillCount: z.number().int().nonnegative().optional(),
+  waitingForMaterialCount: z.number().int().nonnegative().optional(),
 });
 
 // itemId + choiceId only. The backend never trusts the client to say
