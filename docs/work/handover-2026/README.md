@@ -19,18 +19,18 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 
 ## Approved lane state — 2026-10-24
 
-[APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance and integration gates. All four discovery audits are accepted. C, D, S and F are merged locally in that order; nothing is pushed or deployed. T remains unmerged pending Fred's explicit approval of its refreshed report.
+[APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance. [APPROVAL-03](approval-03.md) accepts T and authorizes local integration checks, followed by a stop without pushing. All four discovery audits are accepted. C, D, S, F and T are merged locally in that order; nothing is pushed or deployed.
 
 | Lane | Scope / feature requirements | State / gate |
 | --- | --- | --- |
 | S | [LMS ingest spec](../../features/lms-ingest/README.md), INGEST-REQ-001; upload comment correction only | Approved by APPROVAL-02; merged locally as 5c9011e. Live checks remain outstanding. |
-| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Complete at b605a3b with 400 API and 14 frontend tests passing; web checks pass. Awaiting Fred's refreshed-report approval before merge. Sanitizer coverage remains partial. |
+| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Approved by APPROVAL-03 at b605a3b; merged locally as 9c2e667. Integrated API/frontend/web checks pass; live verification remains outstanding. Sanitizer coverage remains partial. |
 | F | [Study](../../features/study/README.md), STUDY-REQ-001/002/003/004/005 | APPROVAL-02 conditions satisfied at 7041bc7; merged locally as f316f48. No SQL change. External renderer limitation documented. |
 | C | [Secrets catalogue](../../engineering/secrets.md) and placeholder examples | Approved by APPROVAL-02; merged locally as af6b93c. Eleven tooling tests and inventory check pass on main. |
 | D | Framework, accepted archive moves, five durable reports, recap knowledge | Approved by APPROVAL-02; merged locally as 51c2de5. Future full specs/runbooks remain incomplete. |
 | DB | [Database workflow](../../engineering/database.md), numeric migrations byte for byte, existing generated types path | Pending Fred's hosted Postgres major. Rebase after Lane D merge, then update post-archive references. Two clean db:verify runs required. Drift awaits Fred's schema-only dump. |
 
-After Fred approves T and it merges, the coordinator adds shared committed test isolation and the planned frontend-runner work item, then runs the combined API/worker/web checks on main. Push requires all checks to pass and must be fast-forward. Deployment additionally requires Fred's confirmation of the integrated report; Fred then performs the student/instructor runs in [TESTING.md](../../TESTING.md) and approved tutor/Study/auth checks. No lane merges itself. Lane DB has a separate gate and does not deploy the application.
+APPROVAL-03 authorizes the shared committed test isolation, planned frontend-runner work item and combined API/worker/frontend/web checks on local main. Agents must stop after reporting the final SHA: Fred deploys the backend first, then pushes. Fred performs the student/instructor runs in [TESTING.md](../../TESTING.md) and approved tutor/Study/auth checks. No lane merges itself. Lane DB has a separate gate and does not deploy the application.
 
 ## Calendar
 
@@ -70,6 +70,8 @@ Session records for Weeks 1 to 12, Checkpoint 1 and 1.1 records, `docs/masterpla
 - [WI-18: Decide API Gateway access logging with ITO](work-items/WI-18-api-gateway-access-logs.md) — `planned`.
 - [WI-19: Extend de-identification coverage deliberately](work-items/WI-19-sanitizer-coverage.md) — `planned`.
 
+Additional integration follow-up: [WI-20: Adopt a standard frontend test runner](work-items/WI-20-frontend-test-runner.md) — `planned`.
+
 Grade passback (AGS), admin and researcher features remain planned in the registry. The presence of legacy REST grade routes does not mean AGS is implemented. Full specs are WI-08, full runbooks WI-06/WI-07, remaining ADR seeds WI-09 and consolidated backlog WI-10. No missing full spec or cross-lane catalogue is silently filled by this framework lane.
 
 ## Durable evidence
@@ -84,10 +86,10 @@ Grade passback (AGS), admin and researcher features remain planned in the regist
 
 The accepted four audits are historical evidence at `e9de105`. Original audit wording about pending implementation approval is preserved as history and superseded by APPROVAL-01. Missing external scratch outputs are explicitly unpromoted. Live Blackboard, tutor recovery and deployed behavior remain unverified in this lane.
 
-## APPROVAL-02 evidence and remaining integration gate
+## APPROVAL-02 evidence and subsequent integration
 
 - [Coordinator merge and gate report](evidence/approval-02-coordinator.md).
-- [Full refreshed Lane T audit](evidence/implementation-tutor-approval-02.md), unmerged branch b605a3b, submitted for Fred's explicit approval.
+- [Full refreshed Lane T audit](evidence/implementation-tutor-approval-02.md), accepted at b605a3b by APPROVAL-03 and merged locally as 9c2e667. The lane submission retains its original pending-approval wording as history.
 - [Lane F conditional-approval evidence](evidence/implementation-study-approval-02.md).
 
-The shared API conftest replacement, combined main API/worker/web verification, and standard frontend-runner planned work item are assigned to the post-T integration commit. They have not been implemented or claimed complete at this gate. No push or deployment is authorized by a branch-only passing report.
+The earlier APPROVAL-02 report is a historical snapshot before T acceptance. Shared service pytest isolation is now in services/conftest.py; the obsolete Study runner is removed and the Tutor scratch runner is no longer used for current verification. [WI-20](work-items/WI-20-frontend-test-runner.md) records standard frontend-runner adoption as planned, without adding dependencies. [APPROVAL-03 integration evidence](evidence/approval-03-integration.md) records current merged-main checks and the documentation-only infra/terraform path exception. No push or deployment has been performed.
