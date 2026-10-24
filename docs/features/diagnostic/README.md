@@ -99,15 +99,15 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 
 - Rule: A baseline candidate is an approved skill with no learner evidence of any kind in the validated institution/course and at least one question servable now. Recorded Study/Practice activity, including item reviews, excludes the skill. No-material skills are not due. Availability reads never write evidence, grades, reviews or exposures.
 - Acceptance: Mixed ready, no-material, preparing, exhausted and already-practiced skills produce only actionable candidates; empty and completed courses are not due. Tenant/course/learner boundaries are retained and no evidence is fabricated.
-- Status: planned
-- Verified by: Lane G's focused availability tests, pending implementation.
+- Status: implemented
+- Verified by: services/api/tests/test_lane_g_diagnostic_availability.py; evidence/diagnostic-availability-lane-g.md (local PostgREST and offline tests).
 
 ### DIAG-REQ-010: Filter by availability before the sitting limit
 
 - Rule: Status and question selection use the same eligibility and availability rules. Filter before the ten-question limit, preserving deterministic skill order and one question per skill. An approved, live, untested bank MCQ is sufficient; do not require five. Exhausted pools await replenishment rather than imply failure. Preserve deterministic legacy selection and existing grading/evidence semantics.
 - Acceptance: With unchanged source data the sitting has min(dueSkillCount, 10) questions, including when unavailable skills precede available skills. Cover more than ten candidates, one-MCQ availability and exhaustion without recording a false generation failure.
-- Status: planned
-- Verified by: Lane G's shared-selection and status parity tests, pending implementation.
+- Status: implemented
+- Verified by: services/api/tests/test_lane_g_diagnostic_availability.py; combined main API tests and local PostgREST parity checks.
 
 ### DIAG-REQ-011: Explain material and preparation waiting truthfully
 
@@ -115,8 +115,8 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 - Rule: Question responses retain ready/generating/failed and existing fields, adding optional waitingForMaterialCount. pendingSkillIds means awaiting preparation or replenishment, not proof that a worker is active. failedSkillIds contains only actual recorded preparation failures; skippedSkillCount equals its length. No-material skills enter neither list. readyCount equals questions.length.
 - Rule: Available questions take precedence (ready). With no questions, pending skills produce generating; otherwise recorded failures produce failed. Material-only waiting produces ready with empty questions and a positive waitingForMaterialCount; empty/all-evidenced courses produce ready, empty questions and zero. Clients missing optional fields keep legacy handling.
 - Acceptance: Mixed availability remains playable, exhaustion is pending, no-material is distinct from failure, and empty/completed courses remain compatible. Status and question material counts agree for unchanged data. No migration, grading or evidence-semantic change.
-- Status: planned
-- Verified by: Lane G's response-contract tests, pending implementation.
+- Status: implemented
+- Verified by: services/api/tests/test_lane_g_diagnostic_availability.py; apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs.
 
 ## Diagnostic recovery and presentation (Lane U, APPROVAL-06)
 
@@ -124,15 +124,15 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 
 - Rule: Diagnostic's load-error Retry refetches the existing question query without submitting answers or reloading the document. Skills and retained Lessons/Flashcards pickers distinguish a failed skills fetch from an empty successful response, show a connection error with a working Retry, and reserve the empty state for a genuinely empty course. Empty copy addresses learners without ingest/proposal implementation terminology. The course-wide Flashcards deck remains available and exposes its existing error/retry states.
 - Acceptance: At 375px and 1440px, a rejected request presents an error rather than No skills mapped yet; pointer and keyboard Retry can recover after the API becomes available. Empty data remains a separate state. Submission/results, course-wide review and grading remain unchanged.
-- Status: planned
-- Verified by: Lane U's uniquely named frontend-closeout browser suite and existing suites; evidence/frontend-closeout.md.
+- Status: implemented
+- Verified by: apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs; local evidence in docs/work/handover-2026/evidence/frontend-closeout.md.
 
 ### DIAG-REQ-013: Present optional actionable and waiting counts compatibly
 
 - Rule: The frontend status schema accepts optional dueSkillCount and waitingForMaterialCount. When dueSkillCount is present, the Diagnostic badge and workspace action follow that actionable count (including zero), taking precedence over the legacy due boolean. When absent, preserve the legacy due signal and use a count-free action label. Show a quiet singular/plural “N topics are waiting for course material” line only for a positive waitingForMaterialCount; it has no action button and is absent when the field is omitted. For question responses, render available questions first; when empty, preserve preparing/failure status, then show material waiting for a positive optional waitingForMaterialCount, otherwise caught up. Missing fields retain legacy handling. Never synthesize evidence or make generation calls to clear a badge.
 - Acceptance: Omitted legacy fields, actionable zero with legacy due=true, positive actionable count and material-only waiting all render correctly; zero/absent waiting shows no line. Workspace and rail agree on whether a Diagnostic action is due.
-- Status: planned
-- Verified by: Lane U's synthetic legacy/new response fixtures, schema checks and existing suites; evidence/frontend-closeout.md.
+- Status: implemented
+- Verified by: apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs, including legacy/new response and schema fixtures; live acceptance remains FG-5.
 
 ### APPROVAL-06 cross-surface recovery and navigation
 
@@ -157,6 +157,8 @@ No schema, RLS or persistence change. Existing server authorization and institut
 No new model calls. Diagnostic generation and the provider path are outside this presentation scope.
 
 ## Edge cases and known limits
+
+Availability reads page histories and eligible pools in ordered batches, but do not share a transactional snapshot across concurrent writes. Status performs no generation/write; query cost still grows with history and bank size, and there is no new whole-request deadline/cache. REST caps below the requested 500-row page size remain unverified. Optional counters are validated by frontend Zod; these existing untyped endpoint response models do not yet describe the fields in OpenAPI. See [Lane G evidence](../../work/handover-2026/evidence/diagnostic-availability-lane-g.md).
 
 Preserve partial preparation, pending topics, no-material, failed generation, empty/caught-up states and the submitted-result guard against query invalidation. Preserve keyboard focus, visible focus indicators and reduced motion. The separate Study flip-card fix replaces hidden-face focus exposure with inert faces and deliberate focus handling; it must preserve rating and schedule behavior.
 
@@ -193,3 +195,4 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 
 | 2026-10-25 | Specify actionable eligibility, availability-first selection and truthful waiting contracts before Lane G implementation | APPROVAL-06 section 4; G proposal and coordinator contract clarification | DIAG-REQ-009–011 |
 | 2026-10-25 | Define working Retry, optional count compatibility, truthful empty responses and the approved cross-surface recovery/navigation/window copy before close-out implementation | APPROVAL-06 section 5; Lane U proposal plus DIAG-REQ-011 response contract | DIAG-REQ-012, DIAG-REQ-013 |
+| 2026-10-25 | Mark availability and frontend recovery locally implemented after lane audits and combined-main checks; preserve explicit live and scan-cost limits | APPROVAL-06; G9bc8479 and Udb2bb754 | DIAG-REQ-009–013 |
