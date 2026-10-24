@@ -12,6 +12,8 @@ tests:
   - services/api/tests/test_lti_launch.py
   - services/api/tests/test_course_sync_cache.py
   - services/api/tests/test_uuid_path_params.py
+  - services/api/tests/test_identity_convergence_lane_i.py
+  - services/api/tests/identity_lane_i_postgrest.py
 ---
 
 # LTI authentication and course entry
@@ -40,7 +42,7 @@ Kala uses an LMS launch to establish the learner's institution, identity, course
 - Rule: institution resolves from issuer plus deployment ID; admin precedes instructor, which precedes learner, with student as the default. Resolve identity by institution-scoped exact alias or LMS identifier; record aliases on every successful resolution. Blackboard roster UUID matches the validated launch subject (AUTH-REQ-006). Email may be absent and is profile data, never sufficient identity evidence.
 - Acceptance: a rostered account launching with its matching LTI sub retains the same Kala user and evidence; distinct identifiers remain distinct even when email matches. Course enrollment is upserted from validated role.
 - Status: implemented
-- Verified by: `test_launch_records_the_alias_on_every_resolution`, `test_launch_without_email_still_creates_a_user`, `test_launch_with_no_matching_email_creates_a_user`; static `claims.py::map_role` and `db/supabase.py::resolve_user`.
+- Verified by: `test_lti_launch.py::test_launch_resolves_to_the_rostered_account_by_exact_subject`, `test_launch_records_the_alias_on_every_resolution`, `test_launch_without_email_still_creates_a_user`, `test_launch_with_no_matching_email_creates_a_user`; static `claims.py::map_role` and `db/supabase.py::resolve_user`.
 
 ### AUTH-REQ-003: Reuse course resolution and reconcile roster conservatively
 - Rule: map context label to Blackboard course reference once, then use the local external-ID cache. Staff launch roster reconciliation has a 600-second success-only cooldown. Students do not trigger roster pulls; failed/empty pulls do not delete enrollments. Only complete, error-free, nonempty pulls with every member resolved remove stale enrollments, including instructors, without deleting user/evidence rows. Any page, identity-resolution or enrollment-write failure skips removals with counts-only warnings (AUTH-REQ-006).
@@ -65,8 +67,8 @@ Kala uses an LMS launch to establish the learner's institution, identity, course
 - Reconciliation: retain removals, including a genuinely removed instructor, only after every roster page was fetched successfully and the nonempty roster was fully resolved and enrolled. A partial, malformed, empty or failed pull, or any per-member failure, removes nobody. Warnings contain counts only, never identifiers, URLs, names, email addresses or exception payloads. A missing roster UUID stops the sync without substituting REST ID, username or email.
 - Historical data: a pre-fix REST-ID user and its history remain intact; a complete successful sync enrolls the UUID/launch user and removes the legacy user's stale enrollment. No evidence is moved or histories merged. H01(b) repair remains planned for ITO; the known legacy 40-event history remains on its old user and is absent from the canonical roster view until that repair.
 - Acceptance: student-first then instructor sync; instructor-first then student launch; repeated sync; returning launch; different people sharing names/email; cross-institution isolation; UUID/sub equality; legacy REST-ID enrollment removal with unchanged history; failed/partial/malformed/empty pulls removing nobody; member-write failure removing nobody; genuinely removed instructor losing enrollment after a complete successful sync; missing UUID stopping sync.
-- Status: planned implementation under APPROVAL-06 rev 2, Lane I and Fred's confirmed reconciliation amendment (2026-10-25).
-- Verified by: dedicated `services/api/tests/test_identity_convergence_lane_i.py` (to be implemented); investigation references below. Real Blackboard acceptance remains a Fred gate.
+- Status: done-awaiting-confirmation; implementation and local checks complete under APPROVAL-06 rev 2, Lane I and Fred's confirmed reconciliation amendment (2026-10-25). Live Blackboard acceptance remains FG-5.
+- Verified by: dedicated `services/api/tests/test_identity_convergence_lane_i.py` (31 scenarios), updated launch regressions, and the disposable real Postgres/PostgREST check `services/api/tests/identity_lane_i_postgrest.py`; identity evidence below. Real Blackboard acceptance remains a Fred gate.
 
 ## API contract
 
@@ -116,9 +118,30 @@ Lane I preserves Lane P's AUTH-REQ-001–005 baseline from commit `2062784`, wit
 
 [Anthology's user-ID documentation](https://docs.blackboard.com/docs/blackboard/lti/1.3/lti-subsystems/ags/ags-grades) identifies REST user `uuid`, launch `sub` and NRPS `user_id` as the matching identity. Current source before this change projects membership `userId` and expanded REST `user.id`, omitting `user.uuid`; `resolve_user` discovers aliases by email; roster reconciliation deletes absent students even when a member failed. These are source findings, not new hosted observations. No real identifier values were collected or reported. The unused `lti_launches` table and diagnostic alias sources are not used as launch provenance.
 
+## Identity verification — 2026-10-25
+
+Implementation: `cbc9a0676f805d1b562535bce7351fd3a5ccef5e`, branch `codex/identity-convergence`, worktree `/Users/fred/.codex/worktrees/c191/kala`, integrated base `5afe69518bf51c728a76753527f1682d64041d71`. Spec-first commit: `a618de3`. REQ/WI lineage: AUTH-REQ-002/003/006, handover WI-08, APPROVAL-06 H01(a)/(b). This identity entry supplements Lane P's retained evidence above; it does not replace or upgrade that earlier verification.
+
+| Check | Result / scope |
+| --- | --- |
+| Focused API tests | `cd services/api && uv run pytest -q tests/test_identity_convergence_lane_i.py tests/test_lti_launch.py tests/test_blackboard_content.py tests/test_course_sync_cache.py`: **103 passed**, 26 dependency deprecation warnings. The dedicated file contributes 31 scenarios. |
+| Full API suite | `cd services/api && uv run pytest -q`: **579 passed**, 30 dependency deprecation warnings, 27.94s, on implementation `cbc9a06`. |
+| Worker suite | `cd services/worker && uv run pytest -q`: **117 passed**, 0.62s. No worker source changes. |
+| New-test lint | `cd services/api && uv run ruff check tests/test_identity_convergence_lane_i.py tests/identity_lane_i_postgrest.py`: passed. |
+| Existing-file lint comparison | Whole-file Ruff retains **17 findings**, matching integrated base `5afe695` by diagnostic code/message; **zero new findings**. Whole-file Ruff is not globally green. Unrelated findings remain outside this lane's scope. |
+| Real persistence check | `cd services/api && PYTHONPATH=. uv run python tests/identity_lane_i_postgrest.py`: passed against disposable local Supabase Postgres **17.6** and PostgREST **14.15**. Exercises the real resolver/select/upsert/delete queries, both identity orders, repeated sync/returning resolution, shared name/email, tenant isolation, failed/empty/member-failed preservation, legacy and departed-instructor enrollment removal, and unchanged evidence. Both test containers are removed on exit. |
+| Scope and whitespace | `git diff --check`: passed. AST source comparison against `5afe695` confirms only `resolve_user`, `_sync_roster` and `get_roster` changed in the three owned runtime files, plus roster-specific URL imports. Launch handling, tenancy/role mapping, other functions and all migration files are unchanged. |
+
+The offline tests cover UUID expansion and a fully paginated success, omitted/null/empty terminal paging forms, failed first/later pages, partial HTTP status, malformed/missing results or paging, repeated continuation, foreign continuation origin, absent/empty UUID, member resolution/enrollment failure, removal failure and counts-only warnings with no traceback/identifier/exception-body leakage. The existing mocked launch identity fixture now uses exact identifiers rather than simulating the superseded email-discovery policy.
+
+The initial focused run had one failing **synthetic fixture**: the same user/course key was incorrectly reused across institutions, causing the fixture's upsert to overwrite its first enrollment. Separate institution-owned users corrected the fixture; the final 103-test run passes. Initial standalone local schema setup omitted the referenced skills table; the committed disposable harness creates all fixture dependencies in order and passes. No migration or application behavior was changed to accommodate either fixture correction.
+
+Limits: the local persistence fixture uses committed identity/evidence table definitions in an isolated schema; it is **not** a full migration, RLS, deployment or real Blackboard acceptance test. Offline pytest processes use committed dotenv/network isolation. The local persistence harness bypasses application credentials and binds only to hard-coded loopback port 55436. Frontend lint/typecheck/build/browser checks were not rerun because this lane changes no frontend source or OpenAPI schema; coordinator owns combined integration checks. No hosted access/write, identity repair, schema migration, deployment, push or message to another chat was performed. H01(b) remains planned with ITO; legacy history, including the previously reported 40-event history, is not merged or made visible under the canonical learner by this code fix.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
 | 2026-10-25 | Write full source-backed feature spec; identify limits and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | AUTH-REQ-001 through AUTH-REQ-005 |
 | 2026-10-25 | Specify UUID/subject convergence, exact identity resolution and complete-pull-only enrollment removal, including instructors; preserve legacy evidence without repair | APPROVAL-06 rev 2 Lane I; Fred confirmed reconciliation amendment; P baseline lineage `2062784` | AUTH-REQ-002, AUTH-REQ-003, AUTH-REQ-006 |
+| 2026-10-25 | Record implementation, dedicated regression and disposable local persistence evidence; retain live acceptance and legacy repair limits | APPROVAL-06 rev 2 Lane I; implementation `cbc9a06` | AUTH-REQ-002, AUTH-REQ-003, AUTH-REQ-006 |
