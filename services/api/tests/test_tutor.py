@@ -255,6 +255,7 @@ def test_TUTOR_REQ_001_slow_persistence_preserves_answer_and_cannot_start_update
     assert updates == []
 
 
-def test_TUTOR_REQ_001_ownership_404_is_preserved(tutor_client, monkeypatch):
+def test_TUTOR_REQ_001_ownership_404_is_preserved(tutor_client, monkeypatch, caplog):
     monkeypatch.setattr(tutor.db, "select", lambda *a, **k: [])
     assert tutor_client.post("/tutor/ask", json=payload(True)).status_code == 404
+    assert "'provider_role': 'none'" in caplog.text

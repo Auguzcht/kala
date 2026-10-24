@@ -25,7 +25,7 @@ class RequestBudget:
         self.deadline = self.started + seconds
         self.reserve = reserve
         self.timings: dict[str, float] = {}
-        self.provider_role = "chat"
+        self.provider_role = "none"
         self.fallback_used = False
         self.outcome = "error"
         self.closed = False

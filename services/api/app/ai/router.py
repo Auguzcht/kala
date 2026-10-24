@@ -101,6 +101,7 @@ def answer(*, system: str, user_text: str, escalate: bool = False,
     messages = list(history) if history else []
     messages.append({"role": "user", "content": [{"text": user_text}]})
     if budget is not None:
+        budget.provider_role = task if task != "default" else ("reasoning" if escalate else "default")
         # Copy every text part; persisted history and other callers stay intact.
         system = strip_pii(system)
         messages = [
