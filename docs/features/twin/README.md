@@ -4,18 +4,32 @@ req_prefix: TWIN
 owner_role: product owner
 status: active
 code:
-  web: apps/web/src/features/twin/
-  api: services/api/app/twin/summary.py
-  worker: []
-  db: []
-tests: [apps/web/src/features/twin/tests/presentation.browser.mjs]
+  web:
+  - apps/web/src/features/twin/
+  - apps/web/src/components/kala/mastery-ring.tsx
+  - apps/web/src/components/kala/evidence-ledger.tsx
+  api: services/api/app/twin/
+  worker:
+  - services/worker/app/jobs/reconcile_mastery.py
+  - services/worker/app/jobs/readiness_snapshot.py
+  db:
+  - packages/db/migrations/0001_init.sql
+  - packages/db/migrations/0002_rls.sql
+tests:
+- apps/web/src/features/twin/tests/presentation.browser.mjs
+- services/api/tests/test_twin_routes.py
+- services/api/tests/test_twin_cohort_approved.py
+- services/worker/tests/test_reconcile_mastery.py
+- services/worker/tests/test_readiness_snapshot_approved.py
 ---
 
-# Twin presentation amendment
+# Digital learning twin
 
 ## Purpose
 
-This focused WI-22 amendment defines readiness-number legibility and bounded evidence browsing for student and instructor views. The broader Twin specification remains incomplete under WI-08; mastery/readiness calculations and evidence history contracts are unchanged.
+The twin turns recorded learning evidence into per-skill mastery and a course readiness summary. Students can inspect their evidence; instructors use the same state through guarded instructor surfaces. Readiness is a learning proxy, not an LMS grade or a validated exam prediction.
+
+This focused WI-22 amendment defines readiness-number legibility and bounded evidence browsing for student and instructor views. The accepted presentation requirements below retain their original IDs; this consolidation adds the WI-08 backend contract.
 
 ## Actors and permissions
 
@@ -23,6 +37,14 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 | --- | --- | --- |
 | Student | Browse the evidence returned for their own twin | Read another student's record |
 | Instructor with existing course access | Browse a learner's returned evidence and readiness through existing authorized routes | Gain new course or learner access through this presentation amendment |
+
+### Backend actors and boundaries
+
+| Actor (app_role) | Can | Cannot |
+| --- | --- | --- |
+| student | Read their own course twin and next suggested skill | Submit a trusted mastery estimate |
+| instructor/admin | Use the instructor twin/record endpoints | Infer authorization solely from a requested student ID |
+| worker | Rebuild derived mastery and append readiness history | Treat snapshots as replacement evidence |
 
 ## Requirements
 
@@ -48,21 +70,115 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 - Status: implemented
 - Verified by: apps/web/src/features/twin/tests/presentation.browser.mjs; desktop/mobile captures and final checks in docs/work/handover-2026/evidence/ui-overhaul.md.
 
+### TWIN-REQ-004: Derive mastery from graded evidence on the server
+- Rule: start at 0.5; for each boolean result update estimate to clamp(prior + 0.15 * (target - prior), 0, 1), target 1 for correct and 0 for incorrect; increment attempts. Self-rated Study recall does not move mastery.
+- Acceptance: an initial correct response gives 0.575; an incorrect response 0.425. Clients receive derived state, never choose it.
+- Status: implemented
+- Verified by: static `app/twin/tracer.py::apply_evidence`; `test_diagnostic_mastery_delta.py`, `test_learn_routes.py::test_flashcards_review_is_a_self_mark_that_never_moves_the_twin`; worker replay tests in `test_reconcile_mastery.py`.
+
+### TWIN-REQ-005: Show approved skills, qualitative bands and recent evidence
+- Rule: only approved course skills reach the twin. Missing mastery is null/zero attempts/no-evidence. Bands are developing below 0.4, proficient from 0.4 to below 0.7, mastered at 0.7 or above. Return at most 20 newest evidence events.
+- Acceptance: no approved skills gives null readiness and empty skills/evidence; reviewed skills show module/Bloom, estimate, attempts and band. Evidence for an absent skill may read Unknown skill.
+- Status: implemented
+- Verified by: `test_twin_routes.py::test_twin_returns_skills_bands_and_evidence`, `test_twin_empty_when_course_has_no_skills`; static `summary.py::band_for`, `twin_payload`.
+
+### TWIN-REQ-006: Compute readiness from approved skills with evidence
+- Rule: return the arithmetic mean of existing mastery estimates for approved course skills, rounded to three decimals. Missing estimates are excluded, not zero-filled. If approved skills exist but none has mastery, return 0.0; no approved skills gives null at the payload level.
+- Acceptance: rejected/proposed skill mastery cannot change the readiness rollup; an unmeasured skill does not depress the measured mean.
+- Status: implemented
+- Verified by: `test_twin_routes.py::test_readiness_uses_approved_skills_only`, `test_readiness_without_approved_skills_is_zero_without_mastery_query`; `readiness.py::compute`.
+
+### TWIN-REQ-007: Reconcile mastery and preserve readiness history
+- Rule: worker replays evidence in ascending created_at order for each user/skill, skips null skill IDs and upserts only changed estimates/attempt counts. Snapshot runs append one row per enrolled student/course with approved-skill mastery, using the same mean; students without that signal get no row.
+- Acceptance: unchanged replay performs no correction; missing/drifted state is repaired; repeated snapshot runs append history rather than overwrite it.
+- Status: partial
+- Verified by: `services/worker/tests/test_reconcile_mastery.py`, `test_readiness_snapshot_approved.py`. Replay caps each institution at 50,000 events without pagination, and worker K is configurable while API K is fixed (finding below).
+
+### TWIN-REQ-008: Suggest a next skill without generating an item
+- Rule: next-up reuses the weakest approved-skill picker; unseen skills precede measured skills. Return null when none is eligible and explain whether the choice is unmeasured or low mastery.
+- Acceptance: GET next-up returns skill metadata/reason without model generation; it does not append evidence.
+- Status: implemented
+- Verified by: static `routers/twin.py::next_up`, `learn/items.py::weakest_skill`; related weakest-skill serving tests in `test_learn_routes.py`. There is no dedicated browser next-up acceptance test.
+
 ## API contract
+
+### Accepted presentation boundary
 
 No API, schema, authorization or query change. Existing student Twin response contains at most 20 recent events. The instructor learner-record implementation reads at most 200 events internally for its statistics, but serializes only the latest 25 into its evidence array; the instructor Twin drill-down uses the Twin response. Pagination navigates the returned array and does not imply access to all historical evidence. Labels explicitly say “Last 20 events” for Twin and “Last 25 events” for learner-record ledgers; bounded statistics say “Based on recent activity”. Full-history server pagination is deferred under WI-25. The earlier 200-row response description confused the internal read limit with the serialized ledger window; the finalization handoff records this correction.
 
+### Backend contract
+| Method and path | Purpose | Auth | Notes (idempotency, error codes) |
+| --- | --- | --- | --- |
+| GET /courses/{course_id}/twin | Own skills/readiness/evidence | Session | Read only; malformed course ID 404 |
+| GET /courses/{course_id}/next-up | Own next suggested skill | Session | Returns next=null when no candidate; no generation |
+| GET /dashboard/{course_id}/students/{user_id}/twin | Staff drill-down | Instructor/admin | Same institution user lookup; course-gate gap in instructor spec |
+
+`/courses/{course_id}/plan` belongs to [instructor-insights](../instructor-insights/README.md). Student twin UI groups skills by module and Bloom (`TwinBody.tsx`, `lib/group-by-module.ts`); it does not write mastery.
+
 ## Data
+
+### Accepted presentation boundary
 
 No new persistence. Readiness and evidence remain server-owned; only the current presentation page is local UI state. Evidence remains append-only and is never edited or deleted by pagination.
 
-## AI usage
+### Backend contract
+Read skills, mastery_state and evidence_events. Server grading writes append-only evidence and tracer-derived mastery; worker reconciles mastery and writes readiness_snapshots. RLS `evidence_read`, `mastery_read` and `readiness_read` allow self, course teacher and institution admin. API/worker service-role calls bypass RLS; own-user route arguments and explicit course/institution filters are therefore part of the boundary. Some helper queries scope by user/course or globally unique skill IDs without an explicit institution predicate; this is not a complete API tenancy audit.
 
+## AI usage (if any)
+
+### Presentation amendment
 None added.
+
+### Backend usage
+No model computes mastery, bands, readiness or snapshots. Recommendations/generation belong to other features. No claim of BKT, learned forgetting, confidence intervals, blueprint weighting or exam-score calibration is made.
 
 ## Edge cases and known limits
 
 Long skill names, mobile widths, empty/one-page lists, list shrinkage, null/0/100 readiness and reduced motion are part of done. Focus and pagination must remain usable without pointer input. No hosted mutation or deployment is authorized by this amendment.
+
+- Readiness over measured skills can look high with thin coverage; interpret with attempts/coverage. Students have no readiness-history endpoint in this feature; instructor stats do read snapshot history.
+- Reconciliation does not delete stale mastery rows that have no remaining evidence; event order ties have no explicit secondary sort.
+- Snapshot inserts are per run, not once per day; history can contain multiple rows on one date.
+- Student GET routes use authenticated user identity but do not explicitly enforce course enrollment before computing. No cross-course access test is claimed.
+
+## Contradictions requiring planner resolution
+
+| Locations at source revision | Finding | Proposed resolution (not implemented here) |
+| --- | --- | --- |
+| `services/api/app/twin/readiness.py:1` (weighted blueprint description); `services/api/app/twin/readiness.py:22` (plain mean) | Weighting is described but not applied. | Correct the source description to this observed contract, or approve a separately tested weighting change. |
+| `services/api/app/twin/tracer.py:8`; `services/worker/app/config.py:129`; `services/worker/app/jobs/reconcile_mastery.py:85` | API uses fixed K=0.15; replay uses configurable tracer_k. Divergence is possible under nondefault configuration. | Centralize or validate the parameter and prove live/replay equivalence for supported settings. |
+| `services/api/app/twin/summary.py:13`; `services/api/app/learn/xp.py:35` | Twin calls 0.7 mastered; badges call 0.7 proficient and 0.85 mastered. | Decide whether badge tiers intentionally differ, then update wording or thresholds through scoped implementation. |
+
+## Evidence and verification limits
+
+WI-08 / APPROVAL-05 rev 2, Lane P. Source reviewed at `4f3ec29d3f827a1db92e90c4f395947d37744479` on 2026-10-25. `implemented` means present in that source, with the evidence stated per requirement; it is not a claim of deployed acceptance. `partial` identifies an explicit gap. Planned behavior is not inferred from archived plans.
+
+- Local: `cd services/api && uv run pytest -q` — **431 passed**, 30 dependency deprecation warnings, 28.45s.
+- Local: `cd services/worker && uv run pytest -q` — **117 passed**, 0.68s.
+- Both processes used committed `services/conftest.py`: dotenv disabled, inherited application settings replaced, IPv4/IPv6/DNS blocked. Tests use mocked boundaries; no hosted data or provider calls.
+- No browser acceptance, live LTI/Blackboard check, RLS replay, deployment, migration, lint/typecheck/build claim is made by this documentation-only lane. UI evidence is static source review unless stated otherwise.
+
+The API/worker results above are retained historical evidence from the original Lane P source review, not new runs on this integration base. Accepted presentation evidence remains attributed to the existing browser suites and WI-22 evidence; this documentation reconciliation does not rerun or upgrade that acceptance. H12 copy requirements are retained from main; Lane U closeout source is now integrated at `8bc569e`. The explicit labels were checked in source, not reverified in a browser here.
+
+## Reconciliation lineage and ID mapping
+
+Coordinator-approved consolidation onto `8bc569e36b52488b4e05202a90cb18c8ba0db589` after Lane I merge. AUTH remains byte-for-byte main's file; no auth behavior or identity policy is reintroduced here. Accepted TWIN presentation IDs and change-log entries are unchanged. Only the unmerged backend draft IDs from `2062784` are reassigned below; references to that historical revision must use this mapping.
+
+| Draft ID at `2062784` | Final ID | Backend requirement |
+| --- | --- | --- |
+| TWIN-REQ-001 | TWIN-REQ-004 | Derive mastery from graded evidence on the server |
+| TWIN-REQ-002 | TWIN-REQ-005 | Show approved skills, qualitative bands and recent evidence |
+| TWIN-REQ-003 | TWIN-REQ-006 | Compute readiness from approved skills with evidence |
+| TWIN-REQ-004 | TWIN-REQ-007 | Reconcile mastery and preserve readiness history |
+| TWIN-REQ-005 | TWIN-REQ-008 | Suggest a next skill without generating an item |
+
+Static reconciliation review confirms returned Twin evidence is capped at 20, learner-record statistics read at most 200 events and serialize 25 ledger rows, and cohort roster/statistics evidence reads are capped at 2,000 class-wide. H12 labels remain “Last 20 events”, “Last 25 events” and “Based on recent activity”; full-history paging stays deferred under [WI-25](../../work/handover-2026/work-items/WI-25-full-history-evidence-paging.md). These are bounded-window counts, not lifetime totals.
+
+## Current source revalidation
+
+Static review at `8bc569e36b52488b4e05202a90cb18c8ba0db589` preserves accepted presentation requirements, H12 wording and the mapped backend rules. Source confirms 20/25 returned-event limits, the internal 200-event learner read, class-wide 2,000-event evidence bound, server-owned calculations and unchanged pending-decision behavior. This is documentation validation only; no test, lint, typecheck, build, browser or hosted check was rerun.
+
+Documentation validation for this reconciliation passed: YAML and referenced code/test paths, requirement fields and unique IDs, local links, source line bounds, accepted presentation/changelog preservation, exact draft-to-final mapping, unchanged Lane S requirement, auth byte identity and eight-path ownership. Runtime tests were not rerun.
 
 ## Change log
 
@@ -71,3 +187,5 @@ Long skill names, mobile widths, empty/one-page lists, list shrinkage, null/0/10
 | 2026-10-25 | Define prominent readiness numbers, plain Focus area heading and shared ten-row ledger pagination before implementation | Fred's direct WI-22 visual/pagination request for student and instructor views | TWIN-REQ-001, TWIN-REQ-002, TWIN-REQ-003 |
 | 2026-10-25 | Correct the observed instructor ledger response window to 25; distinguish the internal 200-event statistics read | Final UI/UX handoff source trace of cohort.learner_record; no runtime or intended-behavior change | TWIN-REQ-003 |
 | 2026-10-25 | Require explicit 20/25-event window labels and recent-activity wording; full-history pagination deferred | APPROVAL-06 H12; Lane U close-out implements copy | TWIN-REQ-003 |
+| 2026-10-25 | Write full source-backed feature spec; identify limits and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | TWIN-REQ-004 through TWIN-REQ-008 |
+| 2026-10-25 | Consolidate accepted presentation requirements and mapped backend draft; preserve H12 windows, WI-25 deferral and revision-specific evidence | Coordinator-approved Lane P reconciliation after APPROVAL-06 Lane I merge; draft `2062784` mapping above | TWIN-REQ-001 through TWIN-REQ-008 |
