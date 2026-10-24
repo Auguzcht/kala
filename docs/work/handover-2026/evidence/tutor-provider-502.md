@@ -6,7 +6,7 @@ Date: 2026-10-25 (Asia/Manila). Status: `done-awaiting-confirmation` for this in
 
 **Confirmed failure mode:** three observed stateless `/tutor/ask` requests completed retrieval, received HTTP **429** from the primary OpenRouter chat model `inclusionai/ling-3.0-flash-vl`, attempted `nex-agi/nex-n2.5-mini:free`, and ended in `provider_error`. The fallback failure's status and reason are absent from the emitted application logs. **Underlying root cause remains unknown**: the evidence does not establish which account/provider limit caused the primary 429, or why the fallback failed. It does not establish exhausted credits, invalid keys, or a request-shape regression.
 
-Fred reports an OpenRouter balance of **$2.63**. Do not characterize it as empty. The confirmed fallback is a `:free` variant; a nonzero account balance does not identify the reason for its failure. Changing the configured model remains Fred's decision. No model catalogue, provider endpoint, key, or billing API was probed.
+Fred reports an OpenRouter balance of **$2.63**. Do not characterize it as empty. The confirmed fallback is a `:free` variant; a nonzero account balance does not identify the reason for its failure. Changing the configured model remains Fred's decision. The initial submission made no provider requests or secret reads. A subsequent explicit authorization allowed one current-key metadata GET, documented below; no generation or embedding request was made.
 
 One recorded tutor request timed out in chat and is consistent with the application's 503 `tutor_timeout` response. Its relationship to the reported console 503 is unconfirmed without a matching sanitized browser route/time/code. Five other tutor requests succeeded in the same query window. This is intermittent failure evidence, not proof that every live path currently fails or has recovered.
 
@@ -16,7 +16,7 @@ One recorded tutor request timed out in chat and is consistent with the applicat
 - Branch: `codex/tutor-provider-502`; worktree: `/Users/fred/.codex/worktrees/9a3f/kala`; source base: `4f3ec29d3f827a1db92e90c4f395947d37744479`. `git merge-base --is-ancestor cab26de 4f3ec29` succeeded. The only diff from `cab26de` is the initiative README and deployment-evidence document. The already-created branch was selected after confirming its ref equals that base.
 - Initial work was source-only. Fred subsequently authorized read-only CLI collection, now recorded in APPROVAL-05 section 6 on main at `0e7602e`. That supersedes the original Fred-only CloudWatch collection assignment. No production implementation or rebase onto a future spec commit is implied.
 - Only this evidence file and the uniquely named new test file are written. No overlap with B/U/coordinator-owned files was needed. No existing test, tutor.py, spec, migration, infrastructure, dev server, or other worktree was edited.
-- CLI JSON was captured inside local Python subprocesses and parsed in memory. Raw messages were never printed or saved. Output was limited to timestamps, classified event/outcome/stage, opaque Lambda request IDs, model/provider names, HTTP status, timing scalars, counts, and selected non-secret Lambda metadata. No dotenv or secret payload was read. No hosted writes, deploy, push, migration, key rotation, or live provider call occurred.
+- CLI JSON was captured inside local Python subprocesses and parsed in memory. Raw messages were never printed or saved. Initial output was limited to timestamps, classified event/outcome/stage, opaque Lambda request IDs, model/provider names, HTTP status, timing scalars, counts, and selected non-secret Lambda metadata. The initial investigation read no secret payload. The subsequent key-status exception below did read the secret payload into process memory; this document does not claim otherwise. No dotenv read, hosted write, deploy, push, migration, key rotation, or live generation/embedding call occurred.
 
 ## Sanitized CloudWatch evidence
 
@@ -38,7 +38,33 @@ All nine tutor timing records below are stateless. Durations are milliseconds, r
 
 For each `provider_error` row, the same Lambda request ID has a fallback warning recording primary model `inclusionai/ling-3.0-flash-vl`, **status 429**, and fallback model `nex-agi/nex-n2.5-mini:free`, plus two generic provider failure events. The timings, provider role, and source flow together show retrieval completed and the second chat attempt failed. They do **not** reveal the second attempt's HTTP status. For these three failures an embedding outage is excluded as the failing stage; this does not exclude an embedding failure in other requests outside the observed set.
 
-Read-only `aws lambda get-function-configuration --qualifier live` used an explicit JMESPath projection, never complete configuration or Environment output. The selected metadata reports API **version 6**, **timeout 30 seconds**, and no direct Lambda environment overrides for AI_PROVIDER, EMBED_PROVIDER, OPENROUTER_MODEL_CHAT, OPENROUTER_MODEL_CHAT_FALLBACK, OPENROUTER_EMBED_MODEL, or OPENAI_EMBED_MODEL. Null here means no direct override, **not** an unset effective setting: the secret bundle is uninspected. Logs independently establish the primary and fallback used in the three failures. The CLI is available via the main checkout's existing AWS executable; no CLI installation or setup script was run. An initial invocation rejected the CLI-v2-only pager flag; retry without it succeeded and no raw CLI error was emitted.
+Read-only `aws lambda get-function-configuration --qualifier live` used an explicit JMESPath projection, never complete configuration or Environment output. The selected metadata reports API **version 6**, **timeout 30 seconds**, and no direct Lambda environment overrides for AI_PROVIDER, EMBED_PROVIDER, OPENROUTER_MODEL_CHAT, OPENROUTER_MODEL_CHAT_FALLBACK, OPENROUTER_EMBED_MODEL, or OPENAI_EMBED_MODEL. Null here means no direct override, **not** an unset effective setting. Provider/model settings in the secret bundle were not inspected; the later exception extracted only the credential needed for key metadata. Logs independently establish the primary and fallback used in the three failures. The CLI is available via the main checkout's existing AWS executable; no CLI installation or setup script was run. An initial invocation rejected the CLI-v2-only pager flag; retry without it succeeded and no raw CLI error was emitted.
+
+## Subsequent authorized current-key metadata check
+
+After initial submission `a309ddd`, Fred's delegated authorization expressly extended the earlier no-secret-read boundary: read the current OpenRouter credential from `kala/app` into process memory solely for the official current-key metadata endpoint. Before the request, the [official OpenRouter current-key documentation](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key) was checked and confirmed **GET https://openrouter.ai/api/v1/key**, using bearer authentication. This is an account/key metadata endpoint, not a model completion or embedding endpoint.
+
+Collection date: **2026-10-25 Manila**, after the initial CloudWatch collection and before 01:59:45 Manila. `aws secretsmanager get-secret-value` ran with captured subprocess stdout/stderr; its payload was decoded in memory, and only OPENROUTER_API_KEY was extracted for the fixed HTTPS destination. The request used no proxy, disabled redirects, retained TLS verification and had a 15-second timeout. No raw response, key label/hash, headers, credential, or exception text was emitted or persisted. No provider/model configuration fields were extracted from the bundle. The process exited after outputting only allowlisted scalar metadata.
+
+| Allowlisted metadata | Observed value |
+| --- | ---: |
+| Credential read available | true |
+| Metadata endpoint HTTP status | **200** |
+| is_free_tier | false |
+| Has per-key spend limit | false |
+| Has expiry | false |
+| Disabled field available in response | false |
+| Free-model daily limit | 50 |
+| Free-model daily remaining | **50** |
+| Free-model daily used | **0** |
+| Key usage | 2.155158467 |
+| Key daily usage | 0.001704348 |
+| Key weekly usage | 0.001704348 |
+| Key monthly usage | 1.772073308 |
+
+The current bundle credential authenticated successfully to this metadata endpoint. No disabled flag was returned, so do not report a returned `disabled=false`. No per-key spend limit or expiry was configured according to this response. The free-model allowance was not exhausted at collection time. This endpoint's key usage is not an account credit balance, and the check does not independently verify Fred's $2.63 balance.
+
+This snapshot does **not** prove model capacity, successful generation, the fallback's earlier failure status, historical quota state, or that a warm v6 Lambda uses the same current key: settings/secret loading is cached. No key identity comparison was emitted, and no rotation history was checked. Primary HTTP 429 remains confirmed from earlier logs; the reason for it and the fallback failure remains unknown. No recovery claim, config/model change or operational action follows from this metadata check alone.
 
 ## Exact source error mapping and fallback policy
 
@@ -139,7 +165,7 @@ The available tutor timing data show successful live requests taking roughly 7.8
 CloudWatch CLI collection is complete for the authorized window; Fred does not need to repeat that query. Remaining account evidence, supplied as safe scalar metadata rather than screenshots of bodies/keys:
 
 - OpenRouter Activity around **00:42:20–00:42:23**, **01:39:22–01:39:24**, and **01:40:13–01:40:16 Manila, 2026-10-25**: primary and fallback model, selected upstream provider, each HTTP status, concise error category (rate limit, quota, billing, auth, capacity, model unavailable), and upstream request ID if present. The fallback status is the critical missing value. The Lambda IDs above may not be searchable in OpenRouter; use times/model names for correlation.
-- Whether either provider key was rotated, revoked, deleted or disabled on Oct 25, with approximate time and deployed update confirmation, **never key material**. OpenRouter key enabled/disabled and per-key budget/quota status. The reported $2.63 balance is already recorded.
+- Whether either provider key was rotated, revoked, deleted or disabled on Oct 25, with approximate time and deployed update confirmation, **never key material**. The current bundle key's authentication and per-key quota snapshot is now recorded above; historical status and the credentials used by warm Lambda invocations remain unverified. The reported $2.63 balance is already recorded.
 - Only if failures implicate embedding or that path still fails after chat recovery: OpenAI key enabled/disabled and billing/quota health. These three observed requests completed embedding, so an OpenAI billing incident is not established here.
 - Safe browser route/method/time and optional `code` for the unexplained 503, and later a fresh successful click-through of Study hint, Explain more, Study/Review-missed/Test docks and persistent Tutor. This lane makes no new live calls.
 
