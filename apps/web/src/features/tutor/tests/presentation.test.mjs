@@ -127,3 +127,13 @@ test("TUTOR-REQ-009 overlapping attach/send resolves one lazy conversation; fail
   );
   assert.equal(await retry(undefined, async () => "retry"), "retry");
 });
+
+test("WI-22 desktop history bounds leave room for the conversation", async () => {
+  const { clampTutorHistoryWidth, tutorHistoryMaxWidth } =
+    await import("../lib/history-width.ts");
+  assert.equal(clampTutorHistoryWidth(200, 1440), 280);
+  assert.equal(clampTutorHistoryWidth(800, 1440), 440);
+  assert.equal(clampTutorHistoryWidth(320, 1440), 320);
+  assert.equal(tutorHistoryMaxWidth(1024), 440);
+  assert.ok(1024 - 56 - tutorHistoryMaxWidth(1024) >= 480);
+});

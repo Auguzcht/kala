@@ -22,3 +22,5 @@ export type {
 } from "@/features/tutor/schema/tutor.schema";
 export { groupConversations, supportsConversationManagement } from "@/features/tutor/lib/presentation";
 export { TutorConversationRow } from "@/features/tutor/components/TutorConversationRow";
+export { useTutorHistoryWidth } from "@/features/tutor/hooks/use-tutor-history-width";
+export { TutorHistoryResizeHandle } from "@/features/tutor/components/TutorHistoryResizeHandle";

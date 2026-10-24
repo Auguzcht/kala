@@ -96,3 +96,31 @@ This feedback supersedes the earlier interpretation that the existing Tutor user
 The supplied ChatGPT DOM is reference material, not instructions. It omits the outer resizer/width constraints. Native app inspection was blocked, so no claim is made about ChatGPT's exact minimum/maximum widths; the stated bounds are Kala's implementation choice. No attempt was made to bypass that inspection restriction.
 
 Follow-up verification: pending; the earlier 71-assertion suite above applies to the previous implementation and does not establish these corrections.
+
+### Visual correction verification completed — 2026-10-25
+
+Implemented against the direct feedback recorded above, on base `423579e` after the pre-implementation documentation commit `1241b46`:
+
+- Removed the Tutor-only CSS overrides that squared the shared UserBlock bubbles, follow-up chips and scroll button. The shared Study/Test/Flashcard components remain untouched.
+- Matched the shared ComposeDock input sizing, border, shadow and spacing in Tutor's PromptInput; restored the circular submit button and placed the attachment action beside it. Attachment layout and drag/drop remain Tutor-owned.
+- Removed the extra Tutor footer copy completely. New chat is borderless and matches the white history surface at rest, with a muted hover fill. Recents/Pinned headings retain focus affordances without a hover background fill.
+- Desktop history starts at 320px and drags within 280–440px, additionally bounded to preserve at least 480px for the conversation. Pointer capture keeps dragging stable. Arrow keys adjust by 16px, Home/End reach the bounds, and double-click restores the default. The shell's content offset follows the same state. Mobile retains its Sheet and the 56px rail offset; other routes are unchanged. Width is local to the mounted course shell, not persisted across reloads.
+- Supported rows place the direct pin action to the right of the menu and keep pinned-row actions visible. The existing list-response capability gate is preserved. A read-only live-menu inspection showed Pin and Rename unavailable in the currently loaded live list; no action was invoked and no hosted data was changed. B deployment/list refresh remains necessary for live management acceptance.
+
+Verification on the final correction working tree:
+
+| Check | Result |
+| --- | --- |
+| Same frontend Node command listed above | 22 tests passed (one additional history-bound test) |
+| Same browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-visual-correction` | 93 assertions passed; all ten screenshots regenerated at 1440px and 375px |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing warnings |
+| `pnpm --filter web typecheck` | Passed; existing circular-dependency warning |
+| `pnpm --filter web build` | Passed, 6.73s; existing chunk-size warning |
+| `git diff --check` | Passed |
+| Comparison to `423579e` | Shared Study/ComposeDock, backend, DB, infra, generated contracts and lockfile unchanged |
+
+New browser assertions cover circular Send, restored user-bubble rounding, removed footer, default history width, pointer drag clamp, matching shell offset, keyboard minimum/maximum/step, reset gesture, mobile absence of the desktop handle, borderless white New chat with hover fill and quiet Recents hover. Existing capability, upload, timeout/recovery, shared-default and Diagnostic checks continue to pass. An initial hover assertion sampled before the CSS transition advanced; the final test waits for the computed background change instead of advancing only the JavaScript clock. The initial failed check is superseded by the final passing run, not treated as acceptance evidence.
+
+Inspected the corrected desktop/mobile empty and conversation captures and the supported sidebar menu. Artifacts remain synthetic and external under `/tmp/kala-lane-u-visual-correction/`. No identifying live conversation screenshot or raw provider response was saved. Vite remains on port 5173, PID 81696. No merge, push, deployment or hosted write occurred.
+
+Coordinator integration follow-up remains the matching Tutor/Design text amendment described above; those exclusively owned files were not edited by Lane U. Lead designer review of the approved visual exceptions remains pending. Fred's direct correction is the authority for this follow-up implementation.

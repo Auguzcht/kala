@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, SquarePen } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -72,11 +72,11 @@ export function TutorSidebar({
       </div>
       <div className="px-3 py-3">
         <Button
-          variant="outline"
-          className="w-full justify-start"
+          variant="ghost"
+          className="w-full justify-start border-0 bg-card shadow-none hover:bg-muted"
           onClick={() => select()}
         >
-          <Plus size={15} /> New chat
+          <SquarePen size={16} /> New chat
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
@@ -113,7 +113,7 @@ export function TutorSidebar({
                 }
                 className="mb-3"
               >
-                <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <ChevronDown
                     size={13}
                     className="transition-transform group-data-[state=closed]:-rotate-90 motion-reduce:transition-none"

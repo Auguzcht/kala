@@ -261,7 +261,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
     <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
       {active.data?.title ? <div className="shrink-0 border-b px-4 py-3 font-display text-sm font-medium sm:px-6">{active.data.title}</div> : null}
       <div className={cn("flex min-h-0 flex-1 flex-col", empty && "justify-center overflow-y-auto py-8")}>
-      {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream className="[&_button]:rounded-md [&_.rounded-3xl]:rounded-md">
+      {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
         {activeId && active.isLoading ? <Shimmer>Loading conversation…</Shimmer> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
         {messages.map((m) => m.role === "user" ? (
@@ -327,8 +327,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
             attachments={active.data?.attachments ?? []} onFiles={(files) => void handleFiles(files)}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
             onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />
-          {empty && suggestions.length ? <div className="mt-4 flex flex-wrap justify-center gap-2">{suggestions.map((suggestion) => <Suggestion key={suggestion} suggestion={suggestion} className="h-auto max-w-full whitespace-normal rounded-md px-3 py-2 text-left text-xs" disabled={uploading || send.isPending} onClick={(question) => { setHasTyped(true); askQuestion(question); }} />)}</div> : null}
-          <p className="mt-3 text-center text-[11px] text-muted-foreground">Course-grounded help · De-identified before model calls</p>
+          {empty && suggestions.length ? <div className="mt-4 flex flex-wrap justify-center gap-2">{suggestions.map((suggestion) => <Suggestion key={suggestion} suggestion={suggestion} className="h-auto max-w-full whitespace-normal px-3 py-2 text-left text-xs" disabled={uploading || send.isPending} onClick={(question) => { setHasTyped(true); askQuestion(question); }} />)}</div> : null}
         </div>
       </div>
       </div>

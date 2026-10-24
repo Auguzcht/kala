@@ -107,19 +107,14 @@ export function TutorConversationRow({
           {name}
         </button>
       )}
-      <div className="flex shrink-0 items-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100">
-        {capable ? (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            aria-label={`${conversation.pinnedAt ? "Unpin" : "Pin"} ${name}`}
-            disabled={update.isPending}
-            onClick={() => pin()}
-          >
-            {conversation.pinnedAt ? <PinOff size={14} /> : <Pin size={14} />}
-          </Button>
-        ) : null}
+      <div
+        className={cn(
+          "flex shrink-0 items-center",
+          conversation.pinnedAt
+            ? "opacity-100"
+            : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
+        )}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -164,6 +159,18 @@ export function TutorConversationRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {capable ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            aria-label={`${conversation.pinnedAt ? "Unpin" : "Pin"} ${name}`}
+            disabled={update.isPending}
+            onClick={() => pin()}
+          >
+            {conversation.pinnedAt ? <PinOff size={14} /> : <Pin size={14} />}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

@@ -385,7 +385,7 @@ try {
           (el, expected) =>
             parseFloat(getComputedStyle(el.parentElement).paddingLeft) ===
             expected,
-          width < 1024 ? 56 : 312,
+          width < 1024 ? 56 : 376,
         ),
       "TUTOR-REQ-004 responsive Tutor offset",
     );
@@ -399,6 +399,77 @@ try {
       (await page.locator("[data-study-surface] img[alt=Kala]").count()) === 1,
       "TUTOR-REQ-007 own logo",
     );
+    check(
+      (await page
+        .getByText("Course-grounded help · De-identified before model calls", {
+          exact: true,
+        })
+        .count()) === 0,
+      "WI-22 requested footer copy removed",
+    );
+    const sendButton = page.getByRole("button", { name: "Send message" });
+    check(
+      await sendButton.evaluate(
+        (el) =>
+          parseFloat(getComputedStyle(el).borderTopLeftRadius) >=
+          el.getBoundingClientRect().height / 2,
+      ),
+      "WI-22 send retains shared circular shape",
+    );
+    if (width >= 1024) {
+      const resize = page.getByRole("separator", {
+        name: "Resize chat history",
+      });
+      check(
+        (await resize.getAttribute("aria-valuenow")) === "320",
+        "WI-22 history starts wider",
+      );
+      const handle = await resize.boundingBox();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + 150);
+      await page.mouse.down();
+      await page.mouse.move(handle.x + 1000, handle.y + 150);
+      await page.mouse.up();
+      check(
+        (await resize.getAttribute("aria-valuenow")) === "440",
+        "WI-22 drag clamps maximum",
+      );
+      check(
+        await page
+          .locator("main")
+          .evaluate(
+            (el) => getComputedStyle(el.parentElement).paddingLeft === "496px",
+          ),
+        "WI-22 shell follows dragged history",
+      );
+      await resize.press("Home");
+      check(
+        (await resize.getAttribute("aria-valuenow")) === "280",
+        "WI-22 keyboard reaches minimum",
+      );
+      await resize.press("ArrowRight");
+      check(
+        (await resize.getAttribute("aria-valuenow")) === "296",
+        "WI-22 keyboard adjusts width",
+      );
+      await resize.press("End");
+      check(
+        (await resize.getAttribute("aria-valuenow")) === "440",
+        "WI-22 keyboard reaches maximum",
+      );
+      await resize.dblclick();
+      check(
+        (await resize.getAttribute("aria-valuenow")) === "320",
+        "WI-22 double-click restores default",
+      );
+    } else {
+      check(
+        (await page
+          .getByRole("separator", { name: "Resize chat history" })
+          .count()) === 0,
+        "WI-22 mobile retains Sheet without desktop resize handle",
+      );
+    }
+    await page.getByRole("heading", { level: 1 }).click();
     await screenshot(page, "tutor-empty", width);
     await input.fill("How does object storage work?");
     let release;
@@ -427,6 +498,15 @@ try {
       .first()
       .waitFor();
     await page.clock.resume();
+    check(
+      await page
+        .getByText("How does object storage work?", { exact: true })
+        .last()
+        .evaluate(
+          (el) => parseFloat(getComputedStyle(el).borderTopLeftRadius) >= 20,
+        ),
+      "WI-22 shared user-bubble rounding restored",
+    );
     await screenshot(page, "tutor-conversation", width);
     check(
       state.creates === 1 && state.asks === 1,
@@ -477,6 +557,56 @@ try {
       width < 1024
         ? managed.page.getByRole("dialog")
         : managed.page.getByRole("complementary", { name: "Tutor chats" });
+    const newChat = history.getByRole("button", {
+      name: "New chat",
+      exact: true,
+    });
+    const newChatBackground = await newChat.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    check(
+      await newChat.evaluate(
+        (el) => getComputedStyle(el).borderTopWidth === "0px",
+      ),
+      "WI-22 New chat has no outline",
+    );
+    check(
+      await newChat.evaluate(
+        (el) =>
+          getComputedStyle(el).backgroundColor ===
+          getComputedStyle(el.parentElement.closest("[class*=bg-card]"))
+            .backgroundColor,
+      ),
+      "WI-22 New chat matches white history at rest",
+    );
+    await newChat.hover();
+    await managed.page.waitForFunction((before) => {
+      const button = [...document.querySelectorAll("button")].find(
+        (el) =>
+          el.textContent.trim() === "New chat" && el.getClientRects().length,
+      );
+      return button && getComputedStyle(button).backgroundColor !== before;
+    }, newChatBackground);
+    check(
+      await newChat.evaluate(
+        (el, before) => getComputedStyle(el).backgroundColor !== before,
+        newChatBackground,
+      ),
+      "WI-22 New chat gains hover fill",
+    );
+    const recentHeading = history.getByRole("button", { name: /^Recents/ });
+    const headingBackground = await recentHeading.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    await recentHeading.hover();
+    await managed.page.clock.fastForward(250);
+    check(
+      await recentHeading.evaluate(
+        (el, before) => getComputedStyle(el).backgroundColor === before,
+        headingBackground,
+      ),
+      "WI-22 Recents heading keeps quiet hover",
+    );
     await history
       .getByRole("button", { name: "Actions for Understanding cloud storage" })
       .click();
@@ -684,13 +814,11 @@ try {
     "TUTOR-REQ-007 typing stops idle loop",
   );
   // Attachment navigation must preserve this unsent draft and create only once.
-  await idle.page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "notes.md",
-      mimeType: "text/markdown",
-      buffer: Buffer.from("synthetic notes"),
-    });
+  await idle.page.locator("input[type=file]").setInputFiles({
+    name: "notes.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("synthetic notes"),
+  });
   await idle.page.getByText("notes.md", { exact: true }).waitFor();
   check(
     (await idle.page.getByPlaceholder("Ask Kala…").inputValue()) === "A draft",
@@ -700,13 +828,11 @@ try {
     idle.state.creates === 1 && idle.state.uploads === 1,
     "TUTOR-REQ-009 first attachment creates then uploads",
   );
-  await idle.page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "rejected.md",
-      mimeType: "text/markdown",
-      buffer: Buffer.from("synthetic notes"),
-    });
+  await idle.page.locator("input[type=file]").setInputFiles({
+    name: "rejected.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("synthetic notes"),
+  });
   await idle.page
     .getByText("Synthetic upload could not be stored. Please try again.", {
       exact: true,

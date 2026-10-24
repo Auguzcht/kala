@@ -3,6 +3,8 @@ import { Paperclip, X } from "lucide-react";
 import {
   PromptInput,
   PromptInputButton,
+  PromptInputBody,
+  PromptInputTools,
   PromptInputTextarea,
   PromptInputSubmit,
   usePromptInputAttachments,
@@ -69,7 +71,7 @@ export function TutorComposer({
         setDraft("");
       }}
       className={cn(
-        "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:bg-card [&_[data-slot=input-group]]:p-2",
+        "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-12 [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:border-input [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:px-1.5",
         "[&_[data-slot=input-group]]:transition-[border-radius] [&_[data-slot=input-group]]:duration-200 motion-reduce:[&_[data-slot=input-group]]:transition-none",
         dockShape(dragging, attachments.length > 0 || uploading) ===
           "rounded-full"
@@ -113,23 +115,27 @@ export function TutorComposer({
           ) : null}
         </div>
       ) : null}
-      <div className="flex w-full items-end gap-2 px-2">
-        <AttachButton disabled={uploading} />
-        <PromptInputTextarea
-          rows={1}
-          placeholder="Ask Kala…"
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            onTyping();
-          }}
-          className="min-h-10 flex-1 rounded-md py-2.5"
-        />
+      <div className="flex w-full items-center">
+        <PromptInputBody>
+          <PromptInputTextarea
+            rows={1}
+            placeholder="Ask Kala…"
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              onTyping();
+            }}
+            className="min-h-12 max-h-32 py-3"
+          />
+        </PromptInputBody>
+        <PromptInputTools className="shrink-0 pl-1">
+          <AttachButton disabled={uploading} />
+        </PromptInputTools>
         <PromptInputSubmit
           aria-label={pending ? "Waiting for reply" : "Send message"}
           disabled={pending || uploading || !draft.trim()}
           status={pending ? "submitted" : undefined}
-          className="mb-0.5 shrink-0 rounded-md"
+          className="shrink-0 rounded-full"
         />
       </div>
     </PromptInput>

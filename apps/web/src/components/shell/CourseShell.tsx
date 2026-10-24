@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type CSSProperties,
   type ReactNode,
   type Ref,
 } from "react";
@@ -39,6 +40,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { Button } from "@/components/ui/button";
 import { PanelLeft } from "lucide-react";
 import { useTwin } from "@/features/twin";
+import { TutorHistoryResizeHandle, useTutorHistoryWidth } from "@/features/tutor";
 import { GamificationSummary } from "@/features/gamification";
 import { useDiagnosticStatus } from "@/features/diagnostic";
 import { TourStepRunner } from "@/components/shell/StudentTour";
@@ -148,6 +150,7 @@ export function CourseShell({
   // TutorSidebar), on every other route the icon rail is the whole story.
   const isTutorRoute = pathname.startsWith("/course/tutor");
   const [tutorHistoryOpen, setTutorHistoryOpen] = useState(false);
+  const tutorHistory = useTutorHistoryWidth(isTutorRoute);
   const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
   const diagnosticDue = diagnosticStatus?.due ?? false;
 
@@ -320,14 +323,15 @@ export function CourseShell({
       </nav>
 
       {isTutorRoute ? (
-        <aside aria-label="Tutor chats" className="fixed inset-y-0 left-14 z-10 hidden w-64 border-r lg:block">
+        <aside aria-label="Tutor chats" className="fixed inset-y-0 left-14 z-10 hidden border-r lg:block" style={{ width: tutorHistory.width }}>
           <TutorSidebar courseId={courseId} />
+          <TutorHistoryResizeHandle width={tutorHistory.width} maxWidth={tutorHistory.maxWidth} onChange={tutorHistory.changeWidth} />
         </aside>
       ) : null}
 
       <div
-        className={cn("flex h-dvh flex-col overflow-hidden", isTutorRoute && "pl-14 lg:pl-[312px]")}
-        style={{ paddingLeft: isTutorRoute ? undefined : 56 }}
+        className={cn("flex h-dvh flex-col overflow-hidden", isTutorRoute && "pl-14 lg:pl-[var(--tutor-content-offset)]")}
+        style={isTutorRoute ? { "--tutor-content-offset": `${56 + tutorHistory.width}px` } as CSSProperties : { paddingLeft: 56 }}
       >
         <div className="shrink-0">
           <TopBar
