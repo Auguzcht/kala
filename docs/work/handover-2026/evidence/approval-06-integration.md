@@ -96,3 +96,7 @@ Risks or questions for planner: FG-3 results required; provider/live acceptance
   unverified; WI-26 security findings and G query-scaling limits remain open.
 Secrets printed: none (confirmed).
 ```
+
+## Subsequent read-only provider and migration checks
+
+On2026-10-25 Fred requested current model-state verification and0037 pre-checks. [Dedicated evidence](provider-and-0037-prechecks-2026-10-25.md) records actual account credit, endpoint availability, shared hint/Tutor routing, successful target-table pre-checks, PG17.6 and the incomplete hosted migration-history finding. This supersedes only the earlier “pre-checks not performed” state; model configuration, migration application/post-checks, deployment and live acceptance remain pending. No runtime files changed or suites rerun.

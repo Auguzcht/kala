@@ -8,9 +8,9 @@ Authority: [APPROVAL-06](../approval-06.md). Owner/operator: Fred. This is a pre
 | --- | --- |
 | Approved source SHA | pending final coordinator report |
 | FG-1 paid fallback on a different serving provider, fresh runtime and hint retest | not-run / not reported |
-| FG-2 hosted Postgres major (Lane DB only) | not reported |
+| FG-2 hosted Postgres major (Lane DB only) | Direct authorized pre-check observed17.6/major17 on2026-10-25; dashboard confirmation not reported |
 | FG-3 migration0037 operator/time/environment | not-run / not reported |
-| FG-3 checksum / pre-checks / post-checks | pending; use [exact runbook](../../../runbooks/0037-apply.md) |
+| FG-3 checksum / pre-checks / post-checks | Checksum and target-table pre-checks passed at07:45+08; manual baseline-history caveat recorded; application/post-checks pending. [Evidence](provider-and-0037-prechecks-2026-10-25.md) |
 | Previous API live alias version / previous Vercel deployment | Fred records before FG-4 |
 | Previous immutable worker image | Fred records privately before FG-4 |
 | FG-4 API published version / live alias / worker update | not-run |
@@ -46,3 +46,7 @@ Append date/time, role, check, expected/observed outcome, sanitized status/count
 ## Acceptance decision
 
 Pending Fred. Do not begin post-FG-5 cleanup/code freeze or describe the release as accepted before Fred records the outcome. If deployment regression requires FG-R, Fred restores the recorded previous API alias and Vercel deployment after compatibility review; leave additive0037 in place and never delete learning history.
+
+## Read-only prerequisite update — 2026-10-25
+
+Fred directly authorized provider metadata review and0037 pre-checks. [Results](provider-and-0037-prechecks-2026-10-25.md): target-table checks passed, count1, PG17.6,0035/0036 markers present; CLI migration history is not a complete numeric baseline record. Provider credits remain approximately2.63USD; primary remains listed, configured free fallback has no endpoints. No model setting, application or live acceptance result changed. Earlier not-run entries remain accurate for application/refresh/click-through.
