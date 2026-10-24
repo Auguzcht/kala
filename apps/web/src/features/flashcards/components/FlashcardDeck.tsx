@@ -176,6 +176,7 @@ export function FlashcardDeck({
   const [sessionCards, setSessionCards] = useState<FlashcardCard[] | null>(null);
   const [phase, setPhase] = useState<Phase>("front");
   const [deckDone, setDeckDone] = useState(false);
+  const [isReplay, setIsReplay] = useState(false);
   const [ratingsByItemId, setRatingsByItemId] = useState<Record<string, boolean>>({});
   const [showReviewSpinner, setShowReviewSpinner] = useState(false);
   const [pendingRemembered, setPendingRemembered] = useState<boolean | null>(null);
@@ -210,6 +211,7 @@ export function FlashcardDeck({
     setSessionCards(valid ? saved.queue.map((id) => cardsById.get(id)!) : data.cards);
     setIndex(valid ? saved.index : 0);
     setDeckDone(false);
+    setIsReplay(false);
     postedRatingIdsRef.current = new Set(valid ? saved.posted : []);
     reviewIdempotencyRef.current = valid ? saved.pending : null;
     setRatingsByItemId(valid ? saved.ratings : {});
@@ -324,7 +326,8 @@ export function FlashcardDeck({
         : visibleSkills.length > 0 && visibleSkills.every((entry) => entry.status === "no_material")
     );
     const preparing = bank.data?.bankServing === true && !noMaterial && (
-      !selectedSkill || !selectedSkill.usable
+      skillId ? !selectedSkill || !selectedSkill.usable
+        : visibleSkills.some((entry) => entry.status !== "no_material" && !entry.usable)
     );
     if (bank.isLoading) {
       return (<SessionState title="Study" onExit={onExit}>{<LoadingPanel label="Checking card availability…" lines={4} />}</SessionState>);
@@ -429,8 +432,8 @@ export function FlashcardDeck({
         dock={
           <ComposeDock
             tourId="tour-study-dock"
-            primary={{ label: "Return to menu", onClick: onExit, icon: ArrowRightIcon }}
-            secondary={{ label: "Reload deck", onClick: reloadDeck, icon: RotateCCWIcon }}
+            primary={{ label: "Go through these again", onClick: replayDeck, disabled: review.isPending, icon: RotateCCWIcon }}
+            secondary={{ label: "Check for more cards", onClick: reloadDeck, disabled: review.isPending || isFetching, icon: ArrowRightIcon }}
           />
         }
       >
@@ -438,7 +441,7 @@ export function FlashcardDeck({
           <div className="relative border bg-card p-6">
             <CornerBrackets />
             <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
-              Study complete
+              {isReplay ? "Practice complete" : "Study complete"}
             </p>
             <p className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               {total}<span className="text-muted-foreground">/{total}</span>
@@ -448,7 +451,9 @@ export function FlashcardDeck({
               You recalled every card.
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              You marked every card Got it in this session. Your next review follows your schedule.
+              {isReplay
+                ? "This practice round did not change your review schedule."
+                : "You marked every card Got it in this session. Your next review follows your schedule."}
             </p>
             {mode === "all" && data.hasMore ? (
               <div className="mt-4">
@@ -595,6 +600,7 @@ export function FlashcardDeck({
 
   function reloadDeck() {
     celebrationRoundRef.current += 1;
+    setIsReplay(false);
     // A one-card deck already sits at index 0, so changing only the index
     // would not rerun the reset effect. Clear the terminal state explicitly.
     setDeckDone(false);
@@ -610,7 +616,29 @@ export function FlashcardDeck({
     refetch();
   }
 
+  function replayDeck() {
+    if (review.isPending || reviewInFlightRef.current) return;
+    // Replay only the original session cards, in order, with no refetch.
+    // Retain postedRatingIdsRef: every rating in this practice round stays
+    // local, including any cards requeued after "Still learning".
+    contentEpochRef.current += 1;
+    setSessionCards(data?.cards ?? []);
+    setIsReplay(true);
+    setIndex(0);
+    setDeckDone(false);
+    setPhase("front");
+    setRatingsByItemId({});
+    setHintText(null);
+    setExplainText(null);
+    setHintAnimationKey(undefined);
+    setExplainAnimationKey(undefined);
+    setFollowUpTurns([]);
+    setPendingFollowUp(null);
+    startedAtRef.current = Date.now();
+  }
+
   function continueNextGroup() {
+    setIsReplay(false);
     setDeckDone(false);
     setIndex(0);
     setPhase("front");
@@ -719,6 +747,11 @@ export function FlashcardDeck({
       }
     >
       <StudyStream>
+        {isReplay ? (
+          <p role="status" className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
+            Practice round · Your review schedule will not change.
+          </p>
+        ) : null}
         {dailyNewCapReached ? (
           <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
             You&apos;ve started 20 new cards today. Come back tomorrow, or use Study all.

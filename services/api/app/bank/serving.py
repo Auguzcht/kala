@@ -14,7 +14,8 @@ def bank_enabled(course: dict, surface: str) -> bool:
     return bool(course.get("bank_serving")) and surface in BANK_SURFACES
 
 
-def _approved_item_pool(*, institution_id: str, course_id: str, skill_id: str | None) -> list[dict]:
+def _approved_item_pool(*, institution_id: str, course_id: str, skill_id: str | None,
+                        include_flashcards: bool = False) -> list[dict]:
     params = {
         "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
         "origin": "eq.bank", "kind": "eq.practice", "retired_at": "is.null",
@@ -24,6 +25,13 @@ def _approved_item_pool(*, institution_id: str, course_id: str, skill_id: str | 
     }
     if skill_id:
         params["skill_id"] = f"eq.{skill_id}"
+    if include_flashcards:
+        # Study accepts native flip cards too. Test/diagnostic retain their
+        # existing MCQ-only pool and response fields.
+        del params["origin"]
+        del params["kind"]
+        params["or"] = "(and(kind.eq.practice,origin.eq.bank),kind.eq.flashcard)"
+        params["select"] += ",kind,front,back"
     # PostgREST's embedded filter requires the relationship in select.
     params["select"] = params["select"] + ",skills!inner(status)"
     return db.select("generated_items", params)
@@ -42,7 +50,8 @@ def pick_bank_items_with_meta(user_id: str, course_id: str, skill_id: str | None
     """Select bank items and report whether the result used a repeat tier."""
     if n <= 0 or mode not in {"study", "test"}:
         return [], False
-    pool = _approved_item_pool(institution_id=institution_id, course_id=course_id, skill_id=skill_id)
+    pool = _approved_item_pool(institution_id=institution_id, course_id=course_id, skill_id=skill_id,
+                               include_flashcards=mode == "study")
     tracked = db.select("srs_state", {
         "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
         "select": "item_id,skill_id",

@@ -88,7 +88,7 @@ def test_membership_due_eligibility(membership_data, item_id, expected_due, expe
     assert set(card) == {"itemId", "prompt", "back", "state", "due", "dueAt"}
 
 
-def test_membership_due_count_matches_review_selection_without_daily_cap(membership_data):
+def test_STUDY_REQ_002_review_adds_unrated_without_changing_membership_due(membership_data):
     membership = flashcards.skill_cards(course_id="course", skill_id="skill", user=USER)
     selected = srs.due_cards(
         institution_id=USER.institution_id, user_id=USER.user_id,
@@ -101,8 +101,9 @@ def test_membership_due_count_matches_review_selection_without_daily_cap(members
 
     due_ids = {card["itemId"] for card in membership["cards"] if card["due"]}
     assert due_ids == {row["item_id"] for row in selected} == {"known"}
-    assert due_ids == {card["itemId"] for card in review["cards"]}
-    assert membership["counts"]["dueToday"] == len(selected) == len(review["cards"])
+    assert {card["itemId"] for card in review["cards"]} == due_ids | {"new-tracked"}
+    assert membership["counts"]["dueToday"] == len(selected) == 1
+    assert review["newRemainingToday"] == 0
     assert len(membership["cards"]) == 5
 
 
