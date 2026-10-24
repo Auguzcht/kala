@@ -23,9 +23,9 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 
 | Lane | Current work | Gate |
 | --- | --- | --- |
-| X | WI-01: investigate provider failures using sanitized CLI evidence | Cause-backed planner approval before production code; coordinator owns Tutor/AI spec changes |
-| B | Tutor rename/pin, TUTOR-REQ-002/003, additive local migration 0037 | Coordinator spec commit before implementation; review before merge; Fred alone applies hosted migration |
-| U | Diagnostic and Tutor UI, TUTOR-REQ-004 onward | Coordinator DESIGN and Tutor spec commits first; U owns Diagnostic spec; Fred supplies local env file and observes UI |
+| X | [WI-01 follow-up](work-items/WI-01-provider-followup.md): provider failures and AI-REQ-002 diagnostics | Primary 429 and missing fallback status confirmed; scoped logging released after spec 11d69de; review before merge |
+| B | [WI-21](work-items/WI-21-tutor-conversation-management.md): rename/pin, TUTOR-REQ-002/003, additive local migration 0037 | Spec ab4cefc committed; implementation released; review before merge; Fred alone applies hosted migration |
+| U | [WI-22](work-items/WI-22-diagnostic-tutor-ui.md): Diagnostic and Tutor UI, TUTOR-REQ-004–011 | DESIGN 6676b9e and Tutor spec c961b83 committed; implementation released; U owns Diagnostic spec; Fred supplies local env file and observes UI |
 | R | WI-06/WI-07: runbooks 01–13, prioritizing 03/04/08 | Unknowns marked Fred to confirm; review before merge |
 | P | WI-08: nine untouched feature specifications | Source/test evidence and honest status; review before merge |
 | C2 | WI-05/WI-13: confirmed Lambda env precedence and cost placeholders | Names only; review before merge |
@@ -87,6 +87,8 @@ Session records for Weeks 1 to 12, Checkpoint 1 and 1.1 records, `docs/masterpla
 - [WI-19: Extend de-identification coverage deliberately](work-items/WI-19-sanitizer-coverage.md) — `planned`.
 
 Additional integration follow-up: [WI-20: Adopt a standard frontend test runner](work-items/WI-20-frontend-test-runner.md) — `planned`.
+
+APPROVAL-05 additions: [WI-21 conversation management](work-items/WI-21-tutor-conversation-management.md) and [WI-22 Diagnostic/Tutor UI](work-items/WI-22-diagnostic-tutor-ui.md) are `in-progress`; [WI-23 Tutor grounding citations](work-items/WI-23-tutor-grounding-citations.md) is `planned`. [Coordinator dispatch and review evidence](evidence/approval-05-coordinator.md) records ownership and current delivery limits.
 
 Grade passback (AGS), admin and researcher features remain planned in the registry. The presence of legacy REST grade routes does not mean AGS is implemented. Full specs are WI-08, full runbooks WI-06/WI-07, remaining ADR seeds WI-09 and consolidated backlog WI-10. No missing full spec or cross-lane catalogue is silently filled by this framework lane.
 
