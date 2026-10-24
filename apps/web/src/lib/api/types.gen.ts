@@ -683,7 +683,8 @@ export interface paths {
         delete: operations["delete_conversation_tutor_conversations__conversation_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch Conversation */
+        patch: operations["patch_conversation_tutor_conversations__conversation_id__patch"];
         trace?: never;
     };
     "/tutor/conversations/{conversation_id}/attachments": {
@@ -1352,6 +1353,35 @@ export interface components {
             latency_ms: number;
             /** Set Id */
             set_id?: string | null;
+        };
+        /** ConversationPatch */
+        ConversationPatch: {
+            /** Title */
+            title?: string;
+            /** Pinned */
+            pinned?: boolean;
+        };
+        /** ManagedConversation */
+        ManagedConversation: {
+            /** Id */
+            id: string;
+            /** Courseid */
+            courseId: string;
+            /** Skillid */
+            skillId: string | null;
+            /** Title */
+            title: string | null;
+            /** Createdat */
+            createdAt: string;
+            /** Updatedat */
+            updatedAt: string;
+            /** Pinnedat */
+            pinnedAt?: string | null;
+        };
+        /** ConversationList */
+        ConversationList: {
+            /** Conversations */
+            conversations: components["schemas"]["ManagedConversation"][];
         };
     };
     responses: never;
@@ -2337,7 +2367,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationList"];
                 };
             };
             /** @description Validation Error */
@@ -3194,6 +3224,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_conversation_tutor_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedConversation"];
                 };
             };
             /** @description Validation Error */

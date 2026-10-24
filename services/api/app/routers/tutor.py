@@ -31,11 +31,12 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from time import monotonic
-from typing import Literal
+from typing import Annotated, Literal
 
 import anyio
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from app.ai import documents, rag
 from app.ai import router as model_router
@@ -162,6 +163,36 @@ class CreateConversation(BaseModel):
     skill_id: str | None = None
 
 
+class ConversationPatch(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid", json_schema_extra={"minProperties": 1})
+
+    # None is an internal omitted-field sentinel, never a valid input value.
+    title: Annotated[str, Field(min_length=1, max_length=80)] | SkipJsonSchema[None] = None
+    pinned: bool | SkipJsonSchema[None] = None
+
+    @model_validator(mode="after")
+    def require_changes(self) -> ConversationPatch:
+        if not self.model_fields_set:
+            raise ValueError("provide title or pinned")
+        if any(getattr(self, name) is None for name in self.model_fields_set):
+            raise ValueError("title and pinned cannot be null")
+        return self
+
+
+class ManagedConversation(BaseModel):
+    id: str
+    courseId: str
+    skillId: str | None
+    title: str | None
+    createdAt: str
+    updatedAt: str
+    pinnedAt: str | None = None
+
+
+class ConversationList(BaseModel):
+    conversations: list[ManagedConversation]
+
+
 @router.post("/conversations")
 def create_conversation(body: CreateConversation, user: CurrentUser = Depends(get_current_user)):
     if body.skill_id:
@@ -186,7 +217,7 @@ def create_conversation(body: CreateConversation, user: CurrentUser = Depends(ge
     return _conversation_view(rows[0])
 
 
-@router.get("/conversations")
+@router.get("/conversations", response_model=ConversationList)
 def list_conversations(
     course_id: str = Depends(require_valid_course_id_query),
     user: CurrentUser = Depends(get_current_user),
@@ -195,10 +226,33 @@ def list_conversations(
         "institution_id": f"eq.{user.institution_id}",
         "user_id": f"eq.{user.user_id}",
         "course_id": f"eq.{course_id}",
-        "select": "id,course_id,skill_id,title,created_at,updated_at",
-        "order": "updated_at.desc",
+        "select": "id,course_id,skill_id,title,created_at,updated_at,pinned_at",
+        "order": "pinned_at.desc.nullslast,updated_at.desc",
     })
-    return {"conversations": [_conversation_view(r) for r in rows]}
+    return {"conversations": [
+        {**_conversation_view(row), "pinnedAt": row.get("pinned_at")} for row in rows
+    ]}
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ManagedConversation)
+def patch_conversation(
+    body: ConversationPatch,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    conversation_id: str = Depends(require_valid_conversation_id),
+):
+    changes = body.model_dump(exclude_unset=True)
+    if "pinned" in changes:
+        # PostgreSQL casts this timestamp input to the transaction's now().
+        # Keep it in the parameter payload, never interpolate SQL or a client time.
+        changes["pinned_at"] = "now" if changes.pop("pinned") else None
+    rows = db.update("tutor_conversations", {
+        "id": f"eq.{conversation_id}",
+        "user_id": f"eq.{user.user_id}",
+        "institution_id": f"eq.{user.institution_id}",
+    }, changes)
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
+    return {**_conversation_view(rows[0]), "pinnedAt": rows[0].get("pinned_at")}
 
 
 @router.get("/conversations/{conversation_id}")
