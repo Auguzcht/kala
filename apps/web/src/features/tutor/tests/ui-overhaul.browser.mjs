@@ -76,6 +76,9 @@ async function fixture(
     creates: 0,
     asks: 0,
     uploads: 0,
+    attachmentDeletes: 0,
+    rejectUploads: true,
+    holdUpload: null,
     submit: null,
     holdAsk: null,
   };
@@ -214,14 +217,20 @@ async function fixture(
     }
     if (path.endsWith("/attachments") && method === "POST") {
       state.uploads++;
-      if (route.request().postData().includes("rejected"))
+      if (state.holdUpload) await state.holdUpload();
+      if (
+        state.rejectUploads &&
+        route.request().postData().includes("rejected")
+      )
         return reply(
           { detail: "Synthetic upload could not be stored. Please try again." },
           503,
         );
       const a = {
         id: `file-${state.uploads}`,
-        filename: "notes.md",
+        filename:
+          /filename="([^"]+)"/.exec(route.request().postData())?.[1] ??
+          "notes.md",
         mimeType: "text/markdown",
         sizeBytes: 20,
         status: "ready",
@@ -231,6 +240,7 @@ async function fixture(
       return reply(a);
     }
     if (/\/attachments\//.test(path) && method === "DELETE") {
+      state.attachmentDeletes++;
       state.attachments = [];
       return reply({});
     }
@@ -575,7 +585,46 @@ try {
       .locator("[data-study-surface]")
       .dispatchEvent("drop", { dataTransfer: data });
     await page.getByText("notes.md", { exact: true }).waitFor();
-    check(state.uploads === 1, "TUTOR-REQ-009 drop uses existing upload route");
+    check(state.uploads === 0, "TUTOR-REQ-009 drop stages without upload");
+    await page
+      .getByRole("button", { name: "Preview notes.md", exact: true })
+      .click();
+    const fileDialog = page.getByRole("dialog", {
+      name: "notes.md",
+      exact: true,
+    });
+    await fileDialog.locator("pre").waitFor();
+    check(
+      await fileDialog.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return (
+          r.left >= 16 &&
+          r.right <= innerWidth - 16 &&
+          getComputedStyle(el).animationName === "none"
+        );
+      }),
+      "TUTOR-REQ-009 raw preview fits mobile and honors reduced motion",
+    );
+    await page.screenshot({
+      path: resolve(out, `tutor-file-preview-${width}.png`),
+    });
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", { name: "Preview notes.md", exact: true })
+      .waitFor();
+    await page.getByPlaceholder("Ask Kala…").fill("Use my notes");
+    await page
+      .getByRole("button", { name: "Send message", exact: true })
+      .click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("[data-tutor-file-card]")
+        ?.textContent.includes("Attached"),
+    );
+    check(
+      state.uploads === 1 && state.asks === 2,
+      "TUTOR-REQ-009 Send uploads before asking through existing routes",
+    );
     check(
       (await page
         .getByText("Drop files to attach", { exact: true })
@@ -977,9 +1026,12 @@ try {
       await newChatButton
         .locator("[data-tutor-action-icon]")
         .evaluate((el, reduced) => {
-          const moving = [...el.querySelectorAll('svg, svg *')].some(node => {
+          const moving = [...el.querySelectorAll("svg, svg *")].some((node) => {
             const transform = getComputedStyle(node).transform;
-            return transform !== 'none' && !new DOMMatrixReadOnly(transform).isIdentity;
+            return (
+              transform !== "none" &&
+              !new DOMMatrixReadOnly(transform).isIdentity
+            );
           });
           return reduced ? !moving : moving;
         }, reducedMotion === "reduce"),
@@ -1081,15 +1133,21 @@ try {
   await primitive.page
     .getByRole("button", { name: "Remove notes.txt" })
     .waitFor();
+  await primitive.page.waitForFunction(
+    () =>
+      document
+        .querySelector("#tutor-composer [data-slot=input-group]")
+        .getBoundingClientRect().height > 100,
+  );
   check(
     await primitive.page
       .locator("#tutor-composer [data-slot=input-group]")
       .evaluate(
         (el) =>
           el.getBoundingClientRect().height > 48 &&
-          parseFloat(getComputedStyle(el).borderRadius) === 12,
+          parseFloat(getComputedStyle(el).borderRadius) === 24,
       ),
-    "WI-22 attached input expands with token radius",
+    "WI-22 attached input expands with a preserved finite corner",
   );
   await primitive.page
     .getByRole("button", { name: "Remove notes.txt" })
@@ -1189,36 +1247,189 @@ try {
     ),
     "TUTOR-REQ-007 typing stops idle loop",
   );
-  // Attachment navigation must preserve this unsent draft and create only once.
+  // Staging and preview never create a conversation or upload.
+  const raw =
+    "### Local heading\n<script>window.previewExecuted=true</script>\n**unformatted text**";
   await idle.page.locator("input[type=file]").setInputFiles({
     name: "notes.md",
     mimeType: "text/markdown",
-    buffer: Buffer.from("synthetic notes"),
+    buffer: Buffer.from(raw),
   });
-  await idle.page.getByText("notes.md", { exact: true }).waitFor();
+  const previewButton = idle.page.getByRole("button", {
+    name: "Preview notes.md",
+    exact: true,
+  });
+  await previewButton.waitFor();
+  check(
+    idle.state.creates === 0 && idle.state.uploads === 0,
+    "TUTOR-REQ-009 choosing a file stages locally",
+  );
+  await previewButton.click();
+  const previewDialog = idle.page.getByRole("dialog", {
+    name: "notes.md",
+    exact: true,
+  });
+  await previewDialog.locator("pre").waitFor();
+  check(
+    (await previewDialog.locator("pre").textContent()) === raw &&
+      (await previewDialog.locator("h3,script,strong").count()) === 0,
+    "TUTOR-REQ-009 preview shows raw markdown and HTML as text",
+  );
+  check(
+    await idle.page.evaluate(() => !window.previewExecuted),
+    "TUTOR-REQ-009 preview cannot execute file markup",
+  );
+  check(
+    await idle.page
+      .locator("[data-slot=dialog-overlay]")
+      .evaluate((el) => getComputedStyle(el).backdropFilter !== "none"),
+    "TUTOR-REQ-009 preview uses a subtle blurred overlay",
+  );
+  await idle.page.waitForFunction(
+    () =>
+      getComputedStyle(document.querySelector("[role=dialog]")).opacity === "1",
+  );
+  await idle.page.screenshot({
+    path: resolve(out, "tutor-file-preview-1440.png"),
+  });
+  await previewDialog
+    .getByRole("button", { name: "Close file preview" })
+    .click();
+  await previewButton.waitFor();
+  await idle.page.waitForFunction(
+    () =>
+      document.activeElement?.getAttribute("aria-label") === "Preview notes.md",
+  );
+  check(
+    idle.state.creates === 0 && idle.state.uploads === 0,
+    "TUTOR-REQ-009 preview closes with focus restored and no upload",
+  );
+  await idle.page.getByRole("button", { name: "Remove notes.md" }).click();
+  await idle.page
+    .locator("[data-tutor-file-card]")
+    .waitFor({ state: "detached" });
+  check(
+    (await idle.page.locator("[data-tutor-file-card]").count()) === 0 &&
+      idle.state.attachmentDeletes === 0,
+    "TUTOR-REQ-009 removing a staged file is local",
+  );
+  await idle.page.locator("input[type=file]").setInputFiles([
+    { name: "notes.md", mimeType: "text/markdown", buffer: Buffer.from(raw) },
+    {
+      name: "rejected.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("retry synthetic notes"),
+    },
+  ]);
   check(
     (await idle.page.getByPlaceholder("Ask Kala…").inputValue()) === "A draft",
-    "TUTOR-REQ-009 lazy attachment preserves draft",
+    "TUTOR-REQ-009 staging preserves the draft",
   );
-  check(
-    idle.state.creates === 1 && idle.state.uploads === 1,
-    "TUTOR-REQ-009 first attachment creates then uploads",
+  await idle.page.waitForFunction(
+    () =>
+      document
+        .querySelector("#tour-tutor-input [data-slot=input-group]")
+        .getBoundingClientRect().height > 150,
   );
-  await idle.page.locator("input[type=file]").setInputFiles({
-    name: "rejected.md",
-    mimeType: "text/markdown",
-    buffer: Buffer.from("synthetic notes"),
+  await idle.page.getByRole("heading", { level: 1 }).hover();
+  await idle.page.waitForFunction(() =>
+    [...document.querySelectorAll("[data-tutor-file-card] svg path")].every(
+      (el) => getComputedStyle(el).opacity === "1",
+    ),
+  );
+  await idle.page.screenshot({
+    path: resolve(out, "tutor-file-staged-1440.png"),
   });
+  await idle.page
+    .getByRole("button", { name: "Send message", exact: true })
+    .click();
   await idle.page
     .getByText("Synthetic upload could not be stored. Please try again.", {
       exact: true,
     })
     .waitFor();
+  await idle.page
+    .getByText("Upload failed — send to retry", { exact: true })
+    .waitFor();
   check(
-    idle.state.creates === 1,
-    "TUTOR-REQ-009 upload error does not create another conversation",
+    idle.state.creates === 1 &&
+      idle.state.uploads === 2 &&
+      idle.state.asks === 0,
+    "TUTOR-REQ-009 partial upload does not ask or duplicate successful files",
+  );
+  check(
+    (await idle.page.getByPlaceholder("Ask Kala…").inputValue()) === "A draft",
+    "TUTOR-REQ-009 upload failure preserves the question",
+  );
+  // Retry only the failed local file; keep the prior successful upload.
+  idle.state.rejectUploads = false;
+  await idle.page
+    .getByRole("button", { name: "Send message", exact: true })
+    .click();
+  await idle.page
+    .getByText("Object storage keeps durable copies", { exact: false })
+    .first()
+    .waitFor();
+  check(
+    idle.state.creates === 1 &&
+      idle.state.uploads === 3 &&
+      idle.state.asks === 1,
+    "TUTOR-REQ-009 successful uploads are reused on send retry",
   );
   await idle.context.close();
+
+  const cancelled = await fixture(1440, { empty: true });
+  let releaseUpload;
+  const heldUpload = new Promise((resolve) => {
+    releaseUpload = resolve;
+  });
+  cancelled.state.holdUpload = () => heldUpload;
+  await cancelled.page.goto("http://localhost:5173/course/tutor");
+  await cancelled.page.getByPlaceholder("Ask Kala…").fill("Old chat question");
+  await cancelled.page.locator("input[type=file]").setInputFiles([
+    {
+      name: "first.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("first"),
+    },
+    {
+      name: "second.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("second"),
+    },
+  ]);
+  await cancelled.page
+    .getByRole("button", { name: "Send message", exact: true })
+    .click();
+  await cancelled.page.waitForURL("**conversation=created");
+  await cancelled.page.waitForFunction(() =>
+    document.querySelector('button[aria-label="Attaching files"]'),
+  );
+  await cancelled.page
+    .getByRole("button", { name: "New chat", exact: true })
+    .filter({ has: cancelled.page.locator("svg") })
+    .click();
+  await cancelled.page.waitForURL("http://localhost:5173/course/tutor");
+  await cancelled.page.getByPlaceholder("Ask Kala…").fill("New chat draft");
+  check(
+    await cancelled.page
+      .getByRole("button", { name: "Send message", exact: true })
+      .isEnabled(),
+    "TUTOR-REQ-009 old upload does not lock the new chat",
+  );
+  releaseUpload();
+  cancelled.state.holdUpload = null;
+  await cancelled.page.waitForTimeout(250);
+  check(
+    cancelled.state.uploads === 1 && cancelled.state.asks === 0,
+    "TUTOR-REQ-009 switching chat stops remaining batch and ask",
+  );
+  check(
+    (await cancelled.page.getByPlaceholder("Ask Kala…").inputValue()) ===
+      "New chat draft",
+    "TUTOR-REQ-009 old upload completion preserves the new chat draft",
+  );
+  await cancelled.context.close();
 
   const legacy = await fixture(1440, { legacy: true });
   await legacy.page.goto(

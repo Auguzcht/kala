@@ -239,3 +239,65 @@ Evidence added: this append-only report; 14 synthetic desktop/mobile captures in
 Anything not done, and why: live Rename/Pin acceptance requires the other worktree’s API/list deployment; no merge/push/deploy/hosted-data mutation authorized or performed.
 Risks or questions for the planner: integrate matching Tutor/Design text, retain capability gating, complete lead designer review and Fred’s authenticated acceptance. Icon glyphs without a published variant intentionally stay static.
 Secrets printed: none (confirmed); environment contents were not read.
+
+
+## Local attachment staging and preview — before implementation, 2026-10-25
+
+Base `75ff72a`. Fred selected “File cards + raw-text preview modal” after asking about immediate uploads and unstable corners. Current source selects -> lazy conversation creation -> upload immediately, and server detail supplies only filename/type/size/status. It has neither local staging nor downloadable contents. The old transition interpolates from rounded-full’s unbounded radius to radius-xl, which produces the late corner snap.
+
+The owned component-boundary spec records local staging, validation, partial retry without duplicate uploads, explicit send ordering, per-chat cancellation, file cards, and bounded local raw-text modal preview before code. Keep accepted types (.txt/.md/.pdf, 5MB) and current API routes. Images and restored-file/PDF content preview require separate contracts and remain out of scope. The finite 24px-equivalent corner is derived from existing radius-xl; no new design token, parser, preview pane or backend endpoint is introduced. Coordinator-owned Tutor and DESIGN amendments remain pending integration.
+
+
+### Local staging and preview verification completed — 2026-10-25
+
+Implemented against base `75ff72a` after Fred selected the file-card/raw-preview approach:
+
+- Selecting/dropping validates and stages local File objects; it creates no conversation and sends no upload request. Local removal sends no DELETE. Files have compact filename/type/size/state cards. TXT/MD can open a raw-text dialog; PDF is a metadata card. Existing/restored files have metadata only unless a local File is still available in this mounted chat.
+- Send lazily creates/reuses one conversation, uploads the staged batch, then asks only when all attachments are ready. Successful uploads are removed from staging and reused when a failed file is retried. Partial failure preserves the question and failed files; editing the question during upload is not discarded when the captured question is sent. Server failed/processing attachments block asking until resolved or removed.
+- Conversation switching stops the old batch’s remaining uploads/ask and resets its busy state without altering the new chat’s draft. An already dispatched upload may finish in its original conversation; it is not reassigned to the new chat.
+- The shared 48px input retains its empty appearance with a finite corner equal to twice radius-xl. The attachment area animates height, preserving that same corner throughout; there is no interpolation from an effectively infinite radius. Reduced motion makes the expansion immediate. No shared Study action/ask behavior changed.
+- Preview uses at most 128 KiB from the local File, rendered as literal text in a scrollable pre element, with a truncation notice for larger files. No Markdown parser, HTML execution, network preview request, adjustable pane or server-content endpoint is added. The modal traps focus, closes by button/Escape, restores the opener, fits 375px screens, subtly blurs the background, and suppresses entry/exit motion for reduced motion. Its close glyph animates only on hover, keeping its initial auto-focused state fully legible.
+
+The existing entry-resume effect was found to leave its “handled” flag unset when entering an already selected chat. A later delete could resume an unrelated remaining chat. Marking the initial decision handled also for selected chats restores its documented once-on-entry behavior; the existing confirmed-delete navigation assertion now passes alongside the staging cancellation test.
+
+Final verification:
+
+| Check | Result |
+| --- | --- |
+| Frontend Node command recorded earlier (same four files) | 21 passed; obsolete radius-class unit test retired, replaced by browser geometry checks |
+| Study deck external-renderer command recorded earlier | 4 passed |
+| Browser command recorded earlier, with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-attachments` | 155 assertions passed |
+| `pnpm --filter web lint` | Passed; 0 errors / 18 existing warnings |
+| `pnpm --filter web typecheck` | Passed; existing route-generator circular dependency warning |
+| `pnpm --filter web build` | Passed; existing chunk-size warning |
+| `git diff --check` | Passed |
+
+Added browser coverage proves no upload/create on selection or preview, local-only removal, raw Markdown/HTML display without execution, dialog focus restoration, reduced-motion/mobile containment, upload-before-ask ordering, partial retry without duplicate successful uploads, draft retention and cross-chat cancellation. Earlier Diagnostic, sidebar, provider-recovery, actual icon-variant, shared dock and flip-focus checks remain passing. All 17 captures under `/tmp/kala-lane-u-attachments/` are synthetic, including staged file cards and desktop/mobile preview. Screenshots wait for expansion/modal opacity to settle; captures of an intermediate animation frame are not final acceptance evidence.
+
+Intermediate fixes: removed an unused drag-state binding after corner state became constant; waited for the intentional exit/collapse before asserting a card was removed; waited for the expanded geometry rather than its first animation frame; narrowed a synthetic New chat selector to distinguish the action from a chat named “New chat.” The entry-resume defect above was a real behavior fix, not a selector adjustment. Final passing runs supersede these intermediate failures.
+
+Fred’s newest session was opened through the existing launch flow, and the local Tutor input was verified visible with no expiry page. No credential was printed or added to source/evidence, and no identifying live screenshot was captured. No live ask/upload/delete/rename/pin was performed.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / Tutor local attachment staging and raw-text preview
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: 75ff72a
+Files changed:
+- apps/web/src/components/ai-elements/dock-layout.ts
+- apps/web/src/features/tutor/components/TutorChat.tsx
+- apps/web/src/features/tutor/components/TutorComposer.tsx
+- apps/web/src/features/tutor/components/TutorFileCard.tsx
+- apps/web/src/features/tutor/components/TutorFilePreview.tsx
+- apps/web/src/features/tutor/lib/attachments.ts
+- apps/web/src/features/tutor/lib/presentation.ts
+- apps/web/src/features/tutor/tests/presentation.test.mjs
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- docs/features/diagnostic/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-005; TUTOR-REQ-004, 009, 011; WI-22
+Commands run and results (tests, lint, typecheck, build): 21 frontend + 4 Study tests, 155 browser assertions; lint/typecheck/build/diff check passed with existing warnings.
+Spec changes made: owned component-boundary amendment and change-log entry before implementation; coordinator-owned Tutor/Design text remains pending integration.
+Evidence added: this append-only verification, synthetic file-card/raw-preview screenshots in /tmp/kala-lane-u-attachments.
+Anything not done, and why: image uploads, PDF content preview and restored-file contents need separate contracts; they were not part of the selected local TXT/MD preview scope. No backend, migration, generated type, dependency, infrastructure, push or deployment change.
+Risks or questions for the planner: integrate revised Tutor attachment lifecycle/shape wording; retain existing backend type/size limits and human live acceptance.
+Secrets printed: none (confirmed); environment contents were not read.

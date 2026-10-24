@@ -23,6 +23,7 @@ import {
   useUploadTutorAttachment,
   useDeleteTutorAttachment,
 } from "@/features/tutor";
+import type { TutorFileUploadResult } from "@/features/tutor/lib/attachments";
 import type { TutorStyle, TutorConversationDetail } from "@/features/tutor";
 
 type UnconfirmedTurn = {
@@ -108,6 +109,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
     epoch.current += 1;
     resolveConversation.current = createConversationResolver();
     setHasTyped(false);
+    uploadsInFlight.current = 0;
+    setUploading(false);
     setPendingTurn(null);
     setUnconfirmedTurns([]);
     setLastQuestion(null);
@@ -117,8 +120,9 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const conversations = useTutorConversations(courseId);
   const autoResumedRef = useRef(false);
   useEffect(() => {
-    if (autoResumedRef.current || activeId || conversations.isLoading) return;
+    if (autoResumedRef.current || conversations.isLoading) return;
     autoResumedRef.current = true;
+    if (activeId) return;
     const mostRecent = [...(conversations.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
     if (mostRecent) {
       selfNavigatedRef.current = true;
@@ -208,22 +212,55 @@ export function TutorChat({ courseId }: { courseId: string }) {
     send.mutate({ question, style, origin: epoch.current });
   }
 
-  async function handleFiles(files: File[]) {
-    if (!files.length) return;
+  async function handleFiles(files: File[]): Promise<TutorFileUploadResult> {
+    const result: TutorFileUploadResult = { uploaded: [], failed: [] };
+    if (!files.length) return result;
+    const origin = epoch.current;
+    let conversationId: string | undefined;
     uploadsInFlight.current += 1;
     setUploading(true);
     try {
       for (const file of files) {
+        if (origin !== epoch.current) {
+          result.failed.push(file);
+          continue;
+        }
         const reason = validateTutorFile(file);
-        if (reason) { toast.error("Couldn't attach that file", { description: reason }); continue; }
+        if (reason) {
+          toast.error("Couldn't attach that file", { description: reason });
+          result.failed.push(file);
+          continue;
+        }
         try {
-          const id = await ensureConversation();
-          await uploadAttachment.mutateAsync({ conversationId: id, file });
+          conversationId ??= await ensureConversation();
+          if (origin !== epoch.current) {
+            result.failed.push(file);
+            continue;
+          }
+          const attachment = await uploadAttachment.mutateAsync({
+            conversationId,
+            file,
+          });
+          result.uploaded.push({ file, attachment });
+          if (attachment.status === "failed")
+            toast.error("Couldn't read that file", {
+              description: "Remove it and try another file.",
+            });
         } catch (error) {
-          toast.error("Couldn't attach that file", { description: apiErrorReason(error) ?? "Please try again." });
+          result.failed.push(file);
+          if (origin === epoch.current)
+            toast.error("Couldn't attach that file", {
+              description: apiErrorReason(error) ?? "Please try again.",
+            });
         }
       }
-    } finally { uploadsInFlight.current -= 1; setUploading(uploadsInFlight.current > 0); }
+      return result;
+    } finally {
+      if (origin === epoch.current) {
+        uploadsInFlight.current -= 1;
+        setUploading(uploadsInFlight.current > 0);
+      }
+    }
   }
 
   function handleRemoveAttachment(attachmentId: string) {
@@ -319,8 +356,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
       </StudyStream>}
       <div className={cn("shrink-0", empty ? "px-4" : dockLayout.footer)}>
         <div className={cn("mx-auto w-full max-w-[800px]", dockLayout.content)}>
-          <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} dragging={dragging} onDragChange={setDragging}
-            attachments={active.data?.attachments ?? []} onFiles={(files) => void handleFiles(files)}
+          <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} onDragChange={setDragging}
+            attachments={active.data?.attachments ?? []} onFiles={handleFiles}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
             onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />
         </div>

@@ -58,13 +58,6 @@ export function pickGreeting(
   return hash % pool.length === 0 ? selected : `${salutation} ${selected}`;
 }
 
-export function dockShape(
-  dragging: boolean,
-  hasAttachments: boolean,
-): "rounded-xl" | "rounded-full" {
-  return dragging || hasAttachments ? "rounded-xl" : "rounded-full";
-}
-
 export function validateTutorFile(file: File): string | null {
   if (!/\.(txt|md|pdf)$/i.test(file.name))
     return "Only .txt, .md, and .pdf files are supported.";

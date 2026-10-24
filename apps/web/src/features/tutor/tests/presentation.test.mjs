@@ -4,7 +4,6 @@ import {
   groupConversations,
   supportsConversationManagement,
   pickGreeting,
-  dockShape,
   validateTutorFile,
   createConversationResolver,
 } from "../lib/presentation.ts";
@@ -97,15 +96,6 @@ test("WI-22 Recents sorting leaves pinned order and source data unchanged", () =
     list.map((x) => x.id),
     ["z", "p", "a"],
   );
-});
-test("TUTOR-REQ-009 shape reacts to dragging and persisted attachments", () => {
-  assert.equal(dockShape(false, false), "rounded-full");
-  for (const [drag, attached] of [
-    [true, false],
-    [false, true],
-    [true, true],
-  ])
-    assert.equal(dockShape(drag, attached), "rounded-xl");
 });
 test("TUTOR-REQ-009 constraints match existing backend file support and byte cap", () => {
   for (const name of ["notes.txt", "notes.MD", "notes.pdf"])
