@@ -93,12 +93,37 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 - Status: implemented
 - Verified by: source inventory and shared loading browser fixtures in apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; Study/Tutor regressions and checks recorded in docs/work/handover-2026/evidence/ui-overhaul.md.
 
+## Diagnostic availability (Lane G, APPROVAL-06)
+
+### DIAG-REQ-009: Count only actionable unevidenced skills
+
+- Rule: A baseline candidate is an approved skill with no learner evidence of any kind in the validated institution/course and at least one question servable now. Recorded Study/Practice activity, including item reviews, excludes the skill. No-material skills are not due. Availability reads never write evidence, grades, reviews or exposures.
+- Acceptance: Mixed ready, no-material, preparing, exhausted and already-practiced skills produce only actionable candidates; empty and completed courses are not due. Tenant/course/learner boundaries are retained and no evidence is fabricated.
+- Status: planned
+- Verified by: Lane G's focused availability tests, pending implementation.
+
+### DIAG-REQ-010: Filter by availability before the sitting limit
+
+- Rule: Status and question selection use the same eligibility and availability rules. Filter before the ten-question limit, preserving deterministic skill order and one question per skill. An approved, live, untested bank MCQ is sufficient; do not require five. Exhausted pools await replenishment rather than imply failure. Preserve deterministic legacy selection and existing grading/evidence semantics.
+- Acceptance: With unchanged source data the sitting has min(dueSkillCount, 10) questions, including when unavailable skills precede available skills. Cover more than ten candidates, one-MCQ availability and exhaustion without recording a false generation failure.
+- Status: planned
+- Verified by: Lane G's shared-selection and status parity tests, pending implementation.
+
+### DIAG-REQ-011: Explain material and preparation waiting truthfully
+
+- Rule: Status retains courseId and due, adding optional non-negative dueSkillCount and waitingForMaterialCount. due is true exactly when actionable count is positive. waitingForMaterialCount counts approved unevidenced skills missing course material; it excludes preparation and exhaustion.
+- Rule: Question responses retain ready/generating/failed and existing fields, adding optional waitingForMaterialCount. pendingSkillIds means awaiting preparation or replenishment, not proof that a worker is active. failedSkillIds contains only actual recorded preparation failures; skippedSkillCount equals its length. No-material skills enter neither list. readyCount equals questions.length.
+- Rule: Available questions take precedence (ready). With no questions, pending skills produce generating; otherwise recorded failures produce failed. Material-only waiting produces ready with empty questions and a positive waitingForMaterialCount; empty/all-evidenced courses produce ready, empty questions and zero. Clients missing optional fields keep legacy handling.
+- Acceptance: Mixed availability remains playable, exhaustion is pending, no-material is distinct from failure, and empty/completed courses remain compatible. Status and question material counts agree for unchanged data. No migration, grading or evidence-semantic change.
+- Status: planned
+- Verified by: Lane G's response-contract tests, pending implementation.
+
 ## API contract
 
 | Method and path | Purpose | Auth | Notes |
 | --- | --- | --- | --- |
-| GET /courses/{course_id}/diagnostic/status | Read whether a baseline is due | Validated course session | No due-rule change |
-| GET /courses/{course_id}/diagnostic | Load baseline questions and preparation state | Validated course session | No selection or generation change |
+| GET /courses/{course_id}/diagnostic/status | Read whether a baseline is due | Validated course session | Optional actionable dueSkillCount and waitingForMaterialCount per DIAG-REQ-009–011 |
+| GET /courses/{course_id}/diagnostic | Load baseline questions and preparation state | Validated course session | Availability before sitting limit; optional waitingForMaterialCount; existing status enum retained |
 | POST /courses/{course_id}/diagnostic/submit | Submit the sitting and receive mastery deltas | Validated course session | Existing payload and grading unchanged |
 
 ## Data
@@ -143,3 +168,5 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 | 2026-10-25 | Align the introduction to the shell's left gutter, replace duplicate completion/modal exits with one celebrated mastery-results view, and unify real waiting indicators across Kala | Fred's direct follow-up explicitly expands visual write scope across the app; retain feature behavior and backend contracts | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-007, DIAG-REQ-008 |
 | 2026-10-25 | Match Diagnostic introduction margins to Skills/Twin content (24px/40px horizontal, 32px vertical and the shared maximum width), superseding breadcrumb alignment | Fred’s direct margin correction in WI-22 | DIAG-REQ-001 |
 | 2026-10-25 | Clarify the singular skill-session versus plural Skills-picker layout boundary so all page headers share the centered maximum width on wide screens | Wide-screen verification of Fred’s margin correction | DIAG-REQ-001 |
+
+| 2026-10-25 | Specify actionable eligibility, availability-first selection and truthful waiting contracts before Lane G implementation | APPROVAL-06 section 4; G proposal and coordinator contract clarification | DIAG-REQ-009–011 |
