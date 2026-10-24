@@ -128,3 +128,5 @@ Local automated integration is green. Fred subsequently reported completing the 
 - [WI-25 full-history evidence paging](work-items/WI-25-full-history-evidence-paging.md): deferred, ITO.
 
 The accepted handoff retires Tutor new-chat starters, stages files locally until Send and retains a Diagnostic purpose header. Earlier WI-22 descriptions are historical initial scope; current feature specs and APPROVAL-06 govern. Design exceptions include Fred's accepted dock/control/history refinements, with lead designer review still pending. Live provider recovery, hosted migration application, deployment and click-through remain Fred gates.
+
+Additional source-audit follow-up: [WI-26 instructor course authorization and recommendation visibility](work-items/WI-26-instructor-course-authorization.md) — planned, ITO; high-priority review before institutional production sign-off. This is separate from H01(a) enrollment convergence.
