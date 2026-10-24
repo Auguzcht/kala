@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from mangum import Mangum
 
 from app.ai.errors import ModelUnavailableError
+from app.ai.request_budget import TutorTimeout
 from app.config import get_settings
 from app.learn.items import ItemGenerationError
 from app.lti.routes import router as lti_router
@@ -46,6 +47,14 @@ async def _log_practice_submit_timing(request: Request, call_next):
         profile["status_code"] = response.status_code
         logger.info("practice_submit_timing %s", profile)
     return response
+
+
+@app.exception_handler(TutorTimeout)
+def _tutor_timeout(_request: Request, exc: TutorTimeout) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": str(exc), "code": "tutor_timeout"},
+    )
 
 
 @app.exception_handler(ModelUnavailableError)

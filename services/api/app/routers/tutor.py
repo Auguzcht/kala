@@ -27,16 +27,21 @@ re-serving someone else's upload).
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Literal
 
+import anyio
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from app.ai import documents, rag
 from app.ai import router as model_router
-from app.ai.deidentify import safe_context
+from app.ai.deidentify import safe_context, strip_pii
+from app.ai.errors import ModelUnavailableError
+from app.ai.request_budget import RequestBudget, TutorTimeout
 from app.db import storage
 from app.db import supabase as db
 from app.deps import (
@@ -48,6 +53,8 @@ from app.deps import (
 )
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 _SYSTEM = (
     "You are Kala, a study tutor. Teach and give hints. Never reveal answers to graded work."
@@ -121,7 +128,8 @@ def _safe_filename(name: str | None) -> str:
     return base[:200]
 
 
-def _owned_conversation(conversation_id: str, user: CurrentUser) -> dict:
+def _owned_conversation(conversation_id: str, user: CurrentUser, *,
+                        budget: RequestBudget | None = None) -> dict:
     """Fetch a conversation, 404 if it doesn't belong to this user. This is
     client-supplied input (unlike institution_id/user_id which are always
     derived server-side from the session), so ownership is checked, not
@@ -132,7 +140,7 @@ def _owned_conversation(conversation_id: str, user: CurrentUser) -> dict:
         "institution_id": f"eq.{user.institution_id}",
         "select": "id,course_id,skill_id,title,created_at,updated_at",
         "limit": "1",
-    })
+    }, **({} if budget is None else {"budget": budget}))
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
     return rows[0]
@@ -341,102 +349,98 @@ class Ask(BaseModel):
 
 
 @router.post("/ask")
-def ask(body: Ask, user: CurrentUser = Depends(get_current_user)):
-    # The tutor is the ONE surface that passes task="chat". Its own model role
-    # exists because deepseek cannot answer inside the request budget (34-103s
-    # against a 25s client timeout behind a 30s Lambda wall), and the global
-    # deepseek fallback cannot rescue it for the same reason. Every other
-    # answer() caller omits task and keeps its existing model.
-    #
-    # A MODEL OUTAGE IS ALREADY HANDLED, at the app level: main.py has an
-    # exception handler for ModelUnavailableError that returns a generic 502
-    # with {"detail": "..."}. An earlier version of this change also wrapped
-    # the call in a local try/except returning 503 with a nested
-    # {"detail": {"error", "message", "retryable"}} payload — that was
-    # removed, for two concrete reasons:
-    #
-    #   1. The frontend does not read the body. TutorChat's onError branches
-    #      on the ERROR, keeping the question and showing a retry, so the
-    #      extra payload was never consumed. There was no contract to match.
-    #   2. It BROKE apiErrorReason(), which extracts the message with a regex
-    #      expecting a flat {"detail":"..."}. A nested detail object does not
-    #      match, so the helper returned null instead of the sentence — a
-    #      worse outcome than the handler it duplicated.
-    #
-    # Two handlers doing one job with different shapes is exactly the drift
-    # this codebase keeps finding. One handler, at the layer every
-    # model-backed endpoint already goes through.
-    return _ask(body, user)
+async def ask(body: Ask, user: CurrentUser = Depends(get_current_user)):
+    budget = RequestBudget()  # starts at handler entry, after authentication
+    try:
+        with anyio.fail_after(budget.remaining()):
+            result = await _ask(body, user, budget=budget)
+        if budget.outcome == "error":
+            budget.outcome = "success"
+        return result
+    except (TutorTimeout, TimeoutError):
+        budget.outcome = "timeout"
+        raise TutorTimeout() from None
+    except ModelUnavailableError:
+        budget.outcome = "provider_error"
+        raise
+    finally:
+        budget.closed = True
+        logger.info("tutor_timing %s", {
+            **budget.timings,
+            "handler_ms": (monotonic() - budget.started) * 1000,
+            "mode": "persistent" if body.conversation_id else "stateless",
+            "provider_role": budget.provider_role,
+            "fallback_used": budget.fallback_used,
+            "outcome": budget.outcome,
+            "user_id_prefix": user.user_id[:8],
+        })
 
 
-def _ask(body: Ask, user: CurrentUser):
-    if not body.conversation_id:
-        # Original stateless path, unchanged. No conversation touched, no
-        # history, no persistence — a canned hint stays a canned hint.
-        chunks = rag.retrieve(
-            institution_id=user.institution_id, course_id=body.course_id, query=body.question,
-        )
-        context = "\n".join(c.get("chunk_text", "") for c in chunks)
-        prompt = safe_context(user, f"Course context:\n{context}\n\nQuestion: {body.question}")
-        system = _SYSTEM + _STYLE_HINTS.get(body.style, "")
-        return {"answer": model_router.answer(system=system, user_text=prompt, task="chat")}
+async def _ask(body: Ask, user: CurrentUser, *, budget: RequestBudget):
+    convo = None
+    history = []
+    if body.conversation_id:
+        convo = await budget.run("ownership", _owned_conversation, body.conversation_id, user)
+        prior = await budget.run("history", db.select, "tutor_messages", {
+            "conversation_id": f"eq.{convo['id']}",
+            "select": "role,content",
+            "order": "created_at.desc",
+            "limit": str(_HISTORY_TURNS),
+        })
+        history = [
+            {"role": m["role"], "content": [{"text": strip_pii(m["content"])}]}
+            for m in reversed(prior)
+        ]
 
-    convo = _owned_conversation(body.conversation_id, user)
-
-    prior = db.select("tutor_messages", {
-        "conversation_id": f"eq.{convo['id']}",
-        "select": "role,content",
-        "order": "created_at.desc",
-        "limit": str(_HISTORY_TURNS),
-    })
-    history = [
-        {"role": m["role"], "content": [{"text": m["content"]}]}
-        for m in reversed(prior)  # selected newest-first for the limit, replayed oldest-first
-    ]
-
-    chunks = rag.retrieve(
-        institution_id=user.institution_id, course_id=convo["course_id"], query=body.question,
+    chunks = await budget.run(
+        "retrieval", rag.retrieve,
+        institution_id=user.institution_id,
+        course_id=convo["course_id"] if convo else body.course_id,
+        query=strip_pii(body.question),
     )
     context = "\n".join(c.get("chunk_text", "") for c in chunks)
-
-    attachments = db.select("tutor_attachments", {
-        "conversation_id": f"eq.{convo['id']}", "status": "eq.ready",
-        "select": "filename,extracted_text",
-    })
     attachment_block = ""
-    if attachments:
-        # Labeled distinctly from course context — this is the student's
-        # own uploaded material, not institution-approved course content,
-        # and the model shouldn't treat the two the same way (course
-        # content is retrieval-grounded and vetted; this is whatever the
-        # student happened to attach).
-        parts = [
-            f"--- {a['filename']} ---\n{(a.get('extracted_text') or '')[:_MAX_ATTACHMENT_CONTEXT_CHARS]}"
-            for a in attachments
-        ]
-        joined = "\n\n".join(parts)[:_MAX_TOTAL_ATTACHMENT_CONTEXT_CHARS]
-        attachment_block = "\n\nMaterial the student uploaded (their own notes, not course content):\n" + joined
+    if convo:
+        attachments = await budget.run("attachments", db.select, "tutor_attachments", {
+            "conversation_id": f"eq.{convo['id']}", "status": "eq.ready",
+            "select": "filename,extracted_text",
+        })
+        if attachments:
+            parts = [
+                f"--- {a['filename']} ---\n{(a.get('extracted_text') or '')[:_MAX_ATTACHMENT_CONTEXT_CHARS]}"
+                for a in attachments
+            ]
+            joined = "\n\n".join(parts)[:_MAX_TOTAL_ATTACHMENT_CONTEXT_CHARS]
+            attachment_block = "\n\nMaterial the student uploaded (their own notes, not course content):\n" + joined
 
     prompt = safe_context(
         user, f"Course context:\n{context}{attachment_block}\n\nQuestion: {body.question}"
     )
-    system = _SYSTEM + _STYLE_HINTS.get(body.style, "")
-    answer_text = model_router.answer(
-        system=system, user_text=prompt, history=history, task="chat",
+    answer_text = await budget.run(
+        "chat", model_router.answer,
+        system=_SYSTEM + _STYLE_HINTS.get(body.style, ""), user_text=prompt,
+        history=history, task="chat",
     )
+    if not convo:
+        return {"answer": answer_text}
 
-    db.insert("tutor_messages", [
-        # PostgREST bulk inserts require every object to have the same keys;
-        # style is nullable for user messages, but it must still be present.
-        {"conversation_id": convo["id"], "role": "user", "content": body.question, "style": None},
-        {"conversation_id": convo["id"], "role": "assistant", "content": answer_text, "style": body.style},
-    ])
-    updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    if not convo.get("title"):
-        # First message in the thread: derive a short title from it rather
-        # than leaving it null forever or spending a model call naming a
-        # chat nobody's read yet. No attempt at cleverness here.
-        updates["title"] = body.question[:60] + ("…" if len(body.question) > 60 else "")
-    db.update("tutor_conversations", {"id": f"eq.{convo['id']}"}, updates)
+    # An answer is useful even when persistence cannot complete. Each write
+    # is a separate awaited stage: an abandoned insert cannot start the update.
+    stage = "persist_messages"
+    try:
+        await budget.run(stage, db.insert, "tutor_messages", [
+            # Keep original text in storage; sanitize only model-bound copies.
+            {"conversation_id": convo["id"], "role": "user", "content": body.question, "style": None},
+            {"conversation_id": convo["id"], "role": "assistant", "content": answer_text, "style": body.style},
+        ])
+        updates: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        if not convo.get("title"):
+            updates["title"] = body.question[:60] + ("…" if len(body.question) > 60 else "")
+        stage = "persist_conversation"
+        await budget.run(stage, db.update, "tutor_conversations", {"id": f"eq.{convo['id']}"}, updates)
+    except Exception:  # noqa: BLE001 - persistence is best effort after an answer
+        budget.outcome = "persistence_failed"
+        # No exception string/traceback: an upstream body may contain user text.
+        logger.warning("tutor_persistence_failed conversation=%s stage=%s", convo["id"][:8], stage)
 
     return {"answer": answer_text, "conversationId": convo["id"]}

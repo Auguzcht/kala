@@ -10,12 +10,13 @@ from typing import Any
 
 import httpx
 
+from app.ai.request_budget import RequestBudget
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def _client() -> httpx.Client:
+def _client(*, budget: RequestBudget | None = None) -> httpx.Client:
     s = get_settings()
     return httpx.Client(
         base_url=f"{s.supabase_url}/rest/v1",
@@ -24,19 +25,19 @@ def _client() -> httpx.Client:
             "Authorization": f"Bearer {s.supabase_service_key}",
             "Content-Type": "application/json",
         },
-        timeout=60.0,  # vector rows (1024-dim embeddings) need headroom on slow/cold writes; 15s was pre-vector
+        timeout=60.0 if budget is None else budget.timeout(60.0),  # vector rows (1024-dim embeddings) need headroom on slow/cold writes; 15s was pre-vector
     )
 
 
-def select(table: str, params: dict[str, str]) -> list[dict]:
-    with _client() as c:
+def select(table: str, params: dict[str, str], *, budget: RequestBudget | None = None) -> list[dict]:
+    with (_client() if budget is None else _client(budget=budget)) as c:
         r = c.get(f"/{table}", params=params)
         r.raise_for_status()
         return r.json()
 
 
-def insert(table: str, rows: list[dict], *, prefer: str = "return=representation") -> list[dict]:
-    with _client() as c:
+def insert(table: str, rows: list[dict], *, prefer: str = "return=representation", budget: RequestBudget | None = None) -> list[dict]:
+    with (_client() if budget is None else _client(budget=budget)) as c:
         r = c.post(f"/{table}", json=rows, headers={"Prefer": prefer})
         r.raise_for_status()
         return r.json() if r.content else []
@@ -54,8 +55,8 @@ def upsert(table: str, rows: list[dict], *, on_conflict: str) -> list[dict]:
         return r.json() if r.content else []
 
 
-def update(table: str, filters: dict[str, str], values: dict[str, Any]) -> list[dict]:
-    with _client() as c:
+def update(table: str, filters: dict[str, str], values: dict[str, Any], *, budget: RequestBudget | None = None) -> list[dict]:
+    with (_client() if budget is None else _client(budget=budget)) as c:
         r = c.patch(f"/{table}", params=filters, json=values,
                     headers={"Prefer": "return=representation"})
         r.raise_for_status()
@@ -73,8 +74,8 @@ def delete(table: str, filters: dict[str, str]) -> list[dict]:
         return r.json() if r.content else []
 
 
-def rpc(fn: str, args: dict[str, Any]) -> Any:
-    with _client() as c:
+def rpc(fn: str, args: dict[str, Any], *, budget: RequestBudget | None = None) -> Any:
+    with (_client() if budget is None else _client(budget=budget)) as c:
         r = c.post(f"/rpc/{fn}", json=args)
         r.raise_for_status()
         return r.json() if r.content else None

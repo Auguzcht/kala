@@ -15,9 +15,14 @@
  */
 export function apiErrorReason(err: unknown): string | null {
   const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
-  const match = raw.match(/\{"detail":"(.*?)"\}/s);
-  if (!match) return null;
-  // The detail arrives JSON-escaped inside the message string; unescape the
-  // common sequences so quotes and newlines read correctly in the UI.
-  return match[1].replace(/\\"/g, '"').replace(/\\n/g, " ").trim() || null;
+  const body = raw.replace(/^API \d+:\s*/, "");
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed !== "object" || parsed === null || !("detail" in parsed)) return null;
+    const detail = (parsed as { detail?: unknown }).detail;
+    return typeof detail === "string" ? detail.replace(/\s+/g, " ").trim() || null : null;
+  } catch {
+    // Gateway/non-JSON bodies have no trusted detail; use the caller's copy.
+    return null;
+  }
 }

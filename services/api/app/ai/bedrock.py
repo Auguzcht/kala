@@ -17,6 +17,7 @@ import time
 import httpx
 
 from app.ai.errors import ModelUnavailableError
+from app.ai.request_budget import RequestBudget, TutorTimeout
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ def converse(
     # them. Passed by the chat role, whose global fallback (deepseek) cannot
     # fit the tutor's timeout and would just re-time-out — see router.answer.
     fallback_model_id: str | None = None,
+    budget: RequestBudget | None = None,
 ) -> str:
     s = get_settings()
     # A budget this small cannot survive a reasoning preamble, so the call will
@@ -99,11 +101,15 @@ def converse(
             "messages": messages,
             "max_tokens": max_tokens,
         }
+        if budget is not None:
+            request["budget"] = budget
         if response_format is not None:
             request["response_format"] = response_format
         try:
             return _openrouter_converse(**request)
         except ModelUnavailableError as exc:
+            if budget is not None and budget.remaining() <= budget.reserve:
+                raise TutorTimeout() from None
             # A model being present in OpenRouter's catalogue does not mean
             # its provider has capacity. Give transient provider failures one
             # chance on a separate provider before exposing the outage to the
@@ -115,17 +121,29 @@ def converse(
             # immediate retry is what turns one 429 into two, and the whole
             # point of the fallback is to reach a DIFFERENT model that has
             # capacity -- hammering the same instant defeats that. Short and
-            # bounded (the Lambda runs on a 30s wall; the client already has
-            # an 8s timeout), so it never eats the request budget.
+            # bounded for callers without a request budget. Tutor checks the
+            # remaining budget before both backoff and fallback.
+            if budget is not None and budget.remaining() < 6:
+                raise TutorTimeout() from None
             if exc.status_code in {429, 503}:
+                if budget is not None and budget.remaining() - _FALLBACK_BACKOFF_SECONDS < 6:
+                    raise TutorTimeout() from None
                 time.sleep(_FALLBACK_BACKOFF_SECONDS)
+            if budget is not None:
+                if budget.remaining() < 6:
+                    raise TutorTimeout() from None
+                budget.fallback_used = True
+                budget.provider_role = "chat_fallback"
             logger.warning(
                 "OpenRouter primary unavailable (model=%s, status=%s); retrying with fallback model=%s",
                 model_id, exc.status_code, fallback,
             )
             request["model_id"] = fallback
             return _openrouter_converse(**request)
-    return _bedrock_converse(model_id=model_id, system=system, messages=messages, max_tokens=max_tokens)
+    return _bedrock_converse(
+        model_id=model_id, system=system, messages=messages, max_tokens=max_tokens,
+        **({} if budget is None else {"budget": budget}),
+    )
 
 
 def _can_fallback(exc: ModelUnavailableError) -> bool:
@@ -138,41 +156,61 @@ def _can_fallback(exc: ModelUnavailableError) -> bool:
     return exc.status_code is None or exc.status_code in {404, 408, 429, 500, 502, 503, 504}
 
 
-def embed(text: str, *, input_type: str = "search_document") -> list[float]:
+def embed(text: str, *, input_type: str = "search_document", budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
     # Embedding provider is independent of chat provider on purpose (see
     # config.py EMBED_PROVIDER docstring) -- chat and embedding reliability
     # turned out to be two separate problems in practice, not one.
     provider = s.embed_provider or s.ai_provider
     if provider == "openai":
-        return _openai_embed(text, input_type=input_type)
+        return _openai_embed(text, input_type=input_type, **({} if budget is None else {"budget": budget}))
     if provider == "openrouter":
-        return _openrouter_embed(text, input_type=input_type)
-    return _bedrock_embed(text, input_type=input_type)
+        return _openrouter_embed(text, input_type=input_type, **({} if budget is None else {"budget": budget}))
+    return _bedrock_embed(text, input_type=input_type, **({} if budget is None else {"budget": budget}))
 
 
 # ---- AWS Bedrock -----------------------------------------------------------
 
-def _bedrock_runtime():
+def _bedrock_runtime(*, budget: RequestBudget | None = None):
     import boto3  # imported lazily so the openrouter-only path needs no AWS SDK
 
     s = get_settings()
-    return boto3.client("bedrock-runtime", region_name=s.aws_region)
+    if budget is None:
+        return boto3.client("bedrock-runtime", region_name=s.aws_region)
+    from botocore.config import Config
+
+    # Tutor only: suppress SDK retries and clamp both network phases. The
+    # handler's elapsed-time guard also covers credentials/client creation.
+    defaults = Config()
+    return boto3.client(
+        "bedrock-runtime", region_name=s.aws_region,
+        config=Config(
+            connect_timeout=budget.timeout(defaults.connect_timeout),
+            read_timeout=budget.timeout(defaults.read_timeout),
+            retries={"total_max_attempts": 1},
+        ),
+    )
 
 
-def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int) -> str:
+def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_tokens: int,
+                      budget: RequestBudget | None = None) -> str:
     try:
-        resp = _bedrock_runtime().converse(
+        resp = (_bedrock_runtime() if budget is None else _bedrock_runtime(budget=budget)).converse(
             modelId=model_id,
             system=[{"text": system}],
             messages=messages,
             inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
         )
+    except TutorTimeout:
+        raise
     except Exception as exc:  # botocore ClientError, EndpointConnectionError, timeouts…
         # Whether the model id is unknown or Bedrock itself is unreachable,
         # the caller's remedy is the same (retry later / fix config), so this
         # is one typed, non-500 failure rather than a provider-specific throw.
-        logger.error("bedrock converse failed (model=%s): %s", model_id, exc)
+        if budget is None:
+            logger.error("bedrock converse failed (model=%s): %s", model_id, exc)
+        else:
+            logger.error("tutor_provider_error provider=bedrock stage=chat")
         raise ModelUnavailableError(
             "The model provider could not be reached. Please try again.",
             provider="bedrock", model_id=model_id,
@@ -181,9 +219,9 @@ def _bedrock_converse(*, model_id: str, system: str, messages: list[dict], max_t
     return "".join(p.get("text", "") for p in parts)
 
 
-def _bedrock_embed(text: str, *, input_type: str) -> list[float]:
+def _bedrock_embed(text: str, *, input_type: str, budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
-    resp = _bedrock_runtime().invoke_model(
+    resp = (_bedrock_runtime() if budget is None else _bedrock_runtime(budget=budget)).invoke_model(
         modelId=s.bedrock_embed_model,
         body=json.dumps({"texts": [text], "input_type": input_type}),
     )
@@ -198,7 +236,7 @@ def _bedrock_embed(text: str, *, input_type: str) -> list[float]:
 
 # ---- OpenRouter (interim, free-tier) ---------------------------------------
 
-def _openrouter_client() -> httpx.Client:
+def _openrouter_client(*, budget: RequestBudget | None = None) -> httpx.Client:
     s = get_settings()
     return httpx.Client(
         base_url=s.openrouter_base_url,
@@ -209,43 +247,9 @@ def _openrouter_client() -> httpx.Client:
             "HTTP-Referer": "https://kala.mmcm.edu.ph",
             "X-Title": "Kala",
         },
-        # Socket/read timeout for the model call.
-        #
-        # WAS 8.0s, and that value was actively breaking every tutor request.
-        # Measured 2026-09-21 against the configured model
-        # (deepseek/deepseek-v4.1-flash:floor) on this endpoint:
-        #
-        #   unpinned (OpenRouter picks the provider):  32s, 64s, 113s
-        #   pinned to the fast provider (Relace):      2.8 - 8.5s
-        #
-        # Fifteen providers serve that model and OpenRouter load-balances
-        # across all of them. Their latencies differ by ~20x. So an 8s cap
-        # times out on the slow ones EVERY time, which then triggers the
-        # cross-provider fallback below, whose call ALSO gets 8s — two
-        # guaranteed failures plus any backoff sleep, inside a 30s Lambda.
-        # The request died having never successfully talked to a model, and
-        # reported only "Service Unavailable".
-        #
-        # The old comment justifies 8s as "fail fast so the fallback can run
-        # instead of the platform killing the Lambda". That reasoning is sound
-        # and the value was wrong: it assumed the fast path is the common case.
-        # It is not, for this model, on this endpoint.
-        #
-        # 25s, not 30s: API Gateway hard-caps the request at 30s regardless of
-        # the Lambda's own timeout, and _openrouter_converse is called AFTER
-        # RAG retrieval and DB reads — so this must leave room for those plus
-        # the response. A call that would exceed 25s now raises
-        # httpx.TimeoutException and gets ONE fallback attempt inside the
-        # remaining budget, which is the fail-fast behavior the old comment
-        # wanted; it just has to be slow enough that a NORMAL call succeeds
-        # before it fires.
-        #
-        # NOTE: this alone does NOT make a 30s wall sufficient. The same
-        # measurements show unpinned calls taking 32-113s, which no timeout
-        # can rescue. The real fix is provider pinning (see
-        # OPENROUTER_PROVIDER_ORDER) and/or streaming. This value is raised so
-        # the failure mode is an honest timeout rather than a silent one.
-        timeout=25.0,
+        # Inactivity timeout; tutor additionally has a handler elapsed-time
+        # guard. Other callers retain their existing 25s phase timeout.
+        timeout=25.0 if budget is None else budget.timeout(25.0),
     )
 
 
@@ -266,6 +270,7 @@ def _openrouter_converse(
     messages: list[dict],
     max_tokens: int,
     response_format: dict | None = None,
+    budget: RequestBudget | None = None,
 ) -> str:
     oai_messages = [{"role": "system", "content": system}]
     for m in messages:
@@ -275,6 +280,7 @@ def _openrouter_converse(
         data = _openrouter_post(
             model_id=model_id, messages=oai_messages,
             max_tokens=max_tokens, response_format=response_format,
+            **({} if budget is None else {"budget": budget}),
         )
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code
@@ -303,12 +309,16 @@ def _openrouter_converse(
                 data = _openrouter_post(
                     model_id=model_id, messages=oai_messages,
                     max_tokens=max_tokens, response_format=None,
+                    **({} if budget is None else {"budget": budget}),
                 )
             except httpx.HTTPStatusError as retry_exc:
                 exc = retry_exc
                 status_code = retry_exc.response.status_code
             except httpx.HTTPError as retry_exc:
-                logger.error("OpenRouter request errored (model=%s): %s", model_id, retry_exc)
+                if budget is None:
+                    logger.error("OpenRouter request errored (model=%s): %s", model_id, retry_exc)
+                else:
+                    logger.error("tutor_provider_error stage=provider_call")
                 raise ModelUnavailableError(
                     "Kala's model provider is unavailable right now. Please try again.",
                     provider="openrouter", model_id=model_id,
@@ -324,17 +334,23 @@ def _openrouter_converse(
         # outage) share the same typed failure but not the same log line.
         model_not_found = status_code == 404
         if model_not_found:
-            logger.error(
-                "OpenRouter model id no longer exists (model=%s). It was "
-                "likely retired from the free tier — set OPENROUTER_MODEL_* "
-                "to a current id (see https://openrouter.ai/models). Body: %s",
-                model_id, exc.response.text[:300],
-            )
+            if budget is None:
+                logger.error(
+                    "OpenRouter model id no longer exists (model=%s). It was "
+                    "likely retired from the free tier — set OPENROUTER_MODEL_* "
+                    "to a current id (see https://openrouter.ai/models). Body: %s",
+                    model_id, exc.response.text[:300],
+                )
+            else:
+                logger.error("tutor_provider_error stage=provider_call")
         else:
-            logger.error(
-                "OpenRouter chat request failed (model=%s, status=%s): %s",
-                model_id, status_code, exc.response.text[:300],
-            )
+            if budget is None:
+                logger.error(
+                    "OpenRouter chat request failed (model=%s, status=%s): %s",
+                    model_id, status_code, exc.response.text[:300],
+                )
+            else:
+                logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=model_id,
@@ -343,7 +359,10 @@ def _openrouter_converse(
     except httpx.HTTPError as exc:
         # Transport-level failure (timeout, DNS, connection reset) — no
         # response object to read a status from. Same typed failure.
-        logger.error("OpenRouter request errored (model=%s): %s", model_id, exc)
+        if budget is None:
+            logger.error("OpenRouter request errored (model=%s): %s", model_id, exc)
+        else:
+            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=model_id,
@@ -373,6 +392,7 @@ def _openrouter_post(
     messages: list[dict],
     max_tokens: int,
     response_format: dict | None,
+    budget: RequestBudget | None = None,
 ) -> dict:
     """One OpenRouter chat completion. Raises httpx.HTTPStatusError on a
     non-2xx so the caller can classify it (structured-output rejection vs
@@ -437,7 +457,7 @@ def _openrouter_post(
         # ultimately surfaces a clean error. Prefer "try it and validate" over
         # "refuse to try".
         payload["response_format"] = response_format
-    with _openrouter_client() as c:
+    with (_openrouter_client() if budget is None else _openrouter_client(budget=budget)) as c:
         r = c.post("/chat/completions", json=payload)
         r.raise_for_status()
         return r.json()
@@ -457,10 +477,10 @@ def _openrouter_content(data: dict) -> str:
     return choices[0].get("message", {}).get("content") or ""
 
 
-def _openrouter_embed(text: str, *, input_type: str) -> list[float]:
+def _openrouter_embed(text: str, *, input_type: str, budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
     try:
-        with _openrouter_client() as c:
+        with (_openrouter_client() if budget is None else _openrouter_client(budget=budget)) as c:
             r = c.post("/embeddings", json={
                 "model": s.openrouter_embed_model,
                 "input": text,
@@ -470,20 +490,26 @@ def _openrouter_embed(text: str, *, input_type: str) -> list[float]:
             data = r.json()
     except httpx.HTTPStatusError as exc:
         model_not_found = exc.response.status_code == 404
-        logger.error(
-            "OpenRouter embedding request failed (model=%s, status=%s%s): %s",
-            s.openrouter_embed_model, exc.response.status_code,
-            ", model id likely retired" if model_not_found else "",
-            exc.response.text[:300],
-        )
+        if budget is None:
+            logger.error(
+                "OpenRouter embedding request failed (model=%s, status=%s%s): %s",
+                s.openrouter_embed_model, exc.response.status_code,
+                ", model id likely retired" if model_not_found else "",
+                exc.response.text[:300],
+            )
+        else:
+            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=s.openrouter_embed_model,
             status_code=exc.response.status_code, model_not_found=model_not_found,
         ) from exc
     except httpx.HTTPError as exc:
-        logger.error("OpenRouter embedding request errored (model=%s): %s",
-                     s.openrouter_embed_model, exc)
+        if budget is None:
+            logger.error("OpenRouter embedding request errored (model=%s): %s",
+                         s.openrouter_embed_model, exc)
+        else:
+            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openrouter", model_id=s.openrouter_embed_model,
@@ -545,7 +571,7 @@ def _to_openrouter_input_type(input_type: str) -> str:
 # providers; it's a no-op), and officially supports requesting a smaller
 # output via "dimensions" rather than needing manual truncation.
 
-def _openai_client() -> httpx.Client:
+def _openai_client(*, budget: RequestBudget | None = None) -> httpx.Client:
     s = get_settings()
     return httpx.Client(
         base_url=s.openai_base_url,
@@ -556,14 +582,14 @@ def _openai_client() -> httpx.Client:
         # 20s, not 30s — see _openrouter_client()'s comment above. This
         # client is also called synchronously in a user-facing request
         # (ingest_course, per chunk), same 30s platform ceiling applies.
-        timeout=20.0,
+        timeout=20.0 if budget is None else budget.timeout(20.0),
     )
 
 
-def _openai_embed(text: str, *, input_type: str) -> list[float]:
+def _openai_embed(text: str, *, input_type: str, budget: RequestBudget | None = None) -> list[float]:
     s = get_settings()
     try:
-        with _openai_client() as c:
+        with (_openai_client() if budget is None else _openai_client(budget=budget)) as c:
             r = c.post("/embeddings", json={
                 "model": s.openai_embed_model,
                 "input": text,
@@ -572,10 +598,13 @@ def _openai_embed(text: str, *, input_type: str) -> list[float]:
             r.raise_for_status()
             data = r.json()
     except httpx.HTTPStatusError as exc:
-        logger.error(
-            "OpenAI embedding request failed (model=%s, status=%s): %s",
-            s.openai_embed_model, exc.response.status_code, exc.response.text[:300],
-        )
+        if budget is None:
+            logger.error(
+                "OpenAI embedding request failed (model=%s, status=%s): %s",
+                s.openai_embed_model, exc.response.status_code, exc.response.text[:300],
+            )
+        else:
+            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openai", model_id=s.openai_embed_model,
@@ -583,8 +612,11 @@ def _openai_embed(text: str, *, input_type: str) -> list[float]:
             model_not_found=exc.response.status_code == 404,
         ) from exc
     except httpx.HTTPError as exc:
-        logger.error("OpenAI embedding request errored (model=%s): %s",
-                     s.openai_embed_model, exc)
+        if budget is None:
+            logger.error("OpenAI embedding request errored (model=%s): %s",
+                         s.openai_embed_model, exc)
+        else:
+            logger.error("tutor_provider_error stage=provider_call")
         raise ModelUnavailableError(
             "Kala's model provider is unavailable right now. Please try again.",
             provider="openai", model_id=s.openai_embed_model,

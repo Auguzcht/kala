@@ -17,6 +17,7 @@ import { FileTextIcon } from "@/components/ui/file-text";
 import { XIcon } from "@/components/ui/x";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/utils";
+import { apiErrorReason } from "@/lib/api-error";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { askTutor, createTutorConversation } from "@/features/tutor/api/tutor.api";
 import {
@@ -25,7 +26,24 @@ import {
   useUploadTutorAttachment,
   useDeleteTutorAttachment,
 } from "@/features/tutor";
-import type { TutorStyle, TutorAttachment } from "@/features/tutor";
+import type { TutorStyle, TutorAttachment, TutorConversationDetail } from "@/features/tutor";
+
+type UnconfirmedTurn = {
+  id: number;
+  conversationId: string;
+  question: string;
+  answer: string;
+  previousMessageIds: string[];
+};
+
+function hasSavedTurn(messages: TutorConversationDetail["messages"], turn: Omit<UnconfirmedTurn, "id">) {
+  const previousIds = new Set(turn.previousMessageIds);
+  // Bulk-inserted messages can share a timestamp; matching must not depend
+  // on their relative order when the refetch sorts only by created_at.
+  const newMessages = messages.filter((message) => !previousIds.has(message.id));
+  return newMessages.some((message) => message.role === "user" && message.content === turn.question)
+    && newMessages.some((message) => message.role === "assistant" && message.content === turn.answer);
+}
 
 // Tutor as a real, resumable chat (Stage 2 of the AI overhaul, see
 // docs/AI_OVERHAUL_TODO.md). Migrated onto the shared StudySurface +
@@ -132,8 +150,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
   // visible with an inline retry action — the toast is a secondary signal,
   // not the only record that anything happened.
   const [pendingTurn, setPendingTurn] = useState<
-    { status: "asking" | "failed"; question: string; style: TutorStyle } | null
+    { status: "asking" | "failed"; question: string; style: TutorStyle; message?: string } | null
   >(null);
+  // Only returned answers missing from a successful refetch (or with a
+  // failed refetch) live here. Stored conversation data stays in Query.
+  const [unconfirmedTurns, setUnconfirmedTurns] = useState<UnconfirmedTurn[]>([]);
+  const localTurnId = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAttachment = useUploadTutorAttachment();
   const deleteAttachment = useDeleteTutorAttachment();
@@ -157,6 +179,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
       return;
     }
     setPendingTurn(null);
+    setUnconfirmedTurns([]);
     setLastQuestion(null);
   }, [activeId]);
 
@@ -202,27 +225,46 @@ export function TutorChat({ courseId }: { courseId: string }) {
         selfNavigatedRef.current = true;
         void navigate({ to: "/course/tutor", search: { conversation: id }, replace: true });
       }
+      const previousMessageIds = queryClient.getQueryData<TutorConversationDetail>(
+        ["tutor-conversation", id],
+      )?.messages.map((message) => message.id) ?? [];
       const result = await askTutor(courseId, question, style, id);
-      return { ...result, conversationId: id };
+      return { ...result, conversationId: id, previousMessageIds };
     },
     onSuccess: async (data, variables) => {
       setLastQuestion(variables.question);
-      // Await the refetch BEFORE dropping the optimistic turn, so the
-      // persisted row is on screen first and the swap is invisible.
-      await queryClient.invalidateQueries({
-        queryKey: ["tutor-conversation", data.conversationId],
-      });
+      // Preserve the normal saved-response handoff. A failed/missing save
+      // must not discard an answer already returned by the tutor.
+      let saved = false;
+      try {
+        await queryClient.invalidateQueries({
+          queryKey: ["tutor-conversation", data.conversationId],
+        }, { throwOnError: true });
+        const refreshed = queryClient.getQueryData<TutorConversationDetail>(
+          ["tutor-conversation", data.conversationId],
+        );
+        saved = hasSavedTurn(refreshed?.messages ?? [], { ...data, question: variables.question });
+      } catch {
+        // Keep the returned answer when the conversation refetch fails.
+      }
+      if (!saved) {
+        const turn = {
+          id: ++localTurnId.current,
+          conversationId: data.conversationId,
+          question: variables.question,
+          answer: data.answer,
+          previousMessageIds: data.previousMessageIds,
+        };
+        setUnconfirmedTurns((turns) => [...turns, turn]);
+      }
       queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
       setPendingTurn(null);
     },
-    onError: (_error, variables) => {
-      // Keep the question on screen with a retry action instead of
-      // silently dropping it — a toast alone is easy to miss and gives the
-      // student nothing to do but retype what they already wrote.
-      setPendingTurn({ status: "failed", question: variables.question, style: variables.style });
-      toast.error("Kala couldn't answer that", {
-        description: "Check your connection and try again.",
-      });
+    onError: (error, variables) => {
+      // Keep the question and the server's retry message visible together.
+      const message = apiErrorReason(error) ?? "Check your connection and try again.";
+      setPendingTurn({ status: "failed", question: variables.question, style: variables.style, message });
+      toast.error("Kala couldn't answer that", { description: message });
     },
   });
 
@@ -287,6 +329,9 @@ export function TutorChat({ courseId }: { courseId: string }) {
 
   const messages = active.data?.messages ?? [];
   const lastMessage = messages.at(-1);
+  const localTurns = unconfirmedTurns.filter(
+    (turn) => turn.conversationId === activeId && !hasSavedTurn(messages, turn),
+  );
 
   return (
     <StudySurface
@@ -342,7 +387,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
       <StudyStream>
         {activeId && active.isLoading ? (
           <Shimmer>Loading conversation…</Shimmer>
-        ) : messages.length === 0 && !pendingTurn ? (
+        ) : messages.length === 0 && localTurns.length === 0 && !pendingTurn ? (
           // Gated on !pendingTurn too — without this, starting a brand new
           // chat showed the EmptyState AND the just-sent question/answer at
           // the same time (zero persisted messages yet, but a turn already
@@ -372,6 +417,17 @@ export function TutorChat({ courseId }: { courseId: string }) {
           )
         )}
 
+        {localTurns.map((turn, index) => (
+          <div key={turn.id} className="mr-auto w-full max-w-full">
+            <UserBlock text={turn.question} initials={userInitials || undefined} />
+            <AssistantBlock
+              text={turn.answer}
+              id={index === localTurns.length - 1 ? "tour-tutor-response" : undefined}
+            />
+            <p className="text-sm text-muted-foreground">This answer may not have been saved.</p>
+          </div>
+        ))}
+
         {pendingTurn ? (
           <>
             {/* The student's own turn, present the moment they hit send.
@@ -390,7 +446,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
               />
             ) : (
               <div className="mr-auto flex w-full max-w-full items-center gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                <span className="flex-1">Kala couldn't answer that.</span>
+                <span className="flex-1">{pendingTurn.message ?? "Kala couldn't answer that."}</span>
                 <Button
                   type="button"
                   variant="outline"
