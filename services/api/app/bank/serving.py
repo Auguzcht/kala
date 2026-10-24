@@ -76,18 +76,53 @@ def pick_bank_items_with_meta(user_id: str, course_id: str, skill_id: str | None
     return selected, len(selected) > len(unseen)
 
 
+def _diagnostic_rows(table: str, params: dict[str, str]) -> list[dict]:
+    """Read a complete ordered Diagnostic result, beyond the REST row cap."""
+    rows: list[dict] = []
+    while True:
+        page = db.select(table, {**params, "limit": "500", "offset": str(len(rows))})
+        rows.extend(page)
+        if len(page) < 500:
+            return rows
+
+
+def pick_diagnostic_items(user_id: str, course_id: str, skill_ids: list[str], *,
+                          institution_id: str) -> dict[str, dict]:
+    """Oldest untested live MCQ per skill; batched, read-only Diagnostic pick.
+
+    Exposure is not learner evidence: opening a Test can exhaust its pool
+    before any answer is recorded. Never fall back to a tested item here.
+    Study reviews exclude whole skills in the Diagnostic eligibility check.
+    """
+    selected: dict[str, dict] = {}
+    for start in range(0, len(skill_ids), 100):
+        skill_filter = f"in.({','.join(skill_ids[start:start + 100])})"
+        pool = _diagnostic_rows("generated_items", {
+            "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+            "skill_id": skill_filter, "origin": "eq.bank", "kind": "eq.practice",
+            "retired_at": "is.null", "skills.status": "eq.approved",
+            "select": "id,skill_id,prompt,choices,bloom_level,skills!inner(status)",
+            "order": "created_at.asc,id.asc",
+        })
+        exposures = _diagnostic_rows("item_exposures", {
+            "institution_id": f"eq.{institution_id}", "user_id": f"eq.{user_id}",
+            "course_id": f"eq.{course_id}", "skill_id": skill_filter,
+            "last_tested_at": "not.is.null", "select": "item_id,last_tested_at",
+            "order": "item_id.asc",
+        })
+        tested = {row["item_id"] for row in exposures if row.get("last_tested_at")}
+        for item in pool:
+            if item["id"] not in tested:
+                selected.setdefault(item["skill_id"], item)
+    return selected
+
+
 def pick_diagnostic_item(user_id: str, course_id: str, skill_id: str, *,
                          institution_id: str) -> dict | None:
     """Pick the oldest untested live bank item without writing exposure."""
-    pool = _approved_item_pool(
-        institution_id=institution_id, course_id=course_id, skill_id=skill_id,
-    )
-    exposures = db.select("item_exposures", {
-        "user_id": f"eq.{user_id}", "course_id": f"eq.{course_id}",
-        "select": "item_id,last_tested_at",
-    })
-    tested = {r["item_id"] for r in exposures if r.get("last_tested_at")}
-    return next((item for item in pool if item["id"] not in tested), None)
+    return pick_diagnostic_items(
+        user_id, course_id, [skill_id], institution_id=institution_id,
+    ).get(skill_id)
 
 
 def _round_robin(items: list[dict], n: int) -> list[dict]:

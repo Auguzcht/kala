@@ -16,7 +16,7 @@ from app.ai import bedrock, documents
 from app.ai.chunking import chunk_text
 from app.ai.deidentify import strip_pii
 from app.bank.kick import kick_bank
-from app.bank.serving import bank_enabled, pick_diagnostic_item, record_exposure
+from app.bank.serving import bank_enabled, pick_diagnostic_items, record_exposure
 from app.db import storage
 from app.db import supabase as db
 from app.deps import (
@@ -37,12 +37,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/courses", tags=["diagnostic"])
 
-# A student who is far behind (many skills never diagnosed at once, e.g.
+# A student with many unevidenced, actionable skills at once (e.g.
 # first ever visit to a course with a large skill map) still only gets a
-# short sitting, not everything at once. The rest stays due and simply
-# resurfaces next time — status reports the TRUE due count, uncapped, so
-# the notification is honest about total volume even though one sitting
-# only serves this many.
+# short sitting. Count all actionable skills, then cap the available questions;
+# unavailable skills never occupy sitting slots (DIAG-REQ-009–011).
 MAX_DIAGNOSTIC_QUESTIONS = 10
 
 # How long a single bounded phase may spend on network work before returning.
@@ -458,46 +456,139 @@ def post_grade(
     return {"courseId": course_id, "columnId": column_id, "userId": body.user_id, "score": body.score}
 
 
+def _diagnostic_rows(table: str, params: dict[str, str]) -> list[dict]:
+    """Ordered paging avoids treating a truncated history as no evidence."""
+    rows: list[dict] = []
+    while True:
+        page = db.select(table, {**params, "limit": "500", "offset": str(len(rows))})
+        rows.extend(page)
+        if len(page) < 500:
+            return rows
+
+
 def _skills_needing_diagnostic(
     *, institution_id: str, course_id: str, user_id: str, module_ref: str | None = None,
 ) -> list[dict]:
-    """Approved skills this SPECIFIC student has never given diagnostic
-    evidence for. This is the "is there something new to baseline" check,
-    per student, not per course. A skill only drops off this list once this
-    user has actually answered a diagnostic question for it, so a skill the
-    instructor adds mid-term (or one this student simply hasn't reached
-    yet) stays on it until they do. Deliberately distinct from
-    generated_items existence, which only tracks whether a question has
-    ever been WRITTEN for the skill course-wide (the shared item bank),
-    not whether THIS student has taken it. Used both by GET /diagnostic
-    (to decide what to include) and GET /diagnostic/status (to decide
-    whether the diagnostic should even surface as available)."""
+    """Approved skills without ANY learner evidence or recorded item review.
+
+    This is eligibility only. Both endpoints then use the same availability
+    calculation before counting or applying the sitting limit (DIAG-REQ-009).
+    A claimed/served item alone is not evidence of studying or answering.
+    """
     skill_filters = {
         "course_id": f"eq.{course_id}", "institution_id": f"eq.{institution_id}",
-        "status": "eq.approved",
-        "select": "id,name,bloom_level",
-        # Deterministic order so a student with more than
-        # MAX_DIAGNOSTIC_QUESTIONS due gets the SAME slice on every
-        # refetch, not an arbitrary 10 each time. created_at is stable and
-        # already indexed via the primary key's default ordering behavior
-        # elsewhere in this file (see cohort.py's own created_at ordering).
-        "order": "created_at.asc",
+        "status": "eq.approved", "select": "id,name,bloom_level",
+        "order": "created_at.asc,id.asc",
     }
     if module_ref is not None:
         skill_filters["module_ref"] = f"eq.{module_ref}"
-    skills = db.select("skills", skill_filters)
-    if not skills:
-        return []
+    skills = _diagnostic_rows("skills", skill_filters)
+    evidenced: set[str] = set()
+    for start in range(0, len(skills), 100):
+        ids = ','.join(skill["id"] for skill in skills[start:start + 100])
+        filters = {
+            "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
+            "user_id": f"eq.{user_id}", "skill_id": f"in.({ids})",
+            "select": "skill_id", "order": "id.asc",
+        }
+        # Reviews are actual Study/Practice activity even when they do not
+        # produce mastery evidence. Reading them does not change that policy.
+        for table in ("evidence_events", "item_reviews"):
+            evidenced.update(row["skill_id"] for row in _diagnostic_rows(table, filters))
+    return [skill for skill in skills if skill["id"] not in evidenced]
 
-    skill_ids = [s["id"] for s in skills]
-    diagnosed_rows = db.select("evidence_events", {
-        "institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}",
-        "user_id": f"eq.{user_id}", "type": "eq.diagnostic",
-        "skill_id": f"in.({','.join(skill_ids)})",
-        "select": "skill_id",
+
+def _diagnostic_availability(
+    *, institution_id: str, course_id: str, user_id: str,
+    module_ref: str | None, prepare_missing: bool = False,
+) -> dict:
+    """Shared availability snapshot; status uses SELECTs only (DIAG-REQ-010/011)."""
+    skills = _skills_needing_diagnostic(
+        institution_id=institution_id, course_id=course_id, user_id=user_id,
+        module_ref=module_ref,
+    )
+    empty = {"items": [], "pendingSkillIds": [], "failedSkillIds": [],
+             "waitingForMaterialCount": 0}
+    if not skills:
+        return empty
+    scope = {"institution_id": f"eq.{institution_id}", "course_id": f"eq.{course_id}"}
+    courses = db.select("courses", {
+        "institution_id": f"eq.{institution_id}", "id": f"eq.{course_id}",
+        "select": "id,bank_serving", "limit": "1",
     })
-    diagnosed_skill_ids = {r["skill_id"] for r in diagnosed_rows}
-    return [s for s in skills if s["id"] not in diagnosed_skill_ids]
+    use_bank = bool(courses and bank_enabled(courses[0], "diagnostic"))
+    states: dict[str, dict] = {}
+    jobs: dict[str, dict] = {}
+    items: dict[str, dict] = {}
+    for start in range(0, len(skills), 100):
+        skill_filter = f"in.({','.join(s['id'] for s in skills[start:start + 100])})"
+        for row in _diagnostic_rows("skill_bank_state", {
+            **scope, "skill_id": skill_filter,
+            "select": "skill_id,status", "order": "skill_id.asc",
+        }):
+            states[row["skill_id"]] = row
+        if not use_bank:
+            for row in _diagnostic_rows("generated_items", {
+                **scope, "skill_id": skill_filter, "kind": "eq.diagnostic",
+                "retired_at": "is.null",
+                "select": "id,skill_id,bloom_level,prompt,choices",
+                "order": "created_at.asc,id.asc",
+            }):
+                items.setdefault(row["skill_id"], row)
+            for row in _diagnostic_rows("item_generation_jobs", {
+                **scope, "skill_id": skill_filter, "kind": "eq.diagnostic",
+                "select": "skill_id,status,last_error", "order": "created_at.desc,id.desc",
+            }):
+                jobs.setdefault(row["skill_id"], row)
+    if use_bank:
+        items = pick_diagnostic_items(
+            user_id, course_id, [s["id"] for s in skills], institution_id=institution_id,
+        )
+    elif prepare_missing:
+        # Retain the existing worker enqueue path and its ten-skill request
+        # bound. Later skills remain pending without claiming a worker is live.
+        missing = [s for s in skills if s["id"] not in items
+                   and states.get(s["id"], {}).get("status") != "no_material"]
+        # Existing terminal jobs must not consume the enqueue allowance and
+        # indefinitely block later skills that have never requested a question.
+        unqueued = [skill for skill in missing if skill["id"] not in jobs]
+        for skill in unqueued[:MAX_DIAGNOSTIC_QUESTIONS]:
+            jobs[skill["id"]], _created = enqueue_diagnostic(
+                institution_id=institution_id, course_id=course_id, skill_id=skill["id"],
+            )
+        # Preserve the worker-completion race re-read, across all candidates.
+        if missing:
+            for start in range(0, len(skills), 100):
+                ids = ','.join(s["id"] for s in skills[start:start + 100])
+                for row in _diagnostic_rows("generated_items", {
+                    **scope, "skill_id": f"in.({ids})", "kind": "eq.diagnostic",
+                    "retired_at": "is.null",
+                    "select": "id,skill_id,bloom_level,prompt,choices",
+                    "order": "created_at.asc,id.asc",
+                }):
+                    items.setdefault(row["skill_id"], row)
+
+    ready, pending, failed = [], [], []
+    waiting_for_material = 0
+    for skill in skills:
+        sid = skill["id"]
+        state = states.get(sid, {})
+        job = jobs.get(sid, {})
+        if state.get("status") == "no_material":
+            waiting_for_material += 1
+        elif sid in items:
+            ready.append(items[sid])
+        elif not use_bank and job.get("last_error") == "NoCourseContentError":
+            waiting_for_material += 1
+        elif ((use_bank and state.get("status") == "error")
+              or (not use_bank and job.get("status") == "failed")):
+            failed.append(sid)
+        else:
+            pending.append(sid)
+    if use_bank and prepare_missing and pending:
+        kick_bank(course_id, "diagnostic")
+    return {"items": ready, "pendingSkillIds": pending, "failedSkillIds": failed,
+            "waitingForMaterialCount": waiting_for_material}
 
 
 @router.get("/{course_id}/diagnostic/status")
@@ -506,20 +597,14 @@ def get_diagnostic_status(
     module_ref: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Lightweight due-check for a notification badge. No generation
-    happens here, just skill + evidence reads, so this is safe to poll from
-    the workspace home or the sidebar without generating anything. The
-    diagnostic should not sit open as a permanent default tab; it should
-    surface only when there is something new for THIS student to baseline."""
-    due_skills = _skills_needing_diagnostic(
+    """Read actionable availability without generation, kicks or evidence writes."""
+    availability = _diagnostic_availability(
         institution_id=user.institution_id, course_id=course_id,
         user_id=user.user_id, module_ref=module_ref,
     )
-    return {
-        "courseId": course_id,
-        "due": len(due_skills) > 0,
-        "dueSkillCount": len(due_skills),
-    }
+    due = len(availability["items"])
+    return {"courseId": course_id, "due": due > 0, "dueSkillCount": due,
+            "waitingForMaterialCount": availability["waitingForMaterialCount"]}
 
 
 @router.get("/{course_id}/diagnostic")
@@ -528,135 +613,23 @@ def get_diagnostic(
     module_ref: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
-    skills = _skills_needing_diagnostic(
+    availability = _diagnostic_availability(
         institution_id=user.institution_id, course_id=course_id,
-        user_id=user.user_id, module_ref=module_ref,
+        user_id=user.user_id, module_ref=module_ref, prepare_missing=True,
     )
-    if not skills:
-        return {
-            "courseId": course_id, "status": "ready", "questions": [],
-            "readyCount": 0, "pendingSkillIds": [], "failedSkillIds": [],
-            "skippedSkillCount": 0,
-        }
-    skills = skills[:MAX_DIAGNOSTIC_QUESTIONS]
-
-    course_rows = db.select("courses", {
-        "id": f"eq.{course_id}", "institution_id": f"eq.{user.institution_id}",
-        "select": "id,bank_serving", "limit": "1",
-    })
-    if course_rows and bank_enabled(course_rows[0], "diagnostic"):
-        questions, pending_skill_ids, failed_skill_ids = [], [], []
-        for skill in skills:
-            states = db.select("skill_bank_state", {
-                "course_id": f"eq.{course_id}", "skill_id": f"eq.{skill['id']}",
-                "select": "status,mcq_ready", "limit": "1",
-            })
-            state = states[0] if states else {"status": "waiting_content", "mcq_ready": 0}
-            if state.get("status") == "no_material":
-                failed_skill_ids.append(skill["id"])
-                continue
-            if int(state.get("mcq_ready") or 0) < 5:
-                pending_skill_ids.append(skill["id"])
-                kick_bank(course_id, "diagnostic")
-                continue
-            item = pick_diagnostic_item(
-                user.user_id, course_id, skill["id"], institution_id=user.institution_id,
-            )
-            if item:
-                questions.append({
-                    "id": item["id"], "skillId": item["skill_id"],
-                    "bloomLevel": item.get("bloom_level"), "prompt": item["prompt"],
-                    "choices": item.get("choices") or [],
-                })
-            else:
-                failed_skill_ids.append(skill["id"])
-        return {
-            "courseId": course_id,
-            "status": "ready" if questions else ("generating" if pending_skill_ids else "failed"),
-            "questions": questions, "readyCount": len(questions),
-            "pendingSkillIds": pending_skill_ids, "failedSkillIds": failed_skill_ids,
-            "skippedSkillCount": len(failed_skill_ids),
-        }
-
-    # The diagnostic is a fixed baseline instrument ("Build your baseline"),
-    # not a randomized quiz: re-fetching must return the SAME shared items.
-    # Existing items are read first; missing skills are represented by durable
-    # queue rows and generated by the worker, never by this request.
-    skill_ids = [s["id"] for s in skills]
-    existing_rows = db.select("generated_items", {
-        "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
-        "kind": "eq.diagnostic",
-        "retired_at": "is.null",
-        "skill_id": f"in.({','.join(skill_ids)})",
-        "select": "id,skill_id,bloom_level,prompt,choices",
-    })
-    # First existing item per skill wins; if somehow more than one exists for
-    # a skill (e.g. a pre-fix duplicate), don't add to the confusion by
-    # rotating between them — pick deterministically and move on.
-    existing_by_skill: dict[str, dict] = {}
-    for row in existing_rows:
-        existing_by_skill.setdefault(row["skill_id"], row)
-
-    skills_needing_items = [s for s in skills if s["id"] not in existing_by_skill]
-
-    pending_skill_ids: list[str] = []
-    failed_skill_ids: list[str] = []
-    for skill in skills_needing_items:
-        job, _created = enqueue_diagnostic(
-            institution_id=user.institution_id, course_id=course_id,
-            skill_id=skill["id"],
-        )
-        if job["status"] in {"pending", "in_progress"}:
-            pending_skill_ids.append(skill["id"])
-        elif job["status"] == "failed":
-            failed_skill_ids.append(skill["id"])
-
-    # A worker may finish between the first item read and the enqueue pass.
-    # Re-read so a fast completion is reflected immediately; later polls are
-    # still cheap reads of the shared item bank plus queue state.
-    if skills_needing_items:
-        existing_rows = db.select("generated_items", {
-            "institution_id": f"eq.{user.institution_id}",
-            "course_id": f"eq.{course_id}", "kind": "eq.diagnostic",
-            "retired_at": "is.null",
-            "skill_id": f"in.({','.join(skill_ids)})",
-            "select": "id,skill_id,bloom_level,prompt,choices",
-        })
-        existing_by_skill = {}
-        for row in existing_rows:
-            existing_by_skill.setdefault(row["skill_id"], row)
-        pending_skill_ids = [
-            sid for sid in pending_skill_ids if sid not in existing_by_skill
-        ]
-        failed_skill_ids = [
-            sid for sid in failed_skill_ids if sid not in existing_by_skill
-        ]
-
-    # Reassemble in original skill order. Missing questions are not represented
-    # as null cards; the explicit pending/failed id lists explain the shorter
-    # response to the polling client.
-    questions = []
-    for s in skills:
-        if s["id"] in existing_by_skill:
-            item = existing_by_skill[s["id"]]
-            questions.append({
-                "id": item["id"], "skillId": item["skill_id"],
-                "bloomLevel": item.get("bloom_level"),
-                "prompt": item["prompt"], "choices": item["choices"],
-            })
-    ready_count = len(questions)
-    status_value = (
-        "generating" if pending_skill_ids else ("ready" if ready_count else "failed")
-    )
-
+    questions = [{
+        "id": item["id"], "skillId": item["skill_id"],
+        "bloomLevel": item.get("bloom_level"), "prompt": item["prompt"],
+        "choices": item.get("choices") or [],
+    } for item in availability["items"][:MAX_DIAGNOSTIC_QUESTIONS]]
+    pending, failed = availability["pendingSkillIds"], availability["failedSkillIds"]
+    status_value = ("ready" if questions else "generating" if pending
+                    else "failed" if failed else "ready")
     return {
-        "courseId": course_id,
-        "status": status_value,
-        "questions": questions,
-        "readyCount": ready_count,
-        "pendingSkillIds": pending_skill_ids,
-        "failedSkillIds": failed_skill_ids,
-        "skippedSkillCount": len(failed_skill_ids),
+        "courseId": course_id, "status": status_value, "questions": questions,
+        "readyCount": len(questions), "pendingSkillIds": pending,
+        "failedSkillIds": failed, "skippedSkillCount": len(failed),
+        "waitingForMaterialCount": availability["waitingForMaterialCount"],
     }
 
 
