@@ -19,12 +19,12 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 
 ## Approved lane state — 2026-10-25
 
-[APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance. [APPROVAL-03](approval-03.md) accepts T and authorizes local integration checks, followed by a stop without pushing. All four discovery audits are accepted. C, D, S, F and T are merged locally in that order; nothing is pushed or deployed.
+[APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance. [APPROVAL-03](approval-03.md) accepts T and authorizes local integration checks; [APPROVAL-04](approval-04.md) accepts the test-only cleanup correction and repeated verification, followed by a stop without pushing. All four discovery audits are accepted. C, D, S, F and T are merged locally in that order; nothing is pushed or deployed.
 
 | Lane | Scope / feature requirements | State / gate |
 | --- | --- | --- |
 | S | [LMS ingest spec](../../features/lms-ingest/README.md), INGEST-REQ-001; upload comment correction only | Approved by APPROVAL-02; merged locally as 5c9011e. Live checks remain outstanding. |
-| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Approved by APPROVAL-03 at b605a3b; merged locally as 9c2e667. Frontend/web checks pass; integrated API verification has one cleanup-timing test failure, documented in APPROVAL-03 evidence. Live verification remains outstanding. Sanitizer coverage remains partial. |
+| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Approved by APPROVAL-03 at b605a3b; merged locally as 9c2e667. APPROVAL-04 verification is green: 20/20 focused runs, 431 API tests in each of two main runs and one fresh-clone run, and 117 worker tests. Live verification remains outstanding. Sanitizer coverage remains partial. |
 | F | [Study](../../features/study/README.md), STUDY-REQ-001/002/003/004/005 | APPROVAL-02 conditions satisfied at 7041bc7; merged locally as f316f48. No SQL change. External renderer limitation documented. |
 | C | [Secrets catalogue](../../engineering/secrets.md) and placeholder examples | Approved by APPROVAL-02; merged locally as af6b93c. Eleven tooling tests and inventory check pass on main. |
 | D | Framework, accepted archive moves, five durable reports, recap knowledge | Approved by APPROVAL-02; merged locally as 51c2de5. Future full specs/runbooks remain incomplete. |
@@ -94,4 +94,10 @@ The accepted four audits are historical evidence at `e9de105`. Original audit wo
 
 The earlier APPROVAL-02 report is a historical snapshot before T acceptance. Shared service pytest isolation is now in services/conftest.py; the obsolete Study runner is removed and the Tutor scratch runner is no longer used for current verification. [WI-20](work-items/WI-20-frontend-test-runner.md) records standard frontend-runner adoption as planned, without adding dependencies. [APPROVAL-03 integration evidence](evidence/approval-03-integration.md) records current merged-main checks and the documentation-only infra/terraform path exception. No push or deployment has been performed.
 
-APPROVAL-03 final integration gate: API 430 passed / 1 failed on both main and a fresh clone; worker 117 passed; frontend 14 + 4 passed; web and configuration checks passed. The single failure is the tutor test's fixed cleanup wait. No test body was changed under the approval prohibition; a bounded-wait patch is prepared for Fred's review. Integration is not green and nothing is pushed or deployed.
+Historical APPROVAL-03 integration gate (superseded by APPROVAL-04 below): API 430 passed / 1 failed on both main and a fresh clone; worker 117 passed; frontend 14 + 4 passed; web and configuration checks passed. The single failure is the tutor test's fixed cleanup wait. No test body was changed under the approval prohibition; a bounded-wait patch is prepared for Fred's review. Integration is not green and nothing is pushed or deployed.
+
+## APPROVAL-04 current integration result
+
+[APPROVAL-04](approval-04.md) accepts the exact test-only bounded cleanup wait and both existing pytest discovery options. [Repeated verification](evidence/approval-04-verification.md) passed: focused test **20/20**, full API **431 passed** in each of two main runs and one fresh-clone run without dotenv files, worker **117 passed**. All deadline and eventual-completion assertions remain intact; no other test body changed. The earlier cleanup failure is resolved.
+
+Local automated integration is green. No push or deployment has been performed. Fred deploys the backend first, then pushes. Live observation, DB major-version confirmation and the remaining handover work retain their existing gates.

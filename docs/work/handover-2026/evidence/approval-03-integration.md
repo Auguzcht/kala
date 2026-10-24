@@ -81,3 +81,13 @@ Accepted final results: API **430 pass / 1 fail**; worker **117 pass** under ver
 Disposition: **not green; stopped for the explicit no-test-body-edit gate**. No push or deployment. The final documentation-only evidence commit preserves these results without changing tested code. Fred must not treat this as an all-pass deployment report.
 
 The concrete proposed test-only patch is at `/Users/fred/.codex/visualizations/2026/10/24/01a16e30-fcb8-7b50-91d8-4f38c908acd5/kala-approval03-integration/proposed-test-cleanup-wait.patch`; it has not been applied. Raw fresh-clone attempts and value-free result summaries are retained alongside it. The coordinator requests approval only for that cleanup-wait change; the response-deadline assertions and production code remain untouched.
+
+## APPROVAL-04 acceptance and subsequent verification — 2026-10-25
+
+[APPROVAL-04](../approval-04.md) section 2 explicitly approves after the fact `addopts = "--confcutdir=.."` in both `services/api/pyproject.toml` and `services/worker/pyproject.toml`, as introduced by ef487ed. They remain unchanged in APPROVAL-04. This records the requested acceptance of the discovery correction.
+
+Section 1 authorizes the exact previously proposed cleanup-wait patch. It was applied and committed as `a5002366e0d364e29797855a0c035f2b0f4bd181`. Every assertion is unchanged, including the response-time bound, unfinished-at-return assertion and eventual-completion assertion. No other test body or import changed. The earlier failures remain preserved above as history; [APPROVAL-04 verification evidence](approval-04-verification.md) records the requested twenty focused runs, repeated main suites, fresh-clone suite and worker suite. No production code changes are authorized by this acceptance, and the no-push/no-agent-deploy gate remains in force.
+
+## APPROVAL-04 resolution — 2026-10-25
+
+The formerly blocked cleanup-only patch is now explicitly authorized and applied. [APPROVAL-04 verification](approval-04-verification.md) passes all requested checks at a500236: focused test 20/20, full API 431 passed twice on main and once in a fresh clone, worker 117 passed. Every assertion and all other test bodies are unchanged. The earlier not-green disposition is historical and superseded by this green local verification; all no-push/no-agent-deploy and live-verification gates remain in force.
