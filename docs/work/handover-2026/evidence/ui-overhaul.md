@@ -472,3 +472,39 @@ Evidence added: this report, waiting-state inventory, synthetic desktop/mobile r
 Anything not done, and why: human live feature acceptance remains; no backend/due-rule/schema/grading change, push, merge, deploy, migration, hosted write or infrastructure change.
 Risks or questions for the planner: direct user scope spans shared student/instructor presentation; review integration with other worktrees and obtain lead designer/live acceptance. Returned empty mastery rows are supported; no synthetic mastery data is shown in production.
 Secrets printed: none (confirmed); environment contents were not read.
+
+
+## Dashboard baseline count trace — 2026-10-25
+
+Base `fdef8d4`. Fred requested investigation of a workspace notice reporting five skills still needing a baseline after a completed sitting. This is a read-only trace; no behavior/spec change or student-evidence repair was requested or performed.
+
+Observed and verified:
+
+- Reloaded the existing workspace and waited for the notice: the count remains five after a fresh load. Submission already invalidates the `diagnostic-status` query in `use-diagnostic.ts`; this is not explained by its 60-second cache alone.
+- Tenant/course/user-scoped read-only database queries confirm 14 approved skills, nine distinct approved skills with Diagnostic evidence, and five without it. The latest sitting saved six distinct skills, all six newly diagnosed. Reconstructing the pre-sitting set from older evidence gives 11 due skills. No answer content or credentials are included here.
+- The first ten due skills contained the six answered skills and four skills whose bank states are `no_material`. The eleventh skill was outside `MAX_DIAGNOSTIC_QUESTIONS`, because the route caps candidates before checking availability. This reconstructs the six-question sitting without implying that submission lost answers.
+- Four remaining skills are `no_material`: the two service/deployment-model skills, EC2 troubleshooting, and cloud architecture design. The fifth, cloud computing essentials, is bank `ready` with 12 live approved MCQs. All 12 have a non-null last-tested exposure for this learner. A read-only call to the current `pick_diagnostic_item` selector returns no item, confirming the exhausted-pool case. Bank readiness alone is not learner-specific Diagnostic availability.
+- Therefore all five legitimately lack Diagnostic evidence under the existing due definition, but zero currently have a selectable Diagnostic question. The dashboard labels the total as “new skills” and offers an action without distinguishing missing material or an exhausted unseen-item pool.
+
+Source trace:
+
+- `apps/web/src/routes/course/index.tsx`: renders `dueSkillCount` directly with “new skills need a baseline”.
+- `apps/web/src/features/diagnostic/hooks/use-diagnostic.ts`: submission invalidates the status query; the question query is invalidated without immediate refetch to preserve completion.
+- `services/api/app/routers/diagnostic.py`, `_skills_needing_diagnostic` and `get_diagnostic_status`: count approved skills without this learner's `type=diagnostic` evidence, independently of content/readiness/exposure.
+- The same route's `get_diagnostic`: slices to ten before filtering `no_material`, readiness and available items; skipped/exhausted skills enter `failedSkillIds`.
+- `services/api/app/bank/serving.py`, `pick_diagnostic_item`: only returns an approved live bank MCQ without a previous tested exposure; no fallback for a fully tested pool.
+
+Recommended follow-up, requiring a deliberate API/spec decision rather than hiding the notice locally: distinguish never-diagnosed totals from actionable Diagnostic availability and unavailable/preparing reasons; make the workspace action reflect actionable availability; select available candidates before applying the sitting limit; define the baseline policy for a learner who has already tested every item. Preserve existing evidence and never mark skipped skills diagnosed just to clear a badge. Backend Diagnostic/bank ownership and matching contracts must be coordinated before implementation. This trace does not change those contracts.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / dashboard baseline-count investigation
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: fdef8d4
+Files changed: docs/work/handover-2026/evidence/ui-overhaul.md only
+REQ / WI IDs touched: DIAG-REQ-004/007 investigation; WI-22
+Commands run and results (tests, lint, typecheck, build): source trace, fresh workspace reload, scoped SELECT queries and read-only bank-selector query confirmed counts and zero selectable remaining questions; diff check passed. Build/unit tests not rerun for evidence-only change.
+Spec changes made: none; existing due semantics verified, availability/product mismatch recorded for a deliberate follow-up.
+Evidence added: this aggregated trace and root causes; no learner identifier, raw answer, token or secret saved.
+Anything not done, and why: no backend/frontend behavior change; user requested a trace. No live generation, submission, data repair, hosted write, migration, push or deploy.
+Risks or questions for the planner: status availability must handle no-material and exhausted unseen-question pools; broad due-rule change belongs to the backend/bank owner with spec and regression coverage.
+Secrets printed: none (confirmed); existing settings loaded programmatically for scoped read-only access, no environment values printed.
