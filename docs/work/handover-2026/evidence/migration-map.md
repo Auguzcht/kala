@@ -1,0 +1,96 @@
+# Disposition of all 82 inventoried documents
+
+Date: 2026-10-24 (Asia/Manila). Decision: [APPROVAL-01](../approval-01.md). Source: [accepted inventory](audit-docs-inventory.md).
+
+Only rows explicitly marked archive were moved/copied. Merge/ADR candidates remain in their original tracked paths for WI-08/WI-09 unless a focused extraction is linked below. The component install guide is a merge candidate, so its main-only original is retained; its current setup lessons are extracted in [local development](../../../engineering/local-development.md). Full specs and runbooks remain separately planned.
+
+| Original source | Accepted action | Current disposition / durable destination |
+| --- | --- | --- |
+| `CLAUDE.md` | keep as authority (routing pointer only during WI-03; preserve rules in AGENTS.md) | [Root rules preserved in AGENTS.md; CLAUDE.md is a pointer](<../../../../AGENTS.md>) |
+| `Kala Frontend Mockup/Kala_Component_Install_Guide.md` | merge into a runbook (current install lessons only; archive superseded architecture) | Main-only original retained; [local development extraction](../../../engineering/local-development.md); full reconciliation planned in WI-08 |
+| `Kala Frontend Mockup/assets/Kala_Design_Brief.md` | archive (retain source provenance; extract only missing agreed requirements) | [docs/archive/design/Kala_Design_Brief.md](<../../../archive/design/Kala_Design_Brief.md>) — copied; ignored main original retained |
+| `MEMORY.md` | archive (extract unique operational decisions first) | [docs/archive/session-recaps/MEMORY.md](<../../../archive/session-recaps/MEMORY.md>) — tracked source moved in Lane D worktree |
+| `README.md` | merge into a runbook | [Retained source](<../../../../README.md>); full reconciliation planned under WI-06/07/08/09 |
+| `apps/web/README.md` | merge into a runbook | [Retained source](<../../../../apps/web/README.md>); full reconciliation planned under WI-06/07/08/09 |
+| `apps/web/docs/2026-10-18-hub-flow-audit.md` | archive | [docs/archive/audits/2026-10-18-hub-flow-audit.md](<../../../archive/audits/2026-10-18-hub-flow-audit.md>) — tracked source moved in Lane D worktree |
+| `apps/web/src/components/kala/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/components/kala/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/components/marketing/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/components/marketing/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/components/motion/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/components/motion/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/components/shell/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/components/shell/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/features/gamification/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/features/gamification/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/features/instructor/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/features/instructor/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/features/lessons/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/features/lessons/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/features/plan/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/features/plan/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/features/skill-hub/CLAUDE.md` | merge into a feature spec (retain rationale; replace local instructions with router pointers in WI-03) | [Versioned router pointer](<../../../../apps/web/src/features/skill-hub/CLAUDE.md>); useful rationale in [guide knowledge](local-guide-knowledge.md); main original retained |
+| `apps/web/src/styles/DESIGN.md` | keep as authority | [Retained source](<../../../../apps/web/src/styles/DESIGN.md>); visual authority remains DESIGN.md |
+| `claude-context.md` | archive (classification only; leave generated output local, do not promote or copy) | Excluded generated output; original retained in main, no promotion |
+| `docs/AI_OVERHAUL_TODO.md` | archive | [docs/archive/session-recaps/AI_OVERHAUL_TODO.md](<../../../archive/session-recaps/AI_OVERHAUL_TODO.md>) — tracked source moved in Lane D worktree |
+| `docs/BACKEND.md` | merge into a feature spec | [Retained source](<../../../BACKEND.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/COMPONENT_AUDIT.md` | archive | [docs/archive/audits/COMPONENT_AUDIT.md](<../../../archive/audits/COMPONENT_AUDIT.md>) — tracked source moved in Lane D worktree |
+| `docs/DEEPSEEK_DEDUP_AND_AUDIT.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_DEDUP_AND_AUDIT.md](<../../../archive/session-recaps/DEEPSEEK_DEDUP_AND_AUDIT.md>) — copied; ignored main original retained |
+| `docs/DEEPSEEK_ONDEMAND_PROPOSAL.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_ONDEMAND_PROPOSAL.md](<../../../archive/session-recaps/DEEPSEEK_ONDEMAND_PROPOSAL.md>) — copied; ignored main original retained |
+| `docs/DEEPSEEK_OPENROUTER.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_OPENROUTER.md](<../../../archive/session-recaps/DEEPSEEK_OPENROUTER.md>) — copied; ignored main original retained |
+| `docs/DEEPSEEK_PER_MODULE_PROPOSAL_FIX.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_PER_MODULE_PROPOSAL_FIX.md](<../../../archive/session-recaps/DEEPSEEK_PER_MODULE_PROPOSAL_FIX.md>) — copied; ignored main original retained |
+| `docs/DEEPSEEK_REFRESH_BUTTON.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_REFRESH_BUTTON.md](<../../../archive/session-recaps/DEEPSEEK_REFRESH_BUTTON.md>) — copied; ignored main original retained |
+| `docs/DEEPSEEK_SEPT1_CLOSEOUT.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md](<../../../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md>) — copied; ignored main original retained |
+| `docs/DEEPSEEK_SKILL_PIPELINE.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/DEEPSEEK_SKILL_PIPELINE.md](<../../../archive/session-recaps/DEEPSEEK_SKILL_PIPELINE.md>) — copied; ignored main original retained |
+| `docs/DEMO_SCRIPT.md` | archive | [docs/archive/demo/DEMO_SCRIPT.md](<../../../archive/demo/DEMO_SCRIPT.md>) — tracked source moved in Lane D worktree |
+| `docs/Deepkseek_HANDOFFAUG31.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/Deepkseek_HANDOFFAUG31.md](<../../../archive/session-recaps/Deepkseek_HANDOFFAUG31.md>) — copied; ignored main original retained |
+| `docs/Deepseek_HANDOFF-Aug31_2.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/Deepseek_HANDOFF-Aug31_2.md](<../../../archive/session-recaps/Deepseek_HANDOFF-Aug31_2.md>) — copied; ignored main original retained |
+| `docs/Deepseek_MANIFEST_sep1.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/Deepseek_MANIFEST_sep1.md](<../../../archive/session-recaps/Deepseek_MANIFEST_sep1.md>) — copied; ignored main original retained |
+| `docs/INCREMENTAL_PROPOSAL.md` | merge into a feature spec | [Retained source](<../../../INCREMENTAL_PROPOSAL.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/SKILL_PIPELINE.md` | merge into a feature spec | [Retained source](<../../../SKILL_PIPELINE.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/SUPABASE.md` | archive, merge setup content into runbook 02 | [docs/archive/engineering/SUPABASE.md](<../../../archive/engineering/SUPABASE.md>) — tracked source moved in Lane D worktree |
+| `docs/TESTING.md` | merge into a runbook | [Retained source](<../../../TESTING.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/UI_AND_MODULES.md` | convert to ADR | [Retained source](<../../../UI_AND_MODULES.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/00_DESIGN_PLAN.md` | merge into a feature spec | [Retained source](<../../../ai-overhaul-v2/00_DESIGN_PLAN.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/01_ARCHITECTURE.md` | merge into a feature spec | [Retained source](<../../../ai-overhaul-v2/01_ARCHITECTURE.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/02_SHARED_COMPONENTS.md` | merge into a feature spec | [Retained source](<../../../ai-overhaul-v2/02_SHARED_COMPONENTS.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/03_LESSONS_TAKEOVER.md` | merge into a feature spec | [Retained source](<../../../ai-overhaul-v2/03_LESSONS_TAKEOVER.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/04_QUIZ_SURFACES.md` | merge into a feature spec | [Retained source](<../../../ai-overhaul-v2/04_QUIZ_SURFACES.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/05_TUTOR_AND_HIERARCHY.md` | convert to ADR | [Retained source](<../../../ai-overhaul-v2/05_TUTOR_AND_HIERARCHY.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/ai-overhaul-v2/06_SEQUENCING_AND_HANDOFF.md` | archive | [docs/archive/session-recaps/study-surface-v2-handoff.md](<../../../archive/session-recaps/study-surface-v2-handoff.md>) — tracked source moved in Lane D worktree |
+| `docs/ai-overhaul-v2/07_TOKEN_USAGE_REFERENCE.md` | merge into a feature spec | [Retained source](<../../../ai-overhaul-v2/07_TOKEN_USAGE_REFERENCE.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/architecture.md` | keep as authority (after reconciliation) | [Retained source](<../../../architecture.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/audits/2026-10-18-bank-lesson-audit.md` | archive | [docs/archive/audits/2026-10-18-bank-lesson-audit.md](<../../../archive/audits/2026-10-18-bank-lesson-audit.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/bank-sample-2026-10-06.md` | archive | [docs/archive/bugs/bank-sample-2026-10-06.md](<../../../archive/bugs/bank-sample-2026-10-06.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/bank-sample-final.md` | archive | [docs/archive/bugs/bank-sample-final.md](<../../../archive/bugs/bank-sample-final.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/batch-generation-benchmark.md` | archive | [docs/archive/bugs/batch-generation-benchmark.md](<../../../archive/bugs/batch-generation-benchmark.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/batch-generation-routing-benchmark.md` | archive | [docs/archive/bugs/batch-generation-routing-benchmark.md](<../../../archive/bugs/batch-generation-routing-benchmark.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/blackboard-rest-quota-exhaustion.md` | archive | [docs/archive/bugs/blackboard-rest-quota-exhaustion.md](<../../../archive/bugs/blackboard-rest-quota-exhaustion.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/duplicate-accounts-from-lms-identifiers.md` | archive | [docs/archive/bugs/duplicate-accounts-from-lms-identifiers.md](<../../../archive/bugs/duplicate-accounts-from-lms-identifiers.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/model-latency-and-capability-benchmark.md` | archive | [docs/archive/bugs/model-latency-and-capability-benchmark.md](<../../../archive/bugs/model-latency-and-capability-benchmark.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/question-bank-schema-iam.md` | archive | [docs/archive/bugs/question-bank-schema-iam.md](<../../../archive/bugs/question-bank-schema-iam.md>) — tracked source moved in Lane D worktree |
+| `docs/bugs/tutor-ask-hits-the-30s-wall.md` | archive | [docs/archive/incidents/INC-002-tutor-30s.md](<../../../archive/incidents/INC-002-tutor-30s.md>) — tracked source moved in Lane D worktree |
+| `docs/deepseek-frontend-component-audit.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/deepseek-frontend-component-audit.md](<../../../archive/session-recaps/deepseek-frontend-component-audit.md>) — copied; ignored main original retained |
+| `docs/deepseek-ia-and-polish-pass2.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/deepseek-ia-and-polish-pass2.md](<../../../archive/session-recaps/deepseek-ia-and-polish-pass2.md>) — copied; ignored main original retained |
+| `docs/deepseek-shared-shell-and-animated-icons.md` | archive (extract unique rationale before any future removal) | [docs/archive/session-recaps/deepseek-shared-shell-and-animated-icons.md](<../../../archive/session-recaps/deepseek-shared-shell-and-animated-icons.md>) — copied; ignored main original retained |
+| `docs/design/async-ingest.md` | merge into a feature spec | [Retained source](<../../../design/async-ingest.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/design/async-item-generation.md` | merge into a feature spec | [Retained source](<../../../design/async-item-generation.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/design/async-lesson-checks.md` | merge into a feature spec | [Retained source](<../../../design/async-lesson-checks.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/design/card-memory-layer.md` | merge into a feature spec | [Retained source](<../../../design/card-memory-layer.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/design/question-bank-design.md` | merge into a feature spec | [Retained source](<../../../design/question-bank-design.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/frontend-overhaul/backend-handoff.md` | merge into a feature spec | [Retained source](<../../../frontend-overhaul/backend-handoff.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/frontend-overhaul/broken-surfaces.md` | archive | [docs/archive/audits/frontend-bank-surfaces.md](<../../../archive/audits/frontend-bank-surfaces.md>) — tracked source moved in Lane D worktree |
+| `docs/frontend-overhaul/schema-check.md` | archive | [docs/archive/audits/frontend-bank-schema-check.md](<../../../archive/audits/frontend-bank-schema-check.md>) — tracked source moved in Lane D worktree |
+| `docs/masterplan.md` | merge into a feature spec | [Retained source](<../../../masterplan.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/runbooks/0034-apply.md` | merge into a runbook | [Retained source](<../../../runbooks/0034-apply.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/runbooks/0035-apply.md` | merge into a runbook | [Retained source](<../../../runbooks/0035-apply.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/runbooks/0036-apply.md` | merge into a runbook | [Retained source](<../../../runbooks/0036-apply.md>); full reconciliation planned under WI-06/07/08/09 |
+| `docs/stack.md` | convert to ADR | [Retained source](<../../../stack.md>); full reconciliation planned under WI-06/07/08/09 |
+| `infra/blackboard/README.md` | merge into a runbook | [Retained source](<../../../../infra/blackboard/README.md>); full reconciliation planned under WI-06/07/08/09 |
+| `infra/terraform/README.md` | merge into a runbook | [Retained source](<../../../../infra/terraform/README.md>); full reconciliation planned under WI-06/07/08/09 |
+| `infra/terraform/lambda.tf.NOTE.md` | archive | [docs/archive/engineering/async-ingest-lambda-note.md](<../../../archive/engineering/async-ingest-lambda-note.md>) — tracked source moved in Lane D worktree |
+| `services/api/.pytest_cache/README.md` | archive (classification only; preserve local cache, no repository promotion) | Excluded generated output; original retained in main, no promotion |
+| `services/api/README.md` | merge into a runbook | [Retained source](<../../../../services/api/README.md>); full reconciliation planned under WI-06/07/08/09 |
+| `services/api/app/routers/diagnostic.py.INGEST_ROUTE.PATCH.md` | delete (proposed only; applied behavior proof P03) | Removed after accepted P01–P03 static evidence; recover with `git show e9de105:services/api/app/routers/diagnostic.py.INGEST_ROUTE.PATCH.md` |
+| `services/worker/.pytest_cache/README.md` | archive (classification only; preserve local cache, no repository promotion) | Excluded generated output; original retained in main, no promotion |
+| `services/worker/README.md` | merge into a runbook | [Retained source](<../../../../services/worker/README.md>); full reconciliation planned under WI-06/07/08/09 |
+| `services/worker/app/config.py.ADD_THESE_FIELDS.md` | delete (proposed only; applied patch proof P01) | Removed after accepted P01–P03 static evidence; recover with `git show e9de105:services/worker/app/config.py.ADD_THESE_FIELDS.md` |
+| `services/worker/app/handler.py.PATCH.md` | delete (proposed only; applied patch proof P02) | Removed after accepted P01–P03 static evidence; recover with `git show e9de105:services/worker/app/handler.py.PATCH.md` |
+
+## Historical links and provenance
+
+Audit links to moved documents now point to their durable archive copies. Audit source-line labels retain the pre-header source numbering at `e9de105`. Deleted recipe links name their Git-history retrieval command. Raw scratch artifacts were not copied; references to them are labeled historical and unavailable in the durable packet. Archives retain their body except link relocation; headers and INC-002 recovery classification are additions.
+
+The two explicitly inventory-directed tracked moves outside `docs/` are `apps/web/docs/2026-10-18-hub-flow-audit.md` and `infra/terraform/lambda.tf.NOTE.md`. No other non-owned README or source file was modified.
