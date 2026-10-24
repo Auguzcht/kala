@@ -50,7 +50,7 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 
 ## API contract
 
-No API, schema, authorization or query change. Existing student Twin response contains at most 20 recent events. The instructor learner-record implementation reads at most 200 events internally for its statistics, but serializes only the latest 25 into its evidence array; the instructor Twin drill-down uses the Twin response. Pagination navigates the returned array and does not imply access to all historical evidence. Full-history server pagination is separate work. The earlier 200-row response description confused the internal read limit with the serialized ledger window; the finalization handoff records this correction.
+No API, schema, authorization or query change. Existing student Twin response contains at most 20 recent events. The instructor learner-record implementation reads at most 200 events internally for its statistics, but serializes only the latest 25 into its evidence array; the instructor Twin drill-down uses the Twin response. Pagination navigates the returned array and does not imply access to all historical evidence. Labels explicitly say “Last 20 events” for Twin and “Last 25 events” for learner-record ledgers; bounded statistics say “Based on recent activity”. Full-history server pagination is deferred under WI-25. The earlier 200-row response description confused the internal read limit with the serialized ledger window; the finalization handoff records this correction.
 
 ## Data
 
@@ -70,3 +70,4 @@ Long skill names, mobile widths, empty/one-page lists, list shrinkage, null/0/10
 | --- | --- | --- | --- |
 | 2026-10-25 | Define prominent readiness numbers, plain Focus area heading and shared ten-row ledger pagination before implementation | Fred's direct WI-22 visual/pagination request for student and instructor views | TWIN-REQ-001, TWIN-REQ-002, TWIN-REQ-003 |
 | 2026-10-25 | Correct the observed instructor ledger response window to 25; distinguish the internal 200-event statistics read | Final UI/UX handoff source trace of cohort.learner_record; no runtime or intended-behavior change | TWIN-REQ-003 |
+| 2026-10-25 | Require explicit 20/25-event window labels and recent-activity wording; full-history pagination deferred | APPROVAL-06 H12; Lane U close-out implements copy | TWIN-REQ-003 |

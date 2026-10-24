@@ -43,7 +43,7 @@ Rules:
 
 Approved APPROVAL-05, 2026-10-25. Applies only to the text-entry dock containers: Study hub `ComposeDock` and Tutor `PromptInput`. These containers may be pill-shaped when empty. The Tutor container becomes a rounded rectangle using an existing radius token while dragging files or holding attachments. ComposeDock stays text-only; this exception does not authorize behavior changes to it.
 
-Rationale: distinguish the conversational entry surface and make room for Tutor attachment chips without changing the rest of Kala's shape language. Buttons (including send), chips, cards, inputs and every other control inside or outside the dock remain boxy under the existing rules. Use existing tokens; do not add hardcoded radii. Lead designer review is recorded in the handover notes.
+Rationale: distinguish the conversational entry surface and make room for Tutor attachments. APPROVAL-06 section 2 reconciles Fred's accepted Lane U refinements to this APPROVAL-05 exception (2026-10-25): shared dock corners use `calc(var(--radius-xl) * 2)` and remain finite while the collapsed 48px pill expands. Tutor attachment/send controls and shared dock send controls are circular; Tutor user-message bubbles and shared follow-up controls retain their rounded shapes. Tutor history menus are rounded and padded, with an inset rounded sort focus ring. These scoped refinements supersede the initial instruction that every chat control remain boxy. All other controls keep the existing boxy rules. Use existing tokens; no hardcoded radii. Shared ComposeDock changes are visual only. Lead designer review remains a handover follow-up.
 
 ## Typography
 
@@ -84,6 +84,10 @@ Sentence case everywhere. No ALL CAPS except tiny eyebrow labels with tracking.
 Approved APPROVAL-05, 2026-10-25. Only Kala's own logo mark in the Tutor new-chat empty state may have a slow, subtle idle loop, built with existing tokens. Stop the loop when the student starts typing or sends a message. Never show this animated empty-state mark mid-conversation, in Study, in Test or in Diagnostic. Under `prefers-reduced-motion`, render a static mark with no animation.
 
 Rationale: identify the empty conversational entry point without competing with reading or writing. This exception does not relax the rule against motion unrelated to state changes anywhere else. Lead designer review is recorded in the handover notes.
+
+### Scoped interaction feedback amendment
+
+APPROVAL-06 section 2, reconciling Fred's accepted 2026-10-25 Lane U refinements: Tutor action glyphs may use their published lucide-animated variants on whole-control hover/focus, with static fallback for unavailable variants. Do not substitute a generic tilt/nudge/pulse. The drop overlay's Upload glyph reacts to drag entry. Overflowing history titles may make one gentle hover journey to the end and back; short titles remain static. History popup entry/exit remains immediate. Local attachment preview dialogs may have short state-transition motion. Reduced motion disables these effects. These are scoped interaction responses, not additional idle loops; only the empty-state logo has the idle exception above. Lead designer review remains pending.
 
 ## Quality floor (every screen)
 

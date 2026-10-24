@@ -34,72 +34,72 @@ Learners get course-grounded help and a usable retry message within the inline r
 ### TUTOR-REQ-002: Rename an owned conversation
 - Rule: PATCH /tutor/conversations/{conversation_id} accepts optional title, a string of 1–80 characters. Omitted fields remain unchanged. The mutation filters by conversation ID and the validated session's user ID and institution ID. Missing, malformed, other-user and cross-institution conversations return 404. An empty body, explicit null, invalid field type or unsupported field returns 422. Success returns the updated conversation. Rename changes title only and preserves pinned_at and updated_at.
 - Acceptance: Owner rename persists and returns 200. Other-user and cross-institution requests return 404 without a write. Titles of 1 and 80 characters succeed; empty and over-80-character titles return 422. Empty and invalid bodies produce no write.
-- Status: planned
-- Verified by: services/api/tests/test_tutor_conversation_management.py (planned)
+- Status: implemented
+- Verified by: services/api/tests/test_tutor_conversation_management.py
 
 ### TUTOR-REQ-003: Pin owned conversations and list pins first
 - Rule: The same PATCH route accepts optional pinned: boolean. true sets pinned_at to the database's current transaction time; false clears it. Repeating true refreshes the pin time. Omitting pinned preserves its value. title and pinned may be updated together in one scoped mutation. Pinning preserves updated_at. GET /tutor/conversations retains its course, owner and institution filters and existing response fields, and adds pinnedAt to each conversation: a timestamp when pinned, otherwise null. Frontend consumers accept pinnedAt as optional and nullable for compatibility with older APIs. Order is pinned_at descending with nulls last, then updated_at descending.
 - Acceptance: Pin and unpin persist and return the resulting pinnedAt. Unauthorized mutations return 404 without a write. Combined rename/pin succeeds atomically. Pinned conversations precede unpinned conversations; newer pins precede older pins; unpinned conversations retain updated_at descending order.
-- Status: planned
-- Verified by: services/api/tests/test_tutor_conversation_management.py (planned)
+- Status: implemented
+- Verified by: services/api/tests/test_tutor_conversation_management.py
 
 ## Tutor presentation (Lane U)
 
 ### TUTOR-REQ-004: Responsive conversation sidebar
 
-- Rule: At lg and larger widths, the Tutor chats sidebar is always open, with no collapse control or persisted collapsed state. Below lg, a header button opens chat history in the existing Sheet primitive. Selecting a conversation closes the mobile Sheet. Sidebar layout must reserve the correct content width.
+- Rule: At lg and larger widths, the Tutor chats sidebar is always open, with no collapse control or persisted collapsed state. Below lg, a header button opens chat history in the existing Sheet primitive. Selecting a conversation closes the mobile Sheet. Desktop history defaults to 320px, resizes by pointer or keyboard within 280–440px, and updates the content offset. Width is local presentation state. There is no duplicate conversation-title header.
 - Acceptance: At 1440px the sidebar remains visible without a collapse control. At 375px it occupies no content width while closed; its header button opens an accessible Sheet, and selecting a conversation closes it and displays that conversation.
-- Status: planned
-- Verified by: planned sidebar interaction tests and manual screenshots at 1440px and 375px.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ### TUTOR-REQ-005: Conversation groups and management controls
 
-- Rule: Replace Today / Yesterday / Older with Collapsible groups named Pinned and Recents. Show Pinned only when at least one conversation is pinned. Preserve the API ordering within each group. Rows expose a pin button and a DropdownMenu on hover or keyboard focus. The menu contains Rename, Pin or Unpin, and Delete. Rename edits the title inline and uses Lane B's PATCH contract; pin and unpin use the same contract. Delete requires confirmation before calling the existing DELETE route. Cancelling confirmation sends no delete request. Deleting the active conversation returns to a new-chat view. Do not add Share, Archive or Move to project.
+- Rule: Replace Today / Yesterday / Older with Collapsible groups named Pinned and Recents. Show Pinned only when at least one conversation is pinned. Preserve pinned order; Recents has local newest/oldest/title sorting. Rows expose a pin button and a DropdownMenu on hover or keyboard focus; actions remain visible while the menu is open. Menus open toward the right on desktop, respect viewport collisions on mobile, and enter and exit immediately. Long overflowing titles reveal their text with one gentle hover movement to the end and back; short titles and reduced-motion titles remain static. The menu contains Rename, Pin or Unpin, and Delete. Rename edits the title inline and uses Lane B's PATCH contract; pin and unpin use the same contract. Delete requires confirmation before calling the existing DELETE route. Cancelling confirmation sends no delete request. Deleting the active conversation returns to a new-chat view. Do not add Share, Archive or Move to project.
 - Rule: Preserve optional and nullable pinnedAt in the frontend schema. Show pin and rename controls only when pinnedAt is present in the corresponding list-response row; null means supported but unpinned. Older responses that omit the property retain working conversation selection and confirmed deletion without PATCH controls.
 - Acceptance: Pinned appears only with pinned rows; Recents contains unpinned rows. Both groups collapse and expand. Keyboard focus reveals row actions. Responses omitting pinnedAt show no pin or rename controls and cause no PATCH calls. Supported responses allow inline rename and pin/unpin. Delete sends no request before confirmation, sends none after cancellation, and clears the active conversation after successful confirmed deletion.
-- Status: planned
-- Verified by: planned sidebar grouping, keyboard-action, capability-gating, rename/pin and delete-confirmation tests.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ### TUTOR-REQ-006: Center the empty-chat composer and select a local greeting
 
-- Rule: An empty conversation shows a greeting above a vertically centered composer. After the first message, use the bottom composer layout. Choose greetings from client-side morning, afternoon, evening and late-night pools, including course-aware variants when course information is available. Choose deterministically for the day and course within the applicable time-of-day pool, and keep the selected greeting stable across ordinary re-renders. Do not include the student's name or make a model call for greetings.
+- Rule: An empty conversation shows a greeting above a vertically centered composer. After the first message, use a floating bottom composer with sufficient final-message and scroll-control clearance. Choose greetings from client-side morning, afternoon, evening and late-night pools, including course-aware variants when course information is available. Choose deterministically for the day and course within the applicable time-of-day pool, and keep the selected greeting stable across ordinary re-renders. Do not include the student's name or make a model call for greetings.
 - Acceptance: Empty-chat screenshots show the centered greeting and composer at both viewport widths. Sending the first message moves the composer to the bottom. Repeated renders with the same date, course and time-of-day inputs produce the same greeting; representative times select the appropriate pool. Missing course information uses a generic greeting.
-- Status: planned
-- Verified by: planned greeting-selection and empty-to-conversation tests, plus manual screenshots.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ### TUTOR-REQ-007: Limit the mascot idle loop to the new-chat empty state
 
 - Rule: Only Kala's own logo mark in the Tutor new-chat empty state may show a slow, subtle SVG or CSS idle loop. Stop it when typing starts or a message is sent. It is absent mid-conversation and from Study, Test and Diagnostic. Use existing tokens and render a static mark under prefers-reduced-motion. A supplied lead-designer animation asset replaces this implementation.
 - Acceptance: A fresh empty chat can show the subtle idle loop; typing or sending stops it. Conversation views do not show the animated empty-state mark. Reduced-motion users receive a static mark.
-- Status: planned
-- Verified by: planned mascot-state tests and manual normal/reduced-motion checks.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
-### TUTOR-REQ-008: Offer course-skill starter suggestions
+### TUTOR-REQ-008: Course-skill starter suggestions (retired)
 
-- Rule: Below the empty-chat composer, show three or four Suggestion controls built from available course skills using local templates such as "Explain {skill}" and "Quiz me on {skill}". Suggestions use the existing grounded Tutor ask path. Do not generate suggestions with a model or invent skill names when skills are unavailable.
-- Acceptance: A course with skills shows three or four relevant template suggestions; selecting one starts the corresponding grounded conversation turn. A course without loaded skills shows no invented course-skill suggestions. Greeting and suggestion selection cause no model calls.
-- Status: planned
-- Verified by: planned starter-generation and selection tests.
+- Status: retired
+- Reason: Fred removed the new-chat starter suggestions during the accepted Lane U handoff. Keep this ID for traceability; do not reintroduce starters. Post-answer follow-ups remain available. APPROVAL-06 section 2 reconciles this accepted change.
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs.
 
-### TUTOR-REQ-009: Reuse PromptInput for Tutor files and composer shape
+### TUTOR-REQ-009: Stage Tutor files locally until Send
 
-- Rule: Tutor uses PromptInput with its existing drag-and-drop handling. Dragging files anywhere over the Tutor view shows "Drop files to attach". The text-entry container is a pill when empty of attachments; while dragging or holding attachments it becomes a rounded rectangle using an existing radius token. Attachment chips appear inside the container above the text field. Animate the shape change only when reduced motion is not requested.
-- Rule: The first attachment in a new chat creates the conversation lazily, then uploads through the existing conversation attachment route. Coordinate overlapping attachment and send operations so they reuse the same created conversation. Respect the backend's .txt, .md and .pdf support and 5MB limit, and display its safe error detail. Attachment failure must not report a successful upload.
-- Rule: This shape exception applies only to ComposeDock/PromptInput text-entry containers. Buttons, including send buttons, chips, cards, inputs and all other controls remain boxy and use existing tokens. Shared primitive changes are opt-in and preserve other callers. ComposeDock behavior is unchanged.
-- Acceptance: Drag-over displays the overlay and rounded-rectangle container; leaving clears the drag state. Uploaded attachments remain inside the container above the field. A new-chat attachment creates one conversation before upload. Unsupported/oversized files show an error. Reduced-motion users get an immediate shape change. Other PromptInput callers retain their existing behavior.
-- Status: planned
-- Verified by: planned dock-state, drag/drop, upload-error and lazy-creation tests, plus screenshots at both widths.
+- Rule: Tutor uses PromptInput and its drag/drop handling. Dragging files over the view shows “Drop files to attach”. File cards sit above the field with filename, type, size and explicit staged/uploading/attached/failure state. The shared dock uses finite corners derived from twice radius-xl: a pill at its collapsed 48px height and a rounded rectangle as content expands. Circular attachment/send controls, message bubbles and follow-ups follow the scoped DESIGN.md amendment; other controls retain their existing rules.
+- Rule: Selecting/dropping validates TXT/MD/PDF up to 5 MiB per file and stages native File objects in React memory only. It does not create a conversation or upload. Send creates a conversation lazily if necessary, uploads the batch, then asks only when all files are ready. Overlapping operations reuse one conversation. Partial failure retains the question and failed files; retry reuses successful uploads. Switching chats cancels the old composer's continuation. Removing a staged file is local; uploaded-file removal uses the existing owned conversation route.
+- Rule: Cards open an accessible preview dialog. Local TXT/MD previews show bounded raw text up to 128 KiB, never execute/render Markdown or HTML and never upload for preview. PDFs and restored files show metadata plus an explicit unavailable-content limitation. No images or new content-retrieval API. Unsent files/previews are lost on refresh/remount, never persisted in browser storage.
+- Rule: Preview entry/exit and drag-entry Upload feedback respect reduced motion. Shared ComposeDock visual alignment is authorized; its text-only, stateless behavior is unchanged.
+- Acceptance: Selection causes no network mutation; Send uploads once before asking. Partial retries do not re-upload successful files; switching chats prevents stale continuation. Unsupported/oversized files show safe errors. Raw preview is bounded and inert, metadata fallback truthful, keyboard removal/preview and reduced motion work at 375px and 1440px.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; accepted handoff and coordinator first-integration evidence. Live acceptance remains FG-5.
 
 ### TUTOR-REQ-010: Show an honest waiting state and retain deadline recovery
 
 - Rule: While waiting for an answer, show the existing Shimmer with "Thinking", changing after about eight seconds to "Still working on it". Reset the timer for each ask and clean it up on completion, failure or conversation change. Do not show invented step traces or a Reasoning component. On tutor_timeout, show the server's safe retry message. Preserve TUTOR-REQ-001's returned-answer and persistence-recovery behavior.
 - Acceptance: Controlled time shows Thinking initially and Still working on it after approximately eight seconds; completion/failure stops the waiting state. Retrying starts a fresh timer. Timeout detail remains visible with Retry, and existing saved/unsaved-answer recovery tests continue to pass.
-- Status: planned
-- Verified by: planned waiting-state timer tests and existing TUTOR-REQ-001 frontend regressions.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ### TUTOR-REQ-011: Preserve the Tutor and Study hub component boundary
 
-- Rule: Apply the boundary below without introducing additional AI Elements or changing ComposeDock behavior.
+- Rule: Apply the boundary below. Shared dock visual geometry is aligned; ComposeDock behavior stays stateless and text-only. No additional prohibited AI Elements are introduced.
 
 | | Tutor | Study hub dock (lesson, study, test, review-missed) |
 | --- | --- | --- |
@@ -112,8 +112,8 @@ Learners get course-grounded help and a usable retry message within the inline r
 | Later, planned | Sources and Inline Citation after the API returns RAG source titles | n/a |
 
 - Acceptance: Tutor uses conversation attachments; Study hub asks remain stateless and text-only. No prohibited component is introduced. Sources and Inline Citation remain planned.
-- Status: planned
-- Verified by: planned component-boundary review and existing Tutor/Study regressions.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -123,7 +123,7 @@ Learners get course-grounded help and a usable retry message within the inline r
 | GET /tutor/conversations?course_id={course_id} | List owned course conversations | validated current user and institution | Existing conversations envelope and fields retained; adds nullable pinnedAt; order pinned_at.desc.nullslast,updated_at.desc |
 
 ## Data
-Reads course-scoped RAG and owned tutor conversations/messages/attachments. Service-role writes preserve original user question and answer; sanitization affects model-bound copies only. Planned migration 0037_tutor_conversation_pin.sql adds nullable pinned_at timestamptz to tutor_conversations without a default or backfill. Existing RLS policies and grants remain unchanged. Conversation-management mutations explicitly filter by conversation ID, validated session user ID and institution ID because the API service role bypasses RLS. Existing create/detail response contracts remain unchanged; the pin projection is added to list and PATCH only.
+Reads course-scoped RAG and owned tutor conversations/messages/attachments. Service-role writes preserve original user question and answer; sanitization affects model-bound copies only. Locally validated migration 0037_tutor_conversation_pin.sql adds nullable pinned_at timestamptz to tutor_conversations without a default or backfill. Existing RLS policies and grants remain unchanged. Conversation-management mutations explicitly filter by conversation ID, validated session user ID and institution ID because the API service role bypasses RLS. Fred applies 0037 at FG-3 before deployment; local implementation does not establish hosted availability. Existing create/detail response contracts remain unchanged; the pin projection is added to list and PATCH only.
 
 ## AI usage (if any)
 Tutor selects the existing chat role and its fallback. Embedding, prompt, context, and prior messages pass the existing sanitizer before reaching a provider. Timeout settings are opt-in; other callers keep their existing defaults.
@@ -141,3 +141,4 @@ TutorChat retains an unconfirmed answer locally when its refetch fails or lacks 
 | 2026-10-25 | Define responsive conversation management, centered empty chat, local greetings and starters, PromptInput attachments, waiting state and component boundary before implementation | APPROVAL-05 rev 2, Lane U and confirmed coordinator amendments | TUTOR-REQ-004–011 |
 | 2026-10-25 | Permit pills only for ComposeDock/PromptInput text-entry containers; Tutor uses an existing token radius while dragging or holding attachments; every control remains boxy | Approved APPROVAL-05, 2026-10-25; DESIGN.md scoped chat-entry exception; lead designer review remains a handover follow-up | TUTOR-REQ-009, TUTOR-REQ-011 |
 | 2026-10-25 | Permit a slow subtle idle loop only for Kala's logo in Tutor's new-chat empty state; stop on typing or sending, use a static reduced-motion mark, and exclude conversations, Study, Test and Diagnostic | Approved APPROVAL-05, 2026-10-25; DESIGN.md scoped mascot exception; lead designer review remains a handover follow-up | TUTOR-REQ-007 |
+| 2026-10-25 | Reconcile accepted implementation: managed conversations; resizable history/local sorting; centered/floating composer; retired starters; memory-only staging and raw previews; scoped visual corrections | APPROVAL-06 section 2, accepted e1b0250 handoff and Fred’s direct Lane U instructions; supersedes initial APPROVAL-05 presentation details where stated | TUTOR-REQ-002–011 |

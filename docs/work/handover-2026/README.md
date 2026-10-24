@@ -119,3 +119,12 @@ Historical APPROVAL-03 integration gate (superseded by APPROVAL-04 below): API 4
 [APPROVAL-04](approval-04.md) accepts the exact test-only bounded cleanup wait and both existing pytest discovery options. [Repeated verification](evidence/approval-04-verification.md) passed: focused test **20/20**, full API **431 passed** in each of two main runs and one fresh-clone run without dotenv files, worker **117 passed**. All deadline and eventual-completion assertions remain intact; no other test body changed. The earlier cleanup failure is resolved.
 
 Local automated integration is green. Fred subsequently reported completing the backend image deployment and authorized the coordinator to review and push main. [Deployment/source verification](evidence/deployment-2026-10-25.md) confirms API version 6, the live alias, expected image digest, HTTP 200 health, matching packaged API source, and a successful worker update. Publication uses the scoped fast-forward checks recorded there; Git's remote main reference records the published revision. Agents perform no deployment. Live observation, DB major-version confirmation and the remaining handover work retain their existing gates.
+
+## APPROVAL-06 current close-out
+
+[APPROVAL-06](approval-06.md) supersedes earlier delivery-state snapshots above. X 7f484bb, B 0ccbb22 and U e1b0250 are merged into local main in the approved order. [Integration evidence](evidence/approval-06-integration.md) records checks and gates; no agent deployment or push. Coordinator owns Tutor, AI, Diagnostic and DESIGN text this round. I alone edits auth; P waits until I merges. U owns close-out implementation and evidence, not these shared specs. I/G/U close-out merges remain subject to coordinator checks and the same-day lateness rule.
+
+- [WI-24 historical dev identity repair](work-items/WI-24-dev-identity-history-repair.md): planned, ITO; no repair today.
+- [WI-25 full-history evidence paging](work-items/WI-25-full-history-evidence-paging.md): deferred, ITO.
+
+The accepted handoff retires Tutor new-chat starters, stages files locally until Send and retains a Diagnostic purpose header. Earlier WI-22 descriptions are historical initial scope; current feature specs and APPROVAL-06 govern. Design exceptions include Fred's accepted dock/control/history refinements, with lead designer review still pending. Live provider recovery, hosted migration application, deployment and click-through remain Fred gates.
