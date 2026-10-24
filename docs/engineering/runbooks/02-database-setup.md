@@ -3,7 +3,7 @@ runbook: database-setup
 applies_to: [local, prod]
 who_runs_it: Fred / ITO database maintainer
 time_needed: "[Fred to confirm]"
-last_verified: "unverified; source review at 4f3ec29 on 2026-10-25, Lane R"
+last_verified: "unverified; source review at 6e21eed on 2026-10-25, Lane R"
 status: in-progress
 ---
 
@@ -17,16 +17,16 @@ Prepare a fresh institutional Supabase project or validate a throwaway local sta
 
 - Read [APPROVAL-01](../../work/handover-2026/approval-01.md), including section 5, and [environment boundaries](../environments.md). Production is a fresh institutional project, with no personal data/account transfer.
 - Obtain project administration, approved plan/region, backups and credential custody through [secrets.md](../secrets.md). Exact choices: [Fred to confirm].
-- **Local gate:** hosted Postgres major is unconfirmed. Lane DB owns major configuration, relocation, seed, schema/types and package scripts. Its executable guide is pending at this revision. Do not run the router's future `db:*` commands as if installed.
+- **Local gate:** hosted Postgres major is unconfirmed (FG-2 in [APPROVAL-06](../../work/handover-2026/approval-06.md)). Lane DB owns major configuration, relocation, seed, schema/types and package scripts. Its executable guide is pending at this revision. Do not run the router's future `db:*` commands as if installed.
 
 ## Steps
 
-1. Record revision and migration manifest with read-only filesystem checks. At this draft's base, **36** SQL files, `0001`–`0036`, live in [packages/db/migrations](../../../packages/db/migrations/). Preserve numeric names and bytes, including 0036's historical path comment. Lane B's proposed 0037 is pending and has a separately owned apply note; it is not part of the 36-file proof.
+1. Record revision and migration manifest with read-only filesystem checks. At refreshed base `6e21eed`, **37** SQL files, `0001`–`0037`, live in [packages/db/migrations](../../../packages/db/migrations/). Preserve numeric names and bytes, including 0036's historical path comment. Lane B's 0037 is merged locally; its exact [maintainer apply runbook](../../runbooks/0037-apply.md) is authoritative for FG-3. Local presence is not hosted application. The original 36-file proof remains historical; B records a separate real local 0001–0037 replay and SQL checks in that runbook, including its temporary rolled-back fixture-grant limitation.
 2. Fred reports only the hosted Postgres major, then Lane DB supplies the approved local workflow. Required accepted results: two clean `db:verify` runs, no second-run schema/type diff, fake fixtures, types at [packages/schema/supabase.ts](../../../packages/schema/supabase.ts). Do not substitute the existing hosted-ref `schema:types` command. Local reset/replay waits for that lane and its guide.
 3. Review [accepted replay evidence](../../work/handover-2026/evidence/audit-migration-replay.md): 36 unchanged files passed two CLI replays and an independent psql replay on PostgreSQL 17.6 / CLI 2.114.0; all 13 notices are enumerated. This proves empty-schema SQL replay, not hosted parity, RLS behavior, populated-data repair or current version suitability.
 4. For a fresh hosted environment, the human creates the approved empty institutional project. Current create-project console path, plan/region/database-major selection: [Fred to confirm]. Check the target before writes; never reset/replay an existing hosted database.
 5. Before SQL application, prepare a reviewed manifest and per-migration pre/post-check plan, local replay on the selected major, backup/restore procedure and checks for Supabase roles/auth helpers, extensions and Data API exposure/grants. `0001` establishes `vector` and `pgcrypto`; include every later migration in order. Approved full-bootstrap application method and migration-history reconciliation for SQL-editor use: [Fred to confirm]. **Stop until reviewed.** Do not guess linked CLI operations or apply only the old first three files.
-6. The human applies only the reviewed manifest and records each file's result. Existing [0034](../../runbooks/0034-apply.md), [0035](../../runbooks/0035-apply.md) and [0036](../../runbooks/0036-apply.md) notes are dated evidence, not blanket reapply authorization. Applied files are immutable; repair goes forward in a new file.
+6. The human applies only the reviewed manifest and records each file's result. Existing [0034](../../runbooks/0034-apply.md), [0035](../../runbooks/0035-apply.md) and [0036](../../runbooks/0036-apply.md) notes are dated evidence, not blanket reapply authorization. For the existing dev-hosted 0001–0036 baseline, Fred alone follows [0037](../../runbooks/0037-apply.md): confirm the reviewed checksum/project/baseline, column absence, RLS/policies/grants, service-role SELECT/UPDATE privileges and counts; apply once; verify nullable timestamptz with no default, preserved rows/null pins and unchanged access controls. Stop if the column already exists or a prerequisite fails. SQL-editor application needs a separate delivery record; it does not automatically update CLI history. FG-3 must pass before the new API selects or updates pinned_at. Applied files are immutable; recovery leaves the additive column in place and fixes forward. A fresh-project manifest also includes 0037; do not blindly replay it on an existing project.
 7. Verify the existing HS256 session-signing compatibility with the API owner before [05](secrets-manager.md). Do not substitute asymmetric signing or different key types without an approved application change. Service credentials stay server-side; browser keys are public-only. Verify tenant/owner RLS, role grants and embedding model/schema dimensions separately.
 8. Establish institutional mapping through the reviewed setup/launch. Source creates/resolves institution from validated issuer plus deployment; do not reuse old UUIDs. Required institution name/timezone and any seed operation: [Fred to confirm]. Complete [08](lti-tool-registration.md) and [10](first-launch-smoke.md) using synthetic users.
 
@@ -57,3 +57,4 @@ Never edit/delete applied history. On failure stop at the file and record saniti
 | --- | --- | --- |
 | 2026-10-24 | Preserve partial 36-file reconciliation | WI-03 extraction. |
 | 2026-10-25 | Draft setup checks and local/hosted execution gates | APPROVAL-05 rev 2, Lane R, WI-07; relocation and 0037 pending. |
+| 2026-10-25 | Refresh to 37 local files, link exact 0037 pre/post-checks and FG-2/FG-3 | APPROVAL-06 rev 2; source 6e21eed; no SQL executed. |

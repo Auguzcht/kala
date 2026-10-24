@@ -5,7 +5,7 @@ All 13 procedures now have **unverified drafts** under WI-06/WI-07. Resolve thei
 | # | Runbook file | Produces | Needs from earlier steps | Source material to reconcile |
 | --- | --- | --- | --- | --- |
 | 01 | [aws-account-bootstrap.md](aws-account-bootstrap.md) | Approved admin access, region, budget/state/quota decisions (backend not yet declared) | AWS account | `infra/terraform/README.md` |
-| 02 | [02-database-setup.md](02-database-setup.md) | Project URL, keys, extensions (`vector`, `pgcrypto`), migrations applied, pilot institution row | none | Archived Supabase guide, accepted 36-file replay, existing migration apply notes |
+| 02 | [02-database-setup.md](02-database-setup.md) | Project URL, keys, extensions (`vector`, `pgcrypto`), migrations applied, pilot institution row | none | Historical 36-file audit plus [0037 local replay/apply note](../../runbooks/0037-apply.md) |
 | 03 | [blackboard-learn-instance.md](blackboard-learn-instance.md) | Running Learn instance (school test instance, or developer VMDK imported to an AMI on EC2), static address, admin and test users, test course | AWS account | `infra/blackboard/README.md`, High-level Blackboard README; import/static-address transcript [Fred to confirm] |
 | 04 | [anthology-developer-app.md](anthology-developer-app.md) | Application key and secret, application ID (LTI client ID), REST app | API base URL from 06; early metadata only, placeholder support [Fred to confirm] | Blackboard README and connector; current Portal screenshots [Fred to confirm] |
 | 05 | [secrets-manager.md](secrets-manager.md) | JSON secret populated (current source: `kala/app`; environment-scoped naming is proposed) | 02, 03, 04 | `infra/terraform/README.md` "Set the application secrets", `docs/engineering/secrets.md` |
@@ -26,17 +26,17 @@ Read the [draft verification and evidence-gap record](verification.md) before re
 
 ## Dependency and execution gates
 
-1. Start with 01's account/state/quota approval. 02's local workflow waits for Lane DB and Fred's hosted Postgres major. At base `4f3ec29`, 36 applied-history files are still in `packages/db/migrations`; relocation is pending. 0037 belongs to Lane B and is outside this lane, including its separate `docs/runbooks/0037-apply.md`.
+1. Start with 01's account/state/quota approval. 02's local workflow waits for Lane DB and Fred's hosted Postgres major. At refreshed base `6e21eed`, **37 repository migration files** (0001–0037) remain in `packages/db/migrations`; relocation is pending FG-2. B's locally merged 0037 and [exact apply runbook](../../runbooks/0037-apply.md) are read-only inputs for Lane R. Hosted application remains Fred's FG-3 before FG-4 deployment; file count does not establish hosted state.
 2. Obtain Learn via 03, then prepare portal metadata in 04. API endpoint fields cannot be finalized until 06 produces the API; whether provisional registration is supported is unverified. Do not submit invented placeholder URLs.
 3. 05 and 06 are phased together: approved state → ECR/empty secret bootstrap → secret population and images → full reviewed stack. Secret readiness and database readiness must precede worker scheduling/invocation. This sequence is a proposed fresh-environment procedure, not an executed transcript.
 4. Finalize 04/08 after 06 and 09's frontend origin. 08 completes the Learn deployment/placement and separate REST integration; 10 accepts real synthetic-role launches and material/learning flows.
-5. Use 07 for subsequent backend code releases. 11 and 12 apply when needed; 13 applies only to an EC2 developer Learn instance. Any shutdown/cutover requires separate named human approval.
+5. Use 07 for subsequent backend code releases. [APPROVAL-06](../../work/handover-2026/approval-06.md) supersedes earlier release snapshots: coordinator checks stop before FG-3; Fred applies 0037, then at FG-4 deploys, checks alias/worker/startup, pushes main and waits for Vercel Ready; FG-5 is his live acceptance. FG-1 provider configuration/refresh is separate from FG-2, which blocks Lane DB only. 11 and 12 apply when needed; 13 applies only to an EC2 developer Learn instance. Any shutdown/cutover requires separate named human approval.
 
-All write/execute steps in these documents belong to named human maintainers. A draft command is not authorization for an agent deploy, hosted migration/write, key rotation, merge or push. Lane R stops with its audit report for coordinator review.
+All hosted/infrastructure mutation steps in these documents belong to named human maintainers; local verification/generation may run only within its separately authorized coordinator scope. A draft command is not authorization for an agent deploy, hosted migration/write, key rotation, merge or push. Lane R stops with its audit report for coordinator review.
 
 ## Approval source
 
-APPROVAL-05 rev 2 was supplied as the task attachment, not a committed repository document. Its Lane R grant is: draft runbooks 01–13 from archived records, MEMORY and READMEs; mark unknowns `[Fred to confirm]`; own only `docs/engineering/runbooks/`. Existing [APPROVAL-01](../../work/handover-2026/approval-01.md), [02](../../work/handover-2026/approval-02.md), [03](../../work/handover-2026/approval-03.md) and [04](../../work/handover-2026/approval-04.md) retain their database, privacy and integration gates. The full approval attachment and all credential material are excluded from these drafts.
+[APPROVAL-05 rev 2](../../work/handover-2026/approval-05.md) is now committed; the original Lane R draft used the supplied attachment. [APPROVAL-06 rev 2](../../work/handover-2026/approval-06.md) continues R/P/C2 docs and sets the current same-day Fred gates. Its Lane R grant is: draft runbooks 01–13 from archived records, MEMORY and READMEs; mark unknowns `[Fred to confirm]`; own only `docs/engineering/runbooks/`. Existing [APPROVAL-01](../../work/handover-2026/approval-01.md), [02](../../work/handover-2026/approval-02.md), [03](../../work/handover-2026/approval-03.md) and [04](../../work/handover-2026/approval-04.md) retain their database, privacy and integration gates. The full approval attachment and all credential material are excluded from these drafts.
 
 ## History
 
@@ -44,3 +44,4 @@ APPROVAL-05 rev 2 was supplied as the task attachment, not a committed repositor
 | --- | --- | --- |
 | 2026-10-24 | Install registry and two partial knowledge extracts | WI-03, APPROVAL-01. |
 | 2026-10-25 | Draft all 13 procedures and reconcile dependencies/gaps | WI-06/WI-07, APPROVAL-05 rev 2, Lane R. |
+| 2026-10-25 | Refresh from local main 6e21eed: 37 migrations, exact 0037 note and same-day gates | APPROVAL-06 rev 2 and coordinator Lane R continuation. |

@@ -3,7 +3,7 @@ runbook: incident-response
 applies_to: [dev-hosted, prod]
 who_runs_it: Fred / ITO incident lead with service owners
 time_needed: "[Fred to confirm]"
-last_verified: "unverified; source review at 4f3ec29 on 2026-10-25, Lane R"
+last_verified: "unverified; source review at 6e21eed on 2026-10-25, Lane R"
 status: in-progress
 ---
 
@@ -60,15 +60,15 @@ Obtain read access to the intended AWS log groups and selected metadata, and hav
    ```
 
    The parsing reflects the base source's Python-dict log format and has not been run against CloudWatch by Lane R. Deployed formatter/request-ID discovery and exact stage extraction: [Fred to confirm]. A missing field is a logging/parsing gap, not zero latency. A timed-out synchronous call may continue/resume in a warm Lambda; response return does not guarantee remote cancellation.
-5. For dependency errors, [the historical safe queries](../../work/handover-2026/evidence/tutor-cloudwatch-queries.md) offer metadata-only discovery. Reconcile them with the deployed version: their statement that Tutor has no timing log is obsolete after Lane T. Source now has generic privacy-safe `tutor_provider_error stage=provider_call` branches that may omit provider/model/status. Do not claim every failure exposes those fields or use raw `@message` to fill the gap. Lane X owns that logging investigation; current cause remains unconfirmed.
-6. Ask the provider account owners to check key validity, rotation/revocation, billing/credits, model availability and rate limits privately. Embedding happens before chat, so one embedding outage can break all tutor paths. Record provider/model **names**, HTTP status and stage only if actually observed. In the base fallback policy, transport failures and 404/408/429/500/502/503/504 can qualify for chat fallback; 401/403/402 do not. Fallback also depends on remaining budget and does not establish embedding recovery. A default free-model slug is not proof of the deployed fallback; the owner confirms effective configuration privately.
+5. Reconcile [historical queries](../../work/handover-2026/evidence/tutor-cloudwatch-queries.md) with the actual deployed version: their no-timing-log statement predates Lane T. At refreshed source 6e21eed, merged Lane X diagnostics wrap budgeted embed/chat failures and emit JSON after `tutor_provider_error`: `stage`, `provider`, `model`, `http_status`, `request_id`, `error_code`. Stages are embed/chat; model/status can be null if unavailable, and TutorTimeout is deliberately excluded. The request ID is the budget identifier, not automatically a Lambda request-ID join. Have Fred extract only these metadata fields or aggregates after verifying the deployed formatter; never display raw @message/provider bodies. Code presence and mocked tests are not proof these new logs are deployed; [integration evidence](../../work/handover-2026/evidence/approval-06-integration.md) leaves deployment/acceptance at Fred gates.
+6. [APPROVAL-06 FG-1](../../work/handover-2026/approval-06.md) identifies a primary HTTP 429 and instructs Fred to check rate limits/credits, set a paid fallback on a different provider (no :free), force fresh Lambda instances and retest the hint. This supersedes the initial unclassified-cause snapshot; recovery remains pending. Other failure events still require their own evidence. Ask the provider owners to check key validity, rotation/revocation, billing/credits, model availability and rate limits privately. Embedding happens before chat, so one embedding outage can break all tutor paths. Record provider/model **names**, HTTP status and stage only if actually observed. In the base fallback policy, transport failures and 404/408/429/500/502/503/504 can qualify for chat fallback; 401/403/402 do not. Fallback also depends on remaining budget and does not establish embedding recovery. A default free-model slug is not proof of the deployed fallback; the owner confirms effective configuration privately.
 7. Check dependency-specific evidence without guessing fixes. For Learn 429, honor Retry-After and stop relaunch/refresh bursts; see the [quota incident](../../archive/bugs/blackboard-rest-quota-exhaustion.md). For SQLSTATE 42702 on practice submit, review [0035](../../runbooks/0035-apply.md) and installed schema with the DB owner. Never edit/reapply immutable migrations or infer RLS correctness from service-role access. For ingest/worker failures use `/aws/lambda/kala-worker` with a narrow window and sanitized job/status metadata; exact current worker failure queries: [Fred to confirm].
 8. Incident lead classifies cause and approves a concrete recovery: provider owner corrects key/credits/config if operational; deployment owner uses 07 for a compatible image recovery; DB owner reviews a forward fix. No deploy is needed merely to replenish provider credits. No automatic model switch, timeout increase or infrastructure change is authorized. Record required approvals and a named owner.
 9. After recovery, perform relevant synthetic checks in [10](first-launch-smoke.md), including both tutor modes for a tutor incident. Record observed pass/fail, time and deployed revision; retain earlier failures. Update incident evidence through its owning lane. A later historical success never establishes current recovery.
 
 ## Verify it worked
 
-Reproduce the affected path once safely under the named tester, confirm dependency health and record sustained observation window: [Fred to confirm]. [INC-002](../../archive/incidents/INC-002-tutor-30s.md) remains historical with live recovery unverified. APPROVAL-05 reports current 502s but does not establish their cause. This lane performed no live investigation.
+Reproduce the affected path once safely under the named tester, confirm dependency health and record sustained observation window: [Fred to confirm]. [INC-002](../../archive/incidents/INC-002-tutor-30s.md) remains historical with live recovery unverified. APPROVAL-06 reports primary rate limiting; FG-1 live recovery remains unverified. The 37th migration is merged locally and [0037 application](../../runbooks/0037-apply.md) remains FG-3 before Fred's FG-4 deployment/push; agents perform none of these hosted actions. This lane performed no live investigation.
 
 ## Undo / roll back
 
@@ -80,7 +80,7 @@ Undo only the incident lead's approved operational change using its service runb
 | --- | --- | --- |
 | Gateway access logging absent from Terraform | Cannot assume route-level access logs exist | [WI-18](../../work/handover-2026/work-items/WI-18-api-gateway-access-logs.md) is planned; request ITO decision separately. |
 | Error alarm lacks source notification action | Alarm declaration does not prove paging | Confirm notification/escalation privately. |
-| Provider error metadata incomplete | Cannot classify all failures from existing safe logs | Report unknown; await Lane X/human provider evidence. |
+| Diagnostics may not yet be deployed; nullable metadata | Local wrappers do not prove live stage/status availability | Confirm deployed version and ask Fred for metadata-only evidence; never infer missing fields. |
 | Partial sanitizer | Logs/model-bound text must not be treated as anonymous | Do not copy payloads; see [AI-REQ-001](../../features/ai-platform/README.md). |
 
 ## History
@@ -88,3 +88,4 @@ Undo only the incident lead's approved operational change using its service runb
 | Date | Change to this runbook | Why |
 | --- | --- | --- |
 | 2026-10-25 | Draft privacy-safe triage and recovery gates | APPROVAL-05 rev 2, Lane R, WI-07. |
+| 2026-10-25 | Replace stale logging/cause snapshot with merged diagnostics and FG-1/FG-3/FG-4 limits | APPROVAL-06 rev 2; source 6e21eed. |
