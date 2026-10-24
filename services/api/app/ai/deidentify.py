@@ -13,5 +13,8 @@ def strip_pii(text: str) -> str:
 
 
 def safe_context(user: CurrentUser, text: str) -> str:
-    """Return context safe to send to a model: no names, no emails."""
+    """Sanitize model-bound copy (emails and explicit name: patterns only).
+
+    This does not remove arbitrary names or all personal information.
+    """
     return f"[subject: {user.user_id[:8]}] {strip_pii(text)}".strip()

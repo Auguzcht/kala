@@ -6,7 +6,9 @@ import json
 import logging
 
 from app.ai import bedrock
+from app.ai.deidentify import strip_pii
 from app.ai.reasoning import strip_reasoning
+from app.ai.request_budget import RequestBudget
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -69,7 +71,8 @@ def get_fallback_for(task: str) -> str | None:
 
 
 def answer(*, system: str, user_text: str, escalate: bool = False,
-           history: list[dict] | None = None, task: str = "default") -> str:
+           history: list[dict] | None = None, task: str = "default",
+           budget: RequestBudget | None = None) -> str:
     """`history` is prior turns already in bedrock.converse's message shape
     ({"role": "user"|"assistant", "content": [{"text": ...}]}), oldest
     first. Optional and backward-compatible: every existing caller omits
@@ -97,12 +100,22 @@ def answer(*, system: str, user_text: str, escalate: bool = False,
         model = get_model_for("reasoning" if escalate else "default")
     messages = list(history) if history else []
     messages.append({"role": "user", "content": [{"text": user_text}]})
+    if budget is not None:
+        # Copy every text part; persisted history and other callers stay intact.
+        system = strip_pii(system)
+        messages = [
+            {**message, "content": [
+                {**part, "text": strip_pii(part["text"])} if "text" in part else dict(part)
+                for part in message["content"]
+            ]} for message in messages
+        ]
     raw = bedrock.converse(
         model_id=model,
         system=system,
         messages=messages,
         max_tokens=_ANSWER_MAX_TOKENS,
         fallback_model_id=get_fallback_for(task),
+        **({} if budget is None else {"budget": budget}),
     )
     return strip_reasoning(raw)
 

@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// Provider/deadline errors share flat detail; older responses omit code.
+export const tutorErrorSchema = z.object({
+  detail: z.string(),
+  code: z.string().nullish(),
+});
+
 export const tutorStyleSchema = z.enum(["default", "eli5", "detail"]);
 
 // The follow-up chips (Hint / Explain) reuse the SAME grounded answer path;
