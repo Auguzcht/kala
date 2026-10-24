@@ -39,6 +39,12 @@ Rules:
 - Primary and secondary action buttons are boxy (`rounded-md`, 4px), not pills. The side rail uses small 8px icon chips.
 - **Bracket / corner-accent motif:** small `[ ]` style corner ticks on key panels, echoing the hornbill's angular crest — sparingly, as a signature detail.
 
+### Scoped exception: chat-entry containers
+
+Approved APPROVAL-05, 2026-10-25. Applies only to the text-entry dock containers: Study hub `ComposeDock` and Tutor `PromptInput`. These containers may be pill-shaped when empty. The Tutor container becomes a rounded rectangle using an existing radius token while dragging files or holding attachments. ComposeDock stays text-only; this exception does not authorize behavior changes to it.
+
+Rationale: distinguish the conversational entry surface and make room for Tutor attachment chips without changing the rest of Kala's shape language. Buttons (including send), chips, cards, inputs and every other control inside or outside the dock remain boxy under the existing rules. Use existing tokens; do not add hardcoded radii. Lead designer review is recorded in the handover notes.
+
 ## Typography
 
 Three deliberate roles (loaded in `index.html` from Google Fonts):
@@ -72,6 +78,12 @@ Sentence case everywhere. No ALL CAPS except tiny eyebrow labels with tracking.
 - First-launch onboarding tours via Driver.js on `/launch` (student path: diagnostic → practice → tutor → twin; instructor path: heatmap → at-risk → drill-down). Same script runs the conference demo walkthrough.
 - Always wrap non-essential motion so `prefers-reduced-motion` disables it.
 - Showy effects (spotlight, beams, aurora) are **landing/conference surface only** — never imported from `/course/*`, `/class/*`, `/admin/*`, `/research/*`.
+
+### Scoped exception: Tutor empty-state mascot
+
+Approved APPROVAL-05, 2026-10-25. Only Kala's own logo mark in the Tutor new-chat empty state may have a slow, subtle idle loop, built with existing tokens. Stop the loop when the student starts typing or sends a message. Never show this animated empty-state mark mid-conversation, in Study, in Test or in Diagnostic. Under `prefers-reduced-motion`, render a static mark with no animation.
+
+Rationale: identify the empty conversational entry point without competing with reading or writing. This exception does not relax the rule against motion unrelated to state changes anywhere else. Lead designer review is recorded in the handover notes.
 
 ## Quality floor (every screen)
 
