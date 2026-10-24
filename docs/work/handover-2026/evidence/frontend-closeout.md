@@ -61,3 +61,27 @@ node apps/web/src/features/twin/tests/presentation.browser.mjs
 ## Current boundaries
 
 H05/H07/H02-copy spec-dependent implementation is held as described above. Other pre-approved fixes are being prepared; final verification must occur after rebasing onto the integrated main/spec SHA supplied by the coordinator. FG-1/2/3/4/5 are not performed by U; none blocks unrelated source work. No external chat message has been sent by U.
+
+## Preliminary source checks before integration/spec release
+
+The ungated source draft covers H06 keyboard links/disabled endpoints, H08 canonical skill context, H09 role-aware recovery, H10/H11 entry/expiry copy, H12 window labels, retained legacy route bridges and the stale Tutor comment. The dedicated test draft is apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs. H05/H07 source is held separately as above; H02 optional fields have not been implemented pending the coordinated contract.
+
+- `pnpm --filter web lint`: passed, 0 errors / 18 existing warnings; /tmp/kala-ui-closeout-lint.log.
+- `pnpm --filter web typecheck`: passed with the existing route-generator circular warning; /tmp/kala-ui-closeout-typecheck.log.
+- Frontend Node command above: 21 passed; /tmp/kala-ui-closeout-unit.log.
+- Study renderer command above: 4 passed; /tmp/kala-ui-closeout-study.log.
+- `node --check apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs`: passed syntax check only, not browser acceptance.
+- Final source whitespace check passed after removing a trailing blank line. No build/browser claim is made before the held pieces are restored and the required rebase occurs. A subsequent small pager clamp/copy correction still requires the final complete checks.
+
+AUDIT REPORT
+Task / brief ID: APPROVAL-06 Lane U / early scope, spec proposal and server handoff
+Branch and worktree: codex/ui-closeout; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: e1b0250; codex/ui-overhaul preserved unchanged
+Files changed: this evidence file committed; frontend source/test drafts held pending the integration/spec SHA and browser-port release
+REQ / WI IDs touched: proposed DIAG-REQ-012/013; existing Twin/Instructor presentation and WI-22; no coordinator-owned spec edited
+Commands run and results (tests, lint, typecheck, build): preliminary lint/typecheck, 21 frontend and 4 Study tests passed; new browser script syntax passed; build/browser final runs pending
+Spec changes made: none in feature specs; exact proposed coordinator text above
+Evidence added: proposal, owned scope, command/dependency list, PID/port yield and preliminary checks
+Anything not done, and why: H05/H07/H02 held until named spec commit; final verification held until integrated rebase and 5173 release; no hosted writes, deployment, push, migration or identity repair
+Risks or questions for the planner: please commit the exact proposed U contract separately from G's 009–011 and release its SHA; preserve optional legacy fields and coordinate any new question waiting fields before UI implementation
+Secrets printed: none (confirmed)
