@@ -317,6 +317,31 @@ def due_cards(*, institution_id: str, user_id: str, course_id: str,
     return fresh[:limit]
 
 
+def unrated_cards(*, institution_id: str, user_id: str, course_id: str,
+                  limit: int = 20, module_ref: str | None = None,
+                  skill_id: str | None = None) -> list[dict]:
+    """Study-only resumption of claimed cards, without claiming them again.
+
+    Keep is_due/due_cards unchanged: Test and membership due badges describe
+    reviewed schedules, while Study also resumes abandoned first encounters.
+    """
+    if limit <= 0:
+        return []
+    params = {
+        "institution_id": f"eq.{institution_id}", "user_id": f"eq.{user_id}",
+        "course_id": f"eq.{course_id}", "reps": "eq.0",
+        "select": "item_id,skill_id,box,ease_milli,streak,reps,lapses,last_outcome,due_at",
+        "order": "created_at.asc,item_id.asc",
+    }
+    if module_ref is not None:
+        params["module_ref"] = f"eq.{module_ref}"
+    if skill_id is not None:
+        params["skill_id"] = f"eq.{skill_id}"
+    rows = db.select("srs_state", params)
+    active_ids = _active_item_ids(institution_id=institution_id, course_id=course_id, rows=rows)
+    return [r for r in rows if int(r.get("reps", 0)) == 0 and r["item_id"] in active_ids][:limit]
+
+
 def stats(*, institution_id: str, user_id: str, course_id: str,
           skill_id: str | None = None) -> dict:
     """Lightweight review-queue summary for the course home surface: how many

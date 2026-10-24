@@ -149,8 +149,9 @@ def deck(
     offset: int = 0,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """The review queue: due scheduled cards first, topped up with fresh cards
-    for skills the student hasn't started. Answer keys never leave the server.
+    """The review queue: due scheduled cards, then claimed-unrated cards,
+    then fresh top-up. Study returns answer labels
+    and explanations for flipping; Test withholds answers until server grading.
     `skill_id` is the topic picker's explicit override — when set, the whole
     deck (due cards AND fresh top-up) scopes to that one skill instead of the
     course-wide due-first mix, same "auto vs chosen" pattern as practice.
@@ -188,6 +189,21 @@ def deck(
         "select": "id,bank_serving", "limit": "1",
     })
     use_bank = bool(course_rows and bank_enabled(course_rows[0], "study"))
+
+    # Counts peeks must exit before any claim, tracking, or exposure path,
+    # including Study all. Repeated landing-page reads cannot spend the cap.
+    if limit == 0:
+        result = {
+            "courseId": course_id, "cards": [],
+            "stats": srs.stats(institution_id=user.institution_id, user_id=user.user_id,
+                               course_id=course_id, skill_id=skill_id),
+            "newRemainingToday": _new_cards_remaining(
+                institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+            ),
+        }
+        if mode is not None:
+            result["mode"] = mode
+        return result
 
     if mode == "all":
         if not use_bank:
@@ -246,7 +262,16 @@ def deck(
         institution_id=user.institution_id, user_id=user.user_id,
         course_id=course_id, limit=page_size * 3, module_ref=module_ref, skill_id=skill_id,
     )
+    unrated = srs.unrated_cards(
+        institution_id=user.institution_id, user_id=user.user_id,
+        course_id=course_id, limit=page_size, module_ref=module_ref, skill_id=skill_id,
+    )
+    # Rated due cards keep their priority. Resumed cards bypass the fresh
+    # claim RPC, so even an exhausted allowance cannot strand them.
+    due_ids = {row["item_id"] for row in due}
+    unrated = [row for row in unrated if row["item_id"] not in due_ids]
     due_item_ids = [d["item_id"] for d in due]
+    due_item_ids.extend(d["item_id"] for d in unrated)
     items_by_id: dict[str, dict] = {}
     if due_item_ids:
         rows = db.select("generated_items", {
@@ -255,7 +280,7 @@ def deck(
             "course_id": f"eq.{course_id}", "retired_at": "is.null",
             "kind": "in.(practice,flashcard)",
             "skills.status": "eq.approved",
-            "select": "id,skill_id,prompt,choices,origin,skills!inner(status)",
+            "select": "id,skill_id,kind,prompt,front,choices,origin,skills!inner(status)",
         })
         items_by_id = {r["id"]: r for r in rows}
 
@@ -267,19 +292,19 @@ def deck(
                                 ease_milli=int(d.get("ease_milli", 2500))) == "slipping" else 1,
             d.get("due_at", ""),
         ))
-    for d in due:
+    for d in due + unrated:
         if len(cards) >= page_size:
             break
         it = items_by_id.get(d["item_id"])
-        if not it or not it.get("choices"):
+        if not it or d["skill_id"] not in skills or (it.get("kind") != "flashcard" and not it.get("choices")):
             continue
         skill = skills.get(d["skill_id"], {})
         cards.append({
             "itemId": it["id"],
             "skillId": d["skill_id"],
             "skillName": skill.get("name"),
-            "prompt": it["prompt"],
-            "state": "due",
+            "prompt": it.get("front") or it["prompt"],
+            "state": "new" if int(d.get("reps", 0)) == 0 else "due",
             "box": d["box"],
         })
 
@@ -289,6 +314,7 @@ def deck(
     daily_remaining = _new_cards_remaining(
         institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
     )
+    newly_claimed = 0
     if use_bank and len(cards) < page_size and daily_remaining > 0:
         bank_items = pick_bank_items(
             user.user_id, course_id, skill_id, min(page_size - len(cards), daily_remaining), "study",
@@ -301,6 +327,7 @@ def deck(
             "p_exempt_daily_new_cap": False,
         }) if bank_items else []
         claimed_ids = {r["item_id"] for r in claimed}
+        newly_claimed = sum(1 for row in claimed if row.get("is_new", True))
         for item in bank_items:
             if item["id"] not in claimed_ids:
                 continue
@@ -315,7 +342,7 @@ def deck(
                 course_id=course_id, skill_id=item["skill_id"], item_id=item["id"], studied=True,
             )
             cards.append({"itemId": item["id"], "skillId": item["skill_id"],
-                          "skillName": skill.get("name"), "prompt": item["prompt"],
+                          "skillName": skill.get("name"), "prompt": item.get("front") or item["prompt"],
                           "state": "new", "box": 0})
 
     # 3) Derive the study back (answer label + explanation) for every card in
@@ -333,11 +360,11 @@ def deck(
             "institution_id": f"eq.{user.institution_id}",
             "course_id": f"eq.{course_id}", "retired_at": "is.null",
             "skills.status": "eq.approved",
-            "select": "id,correct_choice_id,explanation,choices,skills!inner(status)",
+            "select": "id,kind,back,correct_choice_id,explanation,choices,skills!inner(status)",
         })
         backs = {
             r["id"]: {
-                "label": item_gen.correct_label(r),
+                "label": _card_back_label(r),
                 "explanation": r.get("explanation") or "",
             }
             for r in back_rows
@@ -368,7 +395,7 @@ def deck(
     if mode is not None:
         result["mode"] = "review"
         result["sessionId"] = str(uuid4())
-        result["newCardsRemainingToday"] = max(0, daily_remaining - sum(1 for c in cards if c["state"] == "new"))
+        result["newCardsRemainingToday"] = max(0, daily_remaining - newly_claimed)
         result["newRemainingToday"] = result["newCardsRemainingToday"]
     return result
 
