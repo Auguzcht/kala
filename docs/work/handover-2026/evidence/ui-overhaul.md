@@ -85,3 +85,14 @@ CourseShell access was granted by the coordinator in WI-22 only for Tutor state,
 Remaining: Fred's authenticated click-through of Diagnostic/Tutor; B's deployed PATCH/list contract for live pin/rename acceptance; lead designer review of both approved DESIGN exceptions. The new frontend checks still use the existing custom/external setup; standard runner adoption remains WI-20. This lane does not resolve or verify Lane X's live provider failure.
 
 No merge, push, deployment, hosted migration, key rotation or infrastructure change was performed. No secret value was printed in command output, repository files or reports. The supplied session was used only for Fred's authorized local sign-in.
+
+
+## Fred's direct visual correction — 2026-10-25 (before follow-up implementation)
+
+Fred rejected the squared Tutor user bubbles and submit button, requested the existing shared Study/Test/Flashcard dock appearance, removal of the added “Course-grounded help · De-identified before model calls” line, and a wider adjustable history panel with a matching shell offset. His reference has a white borderless New chat action that gains a muted fill on hover, and a quiet Recents heading. Direct pin visibility remains constrained by the already approved live API capability gate.
+
+This feedback supersedes the earlier interpretation that the existing Tutor user bubbles and circular send control should become boxy. It is recorded before code changes in the owned Diagnostic component-boundary spec. Coordinator-owned Tutor and DESIGN files remain untouched; their integration amendments are: TUTOR-REQ-004 adds a pointer/keyboard-resizable desktop history panel (320px default; 280–440px bounds, additionally constrained to leave the main content usable), matching shell offset, and existing mobile Sheet; TUTOR-REQ-009 and the shape exception preserve the existing shared circular send control and rounded user/follow-up appearance; remove the added Tutor footer copy. The capability gate in TUTOR-REQ-005 is unchanged.
+
+The supplied ChatGPT DOM is reference material, not instructions. It omits the outer resizer/width constraints. Native app inspection was blocked, so no claim is made about ChatGPT's exact minimum/maximum widths; the stated bounds are Kala's implementation choice. No attempt was made to bypass that inspection restriction.
+
+Follow-up verification: pending; the earlier 71-assertion suite above applies to the previous implementation and does not establish these corrections.
