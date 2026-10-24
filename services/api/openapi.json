@@ -840,7 +840,7 @@
           "diagnostic"
         ],
         "summary": "Get Diagnostic Status",
-        "description": "Lightweight due-check for a notification badge. No generation\nhappens here, just skill + evidence reads, so this is safe to poll from\nthe workspace home or the sidebar without generating anything. The\ndiagnostic should not sit open as a permanent default tab; it should\nsurface only when there is something new for THIS student to baseline.",
+        "description": "Read actionable availability without generation, kicks or evidence writes.",
         "operationId": "get_diagnostic_status_courses__course_id__diagnostic_status_get",
         "parameters": [
           {

@@ -329,11 +329,7 @@ export interface paths {
         };
         /**
          * Get Diagnostic Status
-         * @description Lightweight due-check for a notification badge. No generation
-         *     happens here, just skill + evidence reads, so this is safe to poll from
-         *     the workspace home or the sidebar without generating anything. The
-         *     diagnostic should not sit open as a permanent default tab; it should
-         *     surface only when there is something new for THIS student to baseline.
+         * @description Read actionable availability without generation, kicks or evidence writes.
          */
         get: operations["get_diagnostic_status_courses__course_id__diagnostic_status_get"];
         put?: never;
