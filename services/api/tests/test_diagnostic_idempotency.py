@@ -86,7 +86,8 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
     assert enqueued_for == ["00000000-0000-4000-8000-000000000011"]
     prompts = [q["prompt"] for q in response["questions"]]
     assert prompts == ["Existing Q?"]
-    assert response["status"] == "generating"
+    # DIAG-REQ-011: available questions remain playable alongside pending skills.
+    assert response["status"] == "ready"
     assert response["pendingSkillIds"] == ["00000000-0000-4000-8000-000000000011"]
 
 
@@ -135,4 +136,5 @@ def test_diagnostic_returns_empty_list_when_course_has_no_approved_skills(monkey
         "courseId": "00000000-0000-4000-8000-000000000001",
         "status": "ready", "questions": [], "readyCount": 0,
         "pendingSkillIds": [], "failedSkillIds": [], "skippedSkillCount": 0,
+        "waitingForMaterialCount": 0,  # DIAG-REQ-011: empty course, no material wait.
     }
