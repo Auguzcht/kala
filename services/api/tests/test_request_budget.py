@@ -42,7 +42,9 @@ def test_TUTOR_REQ_001_elapsed_guard_abandons_trickling_sync_operation():
         assert time.monotonic() - started < 0.11
         assert not finished
         assert budget.remaining() == 0
-        await anyio.sleep(0.1)  # finish only this test's abandoned worker
+        with anyio.fail_after(1):  # bounded cleanup; independent of OS sleep scheduling
+            while not finished:
+                await anyio.sleep(0.01)
         assert finished
 
     anyio.run(scenario)
