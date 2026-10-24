@@ -90,6 +90,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/memory/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Memory Summary
+         * @description Per-skill card-memory counts. Reading the summary never creates SRS rows.
+         */
+        get: operations["memory_summary_courses__course_id__memory_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/roster": {
         parameters: {
             query?: never;
@@ -152,16 +172,7 @@ export interface paths {
         put?: never;
         /**
          * Propose Course Skills
-         * @description On-demand trigger for AI skill proposal, standalone, no relaunch
-         *     needed. This was previously only ever fired as a side effect buried
-         *     inside the LTI launch handler, meaning re-testing or re-running it
-         *     required faking a fresh Blackboard launch each time. Same underlying
-         *     pipeline (ai/skill_proposer.seed_course_skills), same idempotency
-         *     behavior: if this course already has any skill rows, approved or
-         *     proposed, this is a no-op, delete them first (in Supabase) if you
-         *     genuinely want a from-scratch re-proposal, e.g. after fixing a bug in
-         *     the proposal logic itself, or want to re-run against changed course
-         *     content.
+         * @description Queue proposal work; the worker owns all model and content work.
          */
         post: operations["propose_course_skills_courses__course_id__skills_propose_post"];
         delete?: never;
@@ -255,27 +266,11 @@ export interface paths {
         put?: never;
         /**
          * Reset Tagging
-         * @description Clear the "already attempted" mark on UNMATCHED content so it can be
-         *     tagged again against a changed skill set.
+         * @description Recompute every embedded course chunk against approved skill vectors.
          *
-         *     WHY THIS IS NEEDED AND WHY IT IS EXPLICIT. Ingest is resumable via
-         *     `tag_attempted_at`: a chunk that has been through the tagger stops being
-         *     pending, whether or not it matched a skill. That is what stops untaggable
-         *     content looping forever — but it also means a plain re-run of /ingest
-         *     retries NOTHING. Approving new skills and calling /ingest again would skip
-         *     every chunk that previously found no match, which is precisely the content
-         *     the new skills were approved to catch.
-         *
-         *     So this is the deliberate second half of "approve skills, then retag":
-         *     reset first, then ingest. Returns how many rows were reopened so the caller
-         *     knows whether a re-tag is even worth running (0 means nothing to do).
-         *
-         *     Only touches skill_id IS NULL rows. A chunk that already matched a skill
-         *     keeps its tag and is not re-sent to the model — re-tagging matched content
-         *     would be wasted calls and could reshuffle a correct match to a worse one.
-         *
-         *     Staff-gated at both layers, like the upload endpoint: course_id is
-         *     caller-supplied, so "staff somewhere" is not sufficient.
+         *     The operation is a single database RPC, performs no model calls, and is
+         *     intentionally a full recompute so rejected or newly approved skills are
+         *     reflected immediately.
          */
         post: operations["reset_tagging_courses__course_id__content_retag_post"];
         delete?: never;
@@ -518,6 +513,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/practice/{course_id}/sets/{set_id}/retake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Practice Retake
+         * @description Create the next server-owned attempt after the latest one is complete.
+         */
+        post: operations["start_practice_retake_practice__course_id__sets__set_id__retake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/practice/{course_id}/sets/{set_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Set Results
+         * @description Return the durable recap for this student's answers in one set.
+         *
+         *     Only practice_answer_results rows expose answer keys. Unanswered set items
+         *     are assembled from prompt/choices columns alone.
+         */
+        get: operations["get_set_results_practice__course_id__sets__set_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/practice/{course_id}/submit": {
         parameters: {
             query?: never;
@@ -535,6 +573,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/flashcards/{course_id}/skills/{skill_id}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Skill Cards
+         * @description Read the complete live card membership for one approved skill.
+         *
+         *     This is a browse list, not a session selector. It never creates schedule,
+         *     exposure, review, or mastery rows.
+         */
+        get: operations["skill_cards_flashcards__course_id__skills__skill_id__cards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/flashcards/{course_id}/deck": {
         parameters: {
             query?: never;
@@ -544,8 +605,9 @@ export interface paths {
         };
         /**
          * Deck
-         * @description The review queue: due scheduled cards first, topped up with fresh cards
-         *     for skills the student hasn't started. Answer keys never leave the server.
+         * @description The review queue: due scheduled cards, then claimed-unrated cards,
+         *     then fresh top-up. Study returns answer labels
+         *     and explanations for flipping; Test withholds answers until server grading.
          *     `skill_id` is the topic picker's explicit override — when set, the whole
          *     deck (due cards AND fresh top-up) scopes to that one skill instead of the
          *     course-wide due-first mix, same "auto vs chosen" pattern as practice.
@@ -938,6 +1000,26 @@ export interface paths {
         patch: operations["review_proposed_skill_dashboard__course_id__skills__skill_id__review_patch"];
         trace?: never;
     };
+    "/dashboard/{course_id}/skills/{skill_id}/reject-approved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Approved Skill
+         * @description Retire an approved skill's bank items atomically with its rejection.
+         */
+        post: operations["reject_approved_skill_dashboard__course_id__skills__skill_id__reject_approved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboard/{course_id}/skills/{skill_id}/detach": {
         parameters: {
             query?: never;
@@ -1226,6 +1308,18 @@ export interface components {
              */
             hints_used: number;
         };
+        /** ConversationList */
+        ConversationList: {
+            /** Conversations */
+            conversations: components["schemas"]["ManagedConversation"][];
+        };
+        /** ConversationPatch */
+        ConversationPatch: {
+            /** Title */
+            title?: string;
+            /** Pinned */
+            pinned?: boolean;
+        };
         /** CreateConversation */
         CreateConversation: {
             /** Course Id */
@@ -1272,6 +1366,23 @@ export interface components {
             /** Instructor Note */
             instructor_note?: string | null;
         };
+        /** ManagedConversation */
+        ManagedConversation: {
+            /** Id */
+            id: string;
+            /** Courseid */
+            courseId: string;
+            /** Skillid */
+            skillId: string | null;
+            /** Title */
+            title: string | null;
+            /** Createdat */
+            createdAt: string;
+            /** Updatedat */
+            updatedAt: string;
+            /** Pinnedat */
+            pinnedAt?: string | null;
+        };
         /** RecommendationDecision */
         RecommendationDecision: {
             /** Status */
@@ -1292,12 +1403,24 @@ export interface components {
             /** Item Id */
             item_id: string;
             /** Remembered */
-            remembered: boolean;
+            remembered?: boolean | null;
             /**
              * Latency Ms
              * @default 0
              */
             latency_ms: number;
+            /** Session Id */
+            session_id?: string | null;
+            /** Idempotency Key */
+            idempotency_key?: string | null;
+            /** Outcome */
+            outcome?: ("again" | "good") | null;
+            /**
+             * Mode
+             * @default flashcard
+             * @constant
+             */
+            mode: "flashcard";
         };
         /** ReviewDecision */
         ReviewDecision: {
@@ -1353,35 +1476,12 @@ export interface components {
             latency_ms: number;
             /** Set Id */
             set_id?: string | null;
-        };
-        /** ConversationPatch */
-        ConversationPatch: {
-            /** Title */
-            title?: string;
-            /** Pinned */
-            pinned?: boolean;
-        };
-        /** ManagedConversation */
-        ManagedConversation: {
-            /** Id */
-            id: string;
-            /** Courseid */
-            courseId: string;
-            /** Skillid */
-            skillId: string | null;
-            /** Title */
-            title: string | null;
-            /** Createdat */
-            createdAt: string;
-            /** Updatedat */
-            updatedAt: string;
-            /** Pinnedat */
-            pinnedAt?: string | null;
-        };
-        /** ConversationList */
-        ConversationList: {
-            /** Conversations */
-            conversations: components["schemas"]["ManagedConversation"][];
+            /** Session Id */
+            session_id?: string | null;
+            /** Idempotency Key */
+            idempotency_key?: string | null;
+            /** Attemptid */
+            attemptId?: string | null;
         };
     };
     responses: never;
@@ -1538,6 +1638,39 @@ export interface operations {
             };
         };
     };
+    memory_summary_courses__course_id__memory_summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_roster_courses__course_id__roster_get: {
         parameters: {
             query?: never;
@@ -1650,15 +1783,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Queued */
+            /** @description Successful Response */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        status: "queued";
-                    };
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2165,6 +2296,76 @@ export interface operations {
             };
         };
     };
+    start_practice_retake_practice__course_id__sets__set_id__retake_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_set_results_practice__course_id__sets__set_id__results_get: {
+        parameters: {
+            query?: {
+                attemptId?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     submit_practice__course_id__submit_post: {
         parameters: {
             query?: never;
@@ -2202,12 +2403,48 @@ export interface operations {
             };
         };
     };
+    skill_cards_flashcards__course_id__skills__skill_id__cards_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     deck_flashcards__course_id__deck_get: {
         parameters: {
             query?: {
-                limit?: number;
+                limit?: number | null;
                 module_ref?: string | null;
                 skill_id?: string | null;
+                mode?: ("review" | "all") | null;
+                offset?: number;
             };
             header?: {
                 authorization?: string | null;
@@ -2469,6 +2706,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_conversation_tutor_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedConversation"];
                 };
             };
             /** @description Validation Error */
@@ -2893,6 +3167,40 @@ export interface operations {
             };
         };
     };
+    reject_approved_skill_dashboard__course_id__skills__skill_id__reject_approved_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     detach_auto_matched_skill_dashboard__course_id__skills__skill_id__detach_patch: {
         parameters: {
             query?: never;
@@ -3224,43 +3532,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    patch_conversation_tutor_conversations__conversation_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConversationPatch"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ManagedConversation"];
                 };
             };
             /** @description Validation Error */

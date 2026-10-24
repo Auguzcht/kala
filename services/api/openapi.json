@@ -1693,7 +1693,7 @@
           "flashcards"
         ],
         "summary": "Deck",
-        "description": "The review queue: due scheduled cards first, topped up with fresh cards\nfor skills the student hasn't started. Answer keys never leave the server.\n`skill_id` is the topic picker's explicit override \u2014 when set, the whole\ndeck (due cards AND fresh top-up) scopes to that one skill instead of the\ncourse-wide due-first mix, same \"auto vs chosen\" pattern as practice.",
+        "description": "The review queue: due scheduled cards, then claimed-unrated cards,\nthen fresh top-up. Study returns answer labels\nand explanations for flipping; Test withholds answers until server grading.\n`skill_id` is the topic picker's explicit override \u2014 when set, the whole\ndeck (due cards AND fresh top-up) scopes to that one skill instead of the\ncourse-wide due-first mix, same \"auto vs chosen\" pattern as practice.",
         "operationId": "deck_flashcards__course_id__deck_get",
         "parameters": [
           {
@@ -2145,6 +2145,72 @@
       }
     },
     "/tutor/conversations/{conversation_id}": {
+      "patch": {
+        "tags": [
+          "tutor"
+        ],
+        "summary": "Patch Conversation",
+        "operationId": "patch_conversation_tutor_conversations__conversation_id__patch",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedConversation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "tutor"
@@ -2238,72 +2304,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "tutor"
-        ],
-        "summary": "Patch Conversation",
-        "operationId": "patch_conversation_tutor_conversations__conversation_id__patch",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Conversation Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConversationPatch"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagedConversation"
-                }
               }
             }
           },
@@ -3894,6 +3894,40 @@
         ],
         "title": "CheckBody"
       },
+      "ConversationList": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedConversation"
+            },
+            "type": "array",
+            "title": "Conversations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversations"
+        ],
+        "title": "ConversationList"
+      },
+      "ConversationPatch": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "pinned": {
+            "type": "boolean",
+            "title": "Pinned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "minProperties": 1,
+        "title": "ConversationPatch"
+      },
       "CreateConversation": {
         "properties": {
           "course_id": {
@@ -4010,6 +4044,69 @@
         ],
         "title": "InterventionCreate",
         "description": "A teacher writing their own action, not editing one Kala proposed."
+      },
+      "ManagedConversation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "courseId": {
+            "type": "string",
+            "title": "Courseid"
+          },
+          "skillId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skillid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          },
+          "pinnedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinnedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "courseId",
+          "skillId",
+          "title",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "ManagedConversation"
       },
       "RecommendationDecision": {
         "properties": {
@@ -4345,103 +4442,6 @@
           "choice_id"
         ],
         "title": "SubmitBody"
-      },
-      "ConversationPatch": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Title"
-          },
-          "pinned": {
-            "type": "boolean",
-            "title": "Pinned"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "minProperties": 1,
-        "title": "ConversationPatch"
-      },
-      "ManagedConversation": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "courseId": {
-            "type": "string",
-            "title": "Courseid"
-          },
-          "skillId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Skillid"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "createdAt": {
-            "type": "string",
-            "title": "Createdat"
-          },
-          "updatedAt": {
-            "type": "string",
-            "title": "Updatedat"
-          },
-          "pinnedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pinnedat"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "courseId",
-          "skillId",
-          "title",
-          "createdAt",
-          "updatedAt"
-        ],
-        "title": "ManagedConversation"
-      },
-      "ConversationList": {
-        "properties": {
-          "conversations": {
-            "items": {
-              "$ref": "#/components/schemas/ManagedConversation"
-            },
-            "type": "array",
-            "title": "Conversations"
-          }
-        },
-        "type": "object",
-        "required": [
-          "conversations"
-        ],
-        "title": "ConversationList"
       }
     }
   }
