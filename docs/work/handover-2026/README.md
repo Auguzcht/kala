@@ -17,7 +17,7 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 - Feature freeze: Oct 28 (agreed by the developer).
 - This initiative does not add features. Feature work after the freeze is limited to fixing behavior the specs already describe.
 
-## Approved lane state — 2026-10-24
+## Approved lane state — 2026-10-25
 
 [APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance. [APPROVAL-03](approval-03.md) accepts T and authorizes local integration checks, followed by a stop without pushing. All four discovery audits are accepted. C, D, S, F and T are merged locally in that order; nothing is pushed or deployed.
 
@@ -93,3 +93,5 @@ The accepted four audits are historical evidence at `e9de105`. Original audit wo
 - [Lane F conditional-approval evidence](evidence/implementation-study-approval-02.md).
 
 The earlier APPROVAL-02 report is a historical snapshot before T acceptance. Shared service pytest isolation is now in services/conftest.py; the obsolete Study runner is removed and the Tutor scratch runner is no longer used for current verification. [WI-20](work-items/WI-20-frontend-test-runner.md) records standard frontend-runner adoption as planned, without adding dependencies. [APPROVAL-03 integration evidence](evidence/approval-03-integration.md) records current merged-main checks and the documentation-only infra/terraform path exception. No push or deployment has been performed.
+
+APPROVAL-03 final integration gate: API 430 passed / 1 failed on both main and a fresh clone; worker 117 passed; frontend 14 + 4 passed; web and configuration checks passed. The single failure is the tutor test's fixed cleanup wait. No test body was changed under the approval prohibition; a bounded-wait patch is prepared for Fred's review. Integration is not green and nothing is pushed or deployed.
