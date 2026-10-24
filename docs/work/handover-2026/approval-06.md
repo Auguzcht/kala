@@ -167,3 +167,11 @@ Then remove merged worktrees. Keep "Kala Audit" until Fred releases it. The code
 ## Confirmed ownership amendment — 2026-10-25
 
 Fred assigns the coordinator sole edit ownership of docs/features/diagnostic/README.md for this round, matching Tutor/AI ownership. G submits DIAG-REQ-009–011 and U submits H05/H07/H02-copy spec changes. Coordinator commits each lane's text to main in its own small docs commit in separate sections; each lane rebases onto that commit before implementing the affected part. Lanes reference REQ IDs but never edit this file; incorrect specs require stopping and submitting a correction. Lane I remains sole auth-spec editor today; P stays out until I merges. Independent audits and integration continue.
+
+## Confirmed identity reconciliation amendment — 2026-10-25
+
+This supersedes section 3's unconditional protection of prior LTI launchers. Fred rejects additive roster sync: stale course enrollment controls access and retaining removed members would regress tenancy/privacy.
+
+Ship the REST user `uuid` identity fix (matching LTI `sub`) while retaining enrollment reconciliation, including removals. Remove enrollments only after every roster page succeeds, with no error and a non-empty result. Partial, failed or empty fetches skip removals; warnings contain counts only. No migration or history repair is authorized.
+
+Tests additionally prove UUID/launch convergence, removal of the legacy REST-id alias user's enrollment while the launch user remains enrolled, no removals after failed/partial fetches, and removal of a genuinely departed instructor after the next successful sync. Legacy duplicate users retain their history but lose enrollment after a successful sync; H01(b) remains planned. Alfred's older 40 events remain with the legacy user and will not appear in the roster until that repair. Proceed without another stop unless some roster users lack UUIDs.
