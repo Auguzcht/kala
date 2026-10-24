@@ -163,3 +163,7 @@ The coordinator writes `docs/work/handover-2026/closeout.md`:
 Open items include H01(b) data repair, Lane DB if FG-2 is still pending, full-history evidence paging, streaming, Sources and Inline Citation, image attachments, restored-file previews, the frontend test runner, the global Bedrock timeout policy, API Gateway access logs, and any lane left out under the lateness rule.
 
 Then remove merged worktrees. Keep "Kala Audit" until Fred releases it. The code freeze begins, and only docs, runbooks and specs change until Nov 8.
+
+## Confirmed ownership amendment — 2026-10-25
+
+Fred assigns the coordinator sole edit ownership of docs/features/diagnostic/README.md for this round, matching Tutor/AI ownership. G submits DIAG-REQ-009–011 and U submits H05/H07/H02-copy spec changes. Coordinator commits each lane's text to main in its own small docs commit in separate sections; each lane rebases onto that commit before implementing the affected part. Lanes reference REQ IDs but never edit this file; incorrect specs require stopping and submitting a correction. Lane I remains sole auth-spec editor today; P stays out until I merges. Independent audits and integration continue.
