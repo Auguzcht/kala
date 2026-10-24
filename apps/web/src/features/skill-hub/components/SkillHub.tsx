@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import type { ComponentType, ReactNode, Ref } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -268,9 +269,9 @@ function SkillHubFrame({
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-[1040px] px-4 py-8">
+      <LoadingRegion className="mx-auto max-w-[1040px] px-4 py-8">
         <Skeleton className="h-28 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
   if (isError) {

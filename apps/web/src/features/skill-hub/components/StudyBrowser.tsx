@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { Clock3Icon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -6,6 +7,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { useFlashcardMembership } from "@/features/flashcards/hooks/use-flashcards";
 import type { FlashcardMembershipCard } from "@/features/flashcards/schema/flashcards.schema";
@@ -45,11 +47,11 @@ export function StudyBrowser({
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion className="space-y-2">
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
   if (isError) {
@@ -217,7 +219,8 @@ export function StudyBrowser({
       {bank.data?.bankServing &&
       ["waiting_content", "building", "error"].includes(bankSkill?.status ?? "waiting_content") &&
       !bankSkill?.usable ? (
-        <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+        <p className="flex items-center gap-2 border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+          {bankSkill?.status === "building" ? <Spinner aria-hidden /> : null}
           Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0}).
         </p>
       ) : null}

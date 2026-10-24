@@ -20,6 +20,7 @@ import {
   proposeSkills,
   reviewProposedSkill,
 } from "@/features/instructor/api/instructor.api";
+import { withDecisionFeedback } from "@/features/instructor/lib/decision-feedback";
 
 export function useHeatmap(courseId: string) {
   return useQuery({
@@ -54,11 +55,13 @@ export function useReviewProposedSkill(courseId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: { skillId: string; status: "approved" | "rejected" }) =>
-      reviewProposedSkill(courseId, args.skillId, { status: args.status }),
+      withDecisionFeedback(() => reviewProposedSkill(courseId, args.skillId, { status: args.status })),
     onSuccess: () => {
       // Approving a skill changes what the cohort/heatmap can show.
-      queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] });
-      queryClient.invalidateQueries({ queryKey: ["heatmap", courseId] });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["proposed-skills", courseId] }),
+        queryClient.invalidateQueries({ queryKey: ["heatmap", courseId] }),
+      ]);
     },
   });
 }
@@ -155,46 +158,21 @@ export function useDecideRecommendation(courseId: string, userId: string) {
       decisionNote?: string;
       instructorNote?: string;
     }) =>
-      decideRecommendation(courseId, args.recId, {
+      withDecisionFeedback(() => decideRecommendation(courseId, args.recId, {
         status: args.status,
         title: args.title,
         kind: args.kind,
         priority: args.priority,
         decision_note: args.decisionNote,
         instructor_note: args.instructorNote,
-      }),
-    // Optimistic on purpose. A decision is the one interaction in this
-    // product where latency reads as doubt: a teacher clicks Approve and
-    // watches a card sit there. Moving the card to the decision history
-    // immediately, then reconciling with the server response, makes the
-    // gate feel like a decision rather than a form submission. Rolled back
-    // on error, and the toast in DecisionCenter reports the failure.
-    onMutate: async (args) => {
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<RecommendationList>(key);
-      if (previous) {
-        queryClient.setQueryData<RecommendationList>(key, {
-          ...previous,
-          recommendations: previous.recommendations.map((r) =>
-            r.id === args.recId
-              ? {
-                  ...r,
-                  status: args.status,
-                  title: args.title ?? r.title,
-                  kind: args.kind ?? r.kind,
-                  priority: args.priority ?? r.priority,
-                  decisionNote: args.decisionNote ?? r.decisionNote,
-                  instructorNote: args.instructorNote ?? r.instructorNote,
-                  decidedAt: new Date().toISOString(),
-                }
-              : r
-          ),
-        });
-      }
-      return { previous };
-    },
-    onError: (_err, _args, context) => {
-      if (context?.previous) queryClient.setQueryData(key, context.previous);
+      })),
+    // Keep the card and its Recording state mounted until the server has
+    // confirmed the decision (INSTR-REQ-002), then use its validated result.
+    onSuccess: (decision) => {
+      queryClient.setQueryData<RecommendationList>(key, (previous) => previous ? {
+        ...previous,
+        recommendations: previous.recommendations.map((r) => r.id === decision.id ? decision : r),
+      } : previous);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: key });

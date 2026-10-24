@@ -5,6 +5,7 @@ import {
   listTutorConversations,
   fetchTutorConversation,
   deleteTutorConversation,
+  updateTutorConversation,
   uploadTutorAttachment,
   deleteTutorAttachment,
 } from "@/features/tutor/api/tutor.api";
@@ -105,6 +106,18 @@ export function useDeleteTutorAttachment() {
       deleteTutorAttachment(conversationId, attachmentId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tutor-conversation", variables.conversationId] });
+    },
+  });
+}
+
+export function useUpdateTutorConversation(courseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; title?: string; pinned?: boolean }) =>
+      updateTutorConversation(id, patch),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tutor-conversations", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["tutor-conversation", variables.id] });
     },
   });
 }

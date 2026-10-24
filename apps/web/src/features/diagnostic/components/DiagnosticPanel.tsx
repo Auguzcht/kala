@@ -1,28 +1,17 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { useReducedMotion } from "motion/react";
-import { useDiagnostic, useSubmitDiagnostic } from "@/features/diagnostic/hooks/use-diagnostic";
+import {
+  useDiagnostic,
+  useSubmitDiagnostic,
+} from "@/features/diagnostic/hooks/use-diagnostic";
 import { useBankStatus } from "@/features/bank";
-import { ComposeDock } from "@/components/study/ComposeDock";
-import { SessionBar } from "@/components/study/SessionBar";
-import { StudySurface } from "@/components/study/StudySurface";
-import { StudyStream } from "@/components/study/StudyStream";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { MasteryDelta } from "@/components/kala";
-import { TransitionPanel } from "@/components/motion/transition-panel";
+import { DiagnosticResults } from "@/features/diagnostic/components/DiagnosticResults";
+import { Spinner } from "@/components/ui/spinner";
 import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 
 // The diagnostic establishes a baseline, it does not grade a quiz. Two
@@ -36,50 +25,15 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 //      taking it. Right/wrong mid-baseline turns a baseline measurement
 //      into a graded quiz, which undercuts the whole point of a baseline.
 //      The only outcome shown is the twin actually moving, after the
-//      whole sitting is submitted — a blur-out on the question set,
-//      crossfading into the mastery-delta reveal (MasteryDelta already
-//      builds that "your twin just updated" moment; this panel just stops
-//      undercutting it with an inline answer key).
+//      whole sitting is submitted. One results view presents the mastery
+//      progression and exit actions without a per-question answer key.
 //
-// Stage 3 of the AI overhaul (docs/AI_OVERHAUL_TODO.md): the question list
-// now renders through the same AnswerableCard/StudyStream every other quiz
-// surface uses, instead of a bespoke RadioGroup — Diagnostic was the one
-// surface still on its own custom rendering. The batch-silent, blur/reveal,
-// closing-dialog mechanics below are UNCHANGED on purpose: they're tuned
-// and working, there was no bug driving this migration, only the shared
-// question-rendering primitive changed.
-//
-// Shell migration: Diagnostic was the last STUDENT-LOOP surface still on the
-// retired StudySessionShell at the time. It now uses the same StudySurface +
-// SessionBar + ComposeDock shell as Practice, Flashcards, and Lessons, with
-// submit living in the dock. TutorChat has since migrated too (see
-// docs/ai-overhaul-v2/05_TUTOR_AND_HIERARCHY.md and TutorSidebar) —
-// StudySessionShell.tsx has no real importers left and is ready to retire.
-//
-// Diagnostic is the one surface that puts more than one AnswerableCard on
-// screen at once (every other surface shows a single question/card at a
-// time) — every card below passes firstChoiceId={null} so their first
-// choice buttons don't all fight over the same "tour-first-choice" id.
-const REVEAL_VARIANTS = {
-  enter: { opacity: 0, filter: "blur(6px)" },
-  center: { opacity: 1, filter: "blur(0px)" },
-  exit: { opacity: 0, filter: "blur(6px)" },
-};
-const REVEAL_VARIANTS_REDUCED = {
-  enter: { opacity: 0 },
-  center: { opacity: 1 },
-  exit: { opacity: 0 },
-};
-
 export function DiagnosticPanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError } = useDiagnostic(courseId);
   const bank = useBankStatus(courseId);
   const submit = useSubmitDiagnostic(courseId);
-  const navigate = useNavigate();
-  const reduceMotion = useReducedMotion();
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [startedAt] = useState(() => Date.now());
-  const [closingDialogOpen, setClosingDialogOpen] = useState(false);
 
   // Memoized on the actual masteryDelta reference (stable from React Query
   // until a real refetch), not recreated on every unrelated re-render — the
@@ -91,14 +45,15 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   // defined before the empty-state early return, not after it.
   const submitted = submit.isSuccess;
   const allFailedSkillsHaveNoMaterial = Boolean(
-    data && data.questions.length === 0 && data.failedSkillIds.length > 0 &&
-    data.failedSkillIds.every((skillId) =>
-      bank.data?.skills.find((entry) => entry.skillId === skillId)?.status === "no_material"
-    )
+    data &&
+    data.questions.length === 0 &&
+    data.failedSkillIds.length > 0 &&
+    data.failedSkillIds.every(
+      (skillId) =>
+        bank.data?.skills.find((entry) => entry.skillId === skillId)?.status ===
+        "no_material",
+    ),
   );
-  const hasNoMaterialSkills = Boolean(data?.failedSkillIds.some((skillId) =>
-    bank.data?.skills.find((entry) => entry.skillId === skillId)?.status === "no_material"
-  ));
   const masteryDeltaRows = useMemo(
     () =>
       (submit.data?.masteryDelta ?? []).map((d) => ({
@@ -107,16 +62,15 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         priorBand: d.priorBand,
         posteriorBand: d.posteriorBand,
       })),
-    [submit.data?.masteryDelta]
+    [submit.data?.masteryDelta],
   );
 
+  // A completed sitting owns the view even if its question query refetches.
+  if (submitted)
+    return <DiagnosticResults rows={masteryDeltaRows} total={submit.data?.total ?? 0} celebrationKey={`diagnostic:${courseId}:${submit.submittedAt}`} />;
+
   if (isLoading)
-    return (
-      <LoadingPanel
-        label="Checking your baseline…"
-        lines={4}
-      />
-    );
+    return <LoadingPanel label="Checking your baseline…" lines={4} />;
   if (isError)
     return (
       <EmptyState
@@ -132,7 +86,11 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         lines={4}
       />
     );
-  if (data?.status === "failed" && data.failedSkillIds.length > 0 && bank.isLoading)
+  if (
+    data?.status === "failed" &&
+    data.failedSkillIds.length > 0 &&
+    bank.isLoading
+  )
     return <LoadingPanel label="Checking course material…" lines={4} />;
   if (allFailedSkillsHaveNoMaterial)
     return (
@@ -160,7 +118,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   // (invalidation, window refocus) resolves to empty here — the reveal is
   // the thing on screen, so it wins over the empty state until the panel
   // is visited fresh again.
-  if (!data || (data.questions.length === 0 && !submitted))
+  if (!data || data.questions.length === 0)
     return (
       <EmptyState
         title="You're all caught up"
@@ -181,130 +139,62 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   }
 
   return (
-    <>
-      <StudySurface
-        bar={
-          <SessionBar
-            title="Course diagnostic"
-            progress={{
-              current: answeredCount,
-              total: data.questions.length,
-              label: "answered",
-            }}
-            onBack={() => navigate({ to: "/course" })}
-            backLabel="Back to workspace"
-          />
-        }
-        dock={
-          // Submit lives in the dock, matching every other quiz surface. Once
-          // the sitting is submitted the dock offers the exit (the closing
-          // dialog offers the same one), rather than a second submit.
-          <ComposeDock
-            primary={
-              submitted
-                ? {
-                    label: "Back to workspace",
-                    onClick: () => navigate({ to: "/course" }),
-                    icon: ArrowRightIcon,
-                  }
-                : {
-                    // Same tour anchor id as the old inline button, so the
-                    // student tour's #tour-diagnostic-submit step still
-                    // resolves — the anchor moved, it did not disappear.
-                    id: "tour-diagnostic-submit",
-                    label: submit.isPending
-                      ? "Building your baseline…"
-                      : allAnswered
-                        ? "Submit diagnostic"
-                        : "Answer every question to continue",
-                    onClick: handleSubmit,
-                    disabled: !allAnswered || submit.isPending,
-                    pending: submit.isPending,
-                    icon: ArrowRightIcon,
-                  }
-            }
-          />
-        }
-      >
-        <TransitionPanel
-          activeIndex={submitted ? 1 : 0}
-          variants={reduceMotion ? REVEAL_VARIANTS_REDUCED : REVEAL_VARIANTS}
-          transition={{ duration: reduceMotion ? 0 : 0.35, ease: "easeInOut" }}
-        >
-        {[
-          <div key="answering" id="tour-diagnostic-card">
-            <StudyStream height="h-[55vh]">
-              {hasNoMaterialSkills ? (
-                <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-                  Topics without course material are not included.
-                </p>
-              ) : null}
-              {data.pendingSkillIds.length > 0 ? (
-                <p className="border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-                  Preparing questions for {data.pendingSkillIds.length} more {data.pendingSkillIds.length === 1 ? "topic" : "topics"}. Ready questions are below.
-                </p>
-              ) : null}
-              {data.questions.map((q, qi) => (
-                <AnswerableCard
-                  key={q.id}
-                  prompt={q.prompt}
-                  choices={q.choices}
-                  selectedId={selections[q.id] ?? null}
-                  onSelect={(choiceId) => setSelections((s) => ({ ...s, [q.id]: choiceId }))}
-                  result={null}
-                  isPending={submit.isPending}
-                  choicesAnchorId={qi === 0 ? "tour-diagnostic-choices" : undefined}
-                  firstChoiceId={null}
-                />
-              ))}
-            </StudyStream>
-          </div>,
-
-          <Card key="reveal">
-            <CardHeader>
-              <CardTitle>Baseline set</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-sm text-muted-foreground">
-                Here's where your twin landed. Practice moves it from here.
-              </p>
-              {masteryDeltaRows.length > 0 ? (
-                <MasteryDelta
-                  rows={masteryDeltaRows}
-                  onRevealComplete={() => setClosingDialogOpen(true)}
-                />
-              ) : null}
-              <Button variant="outline" onClick={() => navigate({ to: "/course" })}>
-                Back to workspace
-              </Button>
-            </CardContent>
-          </Card>,
-        ]}
-      </TransitionPanel>
-      </StudySurface>
-
-      <Dialog open={closingDialogOpen} onOpenChange={setClosingDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Baseline set</DialogTitle>
-            <DialogDescription>
-              That's it for now. Kala will let you know the moment there's a new topic worth
-              baselining, no need to check back here on your own.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="orange"
-              onClick={() => {
-                setClosingDialogOpen(false);
-                navigate({ to: "/course" });
-              }}
-            >
-              Back to workspace
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <div data-study-surface className="flex h-full min-h-0 flex-col">
+      <header className="shrink-0 border-b bg-background">
+        <PageHeader
+          eyebrow="Diagnostic"
+          title="Find your starting point"
+          description="Answer a few questions so Kala can understand what you already know and where to begin."
+          className="mx-auto mb-0 w-full max-w-screen-2xl px-6 py-8 lg:px-10"
+        />
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div id="tour-diagnostic-card" className="mx-auto flex w-full max-w-[800px] flex-col gap-6 px-4 py-6 sm:px-6">
+          {data.pendingSkillIds.length > 0 ? (
+            <p role="status" className="flex items-center gap-2 border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
+              <Spinner aria-hidden />
+              <span>Preparing questions for {data.pendingSkillIds.length} more {data.pendingSkillIds.length === 1 ? "topic" : "topics"}. Ready questions are below.</span>
+            </p>
+          ) : null}
+          {data.questions.map((q, qi) => (
+            <AnswerableCard
+              key={q.id}
+              prompt={q.prompt}
+              choices={q.choices}
+              selectedId={selections[q.id] ?? null}
+              onSelect={(choiceId) => setSelections((s) => ({ ...s, [q.id]: choiceId }))}
+              result={null}
+              isPending={submit.isPending}
+              choicesAnchorId={qi === 0 ? "tour-diagnostic-choices" : undefined}
+              firstChoiceId={null}
+            />
+          ))}
+        </div>
+      </div>
+      <footer className="shrink-0 border-t bg-background py-4">
+        <div className="mx-auto flex w-full max-w-[800px] flex-wrap items-center justify-between gap-3 px-4 sm:px-6">
+          <p role="status" className="font-mono text-xs text-muted-foreground">
+            {answeredCount} of {data.questions.length} answered
+          </p>
+          <Button
+            id="tour-diagnostic-submit"
+            variant="orange"
+            className="ml-auto"
+            disabled={!allAnswered || submit.isPending}
+            aria-busy={submit.isPending || undefined}
+            onClick={handleSubmit}
+          >
+            {submit.isPending ? <Spinner aria-hidden /> : null}
+            {submit.isPending ? "Building your baseline…" : "Submit diagnostic"}
+            {!submit.isPending ? <ArrowRightIcon size={16} /> : null}
+          </Button>
+        </div>
+        {submit.isError ? (
+          <p role="alert" className="mx-auto mt-2 w-full max-w-[800px] px-4 text-sm text-destructive sm:px-6">
+            Your baseline could not be saved. Please try again.
+          </p>
+        ) : null}
+      </footer>
+    </div>
   );
 }

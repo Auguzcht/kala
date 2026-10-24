@@ -83,3 +83,14 @@ export async function deleteTutorAttachment(
     method: "DELETE",
   });
 }
+
+export async function updateTutorConversation(
+  conversationId: string,
+  patch: { title?: string; pinned?: boolean },
+): Promise<TutorConversation> {
+  const data = await api<unknown>(`/tutor/conversations/${conversationId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return tutorConversationSchema.parse(data);
+}

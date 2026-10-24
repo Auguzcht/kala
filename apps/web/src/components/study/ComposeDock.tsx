@@ -6,6 +6,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { dockLayout } from "@/components/ai-elements/dock-layout";
 import { MessageCircleIcon } from "@/components/ui/message-circle";
 import { XIcon } from "@/components/ui/x";
 import { useIconHover } from "@/hooks/use-icon-hover";
@@ -82,8 +83,8 @@ export function ComposeDock({
   const DOCK_HEIGHT = "h-12";
 
   return (
-    <div id={tourId} className="bg-gradient-to-t from-background via-background/95 to-background/0 px-4 pb-3 pt-6 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-[800px] items-end gap-2">
+    <div id={tourId} className={dockLayout.footer}>
+      <div className={cn("mx-auto flex max-w-[800px] items-end gap-2", dockLayout.content)}>
         <div className="min-w-0 flex-1">
           {attachmentChips ? (
             <div className="mb-2 flex flex-wrap gap-2">{attachmentChips}</div>
@@ -166,32 +167,25 @@ export function ComposeDock({
               onSubmit={(message) => {
                 if (message.text.trim()) onAsk?.(message.text);
               }}
-              className={cn(
-                // The textarea auto-grows (field-sizing) for long questions,
-                // but the collapsed pill matches the action button exactly;
-                // content-box + auto height keeps it from jumping to the
-                // textarea's own min-height on focus.
-                "[&_[data-slot=input-group]]:h-auto",
-                "[&_[data-slot=input-group]]:min-h-12",
-                "[&_[data-slot=input-group]]:rounded-full",
-                "[&_[data-slot=input-group]]:border-input",
-                "[&_[data-slot=input-group]]:shadow-sm",
-                "[&_[data-slot=input-group]]:px-1.5"
-              )}
+              className={cn(dockLayout.form, dockLayout.pill)}
             >
-              <PromptInputBody>
-                <PromptInputTextarea
-                  rows={1}
-                  placeholder={placeholder}
-                  className="min-h-12 max-h-32 py-3"
+              <div className={dockLayout.row}>
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    rows={1}
+                    placeholder={placeholder}
+                    className={dockLayout.textarea}
+                  />
+                </PromptInputBody>
+                <PromptInputTools className="shrink-0 pl-1">
+                  {attachmentSlot}
+                </PromptInputTools>
+                <PromptInputSubmit
+                  className={dockLayout.control}
+                  disabled={askDisabled || askPending}
+                  status={askPending ? "submitted" : undefined}
                 />
-              </PromptInputBody>
-              <PromptInputTools className="shrink-0 pl-1">{attachmentSlot}</PromptInputTools>
-              <PromptInputSubmit
-                className="shrink-0 rounded-full"
-                disabled={askDisabled || askPending}
-                status={askPending ? "submitted" : undefined}
-              />
+              </div>
             </PromptInput>
           )}
         </div>

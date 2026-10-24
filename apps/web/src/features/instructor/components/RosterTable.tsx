@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useMemo, useState } from "react";
 import { useRoster } from "@/features/instructor";
 import type { LearnerStatus, RosterRow } from "@/features/instructor";
@@ -141,10 +142,10 @@ export function RosterTable({
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <LoadingRegion className="space-y-2">
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
 

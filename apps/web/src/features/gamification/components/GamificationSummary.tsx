@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "motion/react";
 import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
 import { FlameIcon } from "@/components/ui/flame";
 import type { FlameIconHandle } from "@/components/ui/flame";
 import { SlidingNumber } from "@/components/motion/sliding-number";
@@ -64,7 +65,8 @@ export function GamificationSummary({
     prevBadgeCountRef.current = count;
   }, [data]);
 
-  if (isLoading || !data) return null;
+  if (isLoading) return <Spinner aria-label="Loading your progress" className="size-3.5 text-muted-foreground" />;
+  if (!data) return null;
   const alive = data.streakDays > 0;
 
   return (

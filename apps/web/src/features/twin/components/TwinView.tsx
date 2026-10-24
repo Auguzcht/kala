@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useTwin } from "@/features/twin";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,10 @@ export function TwinView({ courseId }: { courseId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <LoadingRegion className="space-y-4">
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-32 w-full" />
-      </div>
+      </LoadingRegion>
     );
   }
   if (isError || !data) {

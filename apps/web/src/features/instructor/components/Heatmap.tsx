@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useHeatmap } from "@/features/instructor";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ const BAND_META: Record<MasteryBand, { short: string; cell: string; label: strin
 export function Heatmap({ courseId, deidentified = false }: { courseId: string; deidentified?: boolean }) {
   const { data, isLoading, isError, refetch } = useHeatmap(courseId);
 
-  if (isLoading) return <Skeleton className="h-80 w-full" />;
+  if (isLoading) return <LoadingRegion><Skeleton className="h-80 w-full" /></LoadingRegion>;
   if (isError || !data) {
     return (
       <EmptyState

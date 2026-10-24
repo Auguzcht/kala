@@ -495,6 +495,11 @@ export type PromptInputProps = Omit<
   multiple?: boolean;
   // When true, accepts drops anywhere on document. Default false (opt-in).
   globalDrop?: boolean;
+  /** Opt in to an enclosing drop surface rather than the form. */
+  dropTarget?: RefObject<HTMLElement | null>;
+  onDragActiveChange?: (active: boolean) => void;
+  /** Opt in to immediate file ownership/validation instead of blob staging. */
+  onFilesSelected?: (files: File[]) => void;
   // Render a hidden input with given name and keep it in sync for native form posts. Default false.
   syncHiddenInput?: boolean;
   // Minimal constraints
@@ -516,6 +521,9 @@ export const PromptInput = ({
   accept,
   multiple,
   globalDrop,
+  dropTarget,
+  onDragActiveChange,
+  onFilesSelected,
   syncHiddenInput,
   maxFiles,
   maxFileSize,
@@ -702,7 +710,11 @@ export const PromptInput = ({
     []
   );
 
-  const add = usingProvider ? addWithProviderValidation : addLocal;
+  const add = useCallback((incoming: File[] | FileList) => {
+    if (onFilesSelected) onFilesSelected([...incoming]);
+    else if (usingProvider) addWithProviderValidation(incoming);
+    else addLocal(incoming);
+  }, [onFilesSelected, usingProvider, addWithProviderValidation, addLocal]);
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
   const openFileDialog = usingProvider
     ? controller.attachments.openFileDialog
@@ -731,7 +743,7 @@ export const PromptInput = ({
 
   // Attach drop handlers on nearest form and document (opt-in)
   useEffect(() => {
-    const form = formRef.current;
+    const form = dropTarget?.current ?? formRef.current;
     if (!form) {
       return;
     }
@@ -746,6 +758,7 @@ export const PromptInput = ({
       }
     };
     const onDrop = (e: DragEvent) => {
+      onDragActiveChange?.(false);
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault();
       }
@@ -753,13 +766,23 @@ export const PromptInput = ({
         add(e.dataTransfer.files);
       }
     };
+    const onDragEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes("Files")) onDragActiveChange?.(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!(e.relatedTarget instanceof Node) || !form.contains(e.relatedTarget)) onDragActiveChange?.(false);
+    };
+    form.addEventListener("dragenter", onDragEnter);
+    form.addEventListener("dragleave", onDragLeave);
     form.addEventListener("dragover", onDragOver);
     form.addEventListener("drop", onDrop);
     return () => {
+      form.removeEventListener("dragenter", onDragEnter);
+      form.removeEventListener("dragleave", onDragLeave);
       form.removeEventListener("dragover", onDragOver);
       form.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [add, globalDrop, dropTarget, onDragActiveChange]);
 
   useEffect(() => {
     if (!globalDrop) {

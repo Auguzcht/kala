@@ -31,6 +31,7 @@ export const tutorConversationSchema = z.object({
   title: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  pinnedAt: z.string().nullish(),
 });
 
 export const tutorPersistedMessageSchema = z.object({

@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 // different object, so it never appears here.
 //
 // `estimate` is 0..1. `band` maps the estimate to a qualitative label for
-// screen readers; the numeric value stays secondary (hover title). The
+// screen readers. Readiness-sized rings use a prominent center value;
+// compact skill rings keep the numeric value secondary. The
 // center digit rolls when the estimate changes (SlidingNumber) — the
 // movement IS the mastery update; reduced motion renders the plain number.
 
@@ -55,7 +56,7 @@ export function MasteryRing({
       className={cn("relative inline-grid place-items-center", className)}
       style={{ width: size, height: size }}
       role="img"
-      aria-label={label ?? `${bandLabel}${estimate === null ? "" : `, ${Math.round(filled * 100)} percent`}`}
+      aria-label={`${label ? `${label}: ` : ""}${bandLabel}${estimate === null ? "" : `, ${Math.round(filled * 100)} percent`}`}
       title={estimate === null ? bandLabel : `${bandLabel} · ${Math.round(filled * 100)}%`}
     >
       <svg width={size} height={size} className="-rotate-90">
@@ -81,7 +82,7 @@ export function MasteryRing({
           transition={reduceMotion ? { duration: 0 } : { duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
         />
       </svg>
-      <div className="absolute font-mono text-xs font-medium tabular-nums text-foreground">
+      <div data-slot="mastery-ring-value" className={cn("absolute font-mono tabular-nums text-foreground", size >= 128 ? "text-5xl font-semibold leading-none" : "text-xs font-medium")}>
         {estimate === null ? "—" : reduceMotion ? `${Math.round(filled * 100)}` : <SlidingNumber value={Math.round(filled * 100)} />}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useCohortStats } from "@/features/instructor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -71,11 +72,11 @@ export function CohortStats({ courseId }: { courseId: string }) {
 
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <LoadingRegion busy={isLoading} className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-[116px] w-full" />
         ))}
-      </div>
+      </LoadingRegion>
     );
   }
 
