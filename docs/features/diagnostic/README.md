@@ -8,7 +8,7 @@ code:
   api: services/api/app/routers/diagnostic.py
   worker: []
   db: []
-tests: []
+tests: [apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs]
 ---
 
 # Course diagnostic
@@ -29,36 +29,36 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 
 - Rule: The Diagnostic page omits the "Build your baseline" page header and subtitle, and the "Topics without course material are not included." note. Keep loading, error, preparing, no-material, caught-up and submitted-result states.
 - Acceptance: Neither removed introduction nor note appears in a ready question set; existing non-ready states and the mastery-delta result remain available.
-- Status: planned
-- Verified by: planned Diagnostic component tests and manual screenshots at 1440px and 375px.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; synthetic screenshots at 1440px and 375px in docs/work/handover-2026/evidence/ui-overhaul.md.
 
 ### DIAG-REQ-002: Put answered count beside submission
 
 - Rule: Diagnostic has no SessionBar back chevron or progress bar. Show "{answered} of {total} answered" beside the submit action. Submission remains disabled until all displayed questions are answered and while submission is pending. Preserve the tour anchors and the submitted-result exit.
 - Acceptance: Selecting an answer updates the adjacent count; the question view has no back chevron or progress bar; the enabled submit action sends the existing answer payload once all questions are answered.
-- Status: planned
-- Verified by: planned Diagnostic component tests and manual keyboard checks.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; authenticated acceptance remains pending.
 
 ### DIAG-REQ-003: Keep the last question reachable above submission
 
 - Rule: At desktop and 375px viewport widths, the complete last question and every choice can scroll into view above the submit region. Use a correctly sized scroll region with reserved bottom space, or place submission in normal flow. Do not alter shared ComposeDock behavior.
 - Acceptance: At 1440px and 375px widths, scrolling reaches the last choice without clipping or overlap from submission, including a question with long text and wrapped choices.
-- Status: planned
-- Verified by: planned manual screenshots at both widths.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; long-question screenshots at both widths in docs/work/handover-2026/evidence/ui-overhaul.md.
 
 ### DIAG-REQ-004: Keep one Diagnostic entry route
 
 - Rule: `/course/diagnostic` remains the course Diagnostic route. Audit every Diagnostic link, route and redirect; remove or redirect any stale entry found. Preserve the existing diagnostic API and due logic.
 - Acceptance: The sidebar, workspace card, due notice, instructor plan and tour steps target `/course/diagnostic`. Any stale alias discovered is covered by a redirect test. If none is found, record that result without inventing aliases.
-- Status: planned
-- Verified by: planned route-entry tests and the Lane U route inventory.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs and the route inventory in docs/work/handover-2026/evidence/ui-overhaul.md. No stale alias was found, so no redirect was introduced.
 
 ### DIAG-REQ-005: Preserve the Tutor and Study hub component boundary
 
 - Rule: Use the component boundary below. Diagnostic is a baseline sitting, not an open Tutor conversation; this presentation change adds no chat persistence or file attachment behavior to it.
 - Acceptance: Diagnostic submits through its existing API. Tutor attachment work does not enable attachments or persistence in the Study hub dock or alter ComposeDock behavior.
-- Status: planned
-- Verified by: planned component-boundary review and existing Tutor and Study regression tests.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs, apps/web/src/features/tutor/components/TutorChat.test.mjs and apps/web/src/features/flashcards/tests/study-deck.test.mjs; source review confirms ComposeDock is unchanged.
 
 | | Tutor | Study hub dock (lesson, study, test, review-missed) |
 | --- | --- | --- |
@@ -90,7 +90,7 @@ No new model calls. Diagnostic generation and the provider path are outside this
 
 Preserve partial preparation, pending topics, no-material, failed generation, empty/caught-up states and the submitted-result guard against query invalidation. Preserve keyboard focus, visible focus indicators and reduced motion. The separate Study flip-card fix replaces hidden-face focus exposure with inert faces and deliberate focus handling; it must preserve rating and schedule behavior.
 
-The two APPROVAL-05 visual exceptions are limited to text-entry containers and the Tutor new-chat logo. All controls, including send buttons, chips, cards and inputs, remain boxy and use existing tokens. The logo is static in Diagnostic, Study, Test and Tutor conversations. Lead designer review remains required in Lane U's report. Screenshots and browser acceptance are pending; this spec does not claim implementation or live verification.
+The two APPROVAL-05 visual exceptions are limited to text-entry containers and the Tutor new-chat logo. All controls, including send buttons, chips, cards and inputs, remain boxy and use existing tokens. The logo is static in Diagnostic, Study, Test and Tutor conversations. Lead designer review remains required in Lane U's report. Synthetic screenshots and browser checks are recorded in the Lane U evidence. Authenticated feature acceptance remains pending; opening the course workspace does not establish Diagnostic or Tutor acceptance.
 
 ## Change log
 

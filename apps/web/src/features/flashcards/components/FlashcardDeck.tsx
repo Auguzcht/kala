@@ -175,6 +175,14 @@ export function FlashcardDeck({
   const [index, setIndex] = useState(0);
   const [sessionCards, setSessionCards] = useState<FlashcardCard[] | null>(null);
   const [phase, setPhase] = useState<Phase>("front");
+  const frontFaceRef = useRef<HTMLButtonElement>(null);
+  const backFaceRef = useRef<HTMLButtonElement>(null);
+  const moveFlipFocus = useRef(false);
+  useEffect(() => {
+    if (!moveFlipFocus.current) return;
+    moveFlipFocus.current = false;
+    (phase === "back" ? backFaceRef : frontFaceRef).current?.focus({ preventScroll: true });
+  }, [phase]);
   const [deckDone, setDeckDone] = useState(false);
   const [isReplay, setIsReplay] = useState(false);
   const [ratingsByItemId, setRatingsByItemId] = useState<Record<string, boolean>>({});
@@ -264,6 +272,7 @@ export function FlashcardDeck({
 
       if (event.code === "Space") {
         event.preventDefault();
+        moveFlipFocus.current = true;
         setPhase((current) => current === "front" ? "back" : "front");
         return;
       }
@@ -813,8 +822,9 @@ export function FlashcardDeck({
                   is free and costs no schedule. */}
               <button
                 type="button"
-                onClick={() => setPhase("back")}
-                aria-hidden={phase === "back"}
+                ref={frontFaceRef}
+                onClick={() => { moveFlipFocus.current = true; setPhase("back"); }}
+                inert={phase === "back"}
                 tabIndex={phase === "back" ? -1 : 0}
                 className="block w-full space-y-5 text-left [backface-visibility:hidden] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [grid-area:1/1]"
               >
@@ -832,11 +842,12 @@ export function FlashcardDeck({
               {/* The back shows the answer; grading lives in the persistent dock. */}
               <button
                 type="button"
-                aria-hidden={phase !== "back"}
+                ref={backFaceRef}
+                inert={phase !== "back"}
                 tabIndex={phase === "back" ? 0 : -1}
                 aria-label="Flip to question"
                 disabled={phase !== "back"}
-                onClick={() => setPhase("front")}
+                onClick={() => { moveFlipFocus.current = true; setPhase("front"); }}
                 className="block w-full space-y-4 text-left [backface-visibility:hidden] [grid-area:1/1] [transform:rotateY(180deg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <p className="text-sm text-muted-foreground">{card.prompt}</p>
