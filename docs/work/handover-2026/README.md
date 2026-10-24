@@ -19,18 +19,18 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 
 ## Approved lane state — 2026-10-24
 
-[APPROVAL-01 including confirmed section 5](approval-01.md) is the scoped implementation authorization. All four audits are accepted. This lane does not assert other lanes have passed or merged.
+[APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance and integration gates. All four discovery audits are accepted. C, D, S and F are merged locally in that order; nothing is pushed or deployed. T remains unmerged pending Fred's explicit approval of its refreshed report.
 
 | Lane | Scope / feature requirements | State / gate |
 | --- | --- | --- |
-| S | [LMS ingest spec](../../features/lms-ingest/README.md), INGEST-REQ-001; upload comment correction only | Authorized; Lane S owns spec and source checks. |
-| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Authorized; sanitizer coverage remains partial; non-tutor timeout defaults unchanged. |
-| F | [Study](../../features/study/README.md), STUDY-REQ-001/002/003 | Authorized; SQL changes require planner stop/report; Lane F owns spec. |
-| C | [Secrets catalogue](../../engineering/secrets.md) and placeholder examples | Authorized; excluded from Lane D ownership. |
-| D | Framework, accepted archive moves, five durable reports, recap knowledge | Implemented locally; audit report and planner acceptance required before merge. |
+| S | [LMS ingest spec](../../features/lms-ingest/README.md), INGEST-REQ-001; upload comment correction only | Approved by APPROVAL-02; merged locally as 5c9011e. Live checks remain outstanding. |
+| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Complete at b605a3b with 400 API and 14 frontend tests passing; web checks pass. Awaiting Fred's refreshed-report approval before merge. Sanitizer coverage remains partial. |
+| F | [Study](../../features/study/README.md), STUDY-REQ-001/002/003/004/005 | APPROVAL-02 conditions satisfied at 7041bc7; merged locally as f316f48. No SQL change. External renderer limitation documented. |
+| C | [Secrets catalogue](../../engineering/secrets.md) and placeholder examples | Approved by APPROVAL-02; merged locally as af6b93c. Eleven tooling tests and inventory check pass on main. |
+| D | Framework, accepted archive moves, five durable reports, recap knowledge | Approved by APPROVAL-02; merged locally as 51c2de5. Future full specs/runbooks remain incomplete. |
 | DB | [Database workflow](../../engineering/database.md), numeric migrations byte for byte, existing generated types path | Pending Fred's hosted Postgres major. Rebase after Lane D merge, then update post-archive references. Two clean db:verify runs required. Drift awaits Fred's schema-only dump. |
 
-C/D merge only after green checks and planner review. S/T/F require their tests and web lint/typecheck/build plus planner approval. Fred deploys after integration, then performs the student/instructor runs in [TESTING.md](../../TESTING.md) and approved tutor/Study/auth checks. No lane merges itself. Lane DB has a separate gate and does not deploy the application.
+After Fred approves T and it merges, the coordinator adds shared committed test isolation and the planned frontend-runner work item, then runs the combined API/worker/web checks on main. Push requires all checks to pass and must be fast-forward. Deployment additionally requires Fred's confirmation of the integrated report; Fred then performs the student/instructor runs in [TESTING.md](../../TESTING.md) and approved tutor/Study/auth checks. No lane merges itself. Lane DB has a separate gate and does not deploy the application.
 
 ## Calendar
 
@@ -46,9 +46,9 @@ C/D merge only after green checks and planner review. S/T/F require their tests 
 | --- | --- | --- | --- |
 | WI-01 | Find and fix unreachable live endpoints (starting with `POST /tutor/ask` 502) and the Study "Reload deck" vs "All caught up" mix-up | none | planned |
 | WI-02 | Inventory every Markdown file in the repo and classify it (authority, merge into spec, runbook source, archive, delete) | none | confirmed-done (audit accepted 2026-10-24, APPROVAL-01) |
-| WI-03 | Install the documentation framework (AGENTS.md, docs/README.md, contract, templates) and move archived docs with pointer headers | WI-02 | done-awaiting-confirmation (local documentation checks; planner review pending) |
+| WI-03 | Install the documentation framework (AGENTS.md, docs/README.md, contract, templates) and move archived docs with pointer headers | WI-02 | confirmed-done (framework scope accepted 2026-10-24, APPROVAL-02; merged locally, not pushed) |
 | WI-04 | Local throwaway Supabase stack: move to `supabase/migrations`, replay from zero, seed, generated `schema.sql` and types, one drift check against dev-hosted (see [database.md](../../engineering/database.md)) | none | planned |
-| WI-05 | Secrets inventory generated from config files, `.env.example` files complete, exposure log, rotation plan | none | planned |
+| WI-05 | Secrets inventory generated from config files, `.env.example` files complete, exposure log, rotation plan | none | in-progress (inventory accepted and merged locally under APPROVAL-02; rotation at cutover remains open) |
 | WI-06 | Runbooks 03, 04, 08 (Blackboard instance, Developer Portal app, LTI registration) | none (needs the developer's memory) | planned |
 | WI-07 | Runbooks 01, 02, 05, 06, 07, 09 to 13 | WI-05 | planned |
 | WI-08 | Feature specs for every `active` feature in the registry, from code and tests | WI-03 | planned |
@@ -83,3 +83,11 @@ Grade passback (AGS), admin and researcher features remain planned in the regist
 - [Lane D verification](evidence/docs-framework-verification.md) and [docs link check](evidence/docs-link-check.md).
 
 The accepted four audits are historical evidence at `e9de105`. Original audit wording about pending implementation approval is preserved as history and superseded by APPROVAL-01. Missing external scratch outputs are explicitly unpromoted. Live Blackboard, tutor recovery and deployed behavior remain unverified in this lane.
+
+## APPROVAL-02 evidence and remaining integration gate
+
+- [Coordinator merge and gate report](evidence/approval-02-coordinator.md).
+- [Full refreshed Lane T audit](evidence/implementation-tutor-approval-02.md), unmerged branch b605a3b, submitted for Fred's explicit approval.
+- [Lane F conditional-approval evidence](evidence/implementation-study-approval-02.md).
+
+The shared API conftest replacement, combined main API/worker/web verification, and standard frontend-runner planned work item are assigned to the post-T integration commit. They have not been implemented or claimed complete at this gate. No push or deployment is authorized by a branch-only passing report.

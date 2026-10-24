@@ -2,7 +2,7 @@
 
 **Names only. Secret and setting values never belong in this file.**
 
-No values or actual payload membership are asserted. Backend configuration catalogue; this is not evidence that every name is stored in Secrets Manager. Accounts and exposure entries below come from the supplied pack and are not independently verified.
+No values or actual payload membership are asserted. Backend configuration catalogue; this is not evidence that every name is stored in Secrets Manager. Account details and historical exposure entries come from the supplied pack and are not independently verified. The later Lane S incident is separately attributed to its reporting agent.
 
 
 ## Inventory contract (WI-05)
@@ -152,12 +152,15 @@ ITO creates institutional accounts and replacement credentials. Personal access 
 | OpenRouter, OpenAI | Models and billing | Student developer | ITO or finance |
 | GitHub repository | Source | Unknown; confirm with Fred | ITO organization |
 
-## Exposure log (supplied pack; remediation status unverified)
+## Exposure log (source attributed; remediation status unverified)
 
 | Date | What | How | Action | Status |
 | --- | --- | --- | --- | --- |
 | 2026-10-18 | Supabase service key, LMS REST secret | Printed in an agent chat, per supplied pack | Rotate before handover | open, per supplied pack |
 | 2026-10-24 | AWS IAM key and console password, OpenRouter, OpenAI, Blackboard app secret, Blackboard user passwords | Pasted in a planning chat, per supplied pack | Rotate AWS key now, rest at cutover, per supplied pack | open, per supplied pack |
+| 2026-10-24 | Personal OpenRouter API key; OpenAI embeddings API key; Blackboard Developer application key and application secret; AWS IAM console password, CLI access key ID and secret access key; Blackboard Learn passwords for administrator, two student accounts and instructor account | Lane S reports that a parent-chat tool response emitted an existing credential-bearing preview once; identities confirmed from its existing context without reopening the source | Rotate at cutover, per APPROVAL-02 section 6; no rotation performed by agents | open; agent-reported exposure, remediation unverified |
+
+[APPROVAL-02](../work/handover-2026/approval-02.md) section 6 sets rotation at cutover and supersedes the timing recommendation in the historical pack row above. Credential identifiers are listed for incident completeness; no values or new hosted-state verification are recorded. Lane S reports that it stopped the lookup and did not use or copy values into files or commits.
 
 Secret loaders run during cached settings initialization; secret rotation and process/version refresh need maintainer-run validation. This document supplies names and handover ownership only, not a credential-rotation procedure or runtime proof.
 
@@ -166,3 +169,4 @@ Secret loaders run during cached settings initialization; secret rotation and pr
 | Date | Change | Decision source | IDs affected |
 | --- | --- | --- | --- |
 | 2026-10-24 | Install names-only static inventory, exact consumer tables and complete placeholder examples | APPROVAL-01, Lane C and amendment A2; accepted BRIEF-04 audit | WI-05 |
+| 2026-10-24 | Record names-only Lane S tool-preview exposure and cutover rotation decision | APPROVAL-02 section 6; Lane S incident follow-up | WI-05 |
