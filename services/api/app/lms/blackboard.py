@@ -12,7 +12,7 @@ import logging
 import re
 import time
 from html.parser import HTMLParser
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 
@@ -301,31 +301,25 @@ class BlackboardConnector(LMSConnector):
         return resp.json()["id"]
 
     def get_roster(self, course_ref: str) -> list[dict]:
-        """Full course roster, following pagination to exhaustion.
+        """Return UUID-keyed members only after every page succeeds.
 
-        This used to matter only for completeness — an unpaginated pull
-        just meant "you might be missing some students" on a display. Now
-        that a full pull also drives deletion (lti/routes.py._sync_roster
-        removes any Kala enrollment not present in this list), an
-        incomplete page is worse than incomplete: it would report a fully
-        enrolled student as absent and reconciliation would remove them.
-
-        Follows Learn REST's `paging.nextPage` continuation link, which is
-        typically returned as a path relative to the API root once a
-        response exceeds the default page size. VERIFY the exact key name
-        and whether your instance returns a relative path or an absolute
-        URL before relying on this in production — this loop handles both,
-        but it has not been run against a live paginated response.
+        AUTH-REQ-006: a partial or malformed response is not a roster. Never
+        return the successfully fetched prefix or substitute a REST internal
+        ID for the UUID that matches LTI launch `sub`.
         """
         s = get_settings()
         params = {
             "expand": "users",
-            "fields": "userId,courseRoleId,user.id,user.name,user.contact.email",
+            "fields": "userId,courseRoleId,user.id,user.uuid,user.name,user.contact.email",
         }
         results: list[dict] = []
         path = f"{s.lms_rest_base_url}/courses/{course_ref}/users"
 
+        visited: set[str] = set()
         while path:
+            if path in visited:
+                raise ValueError("incomplete roster pagination")
+            visited.add(path)
             resp = httpx.get(
                 path,
                 headers=self._headers(),
@@ -333,23 +327,58 @@ class BlackboardConnector(LMSConnector):
                 verify=s.lms_verify_tls,
                 timeout=15.0,
             )
-            _check_rate_limit(resp)
+            # Roster warnings must contain counts only (AUTH-REQ-006); the
+            # shared quota helper includes the request URL in its logs.
+            if resp.status_code == 429:
+                raise BlackboardRateLimitedError(
+                    retry_after=_retry_after_seconds(resp), path="roster",
+                )
+            try:
+                remaining = int(resp.headers.get("X-Rate-Limit-Remaining", ""))
+            except (TypeError, ValueError):
+                remaining = None
+            if remaining is not None and remaining < _RATE_LIMIT_WARN_BELOW:
+                logger.warning("Blackboard quota is low: remaining=%d", remaining)
             resp.raise_for_status()
+            if resp.status_code != 200:
+                raise ValueError("incomplete roster response")
             body = resp.json()
-            results.extend(body.get("results", []))
+            if (
+                not isinstance(body, dict) or not isinstance(body.get("results"), list)
+                or body.get("error") or body.get("errors")
+            ):
+                raise ValueError("incomplete roster response")
+            results.extend(body["results"])
 
-            next_page = (body.get("paging") or {}).get("nextPage")
+            paging = body.get("paging")
+            if paging is None:
+                paging = {}
+            if not isinstance(paging, dict):
+                raise TypeError("incomplete roster pagination")
+            next_page = paging.get("nextPage")
+            if next_page is not None and not isinstance(next_page, str):
+                raise TypeError("incomplete roster pagination")
             if not next_page:
                 break
-            # nextPage may already be a full URL, or a path relative to the
-            # API host — handle both rather than assuming one.
-            path = next_page if next_page.startswith("http") else f"{s.lms_rest_base_url.rstrip('/')}{next_page}"
+            # Learn uses absolute or host-relative continuation links. Keep
+            # bearer credentials on the configured origin only.
+            next_path = urljoin(path, next_page)
+            if urlsplit(next_path)[:2] != urlsplit(s.lms_rest_base_url)[:2]:
+                raise ValueError("unexpected roster pagination origin")
+            path = next_path
             params = None  # the continuation link already encodes the query
 
         roster = []
         for membership in results:
-            user = membership.get("user", {})
-            name = user.get("name", {})
+            if not isinstance(membership, dict):
+                raise TypeError("incomplete roster member")
+            user = membership.get("user")
+            if (
+                not isinstance(user, dict) or not isinstance(user.get("uuid"), str)
+                or not user["uuid"].strip()
+            ):
+                raise ValueError("roster user UUID unavailable")
+            name = user.get("name") or {}
             # preferredDisplayName must not shadow real names: Blackboard
             # returns the literal placeholder "GivenName" as
             # preferredDisplayName for accounts the LTI test tool created
@@ -370,7 +399,7 @@ class BlackboardConnector(LMSConnector):
                 )
             )
             roster.append({
-                "lms_user_id": membership["userId"],
+                "lms_user_id": user["uuid"],
                 "role": membership.get("courseRoleId"),
                 "name": display_name,
                 "email": user.get("contact", {}).get("email"),
