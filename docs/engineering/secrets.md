@@ -2,7 +2,7 @@
 
 **Names only. Secret and setting values never belong in this file.**
 
-No values or actual payload membership are asserted. Backend configuration catalogue; this is not evidence that every name is stored in Secrets Manager. Account details and historical exposure entries come from the supplied pack and are not independently verified. The later Lane S incident is separately attributed to its reporting agent.
+No values or actual payload membership are asserted. This backend configuration catalogue is not evidence that every name is stored in Secrets Manager. Source-only findings and Fred's later v6 deployment observation are distinguished below. Account details and historical exposure entries come from the supplied pack and are not independently verified. The later Lane S incident is separately attributed to its reporting agent.
 
 
 ## Inventory contract (WI-05)
@@ -13,7 +13,7 @@ Approved by APPROVAL-01 on 2026-10-24. This is development tooling and documenta
 - Print names, consumers, whether a source default exists and whether that default is safe to publish (yes/no/unknown). Never print default values. Empty sentinels can be safe to publish without being usable configuration. Nonempty strings are unknown unless explicitly recognized as harmless; credential-like defaults are never safe.
 - Compare all duplicated API/worker aliases and defaults without disclosing defaults. Report unsupported or dynamic syntax rather than silently assuming complete coverage.
 - Keep the tables and examples complete for the declared names. Examples use commented placeholders; fill and uncomment only the settings needed, leaving omitted defaults in source.
-- Treat Lambda/secret overlap as conditional until a maintainer establishes actual payload membership.
+- Treat Lambda/secret overlap as conditional until a maintainer establishes actual payload membership. Fred's later v6 observation establishes the Lambda overrides listed below; it does not establish secret payload membership.
 
 Run from the repository root:
 
@@ -97,7 +97,18 @@ The scanner supports the repository's literal `Field` aliases, Terraform inputs 
 | --- | --- | --- | --- | --- |
 | `KALA_SECRETS_ARN` | no (resource identifier) | api, worker bootstrap | Terraform secret resource | Update reference through review; payload membership unknown |
 
-`AWS_REGION` is also read during bootstrap before payload loading. `FRONTEND_URL` and `WORKER_FUNCTION_ARN` are Terraform-owned environment entries; matching payload names would be shadowed. Current Terraform declares the secret name `kala/app`; the supplied pack proposes `kala/<env>/app`. Document current naming and defer any naming migration to explicit infrastructure authorization.
+`AWS_REGION` is also read during bootstrap before payload loading. The original WI-05 source-only inventory identified `FRONTEND_URL` and `WORKER_FUNCTION_ARN` as Terraform-owned environment entries and could only report conditional shadowing, without deployed-state or secret-membership evidence. Current Terraform declares the secret name `kala/app`; the supplied pack proposes `kala/<env>/app`. Document current naming and defer any naming migration to explicit infrastructure authorization.
+
+### Fred-confirmed v6 Lambda overrides (2026-10-25)
+
+Fred confirmed from the v6 deployment output, recorded in APPROVAL-05 rev 2 section 4 (Lane C2), that these settings are Lambda environment variables and override the secret bundle for their respective consumers:
+
+| Consumer | Lambda environment names overriding the secret bundle |
+| --- | --- |
+| API | `FRONTEND_URL`, `WORKER_FUNCTION_ARN` |
+| Worker | `WORKER_FUNCTION_ARN` |
+
+This is maintainer-reported deployment evidence, distinct from the earlier source-only uncertainty. No values are recorded, and Lane C2 did not inspect Lambda configuration, dotenv files or the secret bundle. Actual bundle membership remains unknown; these Lambda entries take precedence over any matching bundle names. Other names retain the source-only limits of the inventory.
 
 ## Browser config (Vercel)
 
@@ -162,7 +173,7 @@ ITO creates institutional accounts and replacement credentials. Personal access 
 
 [APPROVAL-02](../work/handover-2026/approval-02.md) section 6 sets rotation at cutover and supersedes the timing recommendation in the historical pack row above. Credential identifiers are listed for incident completeness; no values or new hosted-state verification are recorded. Lane S reports that it stopped the lookup and did not use or copy values into files or commits.
 
-Secret loaders run during cached settings initialization; secret rotation and process/version refresh need maintainer-run validation. This document supplies names and handover ownership only, not a credential-rotation procedure or runtime proof.
+Secret loaders run during cached settings initialization; secret rotation and process/version refresh need maintainer-run validation. This document supplies names, handover ownership and the explicitly attributed v6 observation, not a credential-rotation procedure. The static inventory itself is not runtime proof.
 
 ## Change log
 
@@ -170,3 +181,4 @@ Secret loaders run during cached settings initialization; secret rotation and pr
 | --- | --- | --- | --- |
 | 2026-10-24 | Install names-only static inventory, exact consumer tables and complete placeholder examples | APPROVAL-01, Lane C and amendment A2; accepted BRIEF-04 audit | WI-05 |
 | 2026-10-24 | Record names-only Lane S tool-preview exposure and cutover rotation decision | APPROVAL-02 section 6; Lane S incident follow-up | WI-05 |
+| 2026-10-25 | Distinguish source-only inventory limits from Fred's v6 Lambda override observation; preserve exposure log and rotation-at-cutover policy | APPROVAL-05 rev 2 section 4, Lane C2; Fred's deployment observation | WI-05 |
