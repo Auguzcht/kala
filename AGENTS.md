@@ -1,6 +1,6 @@
 # AGENTS.md: Kala repository instructions
 
-This file is the entry point for every coding agent (Codex, Claude) and every new maintainer. It is a router. It says what Kala is, the rules that never bend, and where the authority for each kind of question lives. `CLAUDE.md` contains one line pointing here. Current handover authority: [APPROVAL-01, including section 5](docs/work/handover-2026/approval-01.md), [APPROVAL-02's review and integration gates](docs/work/handover-2026/approval-02.md), [APPROVAL-03's tutor acceptance and no-push gate](docs/work/handover-2026/approval-03.md), and [APPROVAL-04's test-only correction and repeated verification](docs/work/handover-2026/approval-04.md).
+This file is the entry point for every coding agent (Codex, Claude) and every new maintainer. It is a router. It says what Kala is, the rules that never bend, and where the authority for each kind of question lives. `CLAUDE.md` contains one line pointing here. Current handover authority: [APPROVAL-01, including section 5](docs/work/handover-2026/approval-01.md), [APPROVAL-02's review and integration gates](docs/work/handover-2026/approval-02.md), [APPROVAL-03's tutor acceptance and no-push gate](docs/work/handover-2026/approval-03.md), [APPROVAL-04's test-only correction and repeated verification](docs/work/handover-2026/approval-04.md), and [APPROVAL-05 rev 2 plus confirmed coordinator amendments](docs/work/handover-2026/approval-05.md).
 
 ## 1. Start here
 

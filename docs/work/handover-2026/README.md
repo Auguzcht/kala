@@ -17,6 +17,22 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 - Feature freeze: Oct 28 (agreed by the developer).
 - This initiative does not add features. Feature work after the freeze is limited to fixing behavior the specs already describe.
 
+## APPROVAL-05 current work — 2026-10-25
+
+[APPROVAL-05 rev 2 and confirmed amendments](approval-05.md) authorize the next parallel work. The prior accepted integration was pushed as `4f3ec29` after Fred deployed API live v6; sections below preserve earlier integration history. Live Study hint, Explain more and dock follow-ups now have reported provider 502 failures; successful health checks do not establish model availability.
+
+| Lane | Current work | Gate |
+| --- | --- | --- |
+| X | WI-01: investigate provider failures using sanitized CLI evidence | Cause-backed planner approval before production code; coordinator owns Tutor/AI spec changes |
+| B | Tutor rename/pin, TUTOR-REQ-002/003, additive local migration 0037 | Coordinator spec commit before implementation; review before merge; Fred alone applies hosted migration |
+| U | Diagnostic and Tutor UI, TUTOR-REQ-004 onward | Coordinator DESIGN and Tutor spec commits first; U owns Diagnostic spec; Fred supplies local env file and observes UI |
+| R | WI-06/WI-07: runbooks 01–13, prioritizing 03/04/08 | Unknowns marked Fred to confirm; review before merge |
+| P | WI-08: nine untouched feature specifications | Source/test evidence and honest status; review before merge |
+| C2 | WI-05/WI-13: confirmed Lambda env precedence and cost placeholders | Names only; review before merge |
+| DB | Local database workflow and relocation | Still awaiting Fred's hosted PostgreSQL major |
+
+Lead designer review is pending for the two narrow DESIGN.md exceptions: chat-entry container shape and Tutor empty-state mascot idle motion. This is a recorded handover review item; Fred has authorized implementation once the exceptions and lane specs are committed. No lane deploys or pushes. Unfinished work after Oct 28 becomes planned with branch and status recorded.
+
 ## Approved lane state — 2026-10-25
 
 [APPROVAL-01 including confirmed section 5](approval-01.md) defines scope; [APPROVAL-02](approval-02.md) records implementation acceptance. [APPROVAL-03](approval-03.md) accepts T and authorizes local integration checks; [APPROVAL-04](approval-04.md) accepts the test-only cleanup correction and repeated verification, followed by a stop without pushing. All four discovery audits are accepted. C, D, S, F and T are merged locally in that order; nothing is pushed or deployed.
