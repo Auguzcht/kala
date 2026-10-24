@@ -364,6 +364,7 @@ function RecommendationCard({
                 tone="green"
                 icon={<CheckIcon ref={checkRef} size={14} />}
                 label="Approve"
+                disabled={decide.isPending}
                 onIconPlay={() => checkRef.current?.startAnimation()}
                 onIconEnter={() => checkRef.current?.startAnimation()}
                 onIconLeave={() => checkRef.current?.stopAnimation()}
@@ -374,6 +375,7 @@ function RecommendationCard({
                 tone="orange"
                 icon={<ZapIcon ref={zapRef} size={14} />}
                 label="Modify"
+                disabled={decide.isPending}
                 onIconPlay={() => zapRef.current?.startAnimation()}
                 onIconEnter={() => zapRef.current?.startAnimation()}
                 onIconLeave={() => zapRef.current?.stopAnimation()}
@@ -384,6 +386,7 @@ function RecommendationCard({
                 tone="red"
                 icon={<XIcon ref={xRef} size={14} />}
                 label="Decline"
+                disabled={decide.isPending}
                 onIconPlay={() => xRef.current?.startAnimation()}
                 onIconEnter={() => xRef.current?.startAnimation()}
                 onIconLeave={() => xRef.current?.stopAnimation()}
@@ -400,6 +403,7 @@ function RecommendationCard({
                   <Input
                     id={`title-${rec.id}`}
                     value={title}
+                    disabled={decide.isPending}
                     onChange={(e) => setTitle(e.target.value)}
                     className="mt-1 h-8 text-[13px]"
                   />
@@ -408,7 +412,7 @@ function RecommendationCard({
                   <Label htmlFor={`kind-${rec.id}`} className="text-[11px]">
                     Change the activity
                   </Label>
-                  <Select value={kind} onValueChange={(v) => setKind(v as RecommendationKind)}>
+                  <Select value={kind} disabled={decide.isPending} onValueChange={(v) => setKind(v as RecommendationKind)}>
                     <SelectTrigger id={`kind-${rec.id}`} className="mt-1 h-8 text-[13px]">
                       <SelectValue />
                     </SelectTrigger>
@@ -434,6 +438,7 @@ function RecommendationCard({
                   <Textarea
                     id={`note-${rec.id}`}
                     value={note}
+                    disabled={decide.isPending}
                     onChange={(e) => setNote(e.target.value)}
                     rows={2}
                     placeholder={
@@ -452,6 +457,7 @@ function RecommendationCard({
                     <Input
                       id={`learner-note-${rec.id}`}
                       value={learnerNote}
+                      disabled={decide.isPending}
                       onChange={(e) => setLearnerNote(e.target.value)}
                       placeholder="Take this before Thursday's session and bring your questions."
                       className="mt-1 h-8 text-[13px]"
@@ -464,10 +470,11 @@ function RecommendationCard({
                   className="w-full"
                   onClick={submit}
                   disabled={decide.isPending}
+                  aria-busy={decide.isPending || undefined}
                 >
                   {decide.isPending ? (
                     <>
-                      <Spinner className="size-3.5" /> Recording
+                      <Spinner className="size-3.5" aria-hidden /> Recording
                     </>
                   ) : choice === "rejected" ? (
                     "Confirm decline"
@@ -491,6 +498,7 @@ function RecommendationCard({
 
 function DecisionButton({
   active,
+  disabled,
   tone,
   icon,
   label,
@@ -500,6 +508,7 @@ function DecisionButton({
   onIconLeave,
 }: {
   active: boolean;
+  disabled?: boolean;
   tone: "green" | "orange" | "red";
   icon: ReactNode;
   label: string;
@@ -517,6 +526,7 @@ function DecisionButton({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => {
         onIconPlay?.();
         onClick();
@@ -525,7 +535,7 @@ function DecisionButton({
       onMouseLeave={onIconLeave}
       aria-pressed={active}
       className={cn(
-        "flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-[12.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-[12.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
         active ? activeClass : "border-border text-muted-foreground hover:bg-accent"
       )}
     >

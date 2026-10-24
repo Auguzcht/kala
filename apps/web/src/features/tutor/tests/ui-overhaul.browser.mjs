@@ -324,10 +324,26 @@ try {
     const { context, page, state, errors } = await fixture(width, {
       empty: true,
     });
+    const headerType = () => page.getByRole('heading',{level:1}).evaluate(el => {
+      const parts=[el,...el.parentElement.querySelectorAll('p')];
+      return parts.map(part=>{
+        const style=getComputedStyle(part);
+        return [style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight,style.letterSpacing];
+      });
+    });
+    await page.goto('http://localhost:5173/course/skills');
+    await page.getByRole('heading',{name:'Choose a skill',exact:true}).waitFor();
+    const skillsHeaderType=await headerType();
+    await screenshot(page,'skills-header',width);
+    await page.goto('http://localhost:5173/course/twin');
+    await page.getByRole('heading',{name:'Your twin',exact:true}).waitFor();
+    check(JSON.stringify(await headerType())===JSON.stringify(skillsHeaderType),'WI-22 Skills and Twin header typography matches');
     await page.goto("http://localhost:5173/course/diagnostic");
     await page
       .getByRole("button", { name: "Submit diagnostic", exact: true })
       .waitFor().catch(async (error) => { throw new Error(`Diagnostic fixture: ${errors.join('; ')}; ${await page.locator('body').innerText()}; ${error.message}`); });
+    check(JSON.stringify(await headerType())===JSON.stringify(skillsHeaderType),'DIAG-REQ-001 Diagnostic header typography matches Skills and Twin');
+    check(skillsHeaderType[0][1]==='24px'&&skillsHeaderType[2][1]==='14px','DIAG-REQ-001 shared page title and description use the same 24px/14px tokens');
     check(
       await page.getByText("0 of 6 answered", { exact: true }).isVisible(),
       "DIAG-REQ-002 initial count",

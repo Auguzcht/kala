@@ -508,3 +508,62 @@ Evidence added: this aggregated trace and root causes; no learner identifier, ra
 Anything not done, and why: no backend/frontend behavior change; user requested a trace. No live generation, submission, data repair, hosted write, migration, push or deploy.
 Risks or questions for the planner: status availability must handle no-material and exhausted unseen-question pools; broad due-rule change belongs to the backend/bank owner with spec and regression coverage.
 Secrets printed: none (confirmed); existing settings loaded programmatically for scoped read-only access, no environment values printed.
+
+
+## Header comparison, instructor identity trace and review feedback — 2026-10-25
+
+Base `fe6a70b`. Fred asked to compare Diagnostic typography with Skills/Twin, trace two active student accounts that appear unrecorded in the hosted instructor roster, and make Approve/Reject waiting feedback perceptible. The direct request authorizes the focused instructor UI changes below. The instructor spec was absent in this checkout (the registry already tracks broader instructor completeness under WI-08); a focused `instructor-insights/README.md` amendment was written from the feature template before implementation. It defines only this feedback correction, not a complete instructor/backend specification.
+
+Typography verification:
+
+- Diagnostic, Skills and Twin already render the same PageHeader component. Computed browser styles at 1440px and 375px confirm identical title/eyebrow/description font family, font size, font weight, line height and tracking: 24px page titles and 14px descriptions. No speculative font change was made. The existing Diagnostic left-shell-gutter placement remains. Question prompts retain AnswerableCard's separate 18px reading style; they are not PageHeader titles.
+- Added six cross-route typography assertions to the retained browser suite. Synthetic Skills and Diagnostic header captures were visually compared at the same viewport/zoom. Files include `/tmp/kala-lane-u-review-polish/skills-header-1440.png` and `diagnostic-introduction-1440.png`.
+
+Read-only identity investigation:
+
+- Tenant-scoped users and their profiles show two identity records for each of the two named learners. Within each pair, normalized email matches (raw emails and user/LMS identifiers are not stored here). The enrolled account uses Blackboard's internal REST identifier; the actively used account uses a different LTI identifier. Each account already has its own alias mapping.
+- The first pair's enrolled record has zero course evidence/mastery, while the active non-enrolled record has 384 evidence events and 12 mastery rows. The second pair's enrolled record has 40 older practice events and two mastery rows, while the active non-enrolled record has 13 recent events and seven mastery rows. Both active records have zero enrollments in this course.
+- A read-only call to the actual `cohort.roster` function returns 25 enrolled learners and reproduces the screenshot's named rows: zero attempts/not-started and 40 attempts/needs-support. The active identities are excluded by the enrollment filter; the activity has not disappeared.
+- Source chain: `cohort.student_ids` requires course enrollment and student role; `_mastery`/`_evidence` join by the resulting user IDs. `db.resolve_user` returns an existing alias hit before attempting same-email discovery. Consequently the pre-existing split aliases continue to resolve to different accounts despite matching email. `_sync_roster` retains the REST-resolved enrolled IDs and removes unmatched student enrollments, so a student launch alone is not a durable reconciliation of the pair.
+- This is an identity/enrollment split, not a missing spinner, display-name issue or frontend roster-cache correction. No account merge, alias reassignment, evidence/mastery/SRS update or enrollment write was performed. Existing `scripts/merge_duplicate_user.py` documents the historical failure mode, but a maintainer must review its current table/collision coverage before any repair. Both sides of the second pair carry real history; a safe repair must preserve both, reconcile aliases/enrollments and verify/recompute dependent state as appropriate. Never join progress by display name in the client. No claim is made about when the historical duplication first occurred.
+
+Feedback implementation (INSTR-REQ-001/002):
+
+- The real API call begins immediately. `withDecisionFeedback` retains its result/error for a minimum 350ms presentation interval; slower requests retain their full pending duration. Skill review controls remain disabled through proposal-list refresh, with the existing shared Spinner only on the selected action and an explicit failure/retry message.
+- Recommendation decisions previously changed cached status optimistically in `onMutate`, immediately unmounting the card that contained its Recording Spinner. They now keep the card mounted until confirmation and the minimum interval, then update from the validated server response and refresh the existing query keys. Choice buttons and editable notes lock during recording. Failure preserves the selected choice/notes and the existing error toast for retry; it never moves the decision to history. The server's instructor gate and API payloads are unchanged.
+- No generic icon motion or new dependency was introduced. Shared Spinner is static under reduced motion. Scope is local source; the separate hosted instructor site has not been deployed by this task.
+
+Verification:
+
+| Command | Result |
+| --- | --- |
+| Retained browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-review-polish` | 217 assertions passed, including six typography checks |
+| Same browser runtime/executable variables, running `node apps/web/src/features/instructor/tests/review-feedback.browser.mjs` | 63 assertions passed for fast approve/reject, slow responses, failures, retries, confirmed recommendation approve/modify/decline, keyboard and reduced motion |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-instructor-polish-lint.log` |
+| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-instructor-polish-typecheck.log` |
+| `pnpm --filter web build` | Passed including project-reference TypeScript check; existing chunk-size warning; `/tmp/kala-instructor-polish-build.log` |
+| Scoped SELECTs and read-only `cohort.roster` | Confirmed identity split and reproduced enrolled-record metrics |
+| `git diff --check` | Passed |
+
+Synthetic pending-state screenshots in `/tmp/kala-instructor-feedback/` were visually inspected: `skill-approved-pending.png`, `skill-rejected-pending.png` and `recommendation-recording.png`. Browser tests block non-localhost requests and intercept all review APIs; no actual approval, rejection, assignment or model call occurred. Initial fixture-only failures were corrected by installing Vite's refresh preamble, using its default ReactDOM export and canonical TanStack Query module URL, and flushing paused-clock notification timers; final passing tests use real components/hooks.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / header comparison, instructor identity trace and visible review feedback
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: fe6a70b
+Files changed:
+- apps/web/src/features/instructor/components/DecisionCenter.tsx
+- apps/web/src/features/instructor/components/SkillReviewPanel.tsx
+- apps/web/src/features/instructor/hooks/use-instructor.ts
+- apps/web/src/features/instructor/lib/decision-feedback.ts
+- apps/web/src/features/instructor/tests/review-feedback.browser.mjs
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- docs/features/instructor-insights/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-001/008; INSTR-REQ-001/002; WI-22
+Commands run and results (tests, lint, typecheck, build): 217 retained browser assertions and 63 instructor feedback assertions passed; lint/typecheck/build/diff check passed with existing warnings; scoped read-only identity/roster queries reproduced the report.
+Spec changes made: focused instructor feedback amendment before implementation, superseding optimistic recommendation removal and defining minimum visible waiting; broader WI-08 specification remains incomplete.
+Evidence added: this report, cross-route typography comparisons, synthetic feedback tests/screenshots and aggregated identity trace.
+Anything not done, and why: no font change because computed header typography already matches; no hosted identity repair, deployment, real decision, migration, backend edit or push. Human live acceptance remains.
+Risks or questions for the planner: prepare a reviewed human-run canonical identity repair that preserves both histories, reconciles aliases and enrollment and checks dependent tables; integrate the focused instructor spec with WI-08. Separate hosted instructor site needs normal release integration before it shows local UI changes.
+Secrets printed: none (confirmed); existing settings loaded for scoped read-only queries without printing credentials or environment values.

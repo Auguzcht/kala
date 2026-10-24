@@ -249,6 +249,9 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
         </Button>
       </div>
 
+      {review.isError ? (
+        <p role="alert" className="px-5 py-3 text-sm text-destructive">We could not record that review. Try again.</p>
+      ) : null}
       {proposed.length === 0 ? (
         <div className="px-5 py-6">
           <p className="text-[13px] text-muted-foreground">
