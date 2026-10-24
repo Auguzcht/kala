@@ -3,6 +3,7 @@
 Uses committed services/conftest.py isolation. No credentials, dotenv reads,
 real provider requests, or production behavior changes. TUTOR-REQ-001 / WI-01.
 """
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -20,23 +21,25 @@ from app.routers import tutor
 HTTP_FAILURES = (301, 400, 401, 402, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504, 529)
 FALLBACK_STATUSES = {404, 408, 429, 500, 502, 503, 504}
 SAFE_DETAIL = "Kala's model provider is unavailable right now. Please try again."
+SENSITIVE_MARKER = "synthetic-sensitive-provider-text"
 
 
 def _response(status):
-    return httpx.Response(status, request=httpx.Request("POST", "https://provider.test/api"))
+    return httpx.Response(status, request=httpx.Request("POST", "https://provider.test/api"),
+                          text=SENSITIVE_MARKER)
 
 
 @pytest.mark.parametrize("status", (None, *HTTP_FAILURES))
 @pytest.mark.parametrize("stage", ("openrouter_chat", "openrouter_embed", "openai_embed"))
-def test_TUTOR_REQ_001_investigation_provider_failure_metadata(monkeypatch, status, stage):
-    """Status survives conversion even when the budgeted log drops it."""
+def test_AI_REQ_002_provider_failure_metadata(monkeypatch, caplog, status, stage):
+    """Error metadata survives conversion and is emitted without raw data."""
     monkeypatch.setattr(bedrock, "get_settings", lambda: SimpleNamespace(
         openrouter_embed_model="investigation-embedding", openai_embed_model="investigation-embedding",
     ))
     response = _response(status) if status is not None else None
 
     def fail_transport():
-        raise httpx.ReadTimeout("synthetic timeout")
+        raise httpx.ReadTimeout(SENSITIVE_MARKER)
 
     class Client:
         def __enter__(self):
@@ -59,14 +62,14 @@ def test_TUTOR_REQ_001_investigation_provider_failure_metadata(monkeypatch, stat
 
         monkeypatch.setattr(bedrock, "_openrouter_post", post)
         operation = lambda: bedrock._openrouter_converse(
-            model_id="investigation-chat", system="system", messages=[], max_tokens=2048, budget=budget,
+            model_id="investigation-chat", system=SENSITIVE_MARKER, messages=[], max_tokens=2048, budget=budget,
         )
         expected_model = "investigation-chat"
     else:
         provider = stage.removesuffix("_embed")
         monkeypatch.setattr(bedrock, f"_{provider}_client", lambda **kwargs: Client())
         operation = lambda: getattr(bedrock, f"_{provider}_embed")(
-            "synthetic question", input_type="search_query", budget=budget,
+            SENSITIVE_MARKER, input_type="search_query", budget=budget,
         )
         expected_model = "investigation-embedding"
 
@@ -77,6 +80,18 @@ def test_TUTOR_REQ_001_investigation_provider_failure_metadata(monkeypatch, stat
     assert caught.value.model_id == expected_model
     assert caught.value.model_not_found == (status == 404)
     assert str(caught.value) == SAFE_DETAIL
+    diagnostics = [record for record in caplog.records if record.getMessage().startswith("tutor_provider_error ")]
+    assert len(diagnostics) == 1
+    assert diagnostics[0].levelname == "ERROR"
+    assert json.loads(diagnostics[0].getMessage().removeprefix("tutor_provider_error ")) == {
+        "stage": "chat" if stage == "openrouter_chat" else "embed",
+        "provider": caught.value.provider,
+        "model": expected_model,
+        "http_status": status,
+        "request_id": budget.request_id,
+        "error_code": {401: "unauthorized", 402: "payment_required", 403: "forbidden"}.get(status, "provider_error"),
+    }
+    assert SENSITIVE_MARKER not in caplog.text
 
 
 @pytest.mark.parametrize("status", (None, *HTTP_FAILURES))

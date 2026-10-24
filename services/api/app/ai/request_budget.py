@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from functools import partial
 from time import monotonic
+from uuid import uuid4
 
 import anyio
 
@@ -29,6 +30,8 @@ class RequestBudget:
         self.fallback_used = False
         self.outcome = "error"
         self.closed = False
+        # Internal correlation only; never a client, student or provider ID.
+        self.request_id = str(uuid4())
 
     def remaining(self) -> float:
         return max(0.0, self.deadline - monotonic()) if not self.closed else 0.0

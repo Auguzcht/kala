@@ -1,6 +1,6 @@
 # APPROVAL-05 Lane X: tutor provider investigation
 
-Date: 2026-10-25 (Asia/Manila). Status: `done-awaiting-confirmation` for this investigation submission; production recovery remains unverified. Work item: WI-01. Related requirements: TUTOR-REQ-001 and AI-REQ-001. No intended behavior or production code changed.
+Date: 2026-10-25 (Asia/Manila). Status: `done-awaiting-confirmation` for coordinator review; production recovery remains unverified. Work item: WI-01. Related requirements: TUTOR-REQ-001, AI-REQ-001 and AI-REQ-002. The initial investigation changed no production code. The subsequent approved diagnostics implementation and its separate validation are appended below.
 
 ## Finding and limits
 
@@ -15,7 +15,7 @@ One recorded tutor request timed out in chat and is consistent with the applicat
 - Read the complete attachment APPROVAL-05 rev 2, AGENTS.md, docs/README.md, the relevant local CLAUDE.md guides, the tutor/AI platform/Study specs, and APPROVAL-01 through APPROVAL-04. Read the committed APPROVAL-05 amendment via `git show main:docs/work/handover-2026/approval-05.md` after coordinator notification. The practice-tests spec is absent at the audited base; no requirements were invented from that missing file.
 - Branch: `codex/tutor-provider-502`; worktree: `/Users/fred/.codex/worktrees/9a3f/kala`; source base: `4f3ec29d3f827a1db92e90c4f395947d37744479`. `git merge-base --is-ancestor cab26de 4f3ec29` succeeded. The only diff from `cab26de` is the initiative README and deployment-evidence document. The already-created branch was selected after confirming its ref equals that base.
 - Initial work was source-only. Fred subsequently authorized read-only CLI collection, now recorded in APPROVAL-05 section 6 on main at `0e7602e`. That supersedes the original Fred-only CloudWatch collection assignment. No production implementation or rebase onto a future spec commit is implied.
-- Only this evidence file and the uniquely named new test file are written. No overlap with B/U/coordinator-owned files was needed. No existing test, tutor.py, spec, migration, infrastructure, dev server, or other worktree was edited.
+- Initial submission wrote only this evidence file and the uniquely named new investigation test file. The later approved implementation adds only the explicitly released paths and a second uniquely named new test file, listed below. No overlap with B/U/coordinator-owned files was needed. No pre-existing test, tutor.py, spec, migration, infrastructure, dev server, or other worktree was edited.
 - CLI JSON was captured inside local Python subprocesses and parsed in memory. Raw messages were never printed or saved. Initial output was limited to timestamps, classified event/outcome/stage, opaque Lambda request IDs, model/provider names, HTTP status, timing scalars, counts, and selected non-secret Lambda metadata. The initial investigation read no secret payload. The subsequent key-status exception below did read the secret payload into process memory; this document does not claim otherwise. No dotenv read, hosted write, deploy, push, migration, key rotation, or live generation/embedding call occurred.
 
 ## Sanitized CloudWatch evidence
@@ -68,7 +68,7 @@ This snapshot does **not** prove model capacity, successful generation, the fall
 
 ## Exact source error mapping and fallback policy
 
-Source anchors: [bedrock.py](../../../../services/api/app/ai/bedrock.py) (`converse` at 68, `_can_fallback` at 149, embedding dispatch at 159, Bedrock chat at 195, Bedrock embedding at 222, OpenRouter chat at 266, OpenRouter embedding at 480, OpenAI embedding at 589); [errors.py](../../../../services/api/app/ai/errors.py); [main.py](../../../../services/api/app/main.py) (handlers at 52 and 60).
+Source anchors at the initial audited revision `4f3ec29`: [bedrock.py](../../../../services/api/app/ai/bedrock.py) (`converse` at 68, `_can_fallback` at 149, embedding dispatch at 159, Bedrock chat at 195, Bedrock embedding at 222, OpenRouter chat at 266, OpenRouter embedding at 480, OpenAI embedding at 589); [errors.py](../../../../services/api/app/ai/errors.py); [main.py](../../../../services/api/app/main.py) (handlers at 52 and 60). Line numbers here describe that initial snapshot; later diagnostics shift the provider-file lines.
 
 | Provider stage | Conversion to ModelUnavailableError | Application response / fallback |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ Separate from model fallback, OpenRouter chat has one capability downgrade: a st
 
 ## Logging defect
 
-Lane T's budgeted paths avoid logging raw provider error bodies, but discard diagnosis fields. This is a confirmed observability defect, not yet an approved implementation change.
+At the initial audited revision, Lane T's budgeted paths avoid logging raw provider error bodies, but discard diagnosis fields. This is the confirmed observability defect addressed by the subsequently approved implementation below. The table records pre-fix behavior.
 
 | Emitted application event | Provider | Model | HTTP status | Failure stage | Explicit application request_id |
 | --- | --- | --- | --- | --- | --- |
@@ -171,15 +171,15 @@ CloudWatch CLI collection is complete for the authorized window; Fred does not n
 
 If evidence confirms key/account billing configuration, the recovery is operational: Fred updates the setting in `kala/app` or corrects account funding/quota as indicated, with no application-code deploy required; this lane neither performs nor claims that recovery. The observed 429 alone does not justify rotation or adding credit. A fallback-model change is a separate explicit config decision for Fred.
 
-Before any production implementation, coordinator approval and a committed spec are required. Suggested **AI-REQ-002: Provider failure diagnostics for tutor**, status `planned`:
+Initial proposal, subsequently accepted in the coordinator's spec commit: **AI-REQ-002: Provider failure diagnostics for tutor**, status `planned` at spec release:
 
 > Every failed tutor embedding/chat provider attempt records an error event with stage (`embed` or `chat`), provider, attempted model, HTTP status (nullable for transport failures), and opaque request_id. Log neither request/response bodies, credentials, tokens nor identity data. Preserve the generic student-safe 502 contract for 401, 402 and 403; classify them distinctly at error level without adding fallback. Keep the current fallback allowlist and TUTOR-REQ-001 deadline behavior. Correlate primary and fallback attempts without losing the fallback failure's metadata.
 
 Suggested acceptance: mocked primary/fallback and embed failures retain all fields for 401/402/403/429/503 and transport exceptions; no sensitive marker reaches emitted events; 401/402/403 do not retry; 503 tutor_timeout and successful-answer persistence behavior stay unchanged; default non-tutor behavior remains unchanged. Suggested AI-platform change-log row: `2026-10-25 | Specify privacy-safe tutor provider failure diagnostics before implementation | APPROVAL-05 rev 2 and confirmed CLI evidence | AI-REQ-002; TUTOR-REQ-001 compatibility`.
 
-Coordinator subsequently approved this narrow logging/error-handling direction in principle, after a coordinator spec commit; that commit has not been released to this lane. Keep fallback policy, model selection, timeouts, and retry behavior unchanged. This remains proposed spec text, not a spec edit or permission to implement before that gate. Coordinator owns both specs. No new Tutor REQ number is claimed, avoiding B/U's allocations.
+Coordinator subsequently approved this narrow logging/error-handling direction and then released implementation against spec commit `11d69de`. The lane rebased onto that named commit before editing production code. Fallback policy, model selection, timeouts, and retry behavior remain unchanged. Coordinator owns both specs; this lane did not edit them. No new Tutor REQ number is claimed, avoiding B/U's allocations.
 
-Proposed additional path grant for that later fix: **services/api/app/ai/request_budget.py**, only to initialize one opaque random UUID per RequestBudget and expose it to existing budgeted provider calls. This gives embedding, primary chat and fallback chat the same internal request_id without student data, client-supplied headers, a middleware change, or editing tutor.py. CloudWatch's existing @requestId continues to link those events to the Lambda invocation; the generated ID must be documented as an internal correlation ID, not an upstream provider ID. Acceptance should assert stable IDs across all attempts of one request and distinct IDs across requests. Non-budgeted calls retain existing behavior. This path grant is requested, not taken. If an implementation instead needs errors.py or another unowned file, obtain a separate grant before editing. tutor.py remains off limits to X. Rebase onto the coordinator's named spec commit before approved production implementation.
+Coordinator granted the additional path **services/api/app/ai/request_budget.py**, only to initialize one opaque random UUID per RequestBudget and expose it to existing budgeted provider calls. This gives embedding, primary chat and fallback chat the same internal request_id without student data, client-supplied headers, a middleware change, or editing tutor.py. CloudWatch's existing @requestId continues to link those events to the Lambda invocation; the generated ID is an internal correlation ID, not an upstream provider ID. Tests assert stable IDs across stages/attempts and distinct IDs across requests. Non-budgeted calls retain existing behavior. No errors.py or other helper-path grant was needed. tutor.py remains off limits to X.
 
 ## Offline verification
 
@@ -189,6 +189,24 @@ New test file: [test_provider_investigation_approval05_lane_x.py](../../../../se
 - `uv run ruff check --fix tests/test_provider_investigation_approval05_lane_x.py`: fixed only new-file import spacing; a prior dict-construction lint finding was corrected in that file. Final `uv run ruff check tests/test_provider_investigation_approval05_lane_x.py`: **passed**.
 - Final full API suite with all 69 new test cases: `cd services/api && uv run pytest`: **500 passed**, 30 dependency deprecation warnings, 27.82 seconds.
 - Final new-file whitespace, link-target and scope review is performed before the investigation commit; only the two owned files are included.
-- Worker, web lint/typecheck/build and browser checks are not run: no production/web/worker code changed, and live provider recovery is unverified. No integration, merge, push or deploy is claimed.
+- Worker, web lint/typecheck/build and browser checks were not run for the initial investigation: no production/web/worker code changed in that submission. Later diagnostics verification is recorded below. No integration, merge, push or deploy is claimed.
+
+## Approved AI-REQ-002 diagnostics implementation
+
+Implementation base: coordinator spec commit **11d69de**, containing the accepted AI-REQ-002 and WI-01 follow-up. Both investigation commits and the key-status evidence were preserved through the required rebase. Ownership release explicitly grants bedrock.py, optional router.py/main.py changes only as needed, and request_budget.py for correlation. No router.py or main.py edit proved necessary.
+
+- **request_budget.py:** initialize one internal UUIDv4 per budget. The monotonic start, deadline, reserve, timeout calculations, fallback flags, cancellation and persistence semantics are unchanged.
+- **bedrock.py:** observe failures at the five provider leaf functions (OpenRouter chat, both HTTP embeddings, Bedrock chat and embedding) only when a budget is supplied. Emit an ERROR event with JSON metadata: `stage`, `provider`, `model`, `http_status`, `request_id`, and a fixed `error_code`. HTTP 401/402/403 classify respectively as `unauthorized`, `payment_required`, and `forbidden`. Unavailable status is JSON null. Known Bedrock SDK status metadata can be extracted safely without rendering SDK messages.
+- The observer re-raises the existing exception. Previously converted errors stay converted; previously unwrapped SDK, JSON and response-shape errors stay unwrapped. TutorTimeout bypasses provider-error diagnostics and preserves the existing deadline path. No student response changes or additional retries are introduced.
+- The fallback's own leaf call emits its attempted model and failure status under the same budget ID as the primary. Old generic budgeted error lines are replaced. Non-budgeted calls bypass the observer and retain their existing behavior, including their existing logging; broader logging cleanup is outside this approved scope.
+- Added [test_provider_diagnostics_approval05_lane_x.py](../../../../services/api/tests/test_provider_diagnostics_approval05_lane_x.py) and extended only X's own new investigation test. These cover sensitive-marker exclusion from body/exception/prompt, HTTP and transport fields, distinct auth/payment categories, primary/fallback correlation and statuses, stable/different UUIDs, SDK status metadata, preserved unwrapped exceptions, preserved TutorTimeout and non-budgeted diagnostics. Existing fallback/deadline/persistence regressions are unchanged.
+
+Validation after implementation:
+
+- `cd services/api && uv run ruff check app/ai/bedrock.py app/ai/request_budget.py tests/test_provider_investigation_approval05_lane_x.py tests/test_provider_diagnostics_approval05_lane_x.py`: **passed**.
+- Focused provider, request-budget and tutor suite including both new X files: **139 passed**, two dependency deprecation warnings, 26.70 seconds.
+- `cd services/api && uv run pytest`: **515 passed**, 30 dependency deprecation warnings, 27.66 seconds. This includes all 431 pre-existing cases plus 69 X investigation cases and 15 X diagnostics cases.
+- `git diff --check`: **passed**. Evidence link-target check: **14 local targets valid**. Final scope review includes exactly this evidence file, bedrock.py, request_budget.py, and the two new X test files. The production diff changes no fallback decision, model setting, HTTP client timeout, retry configuration, or application error handler.
+- Web, worker, browser, hosted generation and deployment checks are not run: the change is confined to API diagnostic logging/correlation, and live generation calls remain unauthorized. Logging verification does not demonstrate provider recovery.
 
 Secrets printed: **none**. Raw production/provider messages emitted or persisted: **none**.
