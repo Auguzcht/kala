@@ -44,12 +44,12 @@ export function StudyStream({
       )}
     >
       <Conversation>
-        <ConversationContent className="gap-5 py-6">
+        <ConversationContent className="gap-5 pt-6 pb-24">
           <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5">
             {children}
           </div>
         </ConversationContent>
-        <ConversationScrollButton />
+        <ConversationScrollButton className="bottom-20" />
       </Conversation>
     </div>
   );

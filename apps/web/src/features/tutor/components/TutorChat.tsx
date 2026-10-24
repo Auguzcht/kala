@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { TutorComposer } from "@/features/tutor/components/TutorComposer";
 import { TutorWelcome } from "@/features/tutor/components/TutorWelcome";
-import { pickGreeting, starterSuggestions, validateTutorFile, createConversationResolver } from "@/features/tutor/lib/presentation";
-import { Suggestion } from "@/components/ai-elements/suggestion";
+import { pickGreeting, validateTutorFile, createConversationResolver } from "@/features/tutor/lib/presentation";
+import { dockLayout } from "@/components/ai-elements/dock-layout";
 import { useCourse } from "@/features/courses";
-import { useTwin } from "@/features/twin";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -85,7 +84,6 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const [hasTyped, setHasTyped] = useState(false);
   const [greetingDate] = useState(() => new Date());
   const course = useCourse(courseId);
-  const twin = useTwin(courseId);
   const resolveConversation = useRef(createConversationResolver());
   const epoch = useRef(0);
   const [waitingLong, setWaitingLong] = useState(false);
@@ -255,12 +253,10 @@ export function TutorChat({ courseId }: { courseId: string }) {
     return () => window.clearTimeout(timer);
   }, [asking, activeId]);
   const empty = !active.isLoading && !active.isError && messages.length === 0 && localTurns.length === 0 && !pendingTurn;
-  const suggestions = starterSuggestions(twin.data?.skills ?? []);
 
   return (
     <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
-      {active.data?.title ? <div className="shrink-0 border-b px-4 py-3 font-display text-sm font-medium sm:px-6">{active.data.title}</div> : null}
-      <div className={cn("flex min-h-0 flex-1 flex-col", empty && "justify-center overflow-y-auto py-8")}>
+      <div className={cn("flex min-h-0 flex-1 flex-col", empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
       {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
         {activeId && active.isLoading ? <Shimmer>Loading conversation…</Shimmer> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
@@ -321,13 +317,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
           </div>
         ) : null}
       </StudyStream>}
-      <div className={cn("shrink-0 px-4 pb-4 pt-3 sm:px-6", !empty && "border-t bg-background")}>
-        <div className="mx-auto w-full max-w-[800px]">
+      <div className={cn("shrink-0", empty ? "px-4" : dockLayout.footer)}>
+        <div className={cn("mx-auto w-full max-w-[800px]", dockLayout.content)}>
           <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} dragging={dragging} onDragChange={setDragging}
             attachments={active.data?.attachments ?? []} onFiles={(files) => void handleFiles(files)}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
             onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />
-          {empty && suggestions.length ? <div className="mt-4 flex flex-wrap justify-center gap-2">{suggestions.map((suggestion) => <Suggestion key={suggestion} suggestion={suggestion} className="h-auto max-w-full whitespace-normal px-3 py-2 text-left text-xs" disabled={uploading || send.isPending} onClick={(question) => { setHasTyped(true); askQuestion(question); }} />)}</div> : null}
         </div>
       </div>
       </div>

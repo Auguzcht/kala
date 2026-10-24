@@ -10,7 +10,7 @@ export function TutorWelcome({
   const reducedMotion = useReducedMotion();
   const animate = idle && !reducedMotion;
   return (
-    <div className="mx-auto mb-6 flex max-w-xl flex-col items-center gap-5 px-4 text-center">
+    <div className="mx-auto mb-8 flex self-end max-w-xl flex-col items-center gap-5 px-4 text-center">
       <motion.img
         src="/Kala-Logo.svg"
         alt="Kala"

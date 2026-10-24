@@ -390,10 +390,12 @@ try {
       "TUTOR-REQ-004 responsive Tutor offset",
     );
     check(
-      await page
-        .getByRole("button", { name: "Explain Cloud storage", exact: true })
-        .isVisible(),
-      "TUTOR-REQ-008 course starter",
+      (await page
+        .getByRole("button", {
+          name: /^(Explain|Quiz me on|Help me practice) /,
+        })
+        .count()) === 0,
+      "WI-22 long new-chat starters removed",
     );
     check(
       (await page.locator("[data-study-surface] img[alt=Kala]").count()) === 1,
@@ -406,6 +408,20 @@ try {
         })
         .count()) === 0,
       "WI-22 requested footer copy removed",
+    );
+    check(
+      await input.evaluate((el) => {
+        const box = el
+            .closest("[data-slot=input-group]")
+            .getBoundingClientRect(),
+          surface = el.closest("[data-study-surface]").getBoundingClientRect();
+        return (
+          Math.abs(
+            box.top + box.height / 2 - (surface.top + surface.height / 2),
+          ) <= 1
+        );
+      }),
+      `WI-22 new-chat composer centered in canvas at ${width}`,
     );
     const sendButton = page.getByRole("button", { name: "Send message" });
     check(
@@ -507,6 +523,31 @@ try {
         ),
       "WI-22 shared user-bubble rounding restored",
     );
+    check(
+      await input.evaluate((el) => {
+        const group = el
+            .closest("[data-slot=input-group]")
+            .getBoundingClientRect(),
+          surface = el.closest("[data-study-surface]"),
+          stream = surface.querySelector("[role=log]").getBoundingClientRect();
+        return (
+          stream.bottom > group.top &&
+          Math.abs(
+            surface.getBoundingClientRect().bottom - group.bottom - 16,
+          ) <= 1 &&
+          getComputedStyle(surface.firstElementChild).borderBottomWidth ===
+            "0px"
+        );
+      }),
+      "WI-22 seamless floating Tutor dock overlaps stream with 16px bottom inset",
+    );
+    check(
+      (await page
+        .locator("main")
+        .getByText("New chat", { exact: true })
+        .count()) === 0,
+      "WI-22 redundant conversation title header removed",
+    );
     await screenshot(page, "tutor-conversation", width);
     check(
       state.creates === 1 && state.asks === 1,
@@ -544,7 +585,12 @@ try {
     check(errors.length === 0, "no browser exceptions");
     await context.close();
 
-    const managed = await fixture(width);
+    const managed = await fixture(width, { reducedMotion: "no-preference" });
+    managed.state.rows.push({
+      ...row("older"),
+      title: "Alpha review",
+      updatedAt: "2026-10-23T10:00:00Z",
+    });
     await managed.page.goto(
       "http://localhost:5173/course/tutor?conversation=existing",
     );
@@ -594,6 +640,109 @@ try {
       ),
       "WI-22 New chat gains hover fill",
     );
+    const recentTitle = await history
+      .getByRole("button", { name: "Understanding cloud storage", exact: true })
+      .boundingBox();
+    check(
+      await newChat.evaluate(
+        (el, left) =>
+          Math.abs(
+            el.getBoundingClientRect().left +
+              parseFloat(getComputedStyle(el).paddingLeft) -
+              left -
+              4,
+          ) <= 1,
+        recentTitle.x,
+      ),
+      "WI-22 new-chat icon aligns with recent title inset",
+    );
+    const sortTrigger = history.getByRole("button", {
+      name: "Sort recent chats",
+    });
+    await sortTrigger.focus();
+    await sortTrigger.press("Shift+Tab");
+    await managed.page.keyboard.press("Tab");
+    const sortBackground = await sortTrigger.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    await sortTrigger.hover();
+    check(
+      await sortTrigger.evaluate(
+        (el, bg) =>
+          getComputedStyle(el).backgroundColor === bg &&
+          el.querySelector("svg.lucide-list-filter") &&
+          getComputedStyle(el).borderTopWidth === "0px" &&
+          parseFloat(getComputedStyle(el).borderRadius) >= 8 &&
+          getComputedStyle(el).getPropertyValue("--tw-ring-inset") === "inset",
+        sortBackground,
+      ),
+      "WI-22 dedicated sort icon stays plain on hover",
+    );
+    await screenshot(managed.page, "tutor-sort-focus", width);
+    const sortTriggerBox = await sortTrigger.boundingBox();
+    await history.getByRole("button", { name: "Sort recent chats" }).click();
+    check(
+      await managed.page.getByRole("menu").evaluate(
+        (el, bounds) => {
+          const box = el.getBoundingClientRect();
+          return (
+            getComputedStyle(el).animationName === "none" &&
+            (bounds.width >= 1024
+              ? Math.abs(box.left - bounds.left) <= 1
+              : box.left >= 8 && box.right <= bounds.width - 8)
+          );
+        },
+        { width, left: sortTriggerBox.x },
+      ),
+      "WI-22 sort menu opens immediately toward right, bounded on mobile",
+    );
+    check(
+      await managed.page
+        .getByRole("menuitemradio")
+        .evaluateAll((items) =>
+          items.every((el) => el.querySelector("[data-tutor-sort-icon] svg")),
+        ),
+      "WI-22 sort choices include Lucide icons",
+    );
+    await screenshot(managed.page, "tutor-sort", width);
+    await managed.page
+      .getByRole("menuitemradio", { name: "Title A–Z" })
+      .click();
+    await history
+      .getByRole("button", { name: "Alpha review", exact: true })
+      .waitFor();
+    const recentOrder = await history
+      .getByRole("button")
+      .evaluateAll((buttons) =>
+        buttons.map(
+          (el) => el.getAttribute("aria-label") ?? el.textContent.trim(),
+        ),
+      );
+    check(
+      recentOrder.indexOf("Alpha review") <
+        recentOrder.indexOf("Understanding cloud storage"),
+      "WI-22 title sorting reorders recent rows",
+    );
+    await history.getByRole("button", { name: "Sort recent chats" }).click();
+    check(
+      (await managed.page
+        .getByRole("menuitemradio", { name: "Title A–Z" })
+        .getAttribute("aria-checked")) === "true",
+      "WI-22 local Recents sorting retains selection",
+    );
+    await managed.page.keyboard.press("Escape");
+    check(
+      await managed.page
+        .locator("[data-slot=dropdown-menu-content]")
+        .evaluateAll((elements) =>
+          elements.every((el) => getComputedStyle(el).animationName === "none"),
+        ),
+      "WI-22 popup exit has no animation",
+    );
+    check(
+      managed.state.patches === 0,
+      "WI-22 sorting makes no hosted metadata writes",
+    );
     const recentHeading = history.getByRole("button", { name: /^Recents/ });
     const headingBackground = await recentHeading.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
@@ -607,10 +756,48 @@ try {
       ),
       "WI-22 Recents heading keeps quiet hover",
     );
+    const actionTriggerBox = await history
+      .getByRole("button", { name: "Actions for Understanding cloud storage" })
+      .boundingBox();
     await history
       .getByRole("button", { name: "Actions for Understanding cloud storage" })
       .click();
     await managed.page.getByRole("menuitem", { name: "Rename" }).waitFor();
+    await managed.page.getByRole("menuitem", { name: "Rename" }).hover();
+    check(
+      await managed.page
+        .locator(
+          'button[aria-label="Actions for Understanding cloud storage"][data-state=open]',
+        )
+        .evaluate((el) => getComputedStyle(el.parentElement).opacity === "1"),
+      "WI-22 row actions remain visible while popup is open",
+    );
+    check(
+      await managed.page.getByRole("menu").evaluate(
+        (el, bounds) => {
+          const box = el.getBoundingClientRect();
+          return (
+            getComputedStyle(el).animationName === "none" &&
+            (bounds.width >= 1024
+              ? Math.abs(box.left - bounds.left) <= 1
+              : box.left >= 8 && box.right <= bounds.width - 8)
+          );
+        },
+        { width, left: actionTriggerBox.x },
+      ),
+      "WI-22 actions menu opens immediately toward right, bounded on mobile",
+    );
+    check(
+      await managed.page.getByRole("menu").evaluate((el) => {
+        const css = getComputedStyle(el);
+        return (
+          parseFloat(css.borderRadius) >= 12 &&
+          parseFloat(css.paddingTop) >= 8 &&
+          el.querySelector("[role=separator]")
+        );
+      }),
+      "WI-22 action menu has rounded corners, padding and destructive separator",
+    );
     await screenshot(managed.page, "tutor-menu", width);
     await managed.page.getByRole("menuitem", { name: "Rename" }).click();
     await history
@@ -623,6 +810,33 @@ try {
     check(
       managed.state.patches === 1,
       "TUTOR-REQ-005 rename from list capability despite detail omission",
+    );
+    check(
+      await history.getByRole("button", { name: "Pinned 1" }).evaluate((el) => {
+        const recents = [
+          ...el.closest("[class*=overflow-y-auto]").querySelectorAll("button"),
+        ].find((x) => /^Recents/.test(x.textContent.trim()));
+        return (
+          el.getBoundingClientRect().top < recents.getBoundingClientRect().top
+        );
+      }),
+      "WI-22 pinned category precedes Recents",
+    );
+    const directPin = history.getByRole("button", {
+      name: "Pin Storage review",
+      exact: true,
+    });
+    check(
+      await directPin.evaluate((el) => {
+        const previous = el.previousElementSibling;
+        return (
+          previous?.getAttribute("aria-label") ===
+            "Actions for Storage review" &&
+          el.getBoundingClientRect().left >
+            previous.getBoundingClientRect().left
+        );
+      }),
+      "WI-22 direct pin follows more-options control",
     );
     await history
       .getByRole("button", { name: "Pin Storage review", exact: true })
@@ -717,6 +931,66 @@ try {
   check(ariaWarnings.length === 0, "WI-22 no hidden-focus console warning");
   await focus.context.close();
 
+  const marqueeName =
+    "Understanding cloud storage, networking, security and infrastructure trade-offs";
+  for (const reducedMotion of ["no-preference", "reduce"]) {
+    const titleFixture = await fixture(1440, { reducedMotion });
+    titleFixture.state.rows = [{ ...row("existing"), title: marqueeName }];
+    await titleFixture.page.goto(
+      "http://localhost:5173/course/tutor?conversation=existing",
+    );
+    const titleButton = titleFixture.page.getByRole("button", {
+      name: marqueeName,
+      exact: true,
+    });
+    await titleButton.waitFor();
+    await titleButton.hover();
+    await titleFixture.page.clock.runFor(2000);
+    const titleSpan = titleButton.locator("[data-tutor-title]");
+    check(
+      await titleSpan.evaluate((el, reduced) => {
+        const css = getComputedStyle(el),
+          x =
+            css.transform === "none"
+              ? 0
+              : new DOMMatrixReadOnly(css.transform).m41;
+        return reduced
+          ? css.visibility === "hidden" && x === 0
+          : css.visibility === "visible" && x < -1;
+      }, reducedMotion === "reduce"),
+      "WI-22 overflow title reveals only with allowed motion",
+    );
+    await titleFixture.page.clock.runFor(16000);
+    check(
+      await titleSpan.evaluate(
+        (el) => getComputedStyle(el).visibility === "hidden",
+      ),
+      "WI-22 title completes one trip and returns to ellipsis",
+    );
+    const newChatButton = titleFixture.page.getByRole("button", {
+      name: "New chat",
+      exact: true,
+    });
+    await newChatButton.hover({ position: { x: 100, y: 20 } });
+    await titleFixture.page.clock.runFor(150);
+    check(
+      await newChatButton
+        .locator("[data-tutor-action-icon]")
+        .evaluate((el, reduced) => {
+          const moving = [...el.querySelectorAll('svg, svg *')].some(node => {
+            const transform = getComputedStyle(node).transform;
+            return transform !== 'none' && !new DOMMatrixReadOnly(transform).isIdentity;
+          });
+          return reduced ? !moving : moving;
+        }, reducedMotion === "reduce"),
+      "WI-22 whole button drives Lucide feedback and honors reduced motion",
+    );
+    check(
+      titleFixture.errors.length === 0,
+      "WI-22 title/icon feedback has no browser exceptions",
+    );
+    await titleFixture.context.close();
+  }
   const primitive = await fixture(1440, { empty: true });
   await primitive.context.route("**/__lane_u_prompt_fixture", (route) =>
     route.fulfill({
@@ -729,11 +1003,18 @@ try {
     import React from '/node_modules/.vite/deps/react.js';
     import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
     import {PromptInput,PromptInputTextarea,PromptInputSubmit,usePromptInputAttachments} from '/src/components/ai-elements/prompt-input.tsx';
+    import {ComposeDock} from '/src/components/study/ComposeDock.tsx';
+    import {TutorComposer} from '/src/features/tutor/components/TutorComposer.tsx';
+    import {StudySurface} from '/src/components/study/StudySurface.tsx';
+    import {StudyStream} from '/src/components/study/StudyStream.tsx';
     window.fixtureResult={external:0,submitted:0};
     function Probe(){const a=usePromptInputAttachments();return React.createElement('span',{'data-file-count':a.files.length},a.files.length)}
-    function App(){const target=React.useRef(null);return React.createElement('main',null,
+    function FloatingStudy(){return React.createElement('section',{id:'floating-study',style:{height:400}},React.createElement(StudySurface,{dock:React.createElement(ComposeDock,{onAsk:()=>{},placeholder:'Floating dock'})},React.createElement(StudyStream,null,...Array.from({length:30},(_,i)=>React.createElement('p',{key:i},'Synthetic study explanation '+i)),React.createElement('button',{id:'last-study-action'},'Last study action'))))}
+    function App(){const target=React.useRef(null);const [files,setFiles]=React.useState([]);window.setFixtureFiles=setFiles;return React.createElement('main',null,
+      React.createElement('section',{id:'study-composer'},React.createElement(ComposeDock,{onAsk:()=>{},placeholder:'Shared dock'})),
+      React.createElement('section',{id:'tutor-composer'},React.createElement(TutorComposer,{dropTarget:target,dragging:false,onDragChange:()=>{},attachments:files,onFiles:()=>{},onRemove:()=>setFiles([]),onAsk:()=>{},onTyping:()=>{},pending:false,uploading:false,removingId:null})),
       React.createElement('div',{id:'default-outer'},React.createElement(PromptInput,{id:'default-prompt',onSubmit:m=>{window.fixtureResult.submitted=m.files.length}},React.createElement(Probe),React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),
-      React.createElement('div',{id:'opt-in-outer',ref:target},React.createElement(PromptInput,{id:'opt-in-prompt',dropTarget:target,onFilesSelected:files=>{window.fixtureResult.external+=files.length},onSubmit:()=>{}},React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))))}
+      React.createElement('div',{id:'opt-in-outer',ref:target},React.createElement(PromptInput,{id:'opt-in-prompt',dropTarget:target,onFilesSelected:files=>{window.fixtureResult.external+=files.length},onSubmit:()=>{}},React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),React.createElement(FloatingStudy))}
     ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
     </script></body></html>`,
     }),
@@ -747,6 +1028,78 @@ try {
         "Primitive fixture failed: " + primitive.errors.join("; "),
       );
     });
+  for (const width of [1440, 375]) {
+    await primitive.page.setViewportSize({ width, height: 900 });
+    const metrics = await primitive.page.evaluate(() =>
+      ["study-composer", "tutor-composer"].map((id) => {
+        const root = document.getElementById(id),
+          textarea = root.querySelector("textarea"),
+          group = root.querySelector("[data-slot=input-group]");
+        const input = textarea.getBoundingClientRect(),
+          box = group.getBoundingClientRect(),
+          css = getComputedStyle(textarea);
+        const lineCenter =
+          input.top +
+          parseFloat(css.paddingTop) +
+          parseFloat(css.lineHeight) / 2;
+        return {
+          height: box.height,
+          radius: getComputedStyle(group).borderRadius,
+          lineHeight: css.lineHeight,
+          offset: Math.abs(lineCenter - (box.top + box.height / 2)),
+        };
+      }),
+    );
+    check(
+      metrics.every((m) => m.height === 48 && m.offset <= 1),
+      `WI-22 vertically centered 48px composers at ${width}`,
+    );
+    check(
+      metrics[0].radius === metrics[1].radius &&
+        metrics[0].lineHeight === metrics[1].lineHeight,
+      `WI-22 shared dock radius and typography at ${width}`,
+    );
+    check(
+      await primitive.page.locator("#tutor-composer").evaluate((el) => {
+        const button = el.querySelector('button[aria-label="Attach a file"]'),
+          rect = button.getBoundingClientRect();
+        return (
+          rect.right <
+            el.querySelector("textarea").getBoundingClientRect().left + 1 &&
+          rect.width === rect.height &&
+          parseFloat(getComputedStyle(button).borderRadius) >= rect.height / 2
+        );
+      }),
+      `WI-22 leading circular attachment at ${width}`,
+    );
+  }
+  await primitive.page.evaluate(() =>
+    window.setFixtureFiles([
+      { id: "fixture-file", filename: "notes.txt", status: "ready" },
+    ]),
+  );
+  await primitive.page
+    .getByRole("button", { name: "Remove notes.txt" })
+    .waitFor();
+  check(
+    await primitive.page
+      .locator("#tutor-composer [data-slot=input-group]")
+      .evaluate(
+        (el) =>
+          el.getBoundingClientRect().height > 48 &&
+          parseFloat(getComputedStyle(el).borderRadius) === 12,
+      ),
+    "WI-22 attached input expands with token radius",
+  );
+  await primitive.page
+    .getByRole("button", { name: "Remove notes.txt" })
+    .click();
+  await primitive.page.waitForFunction(
+    () =>
+      document
+        .querySelector("#tutor-composer [data-slot=input-group]")
+        .getBoundingClientRect().height === 48,
+  );
   const transfer = await primitive.page.evaluateHandle(() => {
     const data = new DataTransfer();
     data.items.add(
@@ -788,6 +1141,29 @@ try {
   check(
     primitive.errors.length === 0,
     "shared primitive fixture has no exceptions",
+  );
+  await primitive.page.locator("#last-study-action").evaluate((el) => {
+    let parent = el.parentElement;
+    while (
+      parent &&
+      !["auto", "scroll"].includes(getComputedStyle(parent).overflowY)
+    )
+      parent = parent.parentElement;
+    parent.scrollTop = parent.scrollHeight;
+  });
+  check(
+    await primitive.page.locator("#last-study-action").evaluate((el) => {
+      const surface = el.closest("[data-study-surface]"),
+        input = surface
+          .querySelector("[data-slot=input-group]")
+          .getBoundingClientRect(),
+        stream = surface.querySelector("[role=log]").getBoundingClientRect();
+      return (
+        el.getBoundingClientRect().bottom <= input.top &&
+        stream.bottom > input.top
+      );
+    }),
+    "WI-22 shared floating Study dock preserves final-action clearance",
   );
   await primitive.context.close();
 

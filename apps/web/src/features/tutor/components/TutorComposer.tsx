@@ -1,5 +1,5 @@
 import { useState, type RefObject } from "react";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import {
   PromptInput,
   PromptInputButton,
@@ -9,12 +9,18 @@ import {
   PromptInputSubmit,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
+import { dockLayout } from "@/components/ai-elements/dock-layout";
+import { AttachFileIcon } from "@/features/tutor/components/icons/attach-file";
+import { CornerDownLeftIcon } from "@/features/tutor/components/icons/corner-down-left";
+import { XIcon } from "@/components/ui/x";
+import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { TutorAttachment } from "@/features/tutor/schema/tutor.schema";
 import { dockShape } from "@/features/tutor/lib/presentation";
 
 function AttachButton({ disabled }: { disabled: boolean }) {
+  const hover = useTutorIcon();
   const attachments = usePromptInputAttachments();
   return (
     <PromptInputButton
@@ -22,10 +28,40 @@ function AttachButton({ disabled }: { disabled: boolean }) {
       type="button"
       disabled={disabled}
       onClick={attachments.openFileDialog}
-      className="rounded-md"
+      {...hover.events}
+      className={dockLayout.control}
     >
-      <Paperclip size={17} />
+      <AttachFileIcon
+        ref={hover.ref}
+        size={17}
+        className="inline-flex"
+        aria-hidden
+      />
     </PromptInputButton>
+  );
+}
+
+function RemoveAttachmentButton({
+  name,
+  disabled,
+  onRemove,
+}: {
+  name: string;
+  disabled: boolean;
+  onRemove: () => void;
+}) {
+  const hover = useTutorIcon();
+  return (
+    <button
+      type="button"
+      aria-label={`Remove ${name}`}
+      disabled={disabled}
+      onClick={onRemove}
+      {...hover.events}
+      className="rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+    >
+      <XIcon ref={hover.ref} size={13} className="inline-flex" aria-hidden />
+    </button>
   );
 }
 
@@ -55,6 +91,7 @@ export function TutorComposer({
   uploading: boolean;
 }) {
   const [draft, setDraft] = useState("");
+  const submitIcon = useTutorIcon();
   return (
     <PromptInput
       id="tour-tutor-input"
@@ -71,12 +108,12 @@ export function TutorComposer({
         setDraft("");
       }}
       className={cn(
-        "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-12 [&_[data-slot=input-group]]:flex-col [&_[data-slot=input-group]]:border-input [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:px-1.5",
+        dockLayout.form,
         "[&_[data-slot=input-group]]:transition-[border-radius] [&_[data-slot=input-group]]:duration-200 motion-reduce:[&_[data-slot=input-group]]:transition-none",
         dockShape(dragging, attachments.length > 0 || uploading) ===
           "rounded-full"
-          ? "[&_[data-slot=input-group]]:rounded-full"
-          : "[&_[data-slot=input-group]]:rounded-xl",
+          ? dockLayout.pill
+          : dockLayout.expanded,
       )}
     >
       {attachments.length || uploading ? (
@@ -94,15 +131,11 @@ export function TutorComposer({
               {attachment.status === "processing" ? (
                 <Spinner className="size-3" />
               ) : null}
-              <button
-                type="button"
-                aria-label={`Remove ${attachment.filename}`}
+              <RemoveAttachmentButton
+                name={attachment.filename}
                 disabled={removingId === attachment.id}
-                onClick={() => onRemove(attachment.id)}
-                className="rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
-                <X size={13} />
-              </button>
+                onRemove={() => onRemove(attachment.id)}
+              />
             </span>
           ))}
           {uploading ? (
@@ -115,7 +148,10 @@ export function TutorComposer({
           ) : null}
         </div>
       ) : null}
-      <div className="flex w-full items-center">
+      <div className={dockLayout.row}>
+        <PromptInputTools className="shrink-0">
+          <AttachButton disabled={uploading} />
+        </PromptInputTools>
         <PromptInputBody>
           <PromptInputTextarea
             rows={1}
@@ -125,18 +161,25 @@ export function TutorComposer({
               setDraft(event.target.value);
               onTyping();
             }}
-            className="min-h-12 max-h-32 py-3"
+            className={dockLayout.textarea}
           />
         </PromptInputBody>
-        <PromptInputTools className="shrink-0 pl-1">
-          <AttachButton disabled={uploading} />
-        </PromptInputTools>
         <PromptInputSubmit
           aria-label={pending ? "Waiting for reply" : "Send message"}
           disabled={pending || uploading || !draft.trim()}
           status={pending ? "submitted" : undefined}
-          className="shrink-0 rounded-full"
-        />
+          className={dockLayout.control}
+          {...submitIcon.events}
+        >
+          {pending ? undefined : (
+            <CornerDownLeftIcon
+              ref={submitIcon.ref}
+              size={16}
+              className="inline-flex"
+              aria-hidden
+            />
+          )}
+        </PromptInputSubmit>
       </div>
     </PromptInput>
   );

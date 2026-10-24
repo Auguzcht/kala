@@ -24,3 +24,13 @@ export { groupConversations, supportsConversationManagement } from "@/features/t
 export { TutorConversationRow } from "@/features/tutor/components/TutorConversationRow";
 export { useTutorHistoryWidth } from "@/features/tutor/hooks/use-tutor-history-width";
 export { TutorHistoryResizeHandle } from "@/features/tutor/components/TutorHistoryResizeHandle";
+
+export type { RecentSort } from "@/features/tutor/lib/presentation";
+
+export { TutorHistoryMenuContent, TutorHistorySortItem } from "@/features/tutor/components/TutorHistoryMenu";
+
+export { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
+
+export { SquarePenIcon } from "@/features/tutor/components/icons/square-pen";
+export { ClockIcon } from "@/features/tutor/components/icons/clock";
+export { ArrowDownAZIcon } from "@/features/tutor/components/icons/arrow-down-a-z";

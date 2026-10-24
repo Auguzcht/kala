@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ChevronDown, SquarePen } from "lucide-react";
+import { ChevronDown, ListFilter } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -9,6 +9,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -22,8 +29,14 @@ import {
   useTutorConversations,
   groupConversations,
   TutorConversationRow,
+  TutorHistoryMenuContent,
+  TutorHistorySortItem,
+  SquarePenIcon,
+  ClockIcon,
+  ArrowDownAZIcon,
+  useTutorIcon,
 } from "@/features/tutor";
-import type { TutorConversation } from "@/features/tutor";
+import type { RecentSort, TutorConversation } from "@/features/tutor";
 import { apiErrorReason } from "@/lib/api-error";
 
 /** Layout is owned by CourseShell; the same history works in its mobile Sheet. */
@@ -34,6 +47,7 @@ export function TutorSidebar({
   courseId: string;
   onSelect?: () => void;
 }) {
+  const newChatIcon = useTutorIcon();
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const activeId = "conversation" in search ? search.conversation : undefined;
@@ -41,7 +55,8 @@ export function TutorSidebar({
   const remove = useDeleteTutorConversation(courseId);
   const [deleting, setDeleting] = useState<TutorConversation | null>(null);
   const [expanded, setExpanded] = useState({ Pinned: true, Recents: true });
-  const grouped = groupConversations(conversations.data ?? []);
+  const [recentSort, setRecentSort] = useState<RecentSort>("recent");
+  const grouped = groupConversations(conversations.data ?? [], recentSort);
 
   function select(id?: string) {
     void navigate({
@@ -70,13 +85,21 @@ export function TutorSidebar({
       <div className="flex h-12 shrink-0 items-center border-b px-4">
         <span className="font-display text-sm font-semibold">Chats</span>
       </div>
-      <div className="px-3 py-3">
+      <div className="px-2 py-3">
         <Button
           variant="ghost"
-          className="w-full justify-start border-0 bg-card shadow-none hover:bg-muted"
+          className="w-full justify-start border-0 bg-card px-3.5 shadow-none hover:bg-muted"
+          {...newChatIcon.events}
           onClick={() => select()}
         >
-          <SquarePen size={16} /> New chat
+          <SquarePenIcon
+            ref={newChatIcon.ref}
+            size={16}
+            className="inline-flex"
+            aria-hidden
+            data-tutor-action-icon
+          />{" "}
+          New chat
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
@@ -113,16 +136,56 @@ export function TutorSidebar({
                 }
                 className="mb-3"
               >
-                <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <ChevronDown
-                    size={13}
-                    className="transition-transform group-data-[state=closed]:-rotate-90 motion-reduce:transition-none"
-                  />
-                  {label}
-                  <span className="ml-auto font-mono text-[11px]">
-                    {grouped[label].length}
-                  </span>
-                </CollapsibleTrigger>
+                <div className="flex items-center">
+                  <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-xs font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <ChevronDown
+                      size={13}
+                      className="transition-transform group-data-[state=closed]:-rotate-90 motion-reduce:transition-none"
+                    />
+                    {label}
+                    <span className="ml-auto font-mono text-[11px]">
+                      {grouped[label].length}
+                    </span>
+                  </CollapsibleTrigger>
+                  {label === "Recents" ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-card text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                          aria-label="Sort recent chats"
+                        >
+                          <ListFilter size={16} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <TutorHistoryMenuContent>
+                        <DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+                          Sort by
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator className="mx-1 my-1" />
+                        <DropdownMenuRadioGroup
+                          value={recentSort}
+                          onValueChange={(value) =>
+                            setRecentSort(value as RecentSort)
+                          }
+                        >
+                          <TutorHistorySortItem value="recent" icon={ClockIcon}>
+                            Most recent
+                          </TutorHistorySortItem>
+                          <TutorHistorySortItem value="oldest" icon={ClockIcon}>
+                            Oldest first
+                          </TutorHistorySortItem>
+                          <TutorHistorySortItem
+                            value="title"
+                            icon={ArrowDownAZIcon}
+                          >
+                            Title A–Z
+                          </TutorHistorySortItem>
+                        </DropdownMenuRadioGroup>
+                      </TutorHistoryMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                </div>
                 <CollapsibleContent>
                   {grouped[label].map((conversation) => (
                     <TutorConversationRow

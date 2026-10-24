@@ -4,7 +4,6 @@ import {
   groupConversations,
   supportsConversationManagement,
   pickGreeting,
-  starterSuggestions,
   dockShape,
   validateTutorFile,
   createConversationResolver,
@@ -74,16 +73,30 @@ test("TUTOR-REQ-006 local deterministic day/course greetings use time pools", ()
     ).some((x) => x.includes("AWS101")),
   );
 });
-test("TUTOR-REQ-008 templates supply 3–4 starters without invented skills", () => {
-  assert.deepEqual(starterSuggestions([]), []);
-  assert.equal(starterSuggestions([{ name: "Storage" }]).length, 3);
-  const starters = starterSuggestions([
-    { name: "Storage" },
-    { name: "Networking" },
-    { name: "Storage" },
-  ]);
-  assert.equal(starters.length, 4);
-  assert.ok(starters.every((x) => /Storage|Networking/.test(x)));
+test("WI-22 Recents sorting leaves pinned order and source data unchanged", () => {
+  const list = [
+    { ...row, id: "z", title: "Zebra", updatedAt: "2026-10-25" },
+    { ...row, id: "p", pinnedAt: "2026-10-24" },
+    { ...row, id: "a", title: "Alpha", updatedAt: "2026-10-24" },
+  ];
+  assert.deepEqual(
+    groupConversations(list).Recents.map((x) => x.id),
+    ["z", "a"],
+  );
+  for (const sort of ["oldest", "title"]) {
+    assert.deepEqual(
+      groupConversations(list, sort).Recents.map((x) => x.id),
+      ["a", "z"],
+    );
+    assert.deepEqual(
+      groupConversations(list, sort).Pinned.map((x) => x.id),
+      ["p"],
+    );
+  }
+  assert.deepEqual(
+    list.map((x) => x.id),
+    ["z", "p", "a"],
+  );
 });
 test("TUTOR-REQ-009 shape reacts to dragging and persisted attachments", () => {
   assert.equal(dockShape(false, false), "rounded-full");

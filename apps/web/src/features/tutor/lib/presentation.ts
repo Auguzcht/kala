@@ -6,10 +6,24 @@ export function supportsConversationManagement(
   return Object.prototype.hasOwnProperty.call(conversation, "pinnedAt");
 }
 
-export function groupConversations(list: TutorConversation[]) {
+export type RecentSort = "recent" | "oldest" | "title";
+
+export function groupConversations(
+  list: TutorConversation[],
+  sort: RecentSort = "recent",
+) {
   return {
     Pinned: list.filter((conversation) => Boolean(conversation.pinnedAt)),
-    Recents: list.filter((conversation) => !conversation.pinnedAt),
+    Recents: list
+      .filter((conversation) => !conversation.pinnedAt)
+      .sort((a, b) => {
+        if (sort === "title")
+          return (a.title || "Untitled chat").localeCompare(
+            b.title || "Untitled chat",
+          );
+        const order = a.updatedAt.localeCompare(b.updatedAt);
+        return sort === "oldest" ? order : -order;
+      }),
   };
 }
 
@@ -42,22 +56,6 @@ export function pickGreeting(
   // Each time-of-day pool keeps its own introduction, including course variants.
   const selected = pool[hash % pool.length];
   return hash % pool.length === 0 ? selected : `${salutation} ${selected}`;
-}
-
-export function starterSuggestions(skills: { name: string }[]): string[] {
-  const names = [
-    ...new Set(skills.map((skill) => skill.name.trim()).filter(Boolean)),
-  ];
-  if (!names.length) return [];
-  if (names.length === 1)
-    return [
-      `Explain ${names[0]}`,
-      `Quiz me on ${names[0]}`,
-      `Help me practice ${names[0]}`,
-    ];
-  return names
-    .slice(0, 2)
-    .flatMap((name) => [`Explain ${name}`, `Quiz me on ${name}`]);
 }
 
 export function dockShape(

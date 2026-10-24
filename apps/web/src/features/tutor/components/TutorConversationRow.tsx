@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { MoreHorizontal, Pin, PinOff, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pin, PinOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TutorTitle } from "@/features/tutor/components/TutorTitle";
+import { SquarePenIcon } from "@/features/tutor/components/icons/square-pen";
+import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
+import { TutorHistoryMenuContent } from "@/features/tutor/components/TutorHistoryMenu";
 import { useUpdateTutorConversation } from "@/features/tutor/hooks/use-tutor";
 import { supportsConversationManagement } from "@/features/tutor/lib/presentation";
 import type { TutorConversation } from "@/features/tutor/schema/tutor.schema";
@@ -28,6 +32,8 @@ export function TutorConversationRow({
   onSelect: () => void;
   onDelete: () => void;
 }) {
+  const renameIcon = useTutorIcon();
+  const [menuOpen, setMenuOpen] = useState(false);
   const update = useUpdateTutorConversation(courseId);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState("");
@@ -98,37 +104,28 @@ export function TutorConversationRow({
           </div>
         </form>
       ) : (
-        <button
-          type="button"
-          aria-current={active ? "page" : undefined}
-          onClick={() => onSelect()}
-          className="min-w-0 flex-1 truncate rounded-md px-1 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {name}
-        </button>
+        <TutorTitle name={name} active={active} onSelect={onSelect} />
       )}
       <div
         className={cn(
           "flex shrink-0 items-center",
-          conversation.pinnedAt
+          menuOpen || conversation.pinnedAt
             ? "opacity-100"
             : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100",
         )}
       >
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               size="icon"
               variant="ghost"
-              className="size-7"
+              className="size-7 rounded-lg focus-visible:ring-inset focus-visible:ring-offset-0"
               aria-label={`Actions for ${name}`}
             >
               <MoreHorizontal size={16} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            side="bottom"
+          <TutorHistoryMenuContent
             onCloseAutoFocus={(event) => {
               if (renaming) event.preventDefault();
             }}
@@ -136,34 +133,47 @@ export function TutorConversationRow({
             {capable ? (
               <>
                 <DropdownMenuItem
+                  className="rounded-lg px-3 py-2"
+                  {...renameIcon.events}
                   onSelect={() => {
                     setRenaming(true);
                     setTitle(conversation.title ?? "");
                   }}
                 >
-                  <Pencil />
+                  <SquarePenIcon
+                    ref={renameIcon.ref}
+                    size={16}
+                    className="inline-flex"
+                    aria-hidden
+                  />
                   Rename
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  className="rounded-lg px-3 py-2"
                   disabled={update.isPending}
                   onSelect={() => pin()}
                 >
                   {conversation.pinnedAt ? <PinOff /> : <Pin />}
                   {conversation.pinnedAt ? "Unpin" : "Pin"}
                 </DropdownMenuItem>
+                <DropdownMenuSeparator className="mx-1 my-2" />
               </>
             ) : null}
-            <DropdownMenuItem variant="destructive" onSelect={() => onDelete()}>
+            <DropdownMenuItem
+              className="rounded-lg px-3 py-2"
+              variant="destructive"
+              onSelect={() => onDelete()}
+            >
               <Trash2 />
               Delete
             </DropdownMenuItem>
-          </DropdownMenuContent>
+          </TutorHistoryMenuContent>
         </DropdownMenu>
         {capable ? (
           <Button
             size="icon"
             variant="ghost"
-            className="size-7"
+            className="size-7 rounded-lg focus-visible:ring-inset focus-visible:ring-offset-0"
             aria-label={`${conversation.pinnedAt ? "Unpin" : "Pin"} ${name}`}
             disabled={update.isPending}
             onClick={() => pin()}

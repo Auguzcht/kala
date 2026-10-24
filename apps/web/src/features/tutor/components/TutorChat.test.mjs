@@ -11,6 +11,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import * as presentation from "../lib/presentation.ts";
+import { dockLayout } from "../../../components/ai-elements/dock-layout.ts";
 import { apiErrorReason } from "../../../lib/api-error.ts";
 
 const require = createRequire(import.meta.url);
@@ -94,10 +95,10 @@ function mount({ messages = [], error, refetch } = {}) {
     "@tanstack/react-router": { useNavigate: () => () => {}, useSearch: () => search },
     sonner: { toast: { error: (...args) => toasts.push(args) } },
     "@/features/tutor/lib/presentation": presentation,
+    "@/components/ai-elements/dock-layout": { dockLayout },
     "@/features/tutor/components/TutorComposer": uiModule("TutorComposer"),
     "@/features/tutor/components/TutorWelcome": uiModule("TutorWelcome"),
     "@/features/courses": { useCourse: () => ({ data: { title: "AWS101" } }) },
-    "@/features/twin": { useTwin: () => ({ data: { skills: [] } }) },
     "@/lib/auth/AuthProvider": { useSession: () => null },
     "@/lib/utils": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/lib/api-error": { apiErrorReason },

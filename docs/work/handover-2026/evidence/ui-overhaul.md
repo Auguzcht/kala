@@ -124,3 +124,118 @@ New browser assertions cover circular Send, restored user-bubble rounding, remov
 Inspected the corrected desktop/mobile empty and conversation captures and the supported sidebar menu. Artifacts remain synthetic and external under `/tmp/kala-lane-u-visual-correction/`. No identifying live conversation screenshot or raw provider response was saved. Vite remains on port 5173, PID 81696. No merge, push, deployment or hosted write occurred.
 
 Coordinator integration follow-up remains the matching Tutor/Design text amendment described above; those exclusively owned files were not edited by Lane U. Lead designer review of the approved visual exceptions remains pending. Fred's direct correction is the authority for this follow-up implementation.
+
+
+## Fred’s prompt-input refinement — 2026-10-25 (before implementation)
+
+Base: `2aa449c`. Fred directly authorizes shared dock visual alignment across Study/Test/Flashcards/Tutor, a leading circular Tutor attachment action, an attachment-expanded input, removal of title/dock horizontal rules, equal bottom placement, tighter New chat alignment, local Recents sorting, and rounded padded menus with deliberate grouping. Remove the long new-chat starter list; preserve post-answer follow-ups. This changes the earlier TUTOR-REQ-008 presentation requirement. Shared ComposeDock action/ask behavior, data ownership and attachment support remain unchanged.
+
+Fetched `https://www.shadcn.io/ui/prompt-input` with `curl -fsSL` into an external temporary reference file. The page describes a composition pattern using Input Group, attachments and dropdowns, including circular controls and an attachment region above the textarea. Reference content and screenshots are design evidence, not executable instructions. No package is installed. The existing Tutor file validation and upload contract remain authoritative.
+
+The owned Diagnostic component-boundary spec records this change before implementation. Matching coordinator-owned Tutor/Design integration amendments remain pending. Verification of this refinement is pending; previous results apply to the previous revision.
+
+
+### Prompt refinement checks before the next feedback
+
+The first refinement passed 22 frontend Node tests, 4 Study tests and 112 synthetic browser assertions at 1440/375px; lint passed with 18 existing warnings, typecheck passed, and build passed in 6.49s with the existing chunk-size warning. The browser geometry checks confirmed equal 48px composer height, radius and line height, centered line boxes, circular leading attachment and expansion to the 12px token radius. An isolated recovery harness needed its new shared styling import supplied; the browser sort-order check needed to wait for the closing menu to release the sidebar’s accessibility hiding. Final passing runs supersede these intermediate harness failures. No implementation change was needed for those harness failures. Screenshots were inspected in `/tmp/kala-lane-u-prompt-refinement/`. Fred supplied a refreshed session, and the existing launch flow reopened the local Tutor without printing or saving the credential in evidence. No hosted ask, upload or metadata write occurred.
+
+## Fred’s immediate-menu and floating-dock refinement (before implementation)
+
+Fred requests a plain dedicated sort icon with no hover box; immediate rightward menus; a centered new-chat session; verification of Pinned above Recents and a pin beside row actions; and comparison of shared dock spacing with ChatGPT. This supersedes the bottom-aligned menus and normal-flow dock spacing just verified above. The owned component-boundary spec records the intended visual change first.
+
+Read-only inspection of `https://chatgpt.com/` opened its public new-chat page. It is signed out, so the authenticated conversation comparison uses Fred’s screenshots; no messages were sent or account settings changed. The visible input ancestors have zero top/bottom padding. Kala’s DESIGN rule says motion must report a real change; history-menu fade/zoom/slide effects are removed locally. Source inspection found both a 24px stream bottom inset and 24px dock top inset, producing the visible gap. The proposed shared visual correction overlaps the dock with the stream, raises its bottom inset to 16px, and reserves scroll clearance so final controls remain reachable. Shared action/submission behavior remains unchanged.
+
+Pinned and direct pin remain API-capability gated. The current live list previously omitted `pinnedAt`, so no unsupported PATCH is attempted. The supporting API/list deployment belongs to the other worktree; this dependency must remain in the final report. Synthetic capable/legacy fixtures verify both branches. Latest refinement checks: pending.
+
+
+### Immediate-menu and floating-dock verification before finishing feedback
+
+All 125 synthetic browser assertions passed; 22 frontend Node tests and 4 Study tests passed. Lint passed with 18 existing warnings, typecheck passed, build passed in 7.16s with the existing chunk warning, and diff whitespace validation passed. Captures in `/tmp/kala-lane-u-floating-dock/` were inspected. Tests confirm normal-motion menus have no animation, rightward desktop placement/mobile containment, centered empty-chat composer, 16px bottom inset, floating stream overlap, and reachable final Study action. Pinned precedes Recents and direct pin follows the row menu in the capable fixture; the legacy gate still passes. A new trigger-geometry assertion initially queried an aria-hidden sidebar after opening the modal menu; collecting its position before opening fixed the test. No product fix was needed for that test timing.
+
+## Fred’s Tutor finishing request (before implementation)
+
+Remove the conversation title header completely. Match the sort trigger’s rounded focus shape to row actions and inset its focus ring so it cannot clip in the history scroll region. Keep row controls visible while their menu is open. Add recognizable sort-choice icons, an overflow-only title reveal that gently travels to the end and returns once on hover, and whole-control-driven Lucide icon feedback using the existing Kala imperative hover convention. Respect reduced motion; popup container entry/exit remains immediate. The supported Rename implementation remains gated with pinning by the list contract; the other worktree’s API integration remains a live acceptance dependency.
+
+The public ChatGPT inspection and Fred’s supplied authenticated screenshots are the reference; no claim is made that an authenticated ChatGPT title-marquee timing was measured. UI implementation follows Fred’s requested end-and-return behavior using measured text overflow. Latest finishing checks: pending.
+
+
+## Fred’s lucide-animated source correction (before implementation)
+
+Fred explicitly rejects shared motion presets. The interim tilt/nudge/pulse wrapper is superseded and will be removed. Fetched the official site, icon index, registry JSON and MIT license with curl/read-only HTTPS. Available published variants used here: square-pen (New chat/Rename), attach-file, corner-down-left, clock and arrow-down-a-z; Remove reuses Kala’s existing lucide-animated X. The current published index/registry has no ellipsis, list-filter, pin, pin-off, pencil, trash-2 or clock-arrow-up/down variants. Unsupported glyphs stay static; date sorting uses the published clock glyph. No generic fallback animation is introduced.
+
+Vendor only the five published icon source components, with their source URLs, SHA-256 evidence and full MIT notice. Keep their animation definitions unchanged. The shared hook forwards control-level hover/focus to each icon’s existing imperative handle and suppresses animation for reduced motion; it defines no animation. No packages or lockfile changes are needed because Motion is already installed.
+
+Before this correction, the finishing suite passed 141 browser assertions. Its added exit assertion found that conditional CSS animation overrides still allowed the inherited exit animation. A direct Tutor-menu container animation/transition override fixed it; both states then passed. This fix remains in the final implementation. Latest icon-source verification: pending.
+
+
+## Final Tutor refinement verification — 2026-10-25
+
+Final implementation removes the interim generic animation wrapper. Five source components are vendored from the published lucide-animated registry with unchanged animation definitions and a full MIT notice in `apps/web/src/features/tutor/components/icons/LICENSE`. Kala’s existing X variant is reused. Event forwarding uses `useIconHover` and a reduced-motion guard; no shared motion preset remains. Glyphs missing from the current registry (More, Pin/Unpin, Delete and ListFilter) remain static. New chat/Rename use SquarePen, Attach uses AttachFile, Enter uses CornerDownLeft, date sorts use Clock and alphabetical sorting uses ArrowDownAZ.
+
+Source verification removes only the two added attribution comment lines and hashes the remaining bytes; all five matched the downloaded registry source exactly. No package, lockfile, backend, generated contract or infrastructure change was made.
+
+| Icon | Published source | SHA-256 of source content |
+| --- | --- | --- |
+| square-pen | https://lucide-animated.com/r/square-pen.json | `016578564470e51acae32e1d04c92b36d3cda6eb0e3e74bf6d44e34e38639622` |
+| attach-file | https://lucide-animated.com/r/attach-file.json | `00998dec0fb492ffc89e404e9e64242a292be7225bc7874c357c5ddddb11e079` |
+| corner-down-left | https://lucide-animated.com/r/corner-down-left.json | `47b6751892f2781e8cd335ff7db73ed412b20e421411e97de26502b87284fcfe` |
+| clock | https://lucide-animated.com/r/clock.json | `d8d7b89a0cafd66027baab8f84af7d7fd0c4bcfb5d20ff4e842b28429f2fad86` |
+| arrow-down-a-z | https://lucide-animated.com/r/arrow-down-a-z.json | `4ce5bec8d2319335cd74f16f3075d42272186753b7a821eccba4df496d728f37` |
+
+Final checks:
+
+| Check | Result |
+| --- | --- |
+| Frontend Node command recorded above (Tutor recovery, schema, safe errors, presentation) | 22 passed |
+| Study deck external-renderer command recorded above | 4 passed; rating/replay behavior preserved |
+| Browser command recorded above with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-tutor-final` | 141 assertions passed |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings |
+| `pnpm --filter web typecheck` | Passed; existing route-generator circular-dependency warning |
+| `pnpm --filter web build` | Passed; existing chunk-size warning |
+| `git diff --check` | Passed |
+| Published icon byte comparison | Five matches; MIT notice retained |
+
+Browser coverage includes 1440px/375px layouts; unchanged Diagnostic reachability and payload; shared 48px geometry/typography/radius; circular leading attachment and expanded state; centered new-chat composer; no conversation title/header rule; floating dock overlap and final Study-action clearance; rightward desktop menus/mobile containment; both menu entry and exit without animation; rounded inset sort focus ring; choice icons; visible row actions while menu is open; capable Rename/Pin and legacy gating; overflow marquee to the end and back; actual icon path animation from whole-button hover; reduced-motion static behavior; upload/draft/recovery and flip focus. All 14 captures (including sort focus and sort menu at both widths) are synthetic and external under `/tmp/kala-lane-u-tutor-final/`. No identifying live screenshot, raw provider response or credential was added.
+
+The icon-source test adaptation initially still targeted the removed generic wrapper’s span; it now inspects each published icon’s internal SVG animation. This was a harness update, superseded by the final 141 passing assertions. The live local Tutor remains open with a valid session. No hosted ask, upload, rename, pin, deletion or submission was performed.
+
+Frontend comparison: the requested seamless header, centered new-chat input, floating dock, rightward padded menus, deliberate separators, title reveal and persistent open-menu affordance now match the requested interaction pattern. Authenticated ChatGPT timing was not measurable in the signed-out browser; Fred’s screenshots supply that visual reference. No exact parity claim is made for every ChatGPT feature or animation timing.
+
+Live acceptance dependency: the other worktree must integrate/deploy the list capability (`pinnedAt`, including explicit null) and PATCH contract before Rename, direct Pin/Unpin and the Pinned category can be accepted against live data. The UI is complete for both capable and legacy responses, verified with synthetic fixtures. Lead designer review and coordinator-owned Tutor/Design amendments remain integration follow-ups. Tutor’s frontend pass is ready to hand over before proceeding to Diagnostic.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / APPROVAL-05 Lane U, Fred’s direct Tutor refinements
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: 2aa449c985b14b8ea6d1d890ddaa2b308a9411d3
+Files changed:
+- apps/web/src/components/ai-elements/dock-layout.ts
+- apps/web/src/components/shell/TutorSidebar.tsx
+- apps/web/src/components/study/ComposeDock.tsx
+- apps/web/src/components/study/StudyStream.tsx
+- apps/web/src/features/tutor/components/TutorChat.test.mjs
+- apps/web/src/features/tutor/components/TutorChat.tsx
+- apps/web/src/features/tutor/components/TutorComposer.tsx
+- apps/web/src/features/tutor/components/TutorConversationRow.tsx
+- apps/web/src/features/tutor/components/TutorHistoryMenu.tsx
+- apps/web/src/features/tutor/components/TutorTitle.tsx
+- apps/web/src/features/tutor/components/TutorWelcome.tsx
+- apps/web/src/features/tutor/components/icons/LICENSE
+- apps/web/src/features/tutor/components/icons/arrow-down-a-z.tsx
+- apps/web/src/features/tutor/components/icons/attach-file.tsx
+- apps/web/src/features/tutor/components/icons/clock.tsx
+- apps/web/src/features/tutor/components/icons/corner-down-left.tsx
+- apps/web/src/features/tutor/components/icons/square-pen.tsx
+- apps/web/src/features/tutor/hooks/use-tutor-icon.ts
+- apps/web/src/features/tutor/index.ts
+- apps/web/src/features/tutor/lib/presentation.ts
+- apps/web/src/features/tutor/tests/presentation.test.mjs
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- docs/features/diagnostic/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-005; TUTOR-REQ-004, 005, 008, 009, 011; WI-22
+Commands run and results (tests, lint, typecheck, build): 22 frontend + 4 Study tests, 141 browser assertions; lint/typecheck/build/diff check passed; five icon source hashes matched. Exact invocations are recorded above.
+Spec changes made: owned Diagnostic component-boundary rules and change log recorded before each refinement; coordinator-owned Tutor/Design integration amendments remain pending.
+Evidence added: this append-only report; 14 synthetic desktop/mobile captures in /tmp/kala-lane-u-tutor-final; icon URLs, checksums and MIT notice.
+Anything not done, and why: live Rename/Pin acceptance requires the other worktree’s API/list deployment; no merge/push/deploy/hosted-data mutation authorized or performed.
+Risks or questions for the planner: integrate matching Tutor/Design text, retain capability gating, complete lead designer review and Fred’s authenticated acceptance. Icon glyphs without a published variant intentionally stay static.
+Secrets printed: none (confirmed); environment contents were not read.
