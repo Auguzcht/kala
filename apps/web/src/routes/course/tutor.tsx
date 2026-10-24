@@ -19,8 +19,7 @@ export const Route = createFileRoute("/course/tutor")({
 
 function TutorPage() {
   const courseId = useSession()?.courseId ?? "";
-  // PageHeader is gone per docs/ai-overhaul-v2/05_TUTOR_AND_HIERARCHY.md —
-  // Tutor is a session now, its title lives in SessionBar, not a page
-  // eyebrow.
+  // Tutor owns the session canvas; the conversation title stays in history
+  // rather than repeating a PageHeader or SessionBar above the stream.
   return <TutorChat courseId={courseId} />;
 }

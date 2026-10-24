@@ -340,7 +340,10 @@ export function RosterTable({
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious
-                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      href="#"
+                      aria-disabled={safePage === 0}
+                      tabIndex={safePage === 0 ? -1 : undefined}
+                      onClick={(event) => { event.preventDefault(); setPage(Math.max(0, safePage - 1)); }}
                       className={safePage === 0 ? "pointer-events-none opacity-40" : undefined}
                     />
                   </PaginationItem>
@@ -351,7 +354,7 @@ export function RosterTable({
                       </PaginationItem>
                     ) : (
                       <PaginationItem key={item}>
-                        <PaginationLink isActive={item === safePage} onClick={() => setPage(item)}>
+                        <PaginationLink href="#" isActive={item === safePage} onClick={(event) => { event.preventDefault(); setPage(item); }}>
                           {item + 1}
                         </PaginationLink>
                       </PaginationItem>
@@ -359,7 +362,10 @@ export function RosterTable({
                   )}
                   <PaginationItem>
                     <PaginationNext
-                      onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
+                      href="#"
+                      aria-disabled={safePage >= pages - 1}
+                      tabIndex={safePage >= pages - 1 ? -1 : undefined}
+                      onClick={(event) => { event.preventDefault(); setPage(Math.min(pages - 1, safePage + 1)); }}
                       className={
                         safePage >= pages - 1 ? "pointer-events-none opacity-40" : undefined
                       }

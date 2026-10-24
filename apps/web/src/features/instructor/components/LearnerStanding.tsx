@@ -80,13 +80,14 @@ export function LearnerStanding({
             </span>
           </div>
           <p className="mt-1 font-mono text-[11.5px] text-muted-foreground">
-            {r.evidenceCount} evidence events · {r.attempts} attempts ·{" "}
+            {r.evidenceCount} recent evidence events (up to 200) · {r.attempts} attempts ·{" "}
             {r.daysInactive === null
               ? "never active"
               : r.daysInactive === 0
                 ? "active today"
                 : `last active ${r.daysInactive}d ago`}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">Based on recent activity</p>
         </div>
         <div className="flex items-center gap-2">
           <Switch

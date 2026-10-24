@@ -18,7 +18,7 @@ export const Route = createFileRoute("/course/skills")({
 
 function SkillsPage() {
   const courseId = useSession()?.courseId ?? "";
-  const { data: twin, isLoading } = useTwin(courseId);
+  const { data: twin, isLoading, isError, refetch } = useTwin(courseId);
   const navigate = useNavigate();
 
   return (
@@ -30,6 +30,8 @@ function SkillsPage() {
       />
       <TopicLanding
         isLoading={isLoading}
+        isError={isError}
+        onRetry={() => { void refetch(); }}
         skills={twin?.skills ?? []}
         onChoose={(skillId) =>
           navigate({ to: "/course/skill/$skillId", params: { skillId }, search: {} })

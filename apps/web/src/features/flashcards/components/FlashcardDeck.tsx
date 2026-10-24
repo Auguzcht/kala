@@ -346,8 +346,8 @@ export function FlashcardDeck({
         <EmptyState
           title="No course material yet"
           description={skillId
-            ? "This skill doesn&apos;t have course material yet."
-            : "No mapped skill has course material yet."}
+            ? "Your course team has not added material for this skill yet."
+            : "Your course team has not added material for this course yet."}
         />
       )}</SessionState>);
     }

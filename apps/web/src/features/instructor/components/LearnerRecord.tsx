@@ -266,7 +266,7 @@ export function LearnerRecord({
             <CardHeader>
               <CardTitle className="text-base">Evidence ledger</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Append-only. Every recommendation on the Decide tab traces back to these rows.
+                Last 25 events. Evidence is append-only; earlier events are not shown here.
               </p>
             </CardHeader>
             <CardContent>

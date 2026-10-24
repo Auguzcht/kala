@@ -6,7 +6,7 @@ import { MessageSquareIcon } from "@/components/ui/message-square";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useCourse } from "@/features/courses";
-import { useDiagnosticStatus } from "@/features/diagnostic";
+import { isDiagnosticDue, useDiagnosticStatus } from "@/features/diagnostic";
 import { useNextUp, useTwin } from "@/features/twin";
 import { InstructorPlan } from "@/features/plan";
 import { MasteryBand } from "@/components/kala";
@@ -41,7 +41,8 @@ function WorkspaceHome() {
   const { data: nextUp, isLoading: nextLoading } = useNextUp(courseId);
   const { data: twin, isLoading: twinLoading } = useTwin(courseId);
   const { data: diagnosticStatus } = useDiagnosticStatus(courseId);
-  const diagnosticDue = diagnosticStatus?.due ?? false;
+  const diagnosticDue = isDiagnosticDue(diagnosticStatus);
+  const waitingForMaterial = diagnosticStatus?.waitingForMaterialCount ?? 0;
 
   const next = nextUp?.next ?? null;
   const evidenceCount = twin?.evidence.length ?? 0;
@@ -68,8 +69,9 @@ function WorkspaceHome() {
         <div className="flex flex-wrap items-center justify-between gap-4 border border-brand-orange/30 bg-brand-orange/5 px-5 py-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
-              {diagnosticStatus?.dueSkillCount}{" "}
-              {diagnosticStatus?.dueSkillCount === 1 ? "new skill needs" : "new skills need"} a baseline
+              {diagnosticStatus?.dueSkillCount === undefined
+                ? "Find your starting point"
+                : `${diagnosticStatus.dueSkillCount} ${diagnosticStatus.dueSkillCount === 1 ? "skill needs" : "skills need"} a baseline`}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               A quick diagnostic sets your starting point so practice can actually target it.
@@ -83,6 +85,11 @@ function WorkspaceHome() {
             Take diagnostic <ArrowRightIcon size={16} />
           </Button>
         </div>
+      ) : null}
+      {waitingForMaterial > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {waitingForMaterial} {waitingForMaterial === 1 ? "topic is" : "topics are"} waiting for course material
+        </p>
       ) : null}
 
       {/* Next up — one persistent shell, never two different DOM structures:

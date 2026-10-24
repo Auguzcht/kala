@@ -11,6 +11,7 @@ import { MasteryBand } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 import { groupByModule } from "@/features/twin";
 import type { TwinSkill } from "@/features/twin";
 import type { BankStatus } from "@/features/bank/schema/bank-status.schema";
@@ -26,6 +27,8 @@ import type { BankStatus } from "@/features/bank/schema/bank-status.schema";
 // skill, Flashcards' due-first).
 export function TopicLanding({
   isLoading,
+  isError = false,
+  onRetry,
   skills,
   onChoose,
   recommended,
@@ -35,6 +38,8 @@ export function TopicLanding({
   bankStatus,
 }: {
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
   skills: TwinSkill[];
   onChoose: (skillId: string) => void;
   /** Rendered above the grouped list — a highlighted recommended pick.
@@ -60,11 +65,21 @@ export function TopicLanding({
     );
   }
 
+  if (isError) {
+    return (
+      <EmptyState
+        title="We could not load your skills"
+        description="Check your connection and try again."
+        action={onRetry ? <Button variant="outline" onClick={onRetry}>Retry</Button> : undefined}
+      />
+    );
+  }
+
   if (skills.length === 0) {
     return (
       <EmptyState
         title="No skills mapped yet"
-        description="This needs approved skills for the course. Course content needs the ingest + skill-proposal pass first."
+        description="Your course team has not made any skills available yet. Check back after they add course material and approve the skills."
       />
     );
   }

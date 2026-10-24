@@ -108,11 +108,11 @@ export function CohortStats({ courseId }: { courseId: string }) {
       <StatTile
         label="Accuracy"
         value={pct(data.accuracy)}
-        sub={`${data.evidenceCount} graded events`}
+        sub={`${data.evidenceCount} recent graded events`}
         tone={
           data.accuracy === null ? "neutral" : data.accuracy >= 0.7 ? "green" : data.accuracy >= 0.5 ? "orange" : "red"
         }
-        help="Share of graded attempts answered correctly across the whole cohort."
+        help="Based on recent activity, using up to the last 2,000 course evidence events. This is not a lifetime total."
       />
       <StatTile
         label="Skills covered"
