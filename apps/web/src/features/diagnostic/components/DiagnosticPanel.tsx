@@ -145,7 +145,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
           eyebrow="Diagnostic"
           title="Find your starting point"
           description="Answer a few questions so Kala can understand what you already know and where to begin."
-          className="mb-0 px-5 py-4"
+          className="mx-auto mb-0 w-full max-w-screen-2xl px-6 py-8 lg:px-10"
         />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">

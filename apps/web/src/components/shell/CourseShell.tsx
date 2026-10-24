@@ -144,7 +144,7 @@ export function CourseShell({
     ? twinForCrumb?.skills.find((s) => s.skillId === skillId)?.name
     : undefined;
   const isSessionRoute = SESSION_ROUTES.some((route) =>
-    pathname.startsWith(route)
+    pathname === route || pathname.startsWith(`${route}/`)
   );
   // Tutor gets its own persistent left-rail extension (chat history — see
   // TutorSidebar), on every other route the icon rail is the whole story.

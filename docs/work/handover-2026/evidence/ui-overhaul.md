@@ -567,3 +567,58 @@ Evidence added: this report, cross-route typography comparisons, synthetic feedb
 Anything not done, and why: no font change because computed header typography already matches; no hosted identity repair, deployment, real decision, migration, backend edit or push. Human live acceptance remains.
 Risks or questions for the planner: prepare a reviewed human-run canonical identity repair that preserves both histories, reconciles aliases and enrollment and checks dependent tables; integrate the focused instructor spec with WI-08. Separate hosted instructor site needs normal release integration before it shows local UI changes.
 Secrets printed: none (confirmed); existing settings loaded for scoped read-only queries without printing credentials or environment values.
+
+
+## Diagnostic margins, readiness values and paged evidence — 2026-10-25
+
+Base `fc75b6c`. Fred clarified that Diagnostic should match the Skills/Twin content margins, requested larger readiness numbers in both student and instructor donuts, removal of the Focus area heading icon, and instructor-sized evidence pagination in both views. The Diagnostic margin rule was amended before implementation, explicitly superseding the earlier breadcrumb-gutter direction. The broader Twin spec was absent in this checkout under WI-08; a focused Twin presentation amendment was created from the feature template before implementation. This task owns only these directly requested presentation paths, not a full Twin/backend contract.
+
+Implementation and findings:
+
+- Diagnostic PageHeader now has the same 24px horizontal padding below lg, 40px at lg, 32px vertical padding and centered max-screen-2xl width as the Skills/Twin page content. Its full-width separator and independent question scroll region remain; question/footer alignment is unchanged. Typography remains shared.
+- A 1920px browser comparison caught a second margin cause: `CourseShell` used raw prefix matching, so `/course/skills` incorrectly matched the singular `/course/skill` session prefix and lost the normal maximum width. Matching now respects exact route/segment boundaries. The plural Skills picker matches Twin and Diagnostic at wide widths; `/course/skill/{id}` still retains its full-width session shell. This changes layout classification only, not route registration, auth or navigation.
+- MasteryRing's center was unconditionally text-xs (12px), including 176px and 144px readiness rings. Rings at least 128px now use the same text-5xl (48px), monospaced, semibold value; 56px skill rings keep the compact 12px value. Null, zero and 100 fit, and the existing fill and rolling-number motion remain reduced-motion aware. The accessible label now includes readiness context, band and value instead of replacing the value with the context label.
+- Removed only the decorative Zap icon and its layout gap from the shared TwinBody Focus area heading. Skill data, mastery, practice action and owner-specific behavior remain.
+- Shared EvidenceLedger now shows ten events per page in returned order, with a range labelled “recent events”, previous/next, active page and the existing pageWindow helper. It uses the same Pagination primitives/default 40px control sizing as the instructor roster. Endpoints expose aria-disabled and are removed from tab order; links have actual hrefs and prevent hash navigation. Mobile retains full-size previous/current/next controls, with stacked rows and unbroken outcome labels. Long names wrap on mobile and retain full-name titles on desktop.
+- Page replacement is immediate instead of replaying an entry animation for an entire page. New arrivals in the current page retain the existing reveal. Empty/one-page lists hide the pager, a shrinking list clamps the page, and learner changes remount the ledger/twin presentation so another learner cannot inherit a previous page. LearnerRecord and instructor twin drill-down share these components.
+- Scope is the existing returned history window: student Twin supplies at most 20 recent events and instructor learner record at most 200. No full-history API, cursor, query limit, mastery arithmetic, evidence mutation or schema was added. The total is explicitly a recent-window count, not lifetime evidence. Full-history server pagination remains separate work.
+
+Verification:
+
+| Command | Result |
+| --- | --- |
+| Retained browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-twin-polish` | 219 assertions passed, including desktop/mobile header geometry and retained Diagnostic/Tutor/Study checks |
+| Same browser runtime/executable variables, running `node apps/web/src/features/twin/tests/presentation.browser.mjs` | 148 assertions passed |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-twin-polish-lint.log` |
+| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-twin-polish-typecheck.log` |
+| `pnpm --filter web build` | Passed including project-reference TypeScript check; existing chunk-size warning; `/tmp/kala-twin-polish-build.log` |
+| `git diff --check` | Passed |
+
+New checks exercise both motion preferences at 1440px/375px, null/0/100 ring bounds, preserved small-ring density, accessible readiness labels, ten-row boundaries, partial final page, keyboard and numbered navigation, no hash jump, disabled endpoints, 200-event windowing, shrinking/empty/one-page data, no page-entry replay, 40px control heights and horizontal overflow. Integrated real student Twin and instructor LearnerRecord routes verify larger readiness values and the shared ledger. A 1920px comparison verifies the centered margin match and preservation of the singular skill-session layout. An initial synthetic Diagnostic fixture lacked required bloomLevel and was corrected to the actual response schema; the wide-screen failure then exposed and led to the real shell-prefix correction.
+
+Synthetic screenshots were visually inspected in `/tmp/kala-twin-presentation/`: `student-twin-1440.png`, `instructor-readiness-1440.png`, `instructor-ledger-1440.png`, `ledger-1440.png`, `ledger-375.png` and `diagnostic-1920.png`. Retained introduction captures are in `/tmp/kala-lane-u-twin-polish/`. All browser fixtures intercept auth/API and block non-localhost requests. No live Diagnostic submission, teacher decision, upload, model call or hosted data read/write was performed in this task.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / matching margins, readable readiness and bounded evidence browsing
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: fc75b6c
+Files changed:
+- apps/web/src/components/kala/evidence-ledger.tsx
+- apps/web/src/components/kala/mastery-ring.tsx
+- apps/web/src/components/shell/CourseShell.tsx
+- apps/web/src/features/diagnostic/components/DiagnosticPanel.tsx
+- apps/web/src/features/instructor/components/LearnerRecord.tsx
+- apps/web/src/features/instructor/components/StudentDrillDown.tsx
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- apps/web/src/features/twin/components/TwinBody.tsx
+- apps/web/src/features/twin/tests/presentation.browser.mjs
+- docs/features/diagnostic/README.md
+- docs/features/twin/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-001; TWIN-REQ-001/002/003; WI-22
+Commands run and results (tests, lint, typecheck, build): 219 retained and 148 Twin presentation browser assertions passed; lint/typecheck/build/diff check passed with existing warnings.
+Spec changes made: replace breadcrumb alignment with Skills/Twin page-content margins and segment-aware layout; focused Twin presentation requirements written before implementation and marked implemented with evidence.
+Evidence added: this report, desktop/mobile/wide-screen screenshots, ring/ledger integration and geometry regressions.
+Anything not done, and why: no full-history backend pagination (existing recent-window contracts retained), deployment, push, hosted mutation, migration, dependency or infrastructure change. Human visual acceptance remains.
+Risks or questions for the planner: integrate focused Twin spec with WI-08; student/instructor response caps remain 20/200; shared rings and ledger intentionally apply to both student and instructor callers.
+Secrets printed: none (confirmed); no environment values or credentials read for this task.

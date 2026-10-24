@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { FlameIcon } from "@/components/ui/flame";
 import type { FlameIconHandle } from "@/components/ui/flame";
-import { ZapIcon } from "@/components/ui/zap";
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { InView } from "@/components/motion/in-view";
 import {
@@ -317,8 +316,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
         {focus ? (
           <Card className={own ? "md:col-span-7" : "md:col-span-12"}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ZapIcon size={16} className="text-brand-orange" aria-hidden />
+              <CardTitle className="text-base">
                 Focus area
               </CardTitle>
             </CardHeader>

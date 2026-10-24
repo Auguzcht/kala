@@ -63,7 +63,7 @@ export function StudentDrillDown({ courseId, userId }: { courseId: string; userI
         </div>
       ) : null}
 
-      <TwinBody twin={twin.data} own={false} />
+      <TwinBody key={userId} twin={twin.data} own={false} />
     </div>
   );
 }

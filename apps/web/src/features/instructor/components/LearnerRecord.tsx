@@ -270,7 +270,7 @@ export function LearnerRecord({
               </p>
             </CardHeader>
             <CardContent>
-              <EvidenceLedger events={r.evidence} />
+              <EvidenceLedger key={userId} events={r.evidence} />
             </CardContent>
           </Card>
         </TabsContent>

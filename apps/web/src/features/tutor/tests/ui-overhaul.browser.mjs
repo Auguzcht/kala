@@ -334,6 +334,7 @@ try {
     await page.goto('http://localhost:5173/course/skills');
     await page.getByRole('heading',{name:'Choose a skill',exact:true}).waitFor();
     const skillsHeaderType=await headerType();
+    const skillsHeaderBox=await page.getByRole('heading',{level:1}).boundingBox();
     await screenshot(page,'skills-header',width);
     await page.goto('http://localhost:5173/course/twin');
     await page.getByRole('heading',{name:'Your twin',exact:true}).waitFor();
@@ -343,6 +344,8 @@ try {
       .getByRole("button", { name: "Submit diagnostic", exact: true })
       .waitFor().catch(async (error) => { throw new Error(`Diagnostic fixture: ${errors.join('; ')}; ${await page.locator('body').innerText()}; ${error.message}`); });
     check(JSON.stringify(await headerType())===JSON.stringify(skillsHeaderType),'DIAG-REQ-001 Diagnostic header typography matches Skills and Twin');
+    const diagnosticHeaderBox=await page.getByRole('heading',{level:1}).boundingBox();
+    check(Math.abs(diagnosticHeaderBox.x-skillsHeaderBox.x)<1&&Math.abs(diagnosticHeaderBox.y-skillsHeaderBox.y)<1,'DIAG-REQ-001 Diagnostic margins match Skills at the same viewport');
     check(skillsHeaderType[0][1]==='24px'&&skillsHeaderType[2][1]==='14px','DIAG-REQ-001 shared page title and description use the same 24px/14px tokens');
     check(
       await page.getByText("0 of 6 answered", { exact: true }).isVisible(),
@@ -369,9 +372,9 @@ try {
       const footer=surface.querySelector('footer');
       const count=footer.querySelector('[role=status]').getBoundingClientRect();
       const submit=footer.querySelector('button').getBoundingClientRect();
-      return Math.abs(title.left-surface.getBoundingClientRect().left-20)<1 && Math.abs(card.left-count.left)<1 && Math.abs(card.right-submit.right)<1 &&
+      return title.left>=surface.getBoundingClientRect().left+24 && Math.abs(card.left-count.left)<1 && Math.abs(card.right-submit.right)<1 &&
         getComputedStyle(surface.querySelector('header')).borderBottomWidth==='1px';
-    }), 'DIAG-REQ-001/002 title aligns to shell gutter; footer aligns to cards');
+    }), 'DIAG-REQ-001/002 title uses page-content margins; footer aligns to cards');
     await screenshot(page,'diagnostic-introduction',width);
     const choices=page.locator('#tour-diagnostic-choices').getByRole('button');
     await choices.nth(0).hover();
