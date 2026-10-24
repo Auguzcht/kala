@@ -100,3 +100,7 @@ Secrets printed: none (confirmed).
 ## Subsequent read-only provider and migration checks
 
 On2026-10-25 Fred requested current model-state verification and0037 pre-checks. [Dedicated evidence](provider-and-0037-prechecks-2026-10-25.md) records actual account credit, endpoint availability, shared hint/Tutor routing, successful target-table pre-checks, PG17.6 and the incomplete hosted migration-history finding. This supersedes only the earlier “pre-checks not performed” state; model configuration, migration application/post-checks, deployment and live acceptance remain pending. No runtime files changed or suites rerun.
+
+## FG-3 complete, pending Fred deployment
+
+Fred reported applying0037 on2026-10-25. [Post-check evidence](0037-postchecks-2026-10-25.md) confirms nullable/no-default pinned_at, unchanged RLS/policies/grants, service privileges, count1/pins0 and Data API200. Fetch/ancestry checks confirm0 behind origin/main. The earlier pending FG-3 state is superseded by this evidence; FG-4 deployment/push and FG-5 acceptance remain Fred-only. Current chat fallback is still the free model; the proposed paid configuration is not applied by the coordinator.

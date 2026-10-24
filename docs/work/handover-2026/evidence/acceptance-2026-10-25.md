@@ -9,10 +9,10 @@ Authority: [APPROVAL-06](../approval-06.md). Owner/operator: Fred. This is a pre
 | Approved source SHA | pending final coordinator report |
 | FG-1 paid fallback on a different serving provider, fresh runtime and hint retest | not-run / not reported |
 | FG-2 hosted Postgres major (Lane DB only) | Direct authorized pre-check observed17.6/major17 on2026-10-25; dashboard confirmation not reported |
-| FG-3 migration0037 operator/time/environment | not-run / not reported |
-| FG-3 checksum / pre-checks / post-checks | Checksum and target-table pre-checks passed at07:45+08; manual baseline-history caveat recorded; application/post-checks pending. [Evidence](provider-and-0037-prechecks-2026-10-25.md) |
-| Previous API live alias version / previous Vercel deployment | Fred records before FG-4 |
-| Previous immutable worker image | Fred records privately before FG-4 |
+| FG-3 migration0037 operator/time/environment | Fred reports applied on2026-10-25, dev-hosted; post-checks verified at07:50+08 |
+| FG-3 checksum / pre-checks / post-checks | Passed; unchanged RLS/policies/grants, count1, pins0, Data API200. [Post-check evidence](0037-postchecks-2026-10-25.md) |
+| Previous API live alias version / previous Vercel deployment | API6 verified before deploy; Fred records Vercel deployment privately |
+| Previous immutable worker image | Captured in gitignored .tmp/fg4-rollback-predeploy.json |
 | FG-4 API published version / live alias / worker update | not-run |
 | FG-4 health / startup errors | not-run |
 | FG-4 fast-forward push / Vercel Ready | not-run |
@@ -50,3 +50,7 @@ Pending Fred. Do not begin post-FG-5 cleanup/code freeze or describe the release
 ## Read-only prerequisite update — 2026-10-25
 
 Fred directly authorized provider metadata review and0037 pre-checks. [Results](provider-and-0037-prechecks-2026-10-25.md): target-table checks passed, count1, PG17.6,0035/0036 markers present; CLI migration history is not a complete numeric baseline record. Provider credits remain approximately2.63USD; primary remains listed, configured free fallback has no endpoints. No model setting, application or live acceptance result changed. Earlier not-run entries remain accurate for application/refresh/click-through.
+
+## FG-3 verification update — 2026-10-25
+
+Fred reported applying0037. [Read-only post-checks](0037-postchecks-2026-10-25.md) pass, including a zero-row Data API column probe. Git fetch confirms main is0 behind origin/main and the remote is an ancestor. Schema/Git prerequisites for the approved deploy are green; provider paid-fallback configuration and live recovery remain FG-1. No deployment, push or live feature acceptance is claimed.
