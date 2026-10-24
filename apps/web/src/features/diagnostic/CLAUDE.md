@@ -1,0 +1,1 @@
+Read [AGENTS.md](<../../../../../AGENTS.md>) and [the task router](<../../../../../docs/README.md>) first. The owning documentation is [docs/features/diagnostic/README.md](<../../../../../docs/features/diagnostic/README.md>); missing full specs are tracked in WI-08. This guide is routing only. Visual work follows [DESIGN.md](<../../styles/DESIGN.md>).

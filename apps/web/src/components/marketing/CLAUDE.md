@@ -1,0 +1,1 @@
+Read [AGENTS.md](../../../../../AGENTS.md) and [the task router](../../../../../docs/README.md) first. Visual authority is [DESIGN.md](../../styles/DESIGN.md). Preserved marketing-only boundaries and registry provenance are in [guide knowledge](../../../../../docs/work/handover-2026/evidence/local-guide-knowledge.md). This guide is routing only.
