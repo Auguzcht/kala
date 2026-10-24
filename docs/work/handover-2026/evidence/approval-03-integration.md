@@ -21,9 +21,9 @@ Nothing was pushed or deployed. Fred deploys the backend first, then pushes. No 
 - Added [WI-20](../work-items/WI-20-frontend-test-runner.md) as planned: adopt a standard frontend runner (for example, Vitest) so component tests no longer need external fixtures. No dependency, lockfile or runtime setting changed in this integration.
 - Updated the development test contract, approval router and initiative delivery state. Feature requirements remain those accepted in the lane reports: INGEST-REQ-001, AI-REQ-001, TUTOR-REQ-001 and STUDY-REQ-001–005.
 
-## Merged-main verification
+## Initial main verification — superseded for service isolation
 
-All listed commands exited 0. Each service ran in its own process from its own directory.
+All listed commands exited 0. Each service ran in its own process from its own directory. Subsequent fresh-clone verification found that the parent conftest was not discovered by default. These initial API/worker passes therefore do not establish dotenv or network isolation and are not the accepted final service-suite evidence. Frontend, build and configuration results remain applicable because their source is unchanged by the discovery correction.
 
 | Command | Result |
 | --- | --- |
@@ -54,4 +54,20 @@ Fresh-clone verification is the final follow-up after the integration commit; it
 
 The Study component suite still needs the retained external renderer fixture, Node's experimental VM modules and deprecated react-test-renderer; WI-20 remains planned. Tutor component tests use their existing custom hook/module harness. Automated checks are mocked/in-process and do not establish live LTI, platform latency, database/RLS behavior or tutor recovery. The warm-Lambda abandoned-call and partial sanitizer limits remain explicit in the Tutor/AI specs. Existing lane Ruff findings were not globally refactored.
 
-No server, Docker resource, hosted data or existing Vite session was changed. Main's ignored dependency/build outputs were used or refreshed by the requested checks. Earlier credentials are not re-read; coordinator secret values printed: none. The previously disclosed Lane S exposure remains in the names-only exposure log with rotation at cutover.
+No deployment, hosted smoke, server, Docker or existing Vite operation was executed. Main's ignored dependency/build outputs were used or refreshed by the requested checks. The initial service runs did not establish dotenv/network isolation; no credential values were printed. Later runs must use verified discovery and blocking. The previously disclosed Lane S exposure remains in the names-only exposure log with rotation at cutover.
+
+## Fresh-clone failure and discovery correction — 2026-10-25
+
+At committed revision cf396410686a96c3cdc1210decc540b6a7f9e2ff, a fresh local clone with no dotenv files or existing virtual environment ran the exact `cd services/api && uv run pytest` command: **409 passed, 22 failed**. Twenty-one mocked LTI tests failed because no generated signing key was present; one existing tight abandoned-thread timing assertion also failed. This result exposed that pytest's service-root discovery cutoff excluded services/conftest.py. The first local-main API/worker results cannot be used as proof of the new isolation. No test body is changed to hide these failures.
+
+The correction adds only `addopts = "--confcutdir=.."` under the pytest section of both service pyproject.toml files, without dependency or lock changes. A trace-config collection check verified that the shared services/conftest.py loads before the API tests' local UUID conftest, with 431 cases collected. Both full service suites and fresh-clone proof are rerun after this correction; passing results are appended below.
+
+## Verified-discovery rerun and test-body gate — 2026-10-25
+
+After the pytest discovery correction, the full API suite on local main returned **430 passed, one failed**, with 30 warnings in 27.71s. The worker suite returned **117 passed** in 0.38s. Trace-config confirms services/conftest.py is loaded in both service runs. The signing failures are resolved. No existing test body or import was edited.
+
+The remaining failure is `tests/test_request_budget.py::test_TUTOR_REQ_001_elapsed_guard_abandons_trickling_sync_operation`, specifically its final `assert finished` after a fixed 100ms cleanup sleep. A focused rerun also fails. An independent three-attempt instrumented probe measured the timeout response at 62.082–62.171ms (below the test's 110ms response bound), the cleanup assertion at 164.184–164.280ms, and worker completion at 172.342–176.535ms. Twelve nominal 10ms sleeps do not guarantee completion by the fixed assertion time on this host. This does not establish a request-deadline violation; the already-documented abandoned worker continues after the response.
+
+A proposed patch is prepared outside the repo: replace the fixed cleanup sleep with polling until completion inside `anyio.fail_after(1)`. It preserves the strict response-time assertion, the assertion that work is unfinished when the deadline returns, and the eventual-completion assertion. The test file is untouched because APPROVAL-03 prohibits test-body edits. The coordinator cannot truthfully declare all checks green until Fred authorizes this test-only correction or provides a different resolution. The initial failing and subsequent probe evidence is retained; tests are not skipped or retried until green.
+
+The initial shared-isolation commit was cf39641. The correction changes only pytest discovery options, a non-value test-report header, and explanatory documentation. No dependencies, lockfiles, application behavior, migrations or Terraform configuration were changed. A committed fresh-clone rerun follows this entry; the original failed attempt is retained separately.

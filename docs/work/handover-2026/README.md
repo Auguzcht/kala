@@ -24,7 +24,7 @@ By 2026-11-08, someone who has never seen Kala can run it locally, understand wh
 | Lane | Scope / feature requirements | State / gate |
 | --- | --- | --- |
 | S | [LMS ingest spec](../../features/lms-ingest/README.md), INGEST-REQ-001; upload comment correction only | Approved by APPROVAL-02; merged locally as 5c9011e. Live checks remain outstanding. |
-| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Approved by APPROVAL-03 at b605a3b; merged locally as 9c2e667. Integrated API/frontend/web checks pass; live verification remains outstanding. Sanitizer coverage remains partial. |
+| T | [Tutor](../../features/tutor/README.md), TUTOR-REQ-001; [AI platform](../../features/ai-platform/README.md), AI-REQ-001 | Approved by APPROVAL-03 at b605a3b; merged locally as 9c2e667. Frontend/web checks pass; integrated API verification has one cleanup-timing test failure, documented in APPROVAL-03 evidence. Live verification remains outstanding. Sanitizer coverage remains partial. |
 | F | [Study](../../features/study/README.md), STUDY-REQ-001/002/003/004/005 | APPROVAL-02 conditions satisfied at 7041bc7; merged locally as f316f48. No SQL change. External renderer limitation documented. |
 | C | [Secrets catalogue](../../engineering/secrets.md) and placeholder examples | Approved by APPROVAL-02; merged locally as af6b93c. Eleven tooling tests and inventory check pass on main. |
 | D | Framework, accepted archive moves, five durable reports, recap knowledge | Approved by APPROVAL-02; merged locally as 51c2de5. Future full specs/runbooks remain incomplete. |

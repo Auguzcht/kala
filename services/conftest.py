@@ -1,7 +1,7 @@
 """Shared API/worker pytest isolation (APPROVAL-02 section 5, APPROVAL-03).
 
-Loaded before either service's test modules. Run each suite in its own process
-from its service directory; both services intentionally use the package `app`.
+Each service's pytest config sets --confcutdir=.. so this loads before test
+modules. Run suites in separate service processes: both use the package `app`.
 Only pytest loads this file; application startup and deployments are unaffected.
 """
 from __future__ import annotations
@@ -72,6 +72,10 @@ from app.config import Settings, get_settings
 
 _isolation.setitem(Settings.model_config, "env_file", None)
 get_settings.cache_clear()
+
+
+def pytest_report_header(config):
+    return "Kala test isolation: dotenv disabled; generated JWT key; IPv4/IPv6/DNS blocked"
 
 
 def pytest_unconfigure(config):
