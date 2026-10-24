@@ -41,10 +41,11 @@ Reads course-scoped RAG and owned tutor conversation/messages/attachments. Servi
 Tutor selects the existing chat role and its fallback. Embedding, prompt, context, and prior messages pass the existing sanitizer before reaching a provider. Timeout settings are opt-in; other callers keep their existing defaults.
 
 ## Edge cases and known limits
-TutorChat retains an unconfirmed answer locally when its refetch fails or lacks the returned turn, and removes the duplicate display if that turn later arrives from storage. This local copy lasts only while the conversation remains open and does not retry saving automatically. The budget begins after authentication, at handler entry. It reserves 3s for response work. Synchronous provider operations may continue in a worker after the handler stops waiting; they cannot start later tutor stages. An in-flight persistence write can commit after timeout, so persistence completion is uncertain. No live Lambda/Blackboard recovery claim.
+TutorChat retains an unconfirmed answer locally when its refetch fails or lacks the returned turn, and removes the duplicate display if that turn later arrives from storage. This local copy lasts only while the conversation remains open and does not retry saving automatically. The budget begins after authentication, at handler entry. It reserves 3s for response work. Synchronous provider operations may continue in a worker after the handler stops waiting; they cannot start later tutor stages. On Lambda, an abandoned synchronous call can resume when the warm execution environment serves the next request; returning a response does not terminate that call or guarantee cancellation of its remote side effects. An in-flight persistence write can commit after timeout, so persistence completion is uncertain. No live Lambda/Blackboard recovery claim.
 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
 | 2026-10-24 | Minimal freeze spec created before implementation | APPROVAL-01, section 2 Lane T and confirmed amendment A1 | TUTOR-REQ-001 |
 | 2026-10-24 | Complete timeout detail and unconfirmed-answer display in TutorChat | APPROVAL-01 standing rule; coordinating planner grant for TutorChat.tsx and dedicated UI tests | TUTOR-REQ-001 |
+| 2026-10-24 | Explicitly document that an abandoned synchronous call can resume during the next request in a warm Lambda environment | APPROVAL-02 from Fred | TUTOR-REQ-001 |
