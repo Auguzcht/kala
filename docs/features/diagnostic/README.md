@@ -118,6 +118,28 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 - Status: planned
 - Verified by: Lane G's response-contract tests, pending implementation.
 
+## Diagnostic recovery and presentation (Lane U, APPROVAL-06)
+
+### DIAG-REQ-012: Recover Diagnostic and skill-picker loading failures
+
+- Rule: Diagnostic's load-error Retry refetches the existing question query without submitting answers or reloading the document. Skills and retained Lessons/Flashcards pickers distinguish a failed skills fetch from an empty successful response, show a connection error with a working Retry, and reserve the empty state for a genuinely empty course. Empty copy addresses learners without ingest/proposal implementation terminology. The course-wide Flashcards deck remains available and exposes its existing error/retry states.
+- Acceptance: At 375px and 1440px, a rejected request presents an error rather than No skills mapped yet; pointer and keyboard Retry can recover after the API becomes available. Empty data remains a separate state. Submission/results, course-wide review and grading remain unchanged.
+- Status: planned
+- Verified by: Lane U's uniquely named frontend-closeout browser suite and existing suites; evidence/frontend-closeout.md.
+
+### DIAG-REQ-013: Present optional actionable and waiting counts compatibly
+
+- Rule: The frontend status schema accepts optional dueSkillCount and waitingForMaterialCount. When dueSkillCount is present, the Diagnostic badge and workspace action follow that actionable count (including zero), taking precedence over the legacy due boolean. When absent, preserve the legacy due signal and use a count-free action label. Show a quiet singular/plural “N topics are waiting for course material” line only for a positive waitingForMaterialCount; it has no action button and is absent when the field is omitted. For question responses, render available questions first; when empty, preserve preparing/failure status, then show material waiting for a positive optional waitingForMaterialCount, otherwise caught up. Missing fields retain legacy handling. Never synthesize evidence or make generation calls to clear a badge.
+- Acceptance: Omitted legacy fields, actionable zero with legacy due=true, positive actionable count and material-only waiting all render correctly; zero/absent waiting shows no line. Workspace and rail agree on whether a Diagnostic action is due.
+- Status: planned
+- Verified by: Lane U's synthetic legacy/new response fixtures, schema checks and existing suites; evidence/frontend-closeout.md.
+
+### APPROVAL-06 cross-surface recovery and navigation
+
+- Rule: Existing roster, skill-proposal and Twin skill pagination uses Tab-reachable links or buttons, explicit endpoint disabled semantics and the existing 40px sizing. Twin's Practice this opens the shown skill's canonical Test browse pane, never starts automatically. Root error/not-found returns authenticated staff to /class and students to /course; without a session it gives the Blackboard session-ended instruction with no dead relaunch button. The public root says “Open Kala from your course in Blackboard.” Session-expired says “Your session ended. Go back to your Blackboard course and open Kala again.” No password sign-in is introduced.
+- Rule: /course/practice without skillId redirects to /course/skills with replace; existing skillId/setId bridges remain canonical Test browse links. Keep /course/lessons and the course-wide /course/flashcards deck. Remove only stale SessionBar source commentary, not routes. Evidence labels state Last 20 events for Twin and Last 25 events for learner-record ledger; statistics based on bounded samples are labelled Based on recent activity and do not imply lifetime evidence totals. No full-history paging/API change.
+- Acceptance: Keyboard pager boundaries and page changes work without a hash jump; contextual Practice this retains skillId and tab=test with no start; each role/no-session error destination is correct; direct root/expiry have the approved copy; legacy links preserve set context and no-skill entry redirects. Count windows remain explicit with empty/partial/full data. Reduced motion and existing layout remain.
+
 ## API contract
 
 | Method and path | Purpose | Auth | Notes |
@@ -170,3 +192,4 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 | 2026-10-25 | Clarify the singular skill-session versus plural Skills-picker layout boundary so all page headers share the centered maximum width on wide screens | Wide-screen verification of Fred’s margin correction | DIAG-REQ-001 |
 
 | 2026-10-25 | Specify actionable eligibility, availability-first selection and truthful waiting contracts before Lane G implementation | APPROVAL-06 section 4; G proposal and coordinator contract clarification | DIAG-REQ-009–011 |
+| 2026-10-25 | Define working Retry, optional count compatibility, truthful empty responses and the approved cross-surface recovery/navigation/window copy before close-out implementation | APPROVAL-06 section 5; Lane U proposal plus DIAG-REQ-011 response contract | DIAG-REQ-012, DIAG-REQ-013 |
