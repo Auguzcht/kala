@@ -33,7 +33,7 @@ Students recall course material with flip cards and self-ratings. Study advances
 - Verified by: services/api/tests/test_study_deck_approved.py
 
 ### STUDY-REQ-002: Resume served but unrated cards
-- Rule: review serves active claimed cards with `reps=0` before any fresh top-up, without spending the daily new-card allowance again. Scheduled due cards retain priority. Native flip cards and bank MCQs are both eligible in Study. The shared Test/practice selector behavior is unchanged.
+- Rule: review serves active claimed cards with `reps=0` before any fresh top-up, without spending the daily new-card allowance again. Scheduled due cards retain priority. The shared Test/practice selector behavior is unchanged.
 - Acceptance: leaving and reopening a deck re-serves the unrated card, even at the daily cap. All caught up requires no due, unrated, or eligible fresh card.
 - Status: implemented
 - Verified by: services/api/tests/test_study_deck_approved.py
@@ -43,6 +43,20 @@ Students recall course material with flip cards and self-ratings. Study advances
 - Acceptance: complete, replay, and rate the same cards without additional review POSTs; a separate action requests another deck.
 - Status: implemented
 - Verified by: apps/web/src/features/flashcards/tests/study-deck.test.mjs
+
+### STUDY-REQ-004: Include eligible native flip cards in Study fresh selection
+- Rule: Study fresh selection includes live native `flashcard` items alongside bank practice MCQs, subject to the existing claim and daily-cap rules. Only Study opts into `include_flashcards`; the shared selector defaults and Test/diagnostic/lesson MCQ pools remain unchanged.
+- Rationale: membership and Study all already include native flip cards, but the old fresh selector excluded them. That could produce an empty review deck and “All caught up” while eligible cards remained. Matching Study membership fixes the same card-availability defect as STUDY-REQ-002.
+- Acceptance: with an untracked bank MCQ and native flip card, Study fresh selection includes both; the existing non-Study regression still returns only the MCQ.
+- Status: implemented
+- Verified by: services/api/tests/test_study_deck_approved.py::test_STUDY_REQ_004_study_fresh_pool_includes_native_flip_cards; services/api/tests/test_study_deck_approved.py::test_STUDY_REQ_002_shared_due_and_test_pools_keep_original_behavior
+
+### STUDY-REQ-005: Derive Preparing from actual Study bank availability
+- Rule: for an empty course-wide deck, “Preparing” requires an actual visible skill with material whose bank is not usable. If all visible skill banks are ready, show “All caught up” when tracked cards exist or “No cards yet” when none exist, subject to the existing error, no-material, and cap states.
+- Rationale: the old course-wide lookup returned no preparing skill when every bank was ready, then treated that missing result as preparing. This is the same empty-deck availability-classification boundary behind the caught-up-while-cards-remain defect: bank readiness and queue availability must support the displayed state. Correcting it makes the STUDY-REQ-003 empty-state distinction observable for a ready course.
+- Acceptance: an empty course-wide deck with a ready bank renders “All caught up” for tracked cards and “No cards yet” for zero tracked cards, without “Preparing questions”.
+- Status: implemented
+- Verified by: apps/web/src/features/flashcards/tests/study-deck.test.mjs, “STUDY-REQ-005 empty ready course distinguishes caught up from no cards”
 
 ## API contract
 | Method and path | Purpose | Auth | Notes |
@@ -59,10 +73,15 @@ No provider calls for deck selection or replay. Existing optional tutor assistan
 ## Edge cases and known limits
 Daily cap applies only to fresh review claims, not resuming unrated cards or Study all. Retired items and rejected skills stay excluded. Membership due badges count scheduled reviewed cards, independently of resumable unrated cards. No next-due field is added in this change. Live LMS and production smoke checks remain the maintainer's responsibility.
 
+The component interaction tests depend on an external renderer fixture: matching `react` and `react-test-renderer` packages (verified with 19.2.8) resolved through `KALA_STUDY_TEST_DEPS`, plus Node's `--experimental-vm-modules` flag. The fixture is outside the repository; a clean checkout alone cannot run these tests until that fixture is supplied. The tests mock provider hooks and UI shells, so they do not verify browser layout or live HTTP integration. React emits a renderer deprecation warning. No dependency or shared test-harness change is included; integration harness work belongs to the coordinator.
+
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
 | 2026-10-24 | Define minimal freeze scope before implementation | APPROVAL-01, Lane F and confirmed section 5 | STUDY-REQ-001, STUDY-REQ-002, STUDY-REQ-003 |
+| 2026-10-24 | Make native flip-card fresh selection and its regression explicit | APPROVAL-02: retain the fix because eligible native cards could be omitted before an empty/caught-up result | STUDY-REQ-004 |
+| 2026-10-24 | Make ready-course Preparing classification and its regression explicit | APPROVAL-02: retain the fix at the same Study empty-state availability boundary | STUDY-REQ-005 |
+| 2026-10-24 | Record the external renderer fixture as a known verification limitation | APPROVAL-02; dependency and integration harness work stays outside this amendment | STUDY-REQ-003, STUDY-REQ-005 |
 
 ## Verification evidence
 

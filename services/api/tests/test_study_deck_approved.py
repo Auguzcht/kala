@@ -196,7 +196,7 @@ def test_STUDY_REQ_002_shared_due_and_test_pools_keep_original_behavior(study):
     assert "front" not in params["select"]
 
 
-def test_STUDY_REQ_002_study_fresh_pool_includes_native_flip_cards(study):
+def test_STUDY_REQ_004_study_fresh_pool_includes_native_flip_cards(study):
     _, _client = study
     selected = serving.pick_bank_items(USER.user_id, COURSE, SKILL, 20, "study",
                                        institution_id=USER.institution_id)

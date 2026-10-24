@@ -147,7 +147,7 @@ test('STUDY-REQ-003 replay waits for the final rating to finish saving', async (
   await deck.unmount();
 });
 
-test('STUDY-REQ-003 empty ready course distinguishes caught up from no cards', async () => {
+test('STUDY-REQ-005 empty ready course distinguishes caught up from no cards', async () => {
   const caughtUp = await mountDeck({ cards: [], tracked: 2 });
   assert.match(caughtUp.text(), /All caught up/);
   assert.doesNotMatch(caughtUp.text(), /Preparing questions/);
