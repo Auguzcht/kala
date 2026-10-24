@@ -127,9 +127,11 @@ export function AnswerableCard({
                 id={ci === 0 ? (firstChoiceId ?? undefined) : undefined}
                 variant={isCorrectChoice ? "outline" : selectedId === c.id ? "orange" : "outline"}
                 disabled={!!result || isPending}
+                aria-pressed={selectedId === c.id}
                 onClick={() => onSelect(c.id)}
                 className={cn(
-                  "h-auto justify-start whitespace-normal text-left transition-colors hover:border-brand-orange/40 hover:bg-accent/40",
+                  "h-auto justify-start whitespace-normal text-left transition-colors",
+                  !result && selectedId !== c.id && "hover:border-brand-orange/40 hover:bg-accent/40",
                   isCorrectChoice && "border-brand-green bg-brand-green/10 text-foreground",
                   isWrongSelection && "border-destructive bg-destructive/10 text-foreground",
                 )}

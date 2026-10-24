@@ -350,3 +350,46 @@ Evidence added: this report, source hash, rendered contrast checks and 20 synthe
 Anything not done, and why: image uploads, restored-file contents and PDF content preview require separate backend contracts. No push, deploy, migration, hosted write or infrastructure change.
 Risks or questions for the planner: integrate matching Tutor/Design wording and complete human live acceptance; keep current upload type/size constraints until the backend supports more.
 Secrets printed: none (confirmed); environment contents were not read.
+
+## Diagnostic introduction, alignment and selected hover — 2026-10-25
+
+Base `bd5cff0`. Fred asked for a Skills-like explanation of the Diagnostic, a top separator, advice on footer alignment, and correction of the selected answer's lingering pale hover. His latest direction supersedes the initial request to remove all introduction. The Diagnostic spec was updated before implementation (DIAG-REQ-001/002/003/006).
+
+Design and implementation:
+
+- Reuse the actual Skills `PageHeader`, with Diagnostic eyebrow, “Find your starting point” and one sentence: “Answer a few questions so Kala can understand what you already know and where to begin.” It explains the task without an extra start screen, timer, progress bar, grade claim or separate hero treatment. The compact introduction sits above a full-width hairline, outside the question scroll region, and disappears for the submitted mastery reveal. Existing early-return states retain their own explanations.
+- Give header, card column, footer count, submit action and error copy the same 800px maximum column and 16px/24px responsive side padding. The footer separator remains full width. Submit stays at the card's right edge even when the mobile footer wraps; the count stays at its left edge. The last long question remains completely reachable above the footer.
+- The shared AnswerableCard applied its neutral hover shade unconditionally, including to an orange selected answer, so a clicked choice looked pale until the cursor left. Apply that neutral hover only to unselected unanswered choices. Selected buttons keep the normal orange Button variant hover. Add aria-pressed for the selected state; choice changes, pending/result locks, grading and submission payloads are unchanged. This is a narrow shared visual fix directly requested by Fred, not a Study behavior change.
+
+Verification:
+
+| Command | Result |
+| --- | --- |
+| Browser command recorded above with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-diagnostic-polish` | 186 assertions passed |
+| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed; existing renderer deprecation/VM-module notices |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-diagnostic-polish-lint.log` |
+| `pnpm --filter web typecheck` | Passed; existing route-generator circular warning; `/tmp/kala-diagnostic-polish-typecheck.log` |
+| `pnpm --filter web build` | Passed; existing chunk-size warning; `/tmp/kala-diagnostic-polish-build.log` |
+| `git diff --check` | Passed |
+
+New assertions cover purpose copy, header/card/footer edge alignment, top separator, click while leaving the pointer stationary, pointer leave/re-entry, selection changes without double counting, keyboard state, persistent introduction while scrolling, last-question clearance and removal of the introduction on results. Existing synthetic submission assertions still prove the original six-answer payload. CSS hover comparisons wait for the browser's real color transition to finish; an initial fake-JavaScript-clock sample measured intermediate CSS colors and was corrected without changing the implementation.
+
+Desktop introduction, mobile introduction and the long final mobile question were visually inspected. Synthetic screenshots are in `/tmp/kala-lane-u-diagnostic-polish/`, including `diagnostic-introduction-1440.png`, `diagnostic-introduction-375.png` and `diagnostic-375.png`. Browser auth/API are intercepted and non-localhost requests blocked. No live Diagnostic submission, generation, grade write or due-rule change occurred.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / Diagnostic purpose, aligned submission and selected-answer hover
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: bd5cff0
+Files changed:
+- apps/web/src/components/study/AnswerableCard.tsx
+- apps/web/src/features/diagnostic/components/DiagnosticPanel.tsx
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- docs/features/diagnostic/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-001, 002, 003, 006; WI-22
+Commands run and results (tests, lint, typecheck, build): 186 browser assertions and 4 Study tests passed; lint/typecheck/build/diff check passed with existing warnings.
+Spec changes made: replace the old introduction-removal rule with compact purpose copy; align footer contents; add selected-hover/accessible-state acceptance before implementation.
+Evidence added: this report and synthetic desktop/mobile screenshots.
+Anything not done, and why: no Diagnostic API, due logic, grade flow or infrastructure change; no push, merge or deployment.
+Risks or questions for the planner: Fred's live visual acceptance remains; mobile footer intentionally wraps to retain readable controls and aligned outer edges.
+Secrets printed: none (confirmed); environment contents were not read.

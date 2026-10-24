@@ -329,6 +329,41 @@ try {
         0,
       "DIAG-REQ-001 no redundant header",
     );
+    check(await page.getByRole('heading',{name:'Find your starting point',level:1,exact:true}).isVisible(),
+      'DIAG-REQ-001 compact purpose header is visible');
+    check(await page.getByText('Answer a few questions so Kala can understand what you already know and where to begin.',{exact:true}).isVisible(),
+      'DIAG-REQ-001 explanation describes the starting-point purpose');
+    check(await page.locator('[data-study-surface]').evaluate(surface => {
+      const card=[...surface.querySelector('#tour-diagnostic-card').children].find(el=>el.querySelector('button')).getBoundingClientRect();
+      const title=surface.querySelector('header h1').getBoundingClientRect();
+      const footer=surface.querySelector('footer');
+      const count=footer.querySelector('[role=status]').getBoundingClientRect();
+      const submit=footer.querySelector('button').getBoundingClientRect();
+      return Math.abs(card.left-title.left)<1 && Math.abs(card.left-count.left)<1 && Math.abs(card.right-submit.right)<1 &&
+        getComputedStyle(surface.querySelector('header')).borderBottomWidth==='1px';
+    }), 'DIAG-REQ-002 header/card/footer share aligned edges and top separator');
+    await screenshot(page,'diagnostic-introduction',width);
+    const choices=page.locator('#tour-diagnostic-choices').getByRole('button');
+    await choices.nth(0).hover();
+    await page.waitForTimeout(200);
+    const neutralHover=await choices.nth(0).evaluate(el=>getComputedStyle(el).backgroundColor);
+    await choices.nth(0).click();
+    await page.waitForTimeout(200);
+    const selectedHover=await choices.nth(0).evaluate(el=>getComputedStyle(el).backgroundColor);
+    check(selectedHover!==neutralHover && await choices.nth(0).getAttribute('aria-pressed')==='true',
+      'DIAG-REQ-006 click retains visible selection under the stationary pointer');
+    await page.getByRole('heading',{name:'Find your starting point'}).hover();
+    await choices.nth(0).hover();
+    await page.waitForTimeout(200);
+    check(await choices.nth(0).evaluate((el,color)=>getComputedStyle(el).backgroundColor===color,selectedHover),
+      'DIAG-REQ-006 returning hover preserves selected fill');
+    await choices.nth(1).click();
+    check(await choices.nth(0).getAttribute('aria-pressed')==='false' && await choices.nth(1).getAttribute('aria-pressed')==='true' &&
+      await page.getByText('1 of 6 answered',{exact:true}).isVisible(),
+      'DIAG-REQ-006 changing choice moves selection without double counting');
+    await choices.nth(0).press('Enter');
+    check(await choices.nth(0).getAttribute('aria-pressed')==='true',
+      'DIAG-REQ-006 keyboard choice exposes the selected state');
     check(
       (await page.getByRole("progressbar").count()) === 0,
       "DIAG-REQ-002 no progress bar",
@@ -357,6 +392,8 @@ try {
       lastBox.y + lastBox.height <= footerBox.y + 1,
       "DIAG-REQ-003 complete last choice above footer",
     );
+    check(await page.getByRole('heading',{name:'Find your starting point'}).isVisible(),
+      'DIAG-REQ-001 compact introduction stays visible while questions scroll');
     check(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -378,6 +415,8 @@ try {
       .getByRole("button", { name: "Submit diagnostic", exact: true })
       .click();
     await page.getByText("Baseline set", { exact: true }).first().waitFor();
+    check((await page.getByRole('heading',{name:'Find your starting point'}).count())===0,
+      'DIAG-REQ-001 answering introduction leaves on result reveal');
     check(
       state.submit.answers.length === 6 &&
         state.submit.answers.every((x) => x.choice_id === "a"),

@@ -8,6 +8,7 @@ import {
 import { useBankStatus } from "@/features/bank";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { AnswerableCard } from "@/components/study/AnswerableCard";
+import { PageHeader } from "@/components/shell/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -163,6 +164,16 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   return (
     <>
       <div data-study-surface className="flex h-full min-h-0 flex-col">
+        {!submitted ? (
+          <header className="shrink-0 border-b bg-background">
+            <PageHeader
+              eyebrow="Diagnostic"
+              title="Find your starting point"
+              description="Answer a few questions so Kala can understand what you already know and where to begin."
+              className="mx-auto mb-0 w-full max-w-[800px] px-4 py-4 sm:px-6"
+            />
+          </header>
+        ) : null}
         <TransitionPanel
           className="min-h-0 flex-1 overflow-y-auto [&>div]:min-h-full"
           activeIndex={submitted ? 1 : 0}
@@ -228,8 +239,8 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
             </Card>,
           ]}
         </TransitionPanel>
-        <footer className="shrink-0 border-t bg-background px-4 py-4 sm:px-6">
-          <div className="mx-auto flex max-w-[800px] flex-wrap items-center justify-between gap-3">
+        <footer className="shrink-0 border-t bg-background py-4">
+          <div className="mx-auto flex w-full max-w-[800px] flex-wrap items-center justify-between gap-3 px-4 sm:px-6">
             <p
               role="status"
               className="font-mono text-xs text-muted-foreground"
@@ -241,6 +252,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
             <Button
               id={submitted ? undefined : "tour-diagnostic-submit"}
               variant="orange"
+              className="ml-auto"
               disabled={!submitted && (!allAnswered || submit.isPending)}
               aria-busy={submit.isPending || undefined}
               onClick={
@@ -258,7 +270,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
           {submit.isError ? (
             <p
               role="alert"
-              className="mx-auto mt-2 max-w-[800px] text-sm text-destructive"
+              className="mx-auto mt-2 w-full max-w-[800px] px-4 text-sm text-destructive sm:px-6"
             >
               Your baseline could not be saved. Please try again.
             </p>

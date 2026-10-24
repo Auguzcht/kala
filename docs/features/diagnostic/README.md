@@ -25,16 +25,17 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 
 ## Requirements
 
-### DIAG-REQ-001: Remove redundant Diagnostic introduction
+### DIAG-REQ-001: Explain the Diagnostic's purpose with a compact introduction
 
-- Rule: The Diagnostic page omits the "Build your baseline" page header and subtitle, and the "Topics without course material are not included." note. Keep loading, error, preparing, no-material, caught-up and submitted-result states.
-- Acceptance: Neither removed introduction nor note appears in a ready question set; existing non-ready states and the mastery-delta result remain available.
+- Rule: While answering, show the shared PageHeader pattern used by Skills: Diagnostic eyebrow, "Find your starting point" title, and "Answer a few questions so Kala can understand what you already know and where to begin." explanation. Keep it compact, aligned with the question column, above a full-width hairline separator. It stays outside the question scroll region and is removed for the submitted-result reveal. Omit the old "Build your baseline" copy and "Topics without course material are not included." note. Keep loading, error, preparing, no-material and caught-up states.
+- Acceptance: At desktop and mobile widths the purpose is visible without a separate start screen, timer or progress bar; heading and description use Skills' existing typography and fit the viewport; existing non-ready states and mastery-delta result remain available.
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; synthetic screenshots at 1440px and 375px in docs/work/handover-2026/evidence/ui-overhaul.md.
 
 ### DIAG-REQ-002: Put answered count beside submission
 
 - Rule: Diagnostic has no SessionBar back chevron or progress bar. Show "{answered} of {total} answered" beside the submit action. Submission remains disabled until all displayed questions are answered and while submission is pending. Preserve the tour anchors and the submitted-result exit.
+- Rule: The header, question cards, answer count and submit button share one maximum-width column and responsive horizontal padding. Keep the footer's top border full width; its content aligns with the outer left/right card edges. Error copy follows the same column.
 - Acceptance: Selecting an answer updates the adjacent count; the question view has no back chevron or progress bar; the enabled submit action sends the existing answer payload once all questions are answered.
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; authenticated acceptance remains pending.
@@ -69,6 +70,13 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 | Shared pieces | Message, MarkdownText, Shimmer thinking state, Suggestion / FollowUpChips, error display and de-identified `/tutor/ask` | Same |
 | Not used | Reasoning, Tool, Agent, Plan, Task, Queue, Sandbox, Terminal, Model Selector, Speech, Artifact, Canvas, Web Preview | Same |
 | Later, planned | Sources and Inline Citation after the API returns RAG source titles | n/a |
+
+### DIAG-REQ-006: Keep answer selection visible during hover and keyboard use
+
+- Rule: The shared AnswerableCard's selected choice retains its orange selection fill while hovered or focused; the neutral hover shade applies only to unselected, unanswered choices. Expose each button's selected state accessibly. Keep existing pending locks, graded-result presentation, choice-change and submission behavior across Diagnostic and Study hub callers.
+- Acceptance: Clicking an answer while leaving the pointer over it does not wash out selection; moving away and returning keeps it selected; selecting another answer moves the selection without increasing the answered count. Keyboard selection exposes the same state. Existing Study/Practice grading and pending protections remain intact.
+- Status: implemented
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; shared Study regressions and synthetic desktop/mobile captures in the Lane U evidence.
 
 ## API contract
 
@@ -116,3 +124,4 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 | 2026-10-25 | Require published lucide-animated per-icon source variants, with shared event forwarding only and static fallback for unavailable glyphs | Fred’s explicit correction and https://lucide-animated.com/ registry inspection | DIAG-REQ-005 |
 | 2026-10-25 | Define local file staging, retry-safe upload-before-send, finite dock corners and raw-text preview dialog before implementation | Fred selected file cards plus raw-text preview modal in this chat; coordinator-owned Tutor/Design integration amendment pending | DIAG-REQ-005 |
 | 2026-10-25 | Define clickable attachment metadata fallback, equal card insets, format accents and published Upload drop glyph; restore shared toast contrast | Fred's direct attachment and notification feedback; existing backend type limits retained | DIAG-REQ-005 |
+| 2026-10-25 | Restore a compact Skills-pattern purpose header with a separator, align submission with the question column, and preserve selected-answer styling on hover | Fred's direct Diagnostic UX feedback supersedes the earlier header-removal direction; no Diagnostic API or due-rule change | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-003, DIAG-REQ-006 |
