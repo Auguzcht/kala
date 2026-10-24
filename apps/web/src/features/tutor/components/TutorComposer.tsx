@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils";
 import type { TutorAttachment } from "@/features/tutor/schema/tutor.schema";
 import { validateTutorFile } from "@/features/tutor/lib/presentation";
 import {
-  canPreviewTutorFile,
   type StagedTutorFile,
   type TutorFileUploadResult,
 } from "@/features/tutor/lib/attachments";
@@ -204,7 +203,7 @@ export function TutorComposer({
               }}
             >
               <div
-                className="flex gap-3 overflow-x-auto px-3 pb-2 pt-3"
+                className="flex gap-3 overflow-x-auto pb-2 pl-1.5 pr-1.5 pt-3"
                 aria-label="Chat attachments"
               >
                 {attachments.map((attachment) => {
@@ -223,11 +222,11 @@ export function TutorComposer({
                       }
                       disabled={busy || pending || removingId === attachment.id}
                       onRemove={() => onRemove(attachment.id)}
-                      onPreview={
-                        file && canPreviewTutorFile(file)
-                          ? (trigger) => setPreview({ file, trigger })
-                          : undefined
-                      }
+                      onPreview={(trigger) => setPreview({
+                        name: attachment.filename, size: attachment.sizeBytes,
+                        status: attachment.status === "ready" ? "Attached" : attachment.status === "failed" ? "Couldn't read" : "Processing",
+                        file, trigger,
+                      })}
                     />
                   );
                 })}
@@ -249,11 +248,11 @@ export function TutorComposer({
                         current.filter((file) => file.id !== item.id),
                       )
                     }
-                    onPreview={
-                      canPreviewTutorFile(item.file)
-                        ? (trigger) => setPreview({ file: item.file, trigger })
-                        : undefined
-                    }
+                    onPreview={(trigger) => setPreview({
+                      name: item.file.name, size: item.file.size,
+                      status: item.failed ? "Upload failed" : "Ready to attach",
+                      file: item.file, trigger,
+                    })}
                   />
                 ))}
               </div>

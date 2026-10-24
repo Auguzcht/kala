@@ -98,6 +98,7 @@ function mount({ messages = [], error, refetch } = {}) {
     "@/components/ai-elements/dock-layout": { dockLayout },
     "@/features/tutor/components/TutorComposer": uiModule("TutorComposer"),
     "@/features/tutor/components/TutorWelcome": uiModule("TutorWelcome"),
+    "@/features/tutor/components/TutorDropOverlay": uiModule("TutorDropOverlay"),
     "@/features/courses": { useCourse: () => ({ data: { title: "AWS101" } }) },
     "@/lib/auth/AuthProvider": { useSession: () => null },
     "@/lib/utils": { cn: (...parts) => parts.filter(Boolean).join(" ") },

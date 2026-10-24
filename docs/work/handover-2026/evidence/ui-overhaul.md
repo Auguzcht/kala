@@ -301,3 +301,52 @@ Evidence added: this append-only verification, synthetic file-card/raw-preview s
 Anything not done, and why: image uploads, PDF content preview and restored-file contents need separate contracts; they were not part of the selected local TXT/MD preview scope. No backend, migration, generated type, dependency, infrastructure, push or deployment change.
 Risks or questions for the planner: integrate revised Tutor attachment lifecycle/shape wording; retain existing backend type/size limits and human live acceptance.
 Secrets printed: none (confirmed); environment contents were not read.
+
+## Attachment interaction polish and toast contrast — 2026-10-25
+
+Base `f87bbf0`. Fred directly requested an animated drop glyph, attachment hover/preview behavior, equal top/left card insets, subtle format accents, investigation of image support, and readable badge/notification toast text. The owned component-boundary amendment was updated before implementation. The direct request authorizes the narrow shared Sonner correction; no gamification logic changes.
+
+Findings and changes:
+
+- The previous card rendered a noninteractive div when the local File was absent, explaining the missing hover/click for restored attachments. Every card now has a keyboard-accessible preview button and muted hover shade. TXT/MD still show raw local text when available. Restored attachments and PDFs open metadata with an explicit content-preview limitation; no unavailable content is invented or fetched. Preview stays available while removal is disabled during pending work.
+- The dock's input group already contributes horizontal padding. Removed the redundant left inset from the card row, making the visible top and left card margins equal (browser geometry checked). MD, TXT and PDF glyph tiles use different subtle existing-token fills and retain text type labels; color is not the only indication of format.
+- The drop overlay uses the actual published Upload variant from `https://lucide-animated.com/r/upload.json`, played on drag entry with reduced-motion gating, plus supported-type/size copy. The source body is byte-for-byte identical apart from the two attribution comments; SHA256 `bd897b41a23e7238e63b7d62070a64a7268db3dfcbfcf18f70568ee376139593`. Existing MIT license applies. No generic motion preset or dependency was added.
+- Sonner previously read `theme` from next-themes, which can remain the saved dark preference even while AppProviders forces light mode. Token overrides kept the toast white, but Sonner's dark-theme description selector made the description near-white. Toaster now prioritizes `forcedTheme`, then `resolvedTheme`, and explicitly uses the readable muted-foreground token for descriptions. Synthetic success/badge, error, info and warning notices with a saved dark preference all satisfy at least 4.5:1 description contrast on their rendered background.
+- Images are an existing backend limitation: `services/api/app/routers/tutor.py` accepts only text/plain, text/markdown and application/pdf, capped at 5 MiB; the upload/extraction path is text based and mirrors the storage MIME restrictions. Accepting PNG/JPG only in the picker would still fail upload. Image upload/processing/model-context support is a separate API/storage contract change. Restored-file content retrieval and PDF content previews also remain separate work. No backend, storage, generated schema or auth changes were made.
+
+Verification:
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter web exec node --test src/features/tutor/components/TutorChat.test.mjs src/features/tutor/schema/tutor.schema.test.ts src/lib/api-error.test.ts src/features/tutor/tests/presentation.test.mjs` | 21 passed |
+| `KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-file-polish node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` | 168 assertions passed |
+| `pnpm --filter web lint` | Passed; 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-file-polish-lint.log` |
+| `pnpm --filter web typecheck` | Passed; existing route-generator circular warning |
+| `pnpm --filter web build` | Passed; existing chunk-size warning; `/tmp/kala-file-polish-build.log` |
+| `git diff --check` | Passed |
+
+The 20 synthetic captures in `/tmp/kala-lane-u-file-polish/` include drag overlay, staged cards, restored-file metadata, raw previews and toast contrast, as well as the retained Diagnostic/sidebar/dock checks. Staged desktop cards, mobile metadata and toast captures were visually inspected. Browser tests intercept all auth/API traffic and block non-localhost requests; no live upload, ask or mutation occurred. Intermediate test-harness corrections used Vite's canonical module URLs to share Sonner/theme singletons, waited for all four notifications to render, and waited for Radix's deferred focus restoration. Final passing verification supersedes those timing/module-isolation failures.
+
+AUDIT REPORT
+Task / brief ID: WI-22 / Tutor attachment polish and shared toast contrast
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Base revision: f87bbf0
+Files changed:
+- apps/web/src/components/ui/sonner.tsx
+- apps/web/src/features/tutor/components/TutorChat.test.mjs
+- apps/web/src/features/tutor/components/TutorChat.tsx
+- apps/web/src/features/tutor/components/TutorComposer.tsx
+- apps/web/src/features/tutor/components/TutorDropOverlay.tsx
+- apps/web/src/features/tutor/components/TutorFileCard.tsx
+- apps/web/src/features/tutor/components/TutorFilePreview.tsx
+- apps/web/src/features/tutor/components/icons/upload.tsx
+- apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+- docs/features/diagnostic/README.md
+- docs/work/handover-2026/evidence/ui-overhaul.md
+REQ / WI IDs touched: DIAG-REQ-005; TUTOR-REQ-009, 011; WI-22
+Commands run and results (tests, lint, typecheck, build): 21 unit tests and 168 browser assertions passed; lint/typecheck/build/diff check passed with existing warnings.
+Spec changes made: owned component-boundary amendment and change-log entry before implementation; coordinator-owned Tutor/Design matching wording remains pending integration.
+Evidence added: this report, source hash, rendered contrast checks and 20 synthetic screenshots.
+Anything not done, and why: image uploads, restored-file contents and PDF content preview require separate backend contracts. No push, deploy, migration, hosted write or infrastructure change.
+Risks or questions for the planner: integrate matching Tutor/Design wording and complete human live acceptance; keep current upload type/size constraints until the backend supports more.
+Secrets printed: none (confirmed); environment contents were not read.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TutorComposer } from "@/features/tutor/components/TutorComposer";
 import { TutorWelcome } from "@/features/tutor/components/TutorWelcome";
+import { TutorDropOverlay } from "@/features/tutor/components/TutorDropOverlay";
 import { pickGreeting, validateTutorFile, createConversationResolver } from "@/features/tutor/lib/presentation";
 import { dockLayout } from "@/components/ai-elements/dock-layout";
 import { useCourse } from "@/features/courses";
@@ -363,7 +364,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
         </div>
       </div>
       </div>
-      {dragging ? <div aria-live="polite" className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-background/95 p-6 text-center"><p className="font-display text-lg font-medium">Drop files to attach</p></div> : null}
+      {dragging ? <TutorDropOverlay /> : null}
     </div>
   );
 }

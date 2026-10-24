@@ -14,10 +14,17 @@ import { XIcon } from "@/components/ui/x";
 import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import {
   TEXT_PREVIEW_BYTES,
+  canPreviewTutorFile,
   tutorFileSize,
 } from "@/features/tutor/lib/attachments";
 
-export type TutorPreviewSelection = { file: File; trigger: HTMLButtonElement };
+export type TutorPreviewSelection = {
+  name: string;
+  size: number;
+  status: string;
+  file?: File;
+  trigger: HTMLButtonElement;
+};
 export function TutorFilePreview({
   selection,
   onClose,
@@ -34,9 +41,11 @@ export function TutorFilePreview({
   const closeIcon = useTutorIcon();
   const lastSelection = useRef(selection);
   if (selection) lastSelection.current = selection;
-  const file = (selection ?? lastSelection.current)?.file;
+  const details = selection ?? lastSelection.current;
+  const file = details?.file;
+  const rawPreview = file && canPreviewTutorFile(file);
   useEffect(() => {
-    if (!file) return;
+    if (!file || !canPreviewTutorFile(file)) return;
     let cancelled = false;
     void file
       .slice(0, TEXT_PREVIEW_BYTES)
@@ -78,7 +87,7 @@ export function TutorFilePreview({
         >
           <div className="flex min-w-0 items-center justify-between gap-3">
             <DialogTitle className="min-w-0 truncate text-base">
-              {file?.name}
+              {details?.name}
             </DialogTitle>
             <DialogClose asChild>
               <Button
@@ -96,13 +105,20 @@ export function TutorFilePreview({
             id="tutor-file-preview-description"
             className="text-xs"
           >
-            {file ? tutorFileSize(file.size) : ""} · Plain text preview
-            {file && file.size > TEXT_PREVIEW_BYTES
+            {details?.name.split(".").at(-1)?.toUpperCase()} · {details ? tutorFileSize(details.size) : ""} · {details?.status}
+            {rawPreview ? " · Plain text preview" : " · File details"}
+            {rawPreview && file.size > TEXT_PREVIEW_BYTES
               ? " · Showing the first 128 KB"
               : ""}
           </DialogDescription>
           <div className="min-h-0 overflow-auto rounded-lg bg-muted/40 p-4">
-            {!content ? (
+            {!rawPreview ? (
+              <p className="text-sm leading-6 text-muted-foreground">
+                {details?.name.toLowerCase().endsWith(".pdf")
+                  ? "PDF content preview isn't available yet. This card shows the file's details; an attached PDF can still be used by Kala when its status is ready."
+                  : "File contents aren't available in this session. Raw-text preview is available for TXT and MD files selected in this chat. Select the original file again to preview its contents locally."}
+              </p>
+            ) : !content ? (
               <p role="status" className="text-sm text-muted-foreground">
                 Loading preview…
               </p>

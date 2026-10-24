@@ -580,6 +580,11 @@ try {
       .locator("[data-study-surface]")
       .dispatchEvent("dragenter", { dataTransfer: data });
     await page.getByText("Drop files to attach", { exact: true }).waitFor();
+    check(
+      await page.locator('[data-tutor-drop-overlay] svg g').evaluate(el =>
+        getComputedStyle(el).transform === "none" || getComputedStyle(el).transform === "matrix(1, 0, 0, 1, 0, 0)"),
+      "TUTOR-REQ-009 Upload glyph is static under reduced motion",
+    );
     await screenshot(page, "tutor-drag", width);
     await page
       .locator("[data-study-surface]")
@@ -1127,7 +1132,7 @@ try {
   }
   await primitive.page.evaluate(() =>
     window.setFixtureFiles([
-      { id: "fixture-file", filename: "notes.txt", status: "ready" },
+      { id: "fixture-file", filename: "notes.txt", sizeBytes: 15, status: "ready" },
     ]),
   );
   await primitive.page
@@ -1149,6 +1154,41 @@ try {
       ),
     "WI-22 attached input expands with a preserved finite corner",
   );
+  // Restored attachments remain clickable even without a local File.
+  const restored = primitive.page.getByRole('button', { name: 'Preview notes.txt', exact: true });
+  const atRest = await restored.evaluate(el => getComputedStyle(el).backgroundColor);
+  await restored.hover();
+  check(await restored.evaluate((el, before) => getComputedStyle(el).backgroundColor !== before, atRest),
+    'TUTOR-REQ-009 restored card has a visible hover shade');
+  check(await primitive.page.locator('[data-tutor-file-card]').evaluate(el => {
+    const card = el.getBoundingClientRect(), group = el.closest('[data-slot=input-group]').getBoundingClientRect();
+    return Math.abs((card.left - group.left) - (card.top - group.top)) <= 1;
+  }), 'TUTOR-REQ-009 attachment top and left insets match');
+  await restored.click();
+  const restoredDialog = primitive.page.getByRole('dialog', { name: 'notes.txt', exact: true });
+  check(await restoredDialog.getByText("File contents aren't available in this session.", { exact: false }).isVisible(),
+    'TUTOR-REQ-009 restored file opens honest metadata fallback');
+  check((await restoredDialog.locator('pre').count()) === 0,
+    'TUTOR-REQ-009 restored preview does not invent file text');
+  await primitive.page.screenshot({path:resolve(out, 'tutor-file-restored-375.png')});
+  await primitive.page.keyboard.press('Escape');
+  await restoredDialog.waitFor({state:'detached'});
+  await primitive.page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Preview notes.txt');
+  check(await restored.evaluate(el => document.activeElement === el),
+    'TUTOR-REQ-009 metadata dialog restores keyboard focus');
+  await primitive.page.evaluate(() => window.setFixtureFiles([
+    {id:'md',filename:'notes.md',sizeBytes:15,status:'ready'},
+    {id:'pdf',filename:'review.pdf',sizeBytes:512,status:'ready'},
+    {id:'txt',filename:'notes.txt',sizeBytes:15,status:'ready'},
+  ]));
+  check(await primitive.page.locator('[data-file-format]').evaluateAll(elements =>
+    new Set(elements.map(el=>getComputedStyle(el).backgroundColor)).size === 3),
+    'TUTOR-REQ-009 formats have distinct subtle token fills and type labels');
+  await primitive.page.getByRole('button',{name:'Preview review.pdf',exact:true}).click();
+  check(await primitive.page.getByRole('dialog',{name:'review.pdf',exact:true}).getByText("PDF content preview isn't available yet.",{exact:false}).isVisible(),
+    'TUTOR-REQ-009 PDF modal explains preview support');
+  await primitive.page.keyboard.press('Escape');
+  await primitive.page.getByRole('dialog').waitFor({state:'detached'});
   await primitive.page
     .getByRole("button", { name: "Remove notes.txt" })
     .click();
@@ -1225,6 +1265,44 @@ try {
   );
   await primitive.context.close();
 
+  // The app forces light mode even when next-themes retains a dark preference.
+  const notices = await fixture(1440);
+  await notices.page.addInitScript(() => localStorage.setItem('theme','dark'));
+  // Use Vite's canonical dependency URLs so the provider and toast singleton
+  // are the same instances used by the actual Toaster component.
+  const toastSource = await (await notices.page.request.get('http://localhost:5173/src/components/ui/sonner.tsx')).text();
+  const sonnerModule = toastSource.match(/from "([^"]*\/sonner\.js[^\"]*)"/)[1];
+  const themeModule = toastSource.match(/from "([^"]*\/next-themes\.js[^\"]*)"/)[1];
+  await notices.context.route('**/__lane_u_toast_fixture', route => route.fulfill({
+    contentType:'text/html',
+    body:`<!doctype html><html><head><link rel="stylesheet" href="/src/styles/globals.css"></head><body><div id="root"></div><script type="module">
+    import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
+    </script><script type="module">
+    import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+    import {ThemeProvider} from '${themeModule}';import {toast} from '${sonnerModule}';import {Toaster} from '/src/components/ui/sonner.tsx';
+    function App(){return React.createElement(ThemeProvider,{attribute:'class',forcedTheme:'light'},React.createElement(Toaster,{visibleToasts:4,expand:true}),...['success','error','info','warning'].map(type=>React.createElement('button',{key:type,onClick:()=>toast[type](type==='success'?'Badge earned':type+' notification',{description:'Readable synthetic description',duration:Infinity})},type)))}
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));</script></body></html>`,
+  }));
+  await notices.page.goto('http://localhost:5173/__lane_u_toast_fixture');
+  for(const type of ['success','error','info','warning']) await notices.page.getByRole('button',{name:type,exact:true}).click();
+  await notices.page.locator('[data-sonner-toast]').last().waitFor();
+  await notices.page.waitForFunction(() => document.querySelectorAll('[data-description]').length === 4);
+  check(await notices.page.locator('[data-sonner-toaster]').getAttribute('data-sonner-theme') === 'light',
+    'WI-22 toast honors forced light theme over saved dark preference');
+  check(await notices.page.locator('[data-description]').evaluateAll(elements => {
+    const lum = color => {
+      const rgb = color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4});
+      return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
+    };
+    return elements.length === 4 && elements.every(el=>{
+      const text=lum(getComputedStyle(el).color),bg=lum(getComputedStyle(el.closest('[data-sonner-toast]')).backgroundColor);
+      return (Math.max(text,bg)+0.05)/(Math.min(text,bg)+0.05)>=4.5;
+    });
+  }), 'WI-22 badge/error/info/warning descriptions meet AA contrast');
+  await notices.page.screenshot({path:resolve(out,'toast-contrast-1440.png')});
+  check(notices.errors.length===0,'toast fixture has no browser exceptions');
+  await notices.context.close();
+
   const idle = await fixture(1440, {
     empty: true,
     reducedMotion: "no-preference",
@@ -1248,6 +1326,20 @@ try {
     "TUTOR-REQ-007 typing stops idle loop",
   );
   // Staging and preview never create a conversation or upload.
+  const dropData = await idle.page.evaluateHandle(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['synthetic'], 'notes.md', {type:'text/markdown'}));
+    return transfer;
+  });
+  await idle.page.locator('[data-study-surface]').dispatchEvent('dragenter',{dataTransfer:dropData});
+  await idle.page.locator('[data-tutor-drop-overlay]').waitFor();
+  await idle.page.clock.runFor(300);
+  check(await idle.page.locator('[data-tutor-drop-overlay] svg g').evaluate(el =>
+    new DOMMatrixReadOnly(getComputedStyle(el).transform).m42 < -1),
+    'TUTOR-REQ-009 published Upload arrow animates on drag entry');
+  await idle.page.screenshot({path:resolve(out,'tutor-drop-animated-1440.png')});
+  await idle.page.locator('[data-study-surface]').dispatchEvent('dragleave',{dataTransfer:dropData});
+  await idle.page.locator('[data-tutor-drop-overlay]').waitFor({state:'detached'});
   const raw =
     "### Local heading\n<script>window.previewExecuted=true</script>\n**unformatted text**";
   await idle.page.locator("input[type=file]").setInputFiles({
