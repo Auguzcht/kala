@@ -1,3 +1,4 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import type { ReactNode } from "react";
 import {
@@ -178,9 +179,9 @@ function SampleWeakestChart() {
 }
 
 export function CohortCharts({ courseId }: { courseId: string }) {
-  const { data, isLoading } = useCohortStats(courseId);
+  const { data, isLoading, isError, error, refetch } = useCohortStats(courseId);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <LoadingRegion busy={isLoading} className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <Skeleton className="h-64 w-full lg:col-span-7" />
@@ -188,6 +189,8 @@ export function CohortCharts({ courseId }: { courseId: string }) {
       </LoadingRegion>
     );
   }
+
+  if (isError || !data) return <InstructorReadFailure error={error} retry={refetch} />;
 
   const trend = data.readinessTrend.map((t) => ({ ...t, label: shortDate(t.date) }));
   const activity = data.activitySeries.map((a) => ({ ...a, label: shortDate(a.date) }));

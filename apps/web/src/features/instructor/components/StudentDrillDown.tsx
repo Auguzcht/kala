@@ -1,8 +1,7 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useAtRisk, useStudentTwin } from "@/features/instructor";
 import { TwinBody } from "@/features/twin/components/TwinBody";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Instructor drill-down: one student's twin, de-identified posture made
@@ -21,13 +20,7 @@ export function StudentDrillDown({ courseId, userId }: { courseId: string; userI
     );
   }
   if (twin.isError || !twin.data) {
-    return (
-      <EmptyState
-        title="We could not load this student's twin"
-        description="Check your connection and try again."
-        action={<Button variant="outline" onClick={() => twin.refetch()}>Retry</Button>}
-      />
-    );
+    return <InstructorReadFailure error={twin.error} retry={twin.refetch} learner />;
   }
 
   const flag = atRisk.data?.flags.find((f) => f.userId === userId);

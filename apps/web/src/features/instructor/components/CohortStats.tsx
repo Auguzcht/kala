@@ -1,3 +1,4 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useCohortStats } from "@/features/instructor";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -68,9 +69,9 @@ function pct(value: number | null | undefined): string {
 }
 
 export function CohortStats({ courseId }: { courseId: string }) {
-  const { data, isLoading } = useCohortStats(courseId);
+  const { data, isLoading, isError, error, refetch } = useCohortStats(courseId);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <LoadingRegion busy={isLoading} className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -79,6 +80,8 @@ export function CohortStats({ courseId }: { courseId: string }) {
       </LoadingRegion>
     );
   }
+
+  if (isError || !data) return <InstructorReadFailure error={error} retry={refetch} />;
 
   const activeShare = data.learners > 0 ? data.activeLearners / data.learners : 0;
 

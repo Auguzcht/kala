@@ -5,15 +5,16 @@ import type { EvidenceEvent } from "@/features/twin/schema/twin.schema";
 
 export function useEvidenceHistory(courseId: string, targetId?: string) {
   const session = useSession();
-  const key = ["evidence-history", session?.institutionId, session?.userId,
+  const key = ["evidence-history", session?.institutionId, session?.userId, session?.role,
     targetId ?? session?.userId, courseId, targetId ? "staff" : "own"];
+  const allowed = !!session && (targetId ? ["instructor", "admin"].includes(session.role) : session.role === "student");
   const query = useInfiniteQuery({
     queryKey: key,
     initialPageParam: null as string | null,
     // TanStack stores cursor identity in pageParams alongside each cached page.
     queryFn: ({ pageParam }) => fetchEvidenceHistory(courseId, targetId, pageParam),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
-    enabled: !!session && !!courseId && (!!targetId || session.role === "student"),
+    enabled: allowed && !!courseId,
     retry: false,
     staleTime: 30_000,
   });
@@ -24,5 +25,5 @@ export function useEvidenceHistory(courseId: string, targetId?: string) {
       if (!seen.has(event.id)) { seen.add(event.id); events.push(event); }
     }
   }
-  return { ...query, events, scopeKey: JSON.stringify(key) };
+  return { ...query, allowed, events, scopeKey: JSON.stringify(key) };
 }

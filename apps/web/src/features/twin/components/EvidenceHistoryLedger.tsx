@@ -13,9 +13,9 @@ export function EvidenceHistoryLedger({ courseId, targetId, fallbackEvents, fall
 }) {
   const history = useEvidenceHistory(courseId, targetId);
   const queryClient = useQueryClient();
-  const active = !!history.data;
+  const active = history.allowed && !!history.data;
   const invalidCursor = history.error?.message.startsWith("API 422:") ?? false;
-  const unavailable = history.error?.message.startsWith("API 404:") ?? false;
+  const unavailable = !history.allowed || /^API (403|404):/.test(history.error?.message ?? "");
   function reload() {
     // Drop the whole chain so a rotated cursor cannot remain in a subsequent page.
     void queryClient.resetQueries({ queryKey: JSON.parse(history.scopeKey), exact: true });
@@ -23,7 +23,7 @@ export function EvidenceHistoryLedger({ courseId, targetId, fallbackEvents, fall
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground" role="status">
-        {active ? `Showing ${history.events.length} of ${targetId ? "this learner's" : "your"} activity` : fallbackLabel}
+        {unavailable ? "Activity unavailable" : active ? `Showing ${history.events.length} of ${targetId ? "this learner's" : "your"} activity` : fallbackLabel}
       </p>
       {unavailable ? (
         <p role="alert" className="text-sm text-muted-foreground">Activity is unavailable for this course or learner.</p>

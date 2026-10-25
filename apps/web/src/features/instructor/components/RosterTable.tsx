@@ -1,3 +1,4 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useMemo, useState } from "react";
 import { useRoster } from "@/features/instructor";
@@ -93,7 +94,7 @@ export function RosterTable({
    * the other showing a different identity mode. */
   deidentified: boolean;
 }) {
-  const { data, isLoading } = useRoster(courseId);
+  const { data, isLoading, isError, error, refetch } = useRoster(courseId);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("status");
   const [page, setPage] = useState(0);
@@ -148,6 +149,8 @@ export function RosterTable({
       </LoadingRegion>
     );
   }
+
+  if (isError || !data) return <InstructorReadFailure error={error} retry={refetch} />;
 
   const total = data?.students.length ?? 0;
 

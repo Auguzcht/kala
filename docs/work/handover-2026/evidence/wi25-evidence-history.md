@@ -53,3 +53,15 @@ Static source findings at H commit `02e5b90`; these are not browser observations
 | `apps/web/src/features/instructor/components/Heatmap.tsx:27–31` | Error branch prevents a missing-data crash, but 404 gets connection/retry wording | Outside H manifest; recorded for coordinator/U |
 
 Proposed INSTR-REQ-009 clarification: learner record and Twin drill-down render HTTP 404 as “Learner unavailable”, with “This learner or course is unavailable. Return to your class to choose an available learner.” Provide a “Back to class” action to `/class`; preserve generic retry for other failures. Do not disclose whether the requested resource exists. Dedicated synthetic 404 checks must assert truthful copy and zero mutating requests. This proposal is not implemented or an amendment to the coordinator-owned spec.
+
+## Amendment 6 implementation update
+
+Coordinator released INSTR-REQ-011 and the validated-role history amendment in `0a2be1250dabd216bdaa28c0b3d6b5e0c23e7037`; H rebased before editing. This update supersedes the pending-UI-proposal disposition in the earlier static audit, while retaining its findings as historical evidence.
+
+H's granted path manifest now also includes `RosterTable.tsx`, `AtRiskList.tsx`, `CohortStats.tsx`, `CohortCharts.tsx`, `Heatmap.tsx`, feature-local `InstructorReadFailure.tsx` and dedicated `read-states.browser.mjs`, alongside the already-owned learner record/drill-down callers. No class routes, shared client/primitives, API semantics or specs were edited.
+
+Roster, at-risk, stats/charts and heatmap now check settled errors before rendering empty or numerical data, including a failed refetch after cached success. Skeletons apply only while loading. Feature-local status-prefix classification renders class 403/404 as unavailable, and other failures as retryable load failure. Learner record/drill-down use Learner unavailable plus Back to class for 403/404 and a transient Retry state for other failures. Error bodies are never displayed. Successful empty responses retain their existing presentation.
+
+History cache identity now includes validated session role. A staff target enables only for instructor/admin; own history enables only for student. Disabled scopes and 403/404 hide protected rows and loaded-count labels. Transient failures retain loaded rows, and invalid cursor uses Reload activity as before.
+
+Validation after these changes: web lint passes (18 existing warnings), typecheck passes, production build passes (existing warnings), new browser scripts pass Node syntax checks, and diff whitespace checks pass. Browser execution is still pending coordinator handover of port 5173; the suites are ready. The dedicated new matrix covers 375/1440, class and learner 403/404/500/network/slow/empty responses, Retry recovery, cached-success refetch failure, heatmap denial and no mutations. The history scope suite covers role/account/course/learner changes, staff-only enablement, page reset and cached-row hiding on 403/404. These are written scenarios, not passing browser evidence yet.

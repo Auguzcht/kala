@@ -1,0 +1,120 @@
+/** INSTR-REQ-011 / APPROVAL-07 Amendment 6: synthetic failure-state matrix. */
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+const requireBrowser=createRequire(resolve(process.env.KALA_BROWSER_TEST_DEPS??'apps/web','package.json'));
+const {chromium}=requireBrowser('playwright');
+const browser=await chromium.launch({headless:true,...(process.env.KALA_BROWSER_EXECUTABLE?{executablePath:process.env.KALA_BROWSER_EXECUTABLE}:{})});
+const out=resolve(process.env.KALA_UI_SCREENSHOTS??'/tmp/kala-instructor-read-states');await mkdir(out,{recursive:true});
+let assertions=0;const check=(v,label)=>{assert.ok(v,label);assertions++;};
+const makeEvents=n=>Array.from({length:n},(_,i)=>({id:`event-${i}`,type:['practice','diagnostic','flashcard','tutor'][i%4],correct:i%2===0,latencyMs:i%3?1250:null,skillName:`Event ${String(i+1).padStart(3,'0')}: Explain durable cloud storage and access controls`,createdAt:new Date(Date.UTC(2026,9,24,12,0)-i*60000).toISOString()}));
+const skills=[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',moduleRef:'Cloud basics',estimate:0.55,attempts:5,band:'proficient'}];
+async function fixture(width,{mode='instructor',reduced='reduce',failure='empty',surface='class'}={}){
+  const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(10000);
+  let release;const gate=new Promise(resolve=>release=resolve);const state={calls:[],mode:failure,release,mutations:0};const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await context.route('**/*',async route=>{
+    const url=new URL(route.request().url());if(url.hostname!=='localhost'||url.port!=='5173')return route.abort();
+    if(url.pathname==='/__twin_presentation')return route.fulfill({contentType:'text/html',body:`<!doctype html><html><head><link rel="stylesheet" href="/src/styles/globals.css"></head><body><div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script><script type="module">
+      import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+      import {MasteryRing} from '/src/components/kala/mastery-ring.tsx';import {EvidenceLedger} from '/src/components/kala/evidence-ledger.tsx';
+      const events=${JSON.stringify(makeEvents(200))};
+      function App(){const [count,setCount]=React.useState(23);return React.createElement('main',{style:{padding:24,maxWidth:1100,margin:'auto'}},React.createElement('div',{className:'flex flex-wrap items-center gap-6'},...[['student-ring',176,0.55,'Board readiness'],['instructor-ring',144,0.55,'Readiness'],['compact-ring',56,0.55,'Skill'],['null-ring',144,null,'No estimate'],['zero-ring',144,0,'Zero'],['full-ring',144,1,'Full']].map(([id,size,estimate,label])=>React.createElement('div',{id,key:id},React.createElement(MasteryRing,{size,estimate,label})))),React.createElement('div',{className:'my-6 flex flex-wrap gap-2'},...[0,1,10,11,23,200,3].map(n=>React.createElement('button',{key:n,onClick:()=>setCount(n),className:'border p-2'},'Use '+n+' events'))),React.createElement('section',{'aria-label':'Test ledger'},React.createElement(EvidenceLedger,{events:events.slice(0,count)})))}
+      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));</script></body></html>`});
+    if(url.pathname.endsWith('/src/app/providers.tsx')){const response=await route.fetch();const body=await response.text();return route.fulfill({response,body:body+'\nwindow.__readStateClient=queryClient;'});}
+    if(url.pathname.endsWith('/src/lib/auth/AuthProvider.tsx'))return route.fulfill({contentType:'application/javascript',body:`export const AuthProvider=({children})=>children;export const useSession=()=>({userId:'demo',institutionId:'inst',role:'${mode==='instructor'?'instructor':'student'}',courseId:'course',displayName:'Demo learner'});export const useSetSession=()=>()=>{};`});
+    if(url.pathname.endsWith('/src/lib/api/client.ts'))return route.fulfill({contentType:'application/javascript',body:`export async function api(path,init){const r=await fetch('/__twin_api'+path,init);if(!r.ok)throw new Error('API '+r.status);return r.json();}`});
+    if(!url.pathname.startsWith('/__twin_api'))return route.continue();
+    const path=url.pathname.slice('/__twin_api'.length);const reply=json=>route.fulfill({json});
+    if(route.request().method()!=='GET'){state.mutations++;return route.abort();}
+    const guarded=surface==='class'?['/roster','/stats','/at-risk','/heatmap'].some(end=>path.endsWith(end)):path.endsWith('/record');
+    if(guarded){
+      state.calls.push(path);
+      if(state.mode==='slow')await gate;
+      if(state.mode==='network')return route.abort('failed');
+      if(typeof state.mode==='number')return route.fulfill({status:state.mode,json:{detail:'synthetic failure'}});
+    }
+    if(path.endsWith('/evidence'))return reply({courseId:'course',evidence:[],nextCursor:null});
+    if(path.endsWith('/roster'))return reply({courseId:'course',students:[]});
+    if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:null,skills:[],students:[],cells:[]});
+    if(path.endsWith('/stats'))return reply({courseId:'course',learners:0,activeLearners:0,startedLearners:0,notStartedLearners:0,cohortReadiness:null,medianReadiness:null,accuracy:null,evidenceCount:0,medianLatencyMs:null,hintsUsed:0,skillsTracked:0,skillsCovered:0,bandDistribution:[],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
+    if(path.endsWith('/proposed'))return reply({courseId:'course',proposed:[]});
+    if(path.endsWith('/auto-matched'))return reply({courseId:'course',autoMatched:[]});
+    if(path==='/courses/course')return reply({id:'course',title:'AWS101'});
+    if(path.endsWith('/twin'))return reply({courseId:'course',readiness:0.55,skills,evidence:makeEvents(20)});
+    if(path.endsWith('/next-up'))return reply({courseId:'course',next:null});
+    if(path.endsWith('/summary'))return reply({xp:0,attempts:0,correct:0,streakDays:0,badges:[]});
+    if(path.endsWith('/diagnostic/status'))return reply({courseId:'course',due:false,dueSkillCount:0});
+    if(path.endsWith('/diagnostic'))return reply({courseId:'course',status:'ready',readyCount:1,questions:[{id:'q',skillId:'storage',bloomLevel:'understand',prompt:'Which storage fits?',choices:[{id:'a',label:'Object storage'},{id:'b',label:'Temporary disk'}]}],pendingSkillIds:[],failedSkillIds:[],skippedSkillCount:0});
+    if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:[]});
+    if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:[]});
+    if(path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:0.55,band:'proficient',cohortReadiness:0.5,percentile:0.5,accuracy:0.6,momentum:null,attempts:20,evidenceCount:200,hintsUsed:0,lastActiveAt:'2026-10-24T12:00:00Z',daysInactive:0,status:'developing',skills,activityByType:[],activitySeries:[],readinessTrend:[],evidence:makeEvents(200)});
+    return reply({});
+  });
+  await page.goto(`http://localhost:5173/${mode==='components'?'__twin_presentation':surface==='class'?'class':'class/student/learner'}`);
+  return {page,context,errors,state};
+}
+
+try {
+  for(const width of [375,1440]) for(const surface of ['class','learner']) for(const failure of [403,404,500,'network','slow','empty']) {
+    const f=await fixture(width,{surface,failure}),{page,state}=f;
+    const denied=failure===403||failure===404;
+    if(failure==='slow'){
+      await page.locator('[aria-busy=true]').first().waitFor();
+      check(await page.getByText('No students enrolled yet',{exact:true}).count()===0,'slow response does not pretend empty');
+      state.mode='empty';state.release();
+    }
+    if(denied||failure===500||failure==='network'){
+      const title=denied?(surface==='class'?"This class isn't available to you":'Learner unavailable')
+        :(surface==='class'?"Couldn't load the class, try again":"Couldn't load the learner, try again");
+      await page.getByRole('heading',{name:title,exact:true}).first().waitFor();
+      check(await page.getByText('No students enrolled yet',{exact:true}).count()===0,'failure does not claim an empty roster');
+      check(await page.getByText('No one needs support right now. Check back after the next activity.',{exact:true}).count()===0,'failure does not claim no support needed');
+      check(await page.locator('#tour-cohort-kpis').count()===0,'failure does not show zero statistics');
+      await page.waitForFunction(()=>document.querySelectorAll('[aria-busy=true]').length===0);
+      check(await page.locator('[aria-busy=true]').count()===0,'settled failure has no stuck loading indicator');
+      if(denied&&surface==='learner'){
+        check(await page.getByRole('link',{name:'Back to class',exact:true}).getAttribute('href')==='/class','unavailable learner has class navigation');
+      }
+      if(!denied){
+        state.mode='empty';
+        for(const region of surface==='class'?['#roster-panel','#at-risk-list','#cohort-analytics']:['main']){
+          const retry=page.locator(region).getByRole('button',{name:'Retry',exact:true});
+          if(await retry.count())await retry.first().click();
+        }
+        // The KPI retry shares the charts query and recovers with it.
+      }
+    }
+    if(!denied){
+      if(surface==='class'){
+        await page.getByText('No students enrolled yet',{exact:true}).waitFor();
+        await page.getByText('No one needs support right now. Check back after the next activity.',{exact:true}).waitFor();
+        await page.locator('#tour-cohort-kpis').waitFor();
+        check(await page.getByRole('alert').count()===0,'successful empty class recovers without error states');
+      }else{
+        await page.getByText('Demo learner',{exact:true}).first().waitFor();
+        check(await page.getByRole('alert').count()===0,'learner retry recovers');
+      }
+    }
+    if(surface==='class'&&denied){
+      await page.getByRole('tab',{name:"Skills × Bloom's",exact:true}).click();
+      await page.locator('#heatmap-panel').getByRole('heading',{name:"This class isn't available to you",exact:true}).waitFor();
+    }
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'failure/empty UI fits viewport');
+    check(f.errors.length===0&&state.mutations===0,'no browser crash or mutations');
+    await f.context.close();
+  }
+  for(const width of [375,1440]) for(const surface of ['class','learner']) {
+    const f=await fixture(width,{surface,failure:'empty'}),{page,state}=f;
+    await page.getByText(surface==='class'?'No students enrolled yet':'Demo learner',{exact:true}).first().waitFor();
+    state.mode=500;await page.evaluate(()=>window.__readStateClient.invalidateQueries());
+    await page.getByRole('heading',{name:surface==='class'?"Couldn't load the class, try again":"Couldn't load the learner, try again",exact:true}).first().waitFor();
+    check(await page.getByText('No students enrolled yet',{exact:true}).count()===0,'cached success does not mask a failed refetch as empty');
+    check(await page.locator('#tour-cohort-kpis').count()===0,'cached statistics hidden after refetch failure');
+    check(await page.locator('[aria-busy=true]').count()===0,'failed refetch is not permanent loading');
+    if(surface==='learner')check(await page.getByText('Demo learner',{exact:true}).count()===0,'cached learner hidden after failed refetch');
+    check(f.errors.length===0&&state.mutations===0,'refetch failure causes no crash or write');
+    await f.context.close();
+  }
+  console.log(`INSTR-REQ-011 browser checks: ${assertions} assertions passed`);
+} finally { await browser.close(); }
