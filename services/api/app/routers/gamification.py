@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 
 from app.deps import CurrentUser, get_current_user, require_valid_course_id
 from app.learn import xp
+from app.routers import bank as bank_router
 
 router = APIRouter(prefix="/gamification", tags=["gamification"])
 
@@ -16,6 +17,8 @@ def summary(
     course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     return xp.summary(
         institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
     )

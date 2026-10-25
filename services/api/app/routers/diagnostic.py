@@ -154,6 +154,10 @@ def get_content(
     # Cheap path on purpose: this is a debug/preview route for looking at the
     # content tree. It must NOT download and parse every PDF in the course.
     # include_attachments defaults False, so this stays a metadata walk.
+    if user.app_role == "student":
+        from app.routers import bank as bank_router
+
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)
@@ -393,6 +397,10 @@ def list_modules(
     Blackboard course is actually organized, no naming assumed. Useful for
     an admin screen to sanity-check ingest, and as the source of options for
     any future module-scoped filtering in the UI."""
+    if user.app_role == "student":
+        from app.routers import bank as bank_router
+
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)
@@ -601,6 +609,10 @@ def get_diagnostic_status(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Read actionable availability without generation, kicks or evidence writes."""
+    if user.app_role == "student":
+        from app.routers import bank as bank_router
+
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)
@@ -619,6 +631,10 @@ def get_diagnostic(
     module_ref: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role == "student":
+        from app.routers import bank as bank_router
+
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)

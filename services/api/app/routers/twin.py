@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user, require_role, require_valid_course_id
 from app.learn import items as item_gen
+from app.routers import bank as bank_router
 from app.routers.diagnostic import _assert_teaches_course, _course_ref
 from app.twin import evidence_history, summary
 
@@ -20,6 +21,8 @@ def get_twin(
     course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)
@@ -58,6 +61,8 @@ def next_up(
     """One recommendation: the skill this student should practice next.
     Lightweight — reuses the same weakest-skill picker as practice but does
     not generate an item (that happens when they actually start)."""
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)
@@ -115,6 +120,8 @@ def learning_plan(
     "the model is 84% confident you are weak at IAM" is the exact thing
     the design brief rules out.
     """
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     if user.app_role in {"instructor", "admin"}:
         _assert_teaches_course(user=user, course_id=course_id)
         _course_ref(course_id, user.institution_id)

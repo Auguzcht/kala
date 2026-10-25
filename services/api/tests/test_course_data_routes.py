@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.deps import CurrentUser, get_current_user, get_lms_connector
 from app.main import app
 from app.routers import diagnostic
+from wi26_student_fixtures import enrolled_student_reads
 
 
 class FakeConnector:
@@ -45,7 +46,7 @@ def test_course_data_routes_require_lti_bearer_token() -> None:
 def test_INGEST_REQ_001_course_data_routes_are_authenticated_and_tenant_scoped(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     app.dependency_overrides[get_lms_connector] = FakeConnector
-    monkeypatch.setattr(diagnostic.db, "select", fake_course_select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fake_course_select))
 
     try:
         with TestClient(app) as client:

@@ -4,6 +4,7 @@ from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import courses, twin
 from app.twin import readiness
+from wi26_student_fixtures import enrolled_student_reads
 
 
 def authenticated_user() -> CurrentUser:
@@ -14,7 +15,7 @@ def test_course_meta_returns_title(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     monkeypatch.setattr(
         courses.db, "select",
-        lambda table, params: [{"id": "00000000-0000-4000-8000-000000000001", "title": "Thermodynamics I", "lms_course_id": "ME301"}],
+        enrolled_student_reads(lambda table, params: [{"id": "00000000-0000-4000-8000-000000000001", "title": "Thermodynamics I", "lms_course_id": "ME301"}]),
     )
 
     try:
@@ -29,7 +30,7 @@ def test_course_meta_returns_title(monkeypatch) -> None:
 
 def test_course_meta_404s_outside_the_institution(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(courses.db, "select", lambda table, params: [])
+    monkeypatch.setattr(courses.db, "select", enrolled_student_reads(lambda table, params: []))
 
     try:
         with TestClient(app) as client:
@@ -59,7 +60,7 @@ def test_twin_returns_skills_bands_and_evidence(monkeypatch) -> None:
             return mastery
         return events
 
-    monkeypatch.setattr(twin.summary.db, "select", fake_select)
+    monkeypatch.setattr(twin.summary.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(twin.summary.readiness, "compute", lambda **kwargs: 0.5)
 
     try:
@@ -82,7 +83,7 @@ def test_twin_returns_skills_bands_and_evidence(monkeypatch) -> None:
 
 def test_twin_empty_when_course_has_no_skills(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(twin.summary.db, "select", lambda table, params: [])
+    monkeypatch.setattr(twin.summary.db, "select", enrolled_student_reads(lambda table, params: []))
 
     try:
         with TestClient(app) as client:
@@ -103,7 +104,7 @@ def test_readiness_uses_approved_skills_only(monkeypatch) -> None:
             return [{"id": approved}]
         assert params["skill_id"] == f"in.({approved})"
         return [{"estimate": 0.6}]
-    monkeypatch.setattr(readiness.db, "select", fake_select)
+    monkeypatch.setattr(readiness.db, "select", enrolled_student_reads(fake_select))
     assert readiness.compute(user_id="student", course_id="course") == 0.6
     assert calls[0][1]["status"] == "eq.approved"
     assert calls[1][1]["skill_id"] == f"in.({approved})"
@@ -111,7 +112,7 @@ def test_readiness_uses_approved_skills_only(monkeypatch) -> None:
 
 def test_readiness_without_approved_skills_is_zero_without_mastery_query(monkeypatch) -> None:
     tables = []
-    monkeypatch.setattr(readiness.db, "select", lambda table, params: tables.append(table) or [])
+    monkeypatch.setattr(readiness.db, "select", enrolled_student_reads(lambda table, params: tables.append(table) or []))
     assert readiness.compute(user_id="student", course_id="course") == 0.0
     assert tables == ["skills"]
 
@@ -124,7 +125,7 @@ def test_next_up_picks_weakest_skill_with_reason(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         twin.db, "select",
-        lambda table, params: [{"skill_id": "00000000-0000-4000-8000-000000000010", "estimate": 0.3}],
+        enrolled_student_reads(lambda table, params: [{"skill_id": "00000000-0000-4000-8000-000000000010", "estimate": 0.3}]),
     )
 
     try:
@@ -142,6 +143,7 @@ def test_next_up_picks_weakest_skill_with_reason(monkeypatch) -> None:
 
 def test_next_up_none_when_course_has_no_skills(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(twin.db, "select", enrolled_student_reads(lambda table, params: []))
     monkeypatch.setattr(twin.item_gen, "weakest_skill", lambda **kwargs: None)
 
     try:

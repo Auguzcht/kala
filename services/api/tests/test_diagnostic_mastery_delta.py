@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import diagnostic
+from wi26_student_fixtures import enrolled_student_reads
 
 # Course used by the partial-tolerance tests below.
 _COURSE = "00000000-0000-4000-8000-000000000001"
@@ -41,7 +42,7 @@ def test_submit_diagnostic_returns_mastery_delta_per_skill(monkeypatch) -> None:
         posterior = {"00000000-0000-4000-8000-000000000010": 0.75, "00000000-0000-4000-8000-000000000011": 0.15}
         return {"estimate": posterior[skill_id]}
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(diagnostic.db, "insert_evidence", lambda rows: rows)
     monkeypatch.setattr(diagnostic.item_gen, "grade",
                         lambda **kw: graded_by_item[kw["item_id"]])
@@ -86,7 +87,7 @@ def test_saved_diagnostic_items_filter_retired_rows_on_both_reads(monkeypatch) -
             return []
         return []
 
-    monkeypatch.setattr(diagnostic.db, "select", select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(diagnostic, "enqueue_diagnostic", lambda **kw: ({"status": "pending"}, True))
     try:
         with TestClient(app) as client:
@@ -126,7 +127,7 @@ def _diag_harness(monkeypatch, *, n_skills: int, failing: set[int]):
 
     monkeypatch.setattr(
         diag.db, "select",
-        lambda table, params: skills if table == "skills" else [],
+        enrolled_student_reads(lambda table, params: skills if table == "skills" else []),
     )
 
     def fake_enqueue(*, skill_id, **kw):

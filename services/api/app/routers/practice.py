@@ -39,6 +39,7 @@ from app.deps import (
     require_valid_set_id,
 )
 from app.learn import items as item_gen
+from app.routers import bank as bank_router
 from app.routers.item_generation_jobs import enqueue_practice, practice_jobs
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,8 @@ def next_item(
     skill_id: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     skill = _resolve_skill(
         institution_id=user.institution_id, user_id=user.user_id,
         course_id=course_id, skill_id=skill_id,
@@ -535,6 +538,8 @@ def list_sets(
     THIS student's attempt metadata (or nulls for never-attempted) so the
     badge renders from one round trip.
     """
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     params = {
         "institution_id": f"eq.{user.institution_id}",
         "course_id": f"eq.{course_id}",
@@ -588,6 +593,8 @@ def get_set(
     flashcard browse — the client must not be able to see the answers before
     submitting. Only SET-LEVEL metadata gains the attempt fields.
     """
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     started_ns = perf_counter_ns()
     timings: dict[str, float] = {}
 
@@ -708,6 +715,8 @@ def get_set_results(
     Only practice_answer_results rows expose answer keys. Unanswered set items
     are assembled from prompt/choices columns alone.
     """
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     sets = db.select("quiz_sets", {
         "id": f"eq.{set_id}", "institution_id": f"eq.{user.institution_id}",
         "course_id": f"eq.{course_id}", "select": "id,skill_id", "limit": "1",

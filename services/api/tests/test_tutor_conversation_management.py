@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import tutor
+from wi26_student_fixtures import enrolled_student_reads
 
 OTHER_USER = "00000000-0000-4000-8000-000000000041"
 OTHER_INSTITUTION = "00000000-0000-4000-8000-000000000051"
@@ -136,7 +137,7 @@ def test_TUTOR_REQ_003_list_scopes_ordering_and_nullable_pin_projection(manageme
         queries.append((table, params.copy()))
         return rows
 
-    monkeypatch.setattr(tutor.db, "select", select)
+    monkeypatch.setattr(tutor.db, "select", enrolled_student_reads(select))
     response = client.get("/tutor/conversations", params={"course_id": COURSE_ID})
     assert response.status_code == 200
     conversations = response.json()["conversations"]
@@ -155,7 +156,7 @@ def test_TUTOR_REQ_003_list_scopes_ordering_and_nullable_pin_projection(manageme
 
 def test_TUTOR_REQ_003_empty_course_list_preserves_envelope(management_client, monkeypatch):
     client, _row, _calls = management_client
-    monkeypatch.setattr(tutor.db, "select", lambda *args: [])
+    monkeypatch.setattr(tutor.db, "select", enrolled_student_reads(lambda *args: []))
     response = client.get("/tutor/conversations", params={"course_id": COURSE_ID})
     assert response.status_code == 200
     assert response.json() == {"conversations": []}
@@ -164,7 +165,7 @@ def test_TUTOR_REQ_003_empty_course_list_preserves_envelope(management_client, m
 def test_TUTOR_REQ_002_003_create_and_detail_contracts_are_unchanged(management_client, monkeypatch):
     client, row, _calls = management_client
     monkeypatch.setattr(tutor.db, "insert", lambda *args: [row.copy()])
-    monkeypatch.setattr(tutor.db, "select", lambda table, params: [row.copy()] if table == "tutor_conversations" else [])
+    monkeypatch.setattr(tutor.db, "select", enrolled_student_reads(lambda table, params: [row.copy()] if table == "tutor_conversations" else []))
     created = client.post("/tutor/conversations", json={"course_id": COURSE_ID})
     detail = client.get(f"/tutor/conversations/{CONVERSATION_ID}")
     assert created.status_code == detail.status_code == 200

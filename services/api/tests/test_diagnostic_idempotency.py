@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import diagnostic
+from wi26_student_fixtures import enrolled_student_reads
 
 
 def authenticated_user() -> CurrentUser:
@@ -31,7 +32,7 @@ def test_diagnostic_reuses_existing_items_and_never_regenerates_them(monkeypatch
             ]
         return []
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(diagnostic.item_gen, "generate_question",
                         lambda **kw: generate_calls.append(kw) or {})
 
@@ -74,7 +75,7 @@ def test_diagnostic_only_generates_for_skills_missing_an_item(monkeypatch) -> No
         enqueued_for.append(skill_id)
         return ({"id": "job-2", "status": "pending"}, True)
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(diagnostic, "enqueue_diagnostic", fake_enqueue)
 
     try:
@@ -108,7 +109,7 @@ def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> Non
         enqueued_for.append(skill_id)
         return ({"id": "job-x", "status": "pending"}, True)
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(diagnostic, "enqueue_diagnostic", fake_enqueue)
 
     try:
@@ -124,7 +125,7 @@ def test_diagnostic_generates_for_all_skills_when_none_exist(monkeypatch) -> Non
 
 def test_diagnostic_returns_empty_list_when_course_has_no_approved_skills(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(diagnostic.db, "select", lambda table, params: [])
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(lambda table, params: []))
 
     try:
         with TestClient(app) as client:

@@ -52,6 +52,7 @@ from app.deps import (
     require_valid_conversation_id,
     require_valid_course_id_query,
 )
+from app.routers import bank as bank_router
 
 router = APIRouter(prefix="/tutor", tags=["tutor"])
 logger = logging.getLogger(__name__)
@@ -222,6 +223,8 @@ def list_conversations(
     course_id: str = Depends(require_valid_course_id_query),
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     rows = db.select("tutor_conversations", {
         "institution_id": f"eq.{user.institution_id}",
         "user_id": f"eq.{user.user_id}",
@@ -261,6 +264,8 @@ def get_conversation(
     user: CurrentUser = Depends(get_current_user),
 ):
     convo = _owned_conversation(conversation_id, user)
+    if user.app_role == "student":
+        bank_router._course_for_user(convo["course_id"], user)
     messages = db.select("tutor_messages", {
         "conversation_id": f"eq.{conversation_id}",
         "select": "id,role,content,style,created_at",

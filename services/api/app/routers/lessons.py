@@ -20,6 +20,7 @@ from app.bank.serving import record_exposure
 from app.deps import CurrentUser, get_current_user, require_valid_course_id, require_valid_skill_id, require_valid_step_id
 from app.learn import items as item_gen
 from app.learn import lessons, srs, xp
+from app.routers import bank as bank_router
 from app.twin import tracer
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
@@ -33,6 +34,8 @@ def get_lesson(
 ):
     """Load the skill's guided lesson, generating and persisting it on first
     request. Idempotent thereafter."""
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     skills = db.select("skills", {
         "id": f"eq.{skill_id}", "institution_id": f"eq.{user.institution_id}",
         "course_id": f"eq.{course_id}", "status": "eq.approved",

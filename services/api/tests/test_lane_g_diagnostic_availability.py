@@ -8,6 +8,7 @@ from app.bank import serving
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import diagnostic
+from wi26_student_fixtures import enrolled_student_reads
 
 COURSE = "00000000-0000-4000-8000-000000000001"
 INSTITUTION = "00000000-0000-4000-8000-000000000050"
@@ -88,7 +89,7 @@ class AvailabilityData:
 @pytest.fixture
 def data(monkeypatch):
     fixture = AvailabilityData()
-    monkeypatch.setattr(diagnostic.db, "select", fixture.select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fixture.select))
     monkeypatch.setattr(diagnostic, "kick_bank", lambda *args: fixture.kicks.append(args))
     monkeypatch.setattr(diagnostic, "enqueue_diagnostic", fixture.enqueue)
 
