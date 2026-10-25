@@ -1,6 +1,6 @@
 """Reproduce diagnostic admission-only scope proof against a pre-SEC revision.
 
-Usage: python3 services/api/tests/wi26_scope_local.py --base da765cbd27bd06c53c04ef3698c9410b503eb94a
+Usage (Python 3.10+; API runtime 3.12+): cd services/api && uv run python tests/wi26_scope_local.py --base da765cbd27bd06c53c04ef3698c9410b503eb94a
 Only AST-identical known admission statements are normalized. All remaining
 module nodes, route signatures/decorators/bodies and non-route helpers compare.
 """

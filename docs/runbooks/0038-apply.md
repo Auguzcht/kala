@@ -70,10 +70,10 @@ A failed uncommitted application rolls back transactionally. After success, reta
 
 ## Local verification
 
-The [local verifier](../../services/api/tests/wi26_rls_local.py) creates a fresh database in a disposable `kala-wi26-sec-*` Docker container with network `none` and no published ports. It uses minimal synthetic Auth/Storage platform fixtures, unchanged 0001–0037, then 0038. No environment files or hosted credentials are used.
+The [local verifier](../../services/api/tests/wi26_rls_local.py) creates a fresh database in a disposable `kala-wi26-sec-*` Docker container with network `none` and no published ports. It uses minimal synthetic Auth/Storage platform fixtures, unchanged 0001–0037, then 0038. No environment files or hosted credentials are used. Verifier modules require Python 3.10+ because they use zip(strict=True); use the API uv environment, whose repository minimum is Python 3.12+. The verified runtime is Python 3.13.14. Bare system python3 may resolve to Python 3.9.
 
 ```sh
-python3 services/api/tests/wi26_rls_local.py --container kala-wi26-sec-policy-2d3d
+cd services/api && uv run python tests/wi26_rls_local.py --container kala-wi26-sec-policy-2d3d
 ```
 
 Final proof on PostgreSQL 17.6 / Supabase image 17.6.1.158 passed: ten actors × 35 read boundaries (including temporary-grant ingest policy probes), recommendation writes, removed learner/instructor cases, preserved self/curriculum/research access, policy dumps, unchanged schema/grants/helpers/views/indexes after excluding policies, preserved fixture counts and unchanged historical migration checksums. Full Supabase service integration, hosted major/exposure and hosted acceptance remain unverified.

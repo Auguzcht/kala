@@ -1,6 +1,6 @@
 """Run WI-26 against a fresh, network-disabled Docker Postgres database.
 
-Usage: python3 services/api/tests/wi26_rls_local.py --container kala-wi26-sec-2d3d
+Usage (Python 3.10+; API runtime 3.12+): cd services/api && uv run python tests/wi26_rls_local.py --container kala-wi26-sec-2d3d
 No environment files, connection URLs or hosted credentials are used.
 """
 import argparse
