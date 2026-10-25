@@ -1,6 +1,6 @@
 # WI-26 course authorization — Lane SEC
 
-Integration base: `0a2be1250dabd216bdaa28c0b3d6b5e0c23e7037`, followed by the coordinator's documentation-only `872c464` amendment. Branch: `codex/wi26-course-authorization`. Initial checkpoint `01c30a4` remains in Git history (rebased as `b926a36` before the final docs rebase); its earlier route/target blockers were resolved by Amendments 4–5. This is local implementation/proof, not hosted acceptance. Coordinator owns specs, WI status and generated API artifacts.
+Final integration base: `00618c5d5b1bc16dc4f2f782d0f85ead6ef65bff`, including coordinator spec-first commits `0a2be125` / `872c464` and the documentation-only acceptance preparation in `00618c5`. Branch: `codex/wi26-course-authorization`. Initial checkpoint `01c30a4` remains in Git history (rebased as `9016faa` on the final integration base); its earlier route/target blockers were resolved by Amendments 4–5. This is local implementation/proof, not hosted acceptance. Coordinator owns specs, WI status and generated API artifacts.
 
 ## Complete route and direct-read inventory
 
@@ -74,11 +74,12 @@ Official Supabase changelog/RLS and PostgreSQL row-security documentation were c
 ## Application tests and scope proof
 
 - Dedicated matrix: 34 operations × six actor cases, five target-student denials, four recommendation scoped-lookup/race cases and six decision-role/status cases: 219 passed. Real role/course/target guards execute; persistence/LMS/model/storage/worker boundaries are synthetic. Denials assert no protected work. Refresh queues/kicks once when allowed; recommendation decision updates once, with all four identity predicates.
-- Full API: 829 passed, 30 existing dependency warnings, 28.32s. Worker checkpoint: 117 passed. Both use committed shared test isolation, fake settings, dotenv disabled and blocked network sockets.
+- Full API: 829 passed, 30 existing dependency warnings, 28.42s on the final integration base. Worker: 117 passed, 0.34s on that base. Both use committed shared test isolation, fake settings, dotenv disabled and blocked network sockets.
+- Reproduce the strict diagnostic proof with `python3 services/api/tests/wi26_scope_local.py` (default final integration base), or `python3 services/api/tests/wi26_scope_local.py --base da765cbd27bd06c53c04ef3698c9410b503eb94a` (original coordinator base). Both pass. The verifier matches exact ASTs of the two authorized guard calls, exact guard-only staff blocks, the original translation wrapper on the two gradebook functions and exactly three dependency replacements. It compares every remaining module node, so it cannot hide arbitrary edits merely because they appear inside an if/try block.
 - Diagnostic AST proof inventories all 13 routes and proves only authorized guard/dependency changes; helper, imports, queue/debounce/kick logic, upload/retag processing and response shaping are identical. The earlier gradebook translation removal is explicitly authorized. Retained dashboard/ingest/upload functional assertion ASTs are unchanged. The course-data regression changes only student roster expectations to the authorized 403; content remains 200.
 - Other routers contain admission guards/imports and, for the sole recommendation-ID route, only the explicitly authorized scoped lookup/target guard/bound UPDATE. Decision state/notes/history/response logic is unchanged.
 - Dedicated test/verifier Ruff passes. Changed-router lint adds no unsuppressed baseline findings; three new FastAPI role dependencies carry targeted B008 explanations.
-- Web lint/typecheck/build pass on the amended base: 18 existing Fast Refresh warnings, existing route-generator circular dependency notice and large-bundle warning. No frontend or generated API/type file changed. No dev server or browser suite was run; H owns the approved denial UI/browser follow-up.
+- Web lint/typecheck/build pass on the amended base: 18 existing Fast Refresh warnings, existing route-generator circular dependency notice and large-bundle warning. No frontend or generated API/type file changed. Only SEC’s disposable Docker container/volumes were removed after all SQL verification. No dev server or browser suite was run; H owns the approved denial UI/browser follow-up.
 - Documentation checker, its 18 unit tests and git diff whitespace checks pass. Frozen-lock installation changed no dependency manifest/lockfile. No infrastructure, Docker configuration, CI or shared spec file was edited.
 
 ## Explicit follow-up boundary
