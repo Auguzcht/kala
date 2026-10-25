@@ -172,3 +172,15 @@ uv run --directory services/api --no-sync python ../../scripts/repair_identity_s
 Canonical-only consent is a stop condition, not evidence that legacy consent transfers. The local counterexample uses the real has_consent/research_evidence_anon logic: zero visible legacy rows before attribution can become visible under canonical consent. Consent and DSR rows on either anchor therefore refuse a non-converged transaction, before writes; a converged no-op remains allowed. No consent/view/policy is changed.
 
 Later-activity audit guards include exact actor/row and old_data/new_data identity references, so service-role consent/DSR changes remain detectable even after their live rows are removed. Source rollback preserves newly appended maintenance audits, while independently proving the entire original scoped audit prefix unchanged. It never removes audit history to force preimage equality.
+
+## Valid governance-refusal outcome
+
+Fred confirms refusal is a valid FG-7 outcome. For a non-converged pair, a safe no-record case has no consent or DSR rows on either anchor; it may proceed only if every other guard passes. A governance-state case has records on either anchor and remains conservatively refused, even if the records appear to match: this tool does not establish transferable legal scope. Mismatched state must never be reconciled by changing consent records, research policies or views.
+
+The public governance-refusal output contains only affected pair labels, counts and the exact phrase, for example:
+
+```text
+pair 1 refused: governance ambiguity consent_count=1 dsr_count=0
+```
+
+No table plans, IDs, state values, names, content or additional generic error are printed for this outcome. Exit 2 is the expected safe refusal, with the entire source transaction rolled back before writes. Coordinator records the actual pair-label/count outcome in WI-24 without describing that pair as repaired; no real pair is assumed by local proof. Already-converged no-op performs no attribution change and remains allowed. A refusal does not authorize changing legal data or policies to force a merge.
