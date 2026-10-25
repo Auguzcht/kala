@@ -8,7 +8,7 @@ code:
   api: []
   worker: []
   db: []
-tests: []
+tests: [apps/web/src/components/shell/tests/tour.browser.mjs]
 ---
 
 # Student and instructor walkthroughs
@@ -39,15 +39,15 @@ Orient students and instructors within the real workspace using guided highlight
 - Verified by: static `CourseShell.tsx::startTour` and `student-tour.ts::createStudentTour`. No real-course availability acceptance is claimed.
 
 ### TOUR-REQ-003: Observe learning actions without performing them
-- Rule: click steps are UI-only. StudentAction steps observe completion selectors and provide Skip, skipping dependent steps. Prefill only writes to an empty textarea; never submits or overwrites a draft. Student must choose test creation/start, answer checks/questions, rate recall and send tutor text. Instructor tour highlights decision buttons without clicking them.
+- Rule: copy follows the current header, answering and results surfaces; Tutor covers history groups, rename/pin and file attach; Study explains end-of-deck replay versus checking for more cards; Test explains saved results; Twin explains the recent evidence ledger. Optional screens are skipped rather than created. Click steps are UI-only. StudentAction steps observe completion selectors and provide Skip, skipping dependent steps. Prefill only writes to an empty textarea; never submits or overwrites a draft. Student must choose test creation/start, answer checks/questions, rate recall and send tutor text. Instructor tour highlights decision buttons without clicking them.
 - Acceptance: Next/Skip never makes an answer, rating, retake, recommendation decision or tutor send request. Draft examples remain editable. Learner actions taken manually during the tour are normal real actions.
 - Status: partial
 - Verified by: static `TourStepConfig` restrictions, `TourRunner.tsx::prefillInput`, `skipAction`, `student-tour.ts` and `instructor-tour.ts` click definitions. There is no network-spy/browser test proving the no-write invariant, and normal destination GETs can write content/queue state (finding below).
 
-### TOUR-REQ-004: Wait for real targets and exit unavailable steps predictably
-- Rule: bind route/search before driving; support instructor student-ID paths and hub wildcard matching. Wait up to 8 seconds for a normal target; data wait states and real student-action waits are bounded to 120 seconds. Unavailable target exits with a message; action timeout skips its dependent sequence. Group contiguous same-page highlights in one driver instance; cleanup destroys obsolete instances.
-- Acceptance: no highlight anchors to a missing skeleton target; route transitions resume once matched; a missing learner/empty class does not wait forever.
-- Status: implemented
+### TOUR-REQ-004: Wait for real targets and skip unavailable steps predictably
+- Rule: bind route/search before driving; support instructor student-ID paths and hub wildcard matching. Wait up to 8 seconds for a normal visible target; explicitly optional targets wait at most 1.2 seconds. Data wait states and real student-action waits are bounded to 120 seconds. Unavailable targets skip to the next available step with one short message per run; action timeout skips its dependent sequence. Each step checks its own visible target, including conditional Diagnostic/results, roster and recommendation states; cleanup destroys obsolete instances. Back restores earlier available steps without repeating a UI click. Learner routes reuse an actual visited ID or follow a UI-only record link; never navigate to a literal placeholder. Missing learner context skips the record sequence instead of inventing a learner.
+- Acceptance: no highlight anchors to a missing skeleton target; route transitions resume once matched; completed Diagnostic, no material, empty roster and empty recommendations continue cleanly. Next, Skip, Back and Escape work on desktop and at 375px.
+- Status: partial
 - Verified by: static `TourRunner.tsx`, `tour-route.ts`, `lib/wait-for-element.ts`. Browser timing, empty-state coverage and responsive popover placement have not been run in this lane.
 
 ### TOUR-REQ-005: Honor reduced motion and accessible orientation
@@ -72,8 +72,8 @@ Tour-specific persistence is only localStorage dismissal per user/role; ephemera
 No direct model call from the runner or sample-text generation. Examples are deterministic strings; sending them remains the student's action. Navigating to a lesson with no cached ready content can still invoke normal first-open generation, and availability checks can wake bank work.
 
 ## Edge cases and known limits
-- Missing/removed tour anchors can exit early; U's Diagnostic/Tutor changes require anchor compatibility review after integration. This lane edits no cross-lane UI/spec file.
-- Instructor flow depends on a real learner row/support flag and optional data panels; an empty class has no substitute walkthrough path.
+- Missing/removed or hidden anchors are skipped; an empty class still walks through its available overview targets and omits learner-dependent steps.
+- Optional results/Study-completion steps never create a session, submit answers or rate cards to reach their targets. The normal flow may skip them; the browse-step copy also explains the eventual end controls.
 - Legacy availability can accept a cached ready lesson without five prepared questions, despite the unavailable message referring to five questions.
 - Driver options do not independently prove accessibility; focus/mobile acceptance remains outstanding.
 
@@ -104,5 +104,7 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Refresh current UI anchors/copy; skip unavailable conditional steps; add Back and synthetic zero-mutation acceptance | User-authorized TOUR-REFRESH | TOUR-REQ-001, TOUR-REQ-003, TOUR-REQ-004, TOUR-REQ-005 |
+| 2026-10-25 | Specify per-step visible-target checks, bounded optional skips and remembered concrete learner routes before runner changes | TOUR-REFRESH continuation in the existing UI worktree | TOUR-REQ-001, TOUR-REQ-003, TOUR-REQ-004, TOUR-REQ-005 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | TOUR-REQ-001 through TOUR-REQ-005 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | TOUR requirements above |
