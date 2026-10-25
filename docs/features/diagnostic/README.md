@@ -23,6 +23,10 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 | --- | --- | --- |
 | authenticated student in a course | Open the course diagnostic, select answers and submit the sitting | Supply trusted identity, role or institution through the client |
 
+## Student read admission
+
+Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing preparation or worker activity. The submit method and enrolled sitting/availability behavior are unchanged by this read-route amendment. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+
 ## Requirements
 
 ### DIAG-REQ-001: Explain the Diagnostic's purpose with a compact introduction
@@ -178,6 +182,7 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Define Diagnostic presentation, scroll reachability, route audit and component boundary before implementation | APPROVAL-05 rev 2, Lane U | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-003, DIAG-REQ-004, DIAG-REQ-005 |
 | 2026-10-25 | Record the narrow pill exception: only ComposeDock/PromptInput text-entry containers may be pills when empty; Tutor uses an existing token radius while dragging or holding attachments; every control remains boxy | Fred's APPROVAL-05 clarification relayed by the coordinator; DESIGN.md exception must be committed before implementation | DIAG-REQ-005 |
 | 2026-10-25 | Record the narrow motion exception: only Kala's logo in the Tutor new-chat empty state may have a slow subtle idle loop, stopping on typing or sending; never in conversations, Study, Test or Diagnostic; static with reduced motion | Fred's APPROVAL-05 clarification relayed by the coordinator; DESIGN.md exception must be committed before implementation; flag lead designer review | DIAG-REQ-005 |

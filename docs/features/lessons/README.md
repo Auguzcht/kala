@@ -30,6 +30,10 @@ Guided lessons teach an approved course skill through persisted teaching steps a
 | worker | Assign prepared bank checks or finish queued legacy checks | Replace already assigned checks during ordinary assignment |
 | instructor | Influence course skills/material through their own feature | Treat reading completion as a graded outcome |
 
+## Student read admission
+
+Lesson-retrieval GET follows [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing lesson generation, persistence or assignment work. Enrolled teaching behavior and check-submission methods remain unchanged. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+
 ## Requirements
 
 ### LESSON-REQ-001: Persist and reuse teaching content per approved skill
@@ -123,5 +127,6 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | LESSON-REQ-001 through LESSON-REQ-007 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | LESSON requirements above |

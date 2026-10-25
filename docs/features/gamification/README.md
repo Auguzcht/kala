@@ -25,6 +25,10 @@ Kala rewards learning activity through derived XP, UTC-day streaks and mastery b
 | authenticated user | Read their own reward summary for a course | Set XP, streak or badge values |
 | grading service | Persist authoritative answer/review outcomes | Accept a client reward amount as truth |
 
+## Student read admission
+
+The reward-summary GET follows [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before computing reward data. Enrolled XP, streak and badge calculations remain unchanged; the guard introduces no reward writes. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+
 ## Requirements
 
 ### GAME-REQ-001: Derive XP without double-counting practice reviews
@@ -60,7 +64,7 @@ Kala rewards learning activity through derived XP, UTC-day streaks and mastery b
 `attempts`/`correct` summarize non-practice evidence plus counted reviews; practice XP is separately summed from saved answer snapshots. These counters must not be described as a complete count of every historic practice submission.
 
 ## Data
-Read evidence_events, item_reviews, practice_answer_results, approved skills and mastery_state. Summary writes nothing; authoritative writers are the learning routes/RPCs. Evidence/mastery RLS allow self/course staff/institution admin; review/result tables use owner-oriented policies from their migrations. The API uses service-role DB access: the summary's event/review/result queries filter user/course but omit an explicit institution filter; the badge queries do include it. Student course-enrollment enforcement is not present in this route.
+Read evidence_events, item_reviews, practice_answer_results, approved skills and mastery_state. Summary writes nothing; authoritative writers are the learning routes/RPCs. Evidence/mastery RLS allow self/course staff/institution admin; review/result tables use owner-oriented policies from their migrations. The API uses service-role DB access: the summary's event/review/result queries filter user/course but omit an explicit institution filter; the badge queries do include it. The audited baseline lacked student course-enrollment enforcement; AUTH-REQ-007 now requires the existing admission guard before this read, with implementation verification pending.
 
 ## AI usage (if any)
 None. Reward arithmetic and badge decisions are deterministic. Generated content or tutor answers earn nothing merely by being viewed.
@@ -97,5 +101,6 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Write full source-backed feature spec; identify limits and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | GAME-REQ-001 through GAME-REQ-004 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | GAME requirements above |

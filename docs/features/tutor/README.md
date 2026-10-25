@@ -21,6 +21,10 @@ Learners get course-grounded help and a usable retry message within the inline r
 | --- | --- | --- |
 | authenticated learner | Ask for course-grounded help, using an owned conversation or stateless mode | Access another user's conversation |
 
+## Student read admission
+
+Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads). Detail resolves the existing owned conversation before checking its course, then loads messages/attachments. Ask, create, management and attachment mutations are unchanged by this read-route amendment. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+
 ## Requirements
 
 ### TUTOR-REQ-001: One 26-second budget per ask request
@@ -134,6 +138,7 @@ TutorChat retains an unconfirmed answer locally when its refetch fails or lacks 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-24 | Minimal freeze spec created before implementation | APPROVAL-01, section 2 Lane T and confirmed amendment A1 | TUTOR-REQ-001 |
 | 2026-10-24 | Complete timeout detail and unconfirmed-answer display in TutorChat | APPROVAL-01 standing rule; coordinating planner grant for TutorChat.tsx and dedicated UI tests | TUTOR-REQ-001 |
 | 2026-10-24 | Explicitly document that an abandoned synchronous call can resume during the next request in a warm Lambda environment | APPROVAL-02 from Fred | TUTOR-REQ-001 |

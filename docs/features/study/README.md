@@ -30,6 +30,10 @@ Practice/Test uses the existing practice router and Test browser. Bank-backed se
 | --- | --- | --- |
 | student | Browse and review their own course cards | Change another student's schedule |
 
+## Student read admission
+
+Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing claims, generation or exposure writes. Enrolled selection, counting, grading and reward rules remain unchanged; mutation methods are outside this amendment. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+
 ## Requirements
 
 ### STUDY-REQ-001: Counts reads have no side effects
@@ -84,6 +88,7 @@ The component interaction tests depend on an external renderer fixture: matching
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-24 | Define minimal freeze scope before implementation | APPROVAL-01, Lane F and confirmed section 5 | STUDY-REQ-001, STUDY-REQ-002, STUDY-REQ-003 |
 | 2026-10-24 | Make native flip-card fresh selection and its regression explicit | APPROVAL-02: retain the fix because eligible native cards could be omitted before an empty/caught-up result | STUDY-REQ-004 |
 | 2026-10-24 | Make ready-course Preparing classification and its regression explicit | APPROVAL-02: retain the fix at the same Study empty-state availability boundary | STUDY-REQ-005 |

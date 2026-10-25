@@ -46,6 +46,10 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 | instructor/admin | Use the instructor twin/record endpoints | Infer authorization solely from a requested student ID |
 | worker | Rebuild derived mastery and append readiness history | Treat snapshots as replacement evidence |
 
+## Student read admission
+
+Own Twin, next-up and assigned-plan GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads). The full-history endpoint keeps TWIN-REQ-010’s explicit student-role and scoped-enrollment guard; staff admission remains INSTR-REQ-009. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+
 ## Requirements
 
 ### TWIN-REQ-001: Make readiness values legible inside large rings
@@ -101,7 +105,7 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 - Verified by: static `routers/twin.py::next_up`, `learn/items.py::weakest_skill`; related weakest-skill serving tests in `test_learn_routes.py`. There is no dedicated browser next-up acceptance test.
 
 ### TWIN-REQ-009: Preserve own-data and guarded staff Twin boundaries
-- Rule: Own Twin, next-up and plan derive user/institution from the validated session; students cannot select another user. Staff access to any course/learner data satisfies INSTR-REQ-009 before data access, with target-student membership for learner views. Preserve legitimate own-student access and existing response shapes; presentation or paging grants no extra access. Own plans contain only approved/modified/completed recommendations.
+- Rule: Own Twin, next-up and plan derive user/institution from the validated session; students cannot select another user. Staff access to any course/learner data satisfies INSTR-REQ-009 before data access, with target-student membership for learner views. Student GETs also satisfy AUTH-REQ-007; preserve enrolled own-student access and existing response shapes. Presentation or paging grants no extra access. Own plans contain only approved/modified/completed recommendations.
 - Acceptance: Existing own-student reads remain intact. Staff wrong-role, untaught-course, foreign-institution and target-membership cases follow INSTR-REQ-009, with allowed correct instructors and same-institution admins. No protected operation occurs after denial.
 - Status: planned
 - Verified by: pending Lane SEC route/role/institution matrix; not a claim of current enforcement or live acceptance.
@@ -201,6 +205,7 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Define prominent readiness numbers, plain Focus area heading and shared ten-row ledger pagination before implementation | Fred's direct WI-22 visual/pagination request for student and instructor views | TWIN-REQ-001, TWIN-REQ-002, TWIN-REQ-003 |
 | 2026-10-25 | Correct the observed instructor ledger response window to 25; distinguish the internal 200-event statistics read | Final UI/UX handoff source trace of cohort.learner_record; no runtime or intended-behavior change | TWIN-REQ-003 |
 | 2026-10-25 | Require explicit 20/25-event window labels and recent-activity wording; full-history pagination deferred | APPROVAL-06 H12; Lane U close-out implements copy | TWIN-REQ-003 |

@@ -70,6 +70,14 @@ Kala uses an LMS launch to establish the learner's institution, identity, course
 - Status: done-awaiting-confirmation; implementation and local checks complete under APPROVAL-06 rev 2, Lane I and Fred's confirmed reconciliation amendment (2026-10-25). Live Blackboard acceptance remains FG-5.
 - Verified by: dedicated `services/api/tests/test_identity_convergence_lane_i.py` (31 scenarios), updated launch regressions, and the disposable real Postgres/PostgREST check `services/api/tests/identity_lane_i_postgrest.py`; identity evidence below. Real Blackboard acceptance remains a Fred gate.
 
+### AUTH-REQ-007: Require existing course enrollment on student reads
+- Rule: For a validated student, the inventoried course-scoped GET handlers require the existing bank course/enrollment guard for the requested or resource-resolved course. Missing enrollment, unavailable course and another institution return the same 404 before content, learning-state retrieval or existing GET side effects. Identity and institution come from the validated token; UUID shape or a session course claim is insufficient. Enrolled responses, existing processing and staff branches remain unchanged. Reuse the existing guard without extending its semantics or introducing another gate.
+- Scope: Course metadata/memory; Twin/next-up/assigned plan; content/modules/Diagnostic status and question retrieval; Study cards/deck; Test next-item/set list/set detail/results; Lesson retrieval; Tutor conversation list/detail; and reward summary. The five existing GETs that can also write or wake work (Diagnostic questions, Study deck, Test next-item, Test set detail and Lesson retrieval) gain admission before that processing; their allowed processing is unchanged. Bank status already has this guard. The new full-history endpoint retains its own stronger student-role/institution/enrollment checks.
+- Resource resolution: Tutor detail retains its existing owned-conversation lookup before checking that conversation's course, then reads messages/attachments. Do not change the shared ownership helper or its mutation callers. A function-local module import in Diagnostic may avoid the existing Bank/Diagnostic import cycle; only the guard branch and necessary imports are permitted.
+- Acceptance: Each fixed GET covers enrolled success, non-enrolled 404 and foreign-institution 404. Denied requests perform no protected processing, generation, scheduling, exposure writes or worker calls. Staff behavior, response fields and enrolled learning behavior remain unchanged. Strict AST comparison permits only the exact student admission branches and necessary imports. Mutation methods are outside this amendment.
+- Status: planned
+- Verified by: pending student-read follow-up matrix and strict scope proof under WI-26; no deployed acceptance claimed.
+
 ## API contract
 
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -142,6 +150,7 @@ Limits: the local persistence fixture uses committed identity/evidence table def
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Write full source-backed feature spec; identify limits and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | AUTH-REQ-001 through AUTH-REQ-005 |
 | 2026-10-25 | Specify UUID/subject convergence, exact identity resolution and complete-pull-only enrollment removal, including instructors; preserve legacy evidence without repair | APPROVAL-06 rev 2 Lane I; Fred confirmed reconciliation amendment; P baseline lineage `2062784` | AUTH-REQ-002, AUTH-REQ-003, AUTH-REQ-006 |
 | 2026-10-25 | Record implementation, dedicated regression and disposable local persistence evidence; retain live acceptance and legacy repair limits | APPROVAL-06 rev 2 Lane I; implementation `cbc9a06` | AUTH-REQ-002, AUTH-REQ-003, AUTH-REQ-006 |
