@@ -188,3 +188,10 @@ Reviewed H `cf169ec587a639feaeae86cdc429f9ca1ae9550a` merged at `bc8a2f5`; then 
 Coordinator reran M's local catalog/replay and full public-CLI proofs on this merged main: all37 immutable migration replays/catalog checks and all14 CLI proof groups passed, including canonical-only consent visibility counterexample, exact sanitized refusal, no-op, schedule/attempt collisions, worker estimates/capture, later-activity refusal and exact restore. Synthetic fixtures only; no hosted pair or outcome is assumed. A refused governance pair is a valid FG-7 outcome recorded separately in WI-24, not a reason to alter legal records or policies.
 
 The current database guide now registers reviewed0038/0039 and the separate repair procedure so operations do not depend on work-layer evidence. The existing database-tooling stream remains gated; no schema/type tooling, infrastructure or hosted system changed. Full integrated checks and FG-6 are still pending the enrollment follow-up.
+
+
+## Combined forward-delta proof
+
+Coordinator added the opt-in standalone `services/api/tests/handover_migrations_local.py` so the two new migrations can be verified together rather than depending on separate lane evidence. It reuses the committed SEC replay/RLS verifier, H's runbook SQL and keyset fixture; no application/default test behavior changes. This new path has no competing owner and is listed here with its integration-only reason. No dependency or infrastructure configuration changes.
+
+On merged H/M main, the command passes all four proof groups: 37-file replay plus0038 authenticated matrices; repeated0039 and guarded runbook/keyset checks after0038; documented index removal/reapply with policies unchanged; local PostgreSQL17.6/no hosted access. Its dedicated Docker container is network-disabled with no published ports and is removed on exit. This also proves the runbook recovery statement on a real local database. NewSQL files remain unmodified; no hosted delivery or performance claim follows from this proof.

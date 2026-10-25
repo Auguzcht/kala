@@ -20,6 +20,17 @@ Every future `db:*` package script is strictly local: no `--linked`, project ref
 
 For approved local replay use throwaway Docker databases, fake fixtures and the pinned CLI's default image until a major is configured. The approved workflow must prove two clean verifies and no second-run schema/type diff. Command implementation and execution remain pending, so this page supplies no invented reset command. New SQL must run against real local Postgres before acceptance; mocks alone are insufficient.
 
+## Combined local migration verification
+
+The optional coordinator verifier [handover_migrations_local.py](../../services/api/tests/handover_migrations_local.py) replays immutable0001–0037, executes the committed0038 authenticated-policy matrix, then tests0039 and its guarded runbook/query fixture in that same database. It also verifies the documented index removal/reapply without changing tightened policies. It creates and removes only its own network-disabled Docker container, with no published ports, environment files or hosted credentials. Prerequisites: Docker running, cached `public.ecr.aws/supabase/postgres:17.6.1.158`, and the repo's uv Python environment. This is an opt-in proof command, not a database setup or hosted-delivery command:
+
+```sh
+cd services/api
+uv run python tests/handover_migrations_local.py
+```
+
+Local PostgreSQL17.6 with minimal synthetic Auth/Storage scaffolding does not certify the hosted project's grants, service stack, lock duration or performance. Named-maintainer pre/post-checks remain required.
+
 ## Hosted drift inspection
 
 Maintainer only: Fred takes a schema-only dump of dev-hosted and places it at `.tmp/hosted_schema.sql` (gitignored). Agents only compare that supplied file against `supabase/schema.sql` after the local workflow creates the latter. Neither path is a current checked-in artifact. No agent connects to hosted Postgres for this inspection. Do not send keys, connection strings or raw dumps into chats or commit them. Record only sanitized differences, revision, versions and verifier.
