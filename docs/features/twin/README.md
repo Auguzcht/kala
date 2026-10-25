@@ -64,7 +64,7 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 
 ### TWIN-REQ-003: Page the evidence ledger consistently
 
-- Rule: The shared EvidenceLedger shows ten returned events per page in the existing server order, using Kala's Pagination primitives at the same default 40px control size as the instructor roster. Display the current range and label the total as recent events, not lifetime history. Show page controls only when multiple pages exist; handle empty/one-page lists. The student twin, instructor twin drill-down and learner record use this same component.
+- Rule: The shared EvidenceLedger shows ten returned events per page in the existing server order, using Kala's Pagination primitives at the same default 40px control size as the instructor roster. Display the current range and label bounded fallback totals as recent events, not lifetime history. When TWIN-REQ-010 or INSTR-REQ-010 full paging is active, use its loaded-activity wording instead; ten-row pages and controls remain unchanged. Show page controls only when multiple pages exist; handle empty/one-page lists. The student twin, instructor twin drill-down and learner record use this same component.
 - Rule: Page changes replace rows immediately without animating an entire page as new evidence. New events arriving on the current page retain the existing short reveal, disabled by reduced motion. Keep pagination controls keyboard accessible, explicitly disable endpoints, clamp the selected page when the returned list shrinks, and fit mobile widths without horizontal overflow. Use the existing pageWindow helper on larger screens and compact the visible number links on small screens without shrinking controls.
 - Acceptance: Ten rows at most are shown; next/previous/numbered/keyboard navigation retains order and stable controls; final-page ranges and disabled endpoints are correct; empty lists and shrinking data are safe at 375px and desktop widths. Both instructor/student views inherit the behavior.
 - Status: implemented
@@ -105,6 +105,17 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 - Acceptance: Existing own-student reads remain intact. Staff wrong-role, untaught-course, foreign-institution and target-membership cases follow INSTR-REQ-009, with allowed correct instructors and same-institution admins. No protected operation occurs after denial.
 - Status: planned
 - Verified by: pending Lane SEC route/role/institution matrix; not a claim of current enforcement or live acceptance.
+
+### TWIN-REQ-010: Browse complete own evidence history
+- Rule: An authenticated student with student enrollment in the requested course and token institution can read only their own evidence through `GET /courses/{course_id}/twin/evidence`. UUID validation alone does not authorize access. This is a new history endpoint; existing Twin/next-up/plan responses remain unchanged.
+- Contract: Return `courseId` and `evidence` using the existing event fields (`id`, `type`, `correct`, optional nullable `latencyMs`, `skillName`, optional nullable `createdAt`). Add optional nullable `nextCursor`, returning null or omitting it at the last page. Do not add required fields to existing responses or alter `createdAt`.
+- Pagination: Keyset on `(created_at DESC, id DESC)` with default limit 25, minimum 1, maximum 100. Fetch limit plus one, return at most limit; provide a next cursor only when another row exists. Index review covers `(user_id, course_id, created_at)` plus `id` for the tie; 0039, if needed, is index-only with `create index if not exists`.
+- Cursor: Use a versioned URL-safe opaque payload authenticated with a domain-separated HMAC derived from the existing server JWT secret, bound to caller, target learner, course and institution. Validate signature, shape, timestamp and UUID before query construction. Invalid/tampered/scope-mismatched cursors return generic 422 without echoing input. Every page rechecks current authorization. No additional cursor TTL or database anchor-existence requirement is introduced; a valid signed cutoff remains usable even if a repair re-attributed the anchor. Secret rotation invalidates old cursors; offer Reload activity on 422.
+- Concurrency: Read strictly below the last returned tuple. Equal timestamps order by ID; newer arrivals appear after refreshing the first page. Merge loaded pages deterministically and deduplicate by ID. Cache identity includes institution, caller, target learner, course and cursor; reset visible pagination on scope changes and never keep another scope's previous data. Do not claim snapshot isolation or lifetime totals.
+- Presentation: Keep ten-row ledger pages, keyboard access, reduced motion and 40px controls. Active own-history surfaces say “Showing N of your activity”, where N is the loaded count. Show “Load older activity” only with a live next cursor. Start the independent history feed rather than mixing its first page with legacy 20/25-row arrays. On fetch failure retain loaded rows and offer retry. Full-history labels appear only after the new request succeeds; retain bounded labels elsewhere.
+- Acceptance: First/next/last/empty pages, equal timestamps, invalid/tampered/cross-scope cursors, limit bounds, unavailable course, account/course switches, concurrent arrivals, retry and deduplication, and 375px/1440px keyboard/reduced-motion browser tests. Reading creates no evidence or XP; existing charts/statistics and response fields remain unchanged.
+- Status: planned
+- Verified by: pending Lane H dedicated API, local index and browser tests; no implemented or hosted acceptance claim.
 
 ## API contract
 
@@ -197,3 +208,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | 2026-10-25 | Consolidate accepted presentation requirements and mapped backend draft; preserve H12 windows, WI-25 deferral and revision-specific evidence | Coordinator-approved Lane P reconciliation after APPROVAL-06 Lane I merge; draft `2062784` mapping above | TWIN-REQ-001 through TWIN-REQ-008 |
 
 | 2026-10-25 | Define own-student and staff-authorized Twin access before guard implementation | APPROVAL-07 section 1 and Amendments 2–3, WI-26; coordinator | TWIN-REQ-009 |
+
+| 2026-10-25 | Define authorized cursor-backed full-history loading; preserve bounded fallback responses/statistics and clarify active-feed labels | APPROVAL-07 section 2 and Amendment 1, WI-25; coordinator spec before H implementation | TWIN-REQ-003, TWIN-REQ-010 |

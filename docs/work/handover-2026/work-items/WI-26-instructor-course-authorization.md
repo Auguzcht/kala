@@ -1,6 +1,6 @@
 ---
 id: WI-26
-status: planned
+status: in-progress
 owner: ITO
 ---
 
@@ -13,3 +13,7 @@ Some dashboard reads/decisions use an instructor/admin role gate and institution
 Define and review course ownership/admin policy before changing behavior. Add denial tests for same-institution instructors outside a course, removed instructors, students, cross-institution calls and decisions against an unowned course. Verify legitimate teachers and institution admins retain intended access. Review every dashboard route, not only the learner-record helper. Determine whether direct authenticated recommendation reads need status filtering; any SQL correction is a new forward migration with real local RLS tests, then a reviewed Fred/ITO apply runbook. Never edit applied0002.
 
 The H01(a) UUID fix removes stale enrollments after a complete successful roster sync, but it does not supply missing checks to routes that never consult that enrollment. No security fix or hosted exploit check is claimed here. Record this risk explicitly in release review; passing UI/API regression suites is not a security sign-off.
+
+## APPROVAL-07 implementation round
+
+Lane SEC works on `codex/wi26-course-authorization`, under coordinator-owned INSTR-REQ-009 / TWIN-REQ-009 and amended INGEST-REQ-001. APPROVAL-07 Amendments 2–3 set wrong-role 403 and course/learner/institution 404, extend refresh guards, preserve the helper/preview/queue logic and require diagnostic guard-only scope proof. New 0038 may only tighten policies and needs local authenticated proof before Fred FG-6. Owner stays ITO; no security completion or hosted acceptance is claimed until actual results.

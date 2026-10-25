@@ -103,6 +103,13 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Status: planned
 - Verified by: pending Lane SEC route inventory, dedicated denial/allow tests and real local policy replay; no implementation or hosted acceptance claimed.
 
+### INSTR-REQ-010: Browse authorized learner evidence history
+- Rule: `GET /dashboard/{course_id}/students/{user_id}/evidence` uses TWIN-REQ-010's response, cursor and stable `(created_at DESC, id DESC)` paging contract. Enforce SEC's INSTR-REQ-009 staff/course/institution gate and target-student membership before evidence access. Correct instructors and same-institution admins are allowed; wrong role is 403, untaught/unavailable or foreign-institution course/learner is 404. Identity/presentation never grants new access.
+- Presentation: The shared ledger and instructor learner views keep ten-row pages and add “Load older activity” only with a next cursor. A successful active full-history request says “Showing N of this learner's activity”, where N is loaded rows. Preserve existing bounded statistics and legacy labels wherever full paging is inactive. Apply TWIN-REQ-010 cache/scope/reset/deduplication/failure/retry and keyboard/reduced-motion rules.
+- Acceptance: Correct teacher and same-institution admin succeed; student, outside-course instructor, foreign-institution instructor/admin and unenrolled target are refused before data access. Cover TWIN-REQ-010 paging/cursor/limit scenarios, browser loading at 375px/1440px and zero evidence/XP writes from views.
+- Status: planned
+- Verified by: pending Lane H dedicated route, query and browser tests after SEC integration; no hosted acceptance claim.
+
 ## API contract
 
 ### Accepted presentation boundary
@@ -152,7 +159,7 @@ None added. Reviewing an existing proposal or recommendation does not introduce 
 
 Network errors, fast responses, slow responses, keyboard activation, reduced motion and repeated clicks are covered. This local implementation does not deploy changes to the separate hosted instructor site. Duplicate enrolled/LTI identities require a separately reviewed human-run repair; never merge by display name in the UI.
 
-- Shared queries cap evidence, snapshots and decisions. Roster/statistics evidence is capped at 2,000 events class-wide; learner-record statistics read at most 200 and return only 25 ledger rows. Bounded counts/accuracy/last activity do not represent lifetime history; full-history paging is deferred under WI-25.
+- Shared queries cap evidence, snapshots and decisions. Roster/statistics evidence is capped at 2,000 events class-wide; learner-record statistics read at most 200 and return only 25 ledger rows. Bounded counts/accuracy/last activity do not represent lifetime history; legacy responses remain bounded; WI-25 full-history ledger paging is newly authorized under INSTR-REQ-010, with implementation and live acceptance still pending.
 - Median implementation uses the upper middle element for even samples; percentile uses strict-below peers. Ties and sparse cohorts need cautious interpretation.
 - Zero evidence is distinct from zero mastery; roster and at-risk use related but different rules. Heatmap/stats cohort means have different denominators.
 - Plans navigate via compatibility routes for lesson/practice/flashcards; routing fixes belong to UI scope. Recommendation lifecycle completion, teacher audit immutability and course gate hardening remain incomplete.
@@ -207,3 +214,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | 2026-10-25 | Consolidate accepted presentation requirements and mapped backend draft; preserve H12 windows, WI-25 deferral and revision-specific evidence | Coordinator-approved Lane P reconciliation after APPROVAL-06 Lane I merge; draft `2062784` mapping above | INSTR-REQ-001 through INSTR-REQ-008 |
 
 | 2026-10-25 | Define complete staff course/learner admission and direct recommendation visibility; preserve own-student access and truthful denials | APPROVAL-07 section 1 and Amendments 2–3, WI-26; coordinator spec before Lane SEC implementation | INSTR-REQ-008, INSTR-REQ-009 |
+
+| 2026-10-25 | Define authorized learner-history endpoint and cursor-backed shared ledger; retain bounded statistics and inactive-feed labels | APPROVAL-07 section 2 and Amendment 1, WI-25; coordinator spec before H implementation | INSTR-REQ-010 |
