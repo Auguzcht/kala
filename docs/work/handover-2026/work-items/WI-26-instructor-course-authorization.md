@@ -6,7 +6,9 @@ owner: ITO
 
 # Close instructor course-access and recommendation visibility gaps
 
-Priority: high, review before institutional production sign-off. Source findings: [INSTR-REQ-008 and contradictions](../../../features/instructor-insights/README.md#contradictions-requiring-planner-resolution). Authority: APPROVAL-06 permits documentation of open handover items; implementation is outside the current identity/availability/UI lanes. Branch: not started.
+Priority: high, review before institutional production sign-off. Current requirements: [INSTR-REQ-009](../../../features/instructor-insights/README.md#instr-req-009-authorize-staff-course-and-learner-access). APPROVAL-07 authorizes implementation on `codex/wi26-course-authorization`; the branch is merged locally, with hosted gates and integrated acceptance still pending. Owner remains ITO.
+
+## Original findings
 
 Some dashboard reads/decisions use an instructor/admin role gate and institution filters without proving that the caller teaches the requested course. `_assert_teaches_student` checks the target learner's enrollment, not caller enrollment. Service-role persistence bypasses RLS. Separately, the plan API hides undecided/rejected recommendations, while the authenticated self-read policy in 0002 does not filter status. Direct Data API exposure and hosted policy state were not tested by this audit.
 
@@ -16,4 +18,13 @@ The H01(a) UUID fix removes stale enrollments after a complete successful roster
 
 ## APPROVAL-07 implementation round
 
-Lane SEC works on `codex/wi26-course-authorization`, under coordinator-owned INSTR-REQ-009 / TWIN-REQ-009 and amended INGEST-REQ-001. APPROVAL-07 Amendments 2–3 set wrong-role 403 and course/learner/institution 404, extend refresh guards, preserve the helper/preview/queue logic and require diagnostic guard-only scope proof. New 0038 may only tighten policies and needs local authenticated proof before Fred FG-6. Owner stays ITO; no security completion or hosted acceptance is claimed until actual results.
+Lane SEC followed coordinator-owned INSTR-REQ-009 / TWIN-REQ-009, INGEST-REQ-001/008 and SKILL-REQ-006. APPROVAL-07 Amendments 2–5 set wrong-role 403 and course/learner/institution 404, authorize all diagnostic staff-branch guards and the scoped recommendation lookup/learner-bound update, and preserve student content reads, helper and queue logic. Migration 0038 tightens 22 existing policies only; its hosted application is still Fred FG-6.
+
+Final SEC revision `9208875cb5bc22f50ce903cf90ef1e680a709e25` merged locally at `afe0c1cb0f35b86a4fddad4d61f83a9ea1067038`. Lane verification: 829 API tests, 117 worker tests, 219 focused authorization cases, 350 local authenticated read cases plus recommendation writes/removed-membership counterexamples, strict 13-route Diagnostic AST proof, unchanged 0001–0037 checksums, and web/docs checks passed. These are local implementation results, not deployed security acceptance. H owns the approved denial/error browser checks. Full merged integration, FG-6, FG-8 and FG-9 remain open.
+
+Student enrollment checks missing from retained shared content/Diagnostic/own-data routes remain explicit follow-up findings; this lane was instructed to preserve those student branches. Hosted grants and Data API state have not been inspected in this round. See the complete inventory for exact routes and lines.
+
+## Verified by
+
+- [SEC inventory, proof and full report](../evidence/wi26-course-authorization.md)
+- [0038 apply runbook](../../../runbooks/0038-apply.md)
