@@ -1,10 +1,11 @@
+import { EvidenceHistoryLedger } from "@/features/twin";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useAtRisk, useLearnerRecord } from "@/features/instructor";
 import { DecisionCenter } from "@/features/instructor/components/DecisionCenter";
 import { LearnerStanding } from "@/features/instructor/components/LearnerStanding";
-import { MasteryBand, MasteryRadar, MasteryRing, EvidenceLedger } from "@/components/kala";
+import { MasteryBand, MasteryRadar, MasteryRing } from "@/components/kala";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -265,12 +266,11 @@ export function LearnerRecord({
           <Card id="tour-record-ledger">
             <CardHeader>
               <CardTitle className="text-base">Evidence ledger</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Last 25 events. Evidence is append-only; earlier events are not shown here.
-              </p>
             </CardHeader>
             <CardContent>
-              <EvidenceLedger key={userId} events={r.evidence} />
+              <EvidenceHistoryLedger key={`${courseId}:${userId}`} courseId={courseId} targetId={userId}
+                fallbackEvents={r.evidence}
+                fallbackLabel="Last 25 events. Evidence is append-only; earlier events are not shown here." />
             </CardContent>
           </Card>
         </TabsContent>
