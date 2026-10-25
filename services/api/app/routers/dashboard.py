@@ -25,6 +25,7 @@ from app.deps import (
     require_valid_skill_id,
     require_valid_user_id,
 )
+from app.routers.diagnostic import _assert_teaches_course, _course_ref
 from app.twin import cohort, summary
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -99,6 +100,8 @@ def heatmap(
     module_ref: str | None = None,
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     skills, students, cells = _cohort(
         institution_id=user.institution_id, course_id=course_id, module_ref=module_ref,
     )
@@ -216,6 +219,8 @@ def at_risk(
     course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     skills, students, cells = _cohort(
         institution_id=user.institution_id, course_id=course_id,
     )
@@ -265,6 +270,9 @@ def student_twin(
     user_id: str = Depends(require_valid_user_id),
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
+    _assert_teaches_student(user=user, course_id=course_id, user_id=user_id)
     rows = db.select("users", {
         "id": f"eq.{user_id}", "institution_id": f"eq.{user.institution_id}",
         "select": "pseudonym", "limit": "1",
@@ -297,6 +305,8 @@ def list_proposed_skills(
     """Skills awaiting review for this course, with any 'possible duplicate'
     hint the proposer attached. Feeds the review UI (or read straight in
     Supabase for the demo)."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     rows = db.select("skills", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
         "status": "eq.proposed",
@@ -327,6 +337,8 @@ def list_auto_matched_skills(
     rather than the reuse being invisible. If an inherited skill's wording
     isn't quite right for THIS course, the detach endpoint below turns it
     back into a course-local proposed skill they can fine-tune."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     rows = db.select("skills", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
         "status": "eq.approved",
@@ -346,6 +358,8 @@ def review_proposed_skill(
 ):
     """Approve or reject a proposed skill, with optional inline edits. Only
     after approval does the skill feed the learner/instructor surfaces."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     if body.status not in ("approved", "rejected"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "status must be approved or rejected")
 
@@ -381,14 +395,8 @@ def reject_approved_skill(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Retire an approved skill's bank items atomically with its rejection."""
-    if user.app_role != "admin":
-        enrollment = db.select("enrollments", {
-            "institution_id": f"eq.{user.institution_id}",
-            "user_id": f"eq.{user.user_id}", "course_id": f"eq.{course_id}",
-            "role": "eq.instructor", "select": "course_id", "limit": "1",
-        })
-        if not enrollment:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "course not found")
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     result = db.rpc("reject_approved_skill", {
         "p_institution_id": user.institution_id,
         "p_course_id": course_id,
@@ -420,6 +428,8 @@ def detach_auto_matched_skill(
 
     Only affects rows that were actually auto-matched (canonical_skill_id set
     and status approved); a 404 otherwise."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     updated = db.update(
         "skills",
         {"id": f"eq.{skill_id}", "institution_id": f"eq.{user.institution_id}",
@@ -468,6 +478,8 @@ def course_roster(
     UI can flip to pseudonyms for screen-sharing, and ai/prescriber.py is
     handed the pseudonym and never the name.
     """
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     return cohort.roster(institution_id=user.institution_id, course_id=course_id)
 
 
@@ -480,6 +492,8 @@ def course_stats(
     readiness trend (from the worker's snapshots, real history), daily
     evidence volume, mastery band distribution, Bloom's coverage, per-skill
     breakdown weakest-first, and the human-in-the-loop decision counts."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     return cohort.stats(institution_id=user.institution_id, course_id=course_id)
 
 
@@ -497,6 +511,8 @@ def student_record(
     momentum (last 10 graded vs the 10 before), engagement pattern, and the
     readiness history the trend line is drawn from.
     """
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     _assert_teaches_student(user=user, course_id=course_id, user_id=user_id)
     record = cohort.learner_record(
         institution_id=user.institution_id, course_id=course_id, user_id=user_id,
@@ -573,6 +589,8 @@ def list_recommendations(
     stay in the list rather than disappearing: the decision history IS the
     human-in-the-loop record, and a teacher should be able to see they
     already turned something down."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     _assert_teaches_student(user=user, course_id=course_id, user_id=user_id)
     rows = db.select("recommendations", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
@@ -602,6 +620,8 @@ def generate_recommendations(
     duplicates every time the teacher hits refresh — decided rows are never
     touched, because they are the audit trail.
     """
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     _assert_teaches_student(user=user, course_id=course_id, user_id=user_id)
     record = cohort.learner_record(
         institution_id=user.institution_id, course_id=course_id, user_id=user_id,
@@ -677,6 +697,16 @@ def decide_recommendation(
     is one of the study's actual research questions, and it is only
     answerable if the two decisions are different values in the column.
     """
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
+    rows = db.select("recommendations", {
+        "id": f"eq.{rec_id}", "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}", "select": "user_id", "limit": "1",
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "recommendation not found")
+    target_user_id = rows[0]["user_id"]
+    _assert_teaches_student(user=user, course_id=course_id, user_id=target_user_id)
     if body.status not in ("approved", "modified", "rejected"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "status must be approved, modified, or rejected",
@@ -704,7 +734,7 @@ def decide_recommendation(
     updated = db.update(
         "recommendations",
         {"id": f"eq.{rec_id}", "institution_id": f"eq.{user.institution_id}",
-         "course_id": f"eq.{course_id}"},
+         "course_id": f"eq.{course_id}", "user_id": f"eq.{target_user_id}"},
         values,
     )
     if not updated:
@@ -736,6 +766,8 @@ def create_intervention(
     an AI proposal a teacher accepted and an action a teacher authored, so
     the learner's plan is one list and the audit trail shows which is
     which."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     _assert_teaches_student(user=user, course_id=course_id, user_id=user_id)
     if body.kind not in ("practice", "lesson", "flashcards", "tutor", "diagnostic", "outreach"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unknown intervention kind")

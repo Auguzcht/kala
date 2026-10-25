@@ -1,8 +1,26 @@
+import pytest
+
 from app.deps import CurrentUser, get_current_user, get_lms_connector
 from app.main import app
 from app.routers import diagnostic, ingest_jobs
 from fastapi.testclient import TestClient
 
+
+
+def with_staff_admission(select):
+    """Add valid course/enrollment fixtures without changing business assertions."""
+    def scoped(table, params):
+        if table == "courses" and params.get("select") == "lms_course_id":
+            return [{"lms_course_id": "_4_1"}]
+        if table == "enrollments" and params.get("role") == "eq.instructor":
+            return [{"course_id": "00000000-0000-4000-8000-000000000001"}]
+        return select(table, params)
+    return scoped
+
+
+@pytest.fixture(autouse=True)
+def valid_admission_default(monkeypatch):
+    monkeypatch.setattr(diagnostic.db, "select", with_staff_admission(lambda table, params: []))
 
 class IngestConnector:
     def get_content(self, course_ref: str, *, include_attachments: bool = False, max_attachments: int = 3):
@@ -55,7 +73,7 @@ def test_ingest_enqueues_a_job_and_returns_202(monkeypatch) -> None:
         inserted.append(rows[0])
         return [row]
 
-    monkeypatch.setattr(ingest_jobs.db, "select", fake_select)
+    monkeypatch.setattr(ingest_jobs.db, "select", with_staff_admission(fake_select))
     monkeypatch.setattr(ingest_jobs.db, "insert", fake_insert)
 
     try:
@@ -87,7 +105,7 @@ def test_ingest_default_include_attachments_is_false(monkeypatch) -> None:
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
     inserted = []
-    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [])
+    monkeypatch.setattr(ingest_jobs.db, "select", with_staff_admission(lambda table, params: []))
     monkeypatch.setattr(
         ingest_jobs.db, "insert",
         lambda table, rows, prefer="return=representation": (
@@ -125,7 +143,7 @@ def test_ingest_double_enqueue_is_a_noop_returning_the_live_job(monkeypatch) -> 
     def insert_should_not_be_called(*args, **kwargs):
         raise AssertionError("insert must not be called when a live job already exists")
 
-    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [live_job])
+    monkeypatch.setattr(ingest_jobs.db, "select", with_staff_admission(lambda table, params: [live_job]))
     monkeypatch.setattr(ingest_jobs.db, "insert", insert_should_not_be_called)
 
     try:
@@ -145,7 +163,7 @@ def test_ingest_status_route_reports_never_ingested(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role="instructor"
     )
-    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [])
+    monkeypatch.setattr(ingest_jobs.db, "select", with_staff_admission(lambda table, params: []))
 
     try:
         with TestClient(app) as client:
@@ -173,7 +191,7 @@ def test_ingest_status_route_reflects_the_job_row(monkeypatch) -> None:
         "started_at": "2026-01-01T00:00:01Z", "updated_at": "2026-01-01T00:05:00Z",
         "finished_at": None,
     }
-    monkeypatch.setattr(ingest_jobs.db, "select", lambda table, params: [row])
+    monkeypatch.setattr(ingest_jobs.db, "select", with_staff_admission(lambda table, params: [row]))
 
     try:
         with TestClient(app) as client:
@@ -211,7 +229,9 @@ def test_propose_skills_endpoint_queues_without_model_or_content_calls(monkeypat
     app.dependency_overrides[get_lms_connector] = IngestConnector
     monkeypatch.setattr(
         diagnostic.db, "select",
-        lambda table, params: [{"lms_course_id": "_4_1"}] if table == "courses" else [],
+        with_staff_admission(lambda table, params: ([{"lms_course_id": "_4_1"}] if table == "courses" else
+                               ([{"course_id": "00000000-0000-4000-8000-000000000001"}]
+                                if table == "enrollments" and params.get("role") == "eq.instructor" else []))),
     )
     queue_calls = []
     monkeypatch.setattr(diagnostic.db, "upsert", lambda table, rows, **kwargs: queue_calls.append(("queued", rows[0]["value"]["status"])))

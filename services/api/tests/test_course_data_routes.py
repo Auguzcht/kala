@@ -63,7 +63,7 @@ def test_INGEST_REQ_001_course_data_routes_are_authenticated_and_tenant_scoped(m
     assert content.json() == [{"lms_content_id": "content-1", "title": "Lesson"}]
     assert assessments.status_code == 403
     assert assessments.json() == {"detail": "insufficient role"}
-    assert roster.status_code == 200
-    assert roster.json() == [{"lms_user_id": "00000000-0000-4000-8000-000000000040", "role": "Student"}]
+    assert roster.status_code == 403
+    assert roster.json() == {"detail": "insufficient role"}
     assert grade.status_code == 403
     assert grade.json() == {"detail": "insufficient role"}

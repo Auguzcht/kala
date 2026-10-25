@@ -7,6 +7,7 @@ from app.bank.kick import kick_bank
 from app.bank.serving import MIN_USABLE, bank_enabled
 from app.db import supabase as db
 from app.deps import CurrentUser, get_current_user, require_valid_course_id
+from app.routers.diagnostic import _assert_teaches_course, _course_ref
 
 router = APIRouter(prefix="/courses", tags=["bank"])
 
@@ -16,6 +17,8 @@ def _course_for_user(course_id: str, user: CurrentUser) -> dict:
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "course not found")
     if user.app_role in {"instructor", "admin"}:
+        _assert_teaches_course(user=user, course_id=course_id)
+        _course_ref(course_id, user.institution_id)
         return rows[0]
     enrolled = db.select("enrollments", {"course_id": f"eq.{course_id}", "user_id": f"eq.{user.user_id}", "select": "user_id", "limit": "1"})
     if not enrolled:

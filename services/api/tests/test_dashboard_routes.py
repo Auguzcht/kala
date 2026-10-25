@@ -4,6 +4,17 @@ from app.routers import dashboard, diagnostic
 from fastapi.testclient import TestClient
 
 
+def with_staff_admission(select):
+    """Supply valid admission rows; retain each test's learning-data fixture."""
+    def scoped(table, params):
+        if table == "courses" and params.get("select") == "lms_course_id":
+            return [{"lms_course_id": "synthetic-course"}]
+        if table == "enrollments" and params.get("role") == "eq.instructor":
+            return [{"course_id": params["course_id"][3:]}]
+        return select(table, params)
+    return scoped
+
+
 def instructor_user() -> CurrentUser:
     return CurrentUser(user_id="inst-1", institution_id="institution-1", app_role="instructor")
 
@@ -11,7 +22,7 @@ def instructor_user() -> CurrentUser:
 def test_reject_approved_skill_is_course_staff_only_and_uses_atomic_rpc(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = instructor_user
     selected, called = [], []
-    monkeypatch.setattr(dashboard.db, "select", lambda table, params: selected.append((table, params)) or [{"course_id": params["course_id"]}])
+    monkeypatch.setattr(dashboard.db, "select", lambda table, params: selected.append((table, params)) or ([{"lms_course_id": "synthetic-course"}] if table == "courses" else [{"course_id": params["course_id"]}]))
     monkeypatch.setattr(dashboard.db, "rpc", lambda fn, args: called.append((fn, args)) or [{"skill_id": args["p_skill_id"], "retired_items": 23}])
     monkeypatch.setattr(dashboard, "kick_bank", lambda *args: None)
     try:
@@ -74,7 +85,7 @@ def test_heatmap_builds_student_by_skill_cells(monkeypatch) -> None:
             return profiles
         return mastery
 
-    monkeypatch.setattr(dashboard.db, "select", fake_select)
+    monkeypatch.setattr(dashboard.db, "select", with_staff_admission(fake_select))
 
     try:
         with TestClient(app) as client:
@@ -118,7 +129,7 @@ def test_at_risk_flags_inactive_student_with_supportive_reason(monkeypatch) -> N
             return mastery
         return evidence
 
-    monkeypatch.setattr(dashboard.db, "select", fake_select)
+    monkeypatch.setattr(dashboard.db, "select", with_staff_admission(fake_select))
 
     try:
         with TestClient(app) as client:
@@ -140,7 +151,7 @@ def test_at_risk_good_news_empty_state(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = instructor_user
     monkeypatch.setattr(
         dashboard.db, "select",
-        lambda table, params: [] if table in ("skills", "enrollments") else [],
+        with_staff_admission(lambda table, params: []),
     )
 
     try:
@@ -157,7 +168,7 @@ def test_student_twin_drill_down(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = instructor_user
     monkeypatch.setattr(
         dashboard.db, "select",
-        lambda table, params: [{"pseudonym": "Mica V."}] if table == "users" else [],
+        with_staff_admission(lambda table, params: [{"id": "00000000-0000-4000-8000-000000000042", "role": "student", "pseudonym": "Mica V."}] if table == "users" else ([{"user_id": "00000000-0000-4000-8000-000000000042"}] if table == "enrollments" else [])),
     )
     monkeypatch.setattr(
         dashboard.summary, "twin_payload",
@@ -190,12 +201,12 @@ def test_list_auto_matched_returns_inherited_skills(monkeypatch) -> None:
     """Auditability: an instructor can see which live skills were auto-matched
     from another course (canonical_skill_id set), not just that they exist."""
     app.dependency_overrides[get_current_user] = instructor_user
-    monkeypatch.setattr(dashboard.db, "select", lambda t, p: [{
+    monkeypatch.setattr(dashboard.db, "select", with_staff_admission(lambda t, p: [{
         "id": "sk-1", "name": "Construct a truth table", "bloom_level": "apply",
         "blueprint_weight": 1.0, "module_ref": "Module 1",
         "proposed_source": "auto-matched to 'Construct a truth table' (sim 0.97)",
         "canonical_skill_id": "canon-1",
-    }])
+    }]))
     try:
         with TestClient(app) as client:
             response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/skills/auto-matched")
@@ -218,6 +229,7 @@ def test_detach_sends_auto_matched_skill_back_to_proposed(monkeypatch) -> None:
         captured["values"] = values
         return [{"id": "sk-1"}]  # one row matched
 
+    monkeypatch.setattr(dashboard.db, "select", with_staff_admission(lambda table, params: []))
     monkeypatch.setattr(dashboard.db, "update", fake_update)
     try:
         with TestClient(app) as client:
@@ -236,6 +248,7 @@ def test_detach_sends_auto_matched_skill_back_to_proposed(monkeypatch) -> None:
 
 def test_detach_404s_when_skill_is_not_auto_matched(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = instructor_user
+    monkeypatch.setattr(dashboard.db, "select", with_staff_admission(lambda table, params: []))
     monkeypatch.setattr(dashboard.db, "update", lambda t, f, v: [])  # nothing matched
     try:
         with TestClient(app) as client:
@@ -251,7 +264,7 @@ def test_proposed_skills_returns_persisted_proposal_status(monkeypatch) -> None:
         if table == "skills": return [{"id": "sk-1", "name": "Apply routing"}]
         if table == "worker_state": return [{"value": {"status": "running"}}]
         return []
-    monkeypatch.setattr(dashboard.db, "select", select)
+    monkeypatch.setattr(dashboard.db, "select", with_staff_admission(select))
     try:
         with TestClient(app) as client:
             response = client.get("/dashboard/00000000-0000-4000-8000-000000000001/skills/proposed")
@@ -263,6 +276,7 @@ def test_proposed_skills_returns_persisted_proposal_status(monkeypatch) -> None:
 
 def test_propose_persists_queued_before_worker_invoke(monkeypatch) -> None:
     calls = []
+    monkeypatch.setattr(diagnostic.db, "select", with_staff_admission(lambda table, params: []))
     monkeypatch.setattr(diagnostic.db, "upsert", lambda table, rows, **kwargs: calls.append(("status", rows[0]["value"]["status"])))
     monkeypatch.setattr(diagnostic, "kick_bank", lambda *args: calls.append(("invoke", args)))
     result = diagnostic.propose_course_skills(

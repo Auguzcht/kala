@@ -137,9 +137,11 @@ def _course_ref(course_id: str, institution_id: str) -> str:
 @router.get("/{course_id}/roster")
 def get_roster(
     course_id: str = Depends(require_valid_course_id),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),  # noqa: B008 - FastAPI resolves the staff dependency
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     return connector.get_roster(_course_ref(course_id, user.institution_id))
 
 
@@ -152,6 +154,9 @@ def get_content(
     # Cheap path on purpose: this is a debug/preview route for looking at the
     # content tree. It must NOT download and parse every PDF in the course.
     # include_attachments defaults False, so this stays a metadata walk.
+    if user.app_role in {"instructor", "admin"}:
+        _assert_teaches_course(user=user, course_id=course_id)
+        _course_ref(course_id, user.institution_id)
     items, _stats = connector.get_content(_course_ref(course_id, user.institution_id))
     return items
 
@@ -162,14 +167,7 @@ def get_assessments(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    try:
-        _assert_teaches_course(user=user, course_id=course_id)
-    except HTTPException as exc:
-        # These gradebook routes expose course authorization denials as 403.
-        # Keep the shared upload gate's 404 contract unchanged elsewhere.
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
-            raise
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient course access") from exc
+    _assert_teaches_course(user=user, course_id=course_id)
     return connector.get_assessments(_course_ref(course_id, user.institution_id))
 
 
@@ -179,6 +177,8 @@ def propose_course_skills(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Queue proposal work; the worker owns all model and content work."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     now = datetime.now(UTC).isoformat()
     db.upsert("worker_state", [{"key": f"proposal:{course_id}", "value": {
         "status": "queued", "queued_at": now, "updated_at": now, "last_error": None,
@@ -191,7 +191,7 @@ def propose_course_skills(
 def ingest_course(
     course_id: str = Depends(require_valid_course_id),
     include_attachments: bool = False,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),  # noqa: B008 - FastAPI resolves the staff dependency
 ):
     # INTEGRATION NOTE (this wiring was missing until now — see
     # docs/features/lms-ingest/README.md#ingest-req-002-enqueue-one-resumable-ingest-job-per-course): this route used to call
@@ -209,6 +209,8 @@ def ingest_course(
     # worker's ingest_walk job (services/worker/app/jobs/ingest_walk.py)
     # drains the tree over its own schedule, checkpointing progress in
     # ingest_jobs so a killed run resumes.
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     job = enqueue_ingest(
         institution_id=user.institution_id,
         course_id=course_id,
@@ -227,8 +229,10 @@ def ingest_course(
 @router.get("/{course_id}/ingest/status")
 def ingest_status(
     course_id: str = Depends(require_valid_course_id),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_role('instructor', 'admin')),  # noqa: B008 - FastAPI resolves the staff dependency
 ):
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     job = ingest_job_status(course_id=course_id)
     if job is None:
         return {"status": "never_ingested", "job": None}
@@ -265,6 +269,7 @@ def upload_course_content(
     course. Same shape as the instructor dashboard's checks.
     """
     _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
 
     filename = documents.safe_filename(file.filename)
     try:
@@ -367,6 +372,7 @@ def reset_tagging(
     reflected immediately.
     """
     _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
 
     result = tagging.tag_recompute(course_id=course_id, institution_id=user.institution_id)
     return {
@@ -387,6 +393,9 @@ def list_modules(
     Blackboard course is actually organized, no naming assumed. Useful for
     an admin screen to sanity-check ingest, and as the source of options for
     any future module-scoped filtering in the UI."""
+    if user.app_role in {"instructor", "admin"}:
+        _assert_teaches_course(user=user, course_id=course_id)
+        _course_ref(course_id, user.institution_id)
     content_rows = db.select("content_items", {
         "institution_id": f"eq.{user.institution_id}", "course_id": f"eq.{course_id}",
         "select": "module_ref",
@@ -440,13 +449,7 @@ def post_grade(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    try:
-        _assert_teaches_course(user=user, course_id=course_id)
-    except HTTPException as exc:
-        # Match assessment reads without changing the shared upload gate.
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
-            raise
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient course access") from exc
+    _assert_teaches_course(user=user, course_id=course_id)
     connector.post_grade(
         _course_ref(course_id, user.institution_id),
         column_id,
@@ -598,6 +601,9 @@ def get_diagnostic_status(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Read actionable availability without generation, kicks or evidence writes."""
+    if user.app_role in {"instructor", "admin"}:
+        _assert_teaches_course(user=user, course_id=course_id)
+        _course_ref(course_id, user.institution_id)
     availability = _diagnostic_availability(
         institution_id=user.institution_id, course_id=course_id,
         user_id=user.user_id, module_ref=module_ref,
@@ -613,6 +619,9 @@ def get_diagnostic(
     module_ref: str | None = None,
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role in {"instructor", "admin"}:
+        _assert_teaches_course(user=user, course_id=course_id)
+        _course_ref(course_id, user.institution_id)
     availability = _diagnostic_availability(
         institution_id=user.institution_id, course_id=course_id,
         user_id=user.user_id, module_ref=module_ref, prepare_missing=True,
@@ -639,6 +648,9 @@ def submit_diagnostic(
     course_id: str = Depends(require_valid_course_id),
     user: CurrentUser = Depends(get_current_user),
 ):
+    if user.app_role in {"instructor", "admin"}:
+        _assert_teaches_course(user=user, course_id=course_id)
+        _course_ref(course_id, user.institution_id)
     results = []
     rows = []
     for a in body.answers:
