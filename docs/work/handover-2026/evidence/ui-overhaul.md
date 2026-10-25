@@ -1,6 +1,6 @@
 # WI-22: Diagnostic and Tutor UI evidence
 
-Date: 2026-10-25 (Asia/Manila). Lane U, branch `codex/ui-overhaul`, worktree `/Users/fred/.codex/worktrees/2e93/kala`.
+Date: 2026-10-25 (Asia/Manila). Lane U, branch `codex/ui-overhaul`, worktree `.`.
 
 ## Authority and revisions
 
@@ -44,8 +44,8 @@ All commands below completed successfully on the final implementation working tr
 | --- | --- |
 | `pnpm install --frozen-lockfile` | Passed; no manifest or lockfile changes |
 | `pnpm --filter web exec node --test src/features/tutor/components/TutorChat.test.mjs src/features/tutor/schema/tutor.schema.test.ts src/lib/api-error.test.ts src/features/tutor/tests/presentation.test.mjs` | 21 passed: 14 existing recovery/error/schema tests plus 7 presentation tests |
-| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed; existing external renderer fixture and deprecation warning remain |
-| `KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` | 71 browser assertions passed; all ten requested screenshots captured |
+| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed; existing external renderer fixture and deprecation warning remain | (local only, not retained)
+| `KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` | 71 browser assertions passed; all ten requested screenshots captured | (local only, not retained)
 | `pnpm --filter web lint` | Passed, 0 errors / 18 pre-existing Fast Refresh warnings |
 | `pnpm --filter web typecheck` | Passed; existing TanStack circular-dependency warning |
 | `pnpm --filter web build` | Passed; existing circular-dependency and chunk-size warnings; final build 6.56s |
@@ -58,7 +58,7 @@ Historical setup corrections, not accepted feature failures: the bundled Playwri
 
 ## Screenshots and visual review
 
-Synthetic captures are external local artifacts under `/tmp/kala-lane-u-visuals/`, deliberately separate from authenticated student data:
+Synthetic captures are external local artifacts under `/tmp/kala-lane-u-visuals/`, deliberately separate from authenticated student data: (local only, not retained)
 
 | State | Desktop | Mobile |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ Verification on the final correction working tree:
 | Check | Result |
 | --- | --- |
 | Same frontend Node command listed above | 22 tests passed (one additional history-bound test) |
-| Same browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-visual-correction` | 93 assertions passed; all ten screenshots regenerated at 1440px and 375px |
+| Same browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-visual-correction` | 93 assertions passed; all ten screenshots regenerated at 1440px and 375px | (local only, not retained)
 | `pnpm --filter web lint` | Passed, 0 errors / 18 existing warnings |
 | `pnpm --filter web typecheck` | Passed; existing circular-dependency warning |
 | `pnpm --filter web build` | Passed, 6.73s; existing chunk-size warning |
@@ -121,7 +121,7 @@ Verification on the final correction working tree:
 
 New browser assertions cover circular Send, restored user-bubble rounding, removed footer, default history width, pointer drag clamp, matching shell offset, keyboard minimum/maximum/step, reset gesture, mobile absence of the desktop handle, borderless white New chat with hover fill and quiet Recents hover. Existing capability, upload, timeout/recovery, shared-default and Diagnostic checks continue to pass. An initial hover assertion sampled before the CSS transition advanced; the final test waits for the computed background change instead of advancing only the JavaScript clock. The initial failed check is superseded by the final passing run, not treated as acceptance evidence.
 
-Inspected the corrected desktop/mobile empty and conversation captures and the supported sidebar menu. Artifacts remain synthetic and external under `/tmp/kala-lane-u-visual-correction/`. No identifying live conversation screenshot or raw provider response was saved. Vite remains on port 5173, PID 81696. No merge, push, deployment or hosted write occurred.
+Inspected the corrected desktop/mobile empty and conversation captures and the supported sidebar menu. Artifacts remain synthetic and external under `/tmp/kala-lane-u-visual-correction/`. No identifying live conversation screenshot or raw provider response was saved. Vite remains on port 5173, PID 81696. No merge, push, deployment or hosted write occurred. (local only, not retained)
 
 Coordinator integration follow-up remains the matching Tutor/Design text amendment described above; those exclusively owned files were not edited by Lane U. Lead designer review of the approved visual exceptions remains pending. Fred's direct correction is the authority for this follow-up implementation.
 
@@ -137,7 +137,7 @@ The owned Diagnostic component-boundary spec records this change before implemen
 
 ### Prompt refinement checks before the next feedback
 
-The first refinement passed 22 frontend Node tests, 4 Study tests and 112 synthetic browser assertions at 1440/375px; lint passed with 18 existing warnings, typecheck passed, and build passed in 6.49s with the existing chunk-size warning. The browser geometry checks confirmed equal 48px composer height, radius and line height, centered line boxes, circular leading attachment and expansion to the 12px token radius. An isolated recovery harness needed its new shared styling import supplied; the browser sort-order check needed to wait for the closing menu to release the sidebar’s accessibility hiding. Final passing runs supersede these intermediate harness failures. No implementation change was needed for those harness failures. Screenshots were inspected in `/tmp/kala-lane-u-prompt-refinement/`. Fred supplied a refreshed session, and the existing launch flow reopened the local Tutor without printing or saving the credential in evidence. No hosted ask, upload or metadata write occurred.
+The first refinement passed 22 frontend Node tests, 4 Study tests and 112 synthetic browser assertions at 1440/375px; lint passed with 18 existing warnings, typecheck passed, and build passed in 6.49s with the existing chunk-size warning. The browser geometry checks confirmed equal 48px composer height, radius and line height, centered line boxes, circular leading attachment and expansion to the 12px token radius. An isolated recovery harness needed its new shared styling import supplied; the browser sort-order check needed to wait for the closing menu to release the sidebar’s accessibility hiding. Final passing runs supersede these intermediate harness failures. No implementation change was needed for those harness failures. Screenshots were inspected in `/tmp/kala-lane-u-prompt-refinement/`. Fred supplied a refreshed session, and the existing launch flow reopened the local Tutor without printing or saving the credential in evidence. No hosted ask, upload or metadata write occurred. (local only, not retained)
 
 ## Fred’s immediate-menu and floating-dock refinement (before implementation)
 
@@ -150,7 +150,7 @@ Pinned and direct pin remain API-capability gated. The current live list previou
 
 ### Immediate-menu and floating-dock verification before finishing feedback
 
-All 125 synthetic browser assertions passed; 22 frontend Node tests and 4 Study tests passed. Lint passed with 18 existing warnings, typecheck passed, build passed in 7.16s with the existing chunk warning, and diff whitespace validation passed. Captures in `/tmp/kala-lane-u-floating-dock/` were inspected. Tests confirm normal-motion menus have no animation, rightward desktop placement/mobile containment, centered empty-chat composer, 16px bottom inset, floating stream overlap, and reachable final Study action. Pinned precedes Recents and direct pin follows the row menu in the capable fixture; the legacy gate still passes. A new trigger-geometry assertion initially queried an aria-hidden sidebar after opening the modal menu; collecting its position before opening fixed the test. No product fix was needed for that test timing.
+All 125 synthetic browser assertions passed; 22 frontend Node tests and 4 Study tests passed. Lint passed with 18 existing warnings, typecheck passed, build passed in 7.16s with the existing chunk warning, and diff whitespace validation passed. Captures in `/tmp/kala-lane-u-floating-dock/` were inspected. Tests confirm normal-motion menus have no animation, rightward desktop placement/mobile containment, centered empty-chat composer, 16px bottom inset, floating stream overlap, and reachable final Study action. Pinned precedes Recents and direct pin follows the row menu in the capable fixture; the legacy gate still passes. A new trigger-geometry assertion initially queried an aria-hidden sidebar after opening the modal menu; collecting its position before opening fixed the test. No product fix was needed for that test timing. (local only, not retained)
 
 ## Fred’s Tutor finishing request (before implementation)
 
@@ -188,14 +188,14 @@ Final checks:
 | --- | --- |
 | Frontend Node command recorded above (Tutor recovery, schema, safe errors, presentation) | 22 passed |
 | Study deck external-renderer command recorded above | 4 passed; rating/replay behavior preserved |
-| Browser command recorded above with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-tutor-final` | 141 assertions passed |
+| Browser command recorded above with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-tutor-final` | 141 assertions passed | (local only, not retained)
 | `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings |
 | `pnpm --filter web typecheck` | Passed; existing route-generator circular-dependency warning |
 | `pnpm --filter web build` | Passed; existing chunk-size warning |
 | `git diff --check` | Passed |
 | Published icon byte comparison | Five matches; MIT notice retained |
 
-Browser coverage includes 1440px/375px layouts; unchanged Diagnostic reachability and payload; shared 48px geometry/typography/radius; circular leading attachment and expanded state; centered new-chat composer; no conversation title/header rule; floating dock overlap and final Study-action clearance; rightward desktop menus/mobile containment; both menu entry and exit without animation; rounded inset sort focus ring; choice icons; visible row actions while menu is open; capable Rename/Pin and legacy gating; overflow marquee to the end and back; actual icon path animation from whole-button hover; reduced-motion static behavior; upload/draft/recovery and flip focus. All 14 captures (including sort focus and sort menu at both widths) are synthetic and external under `/tmp/kala-lane-u-tutor-final/`. No identifying live screenshot, raw provider response or credential was added.
+Browser coverage includes 1440px/375px layouts; unchanged Diagnostic reachability and payload; shared 48px geometry/typography/radius; circular leading attachment and expanded state; centered new-chat composer; no conversation title/header rule; floating dock overlap and final Study-action clearance; rightward desktop menus/mobile containment; both menu entry and exit without animation; rounded inset sort focus ring; choice icons; visible row actions while menu is open; capable Rename/Pin and legacy gating; overflow marquee to the end and back; actual icon path animation from whole-button hover; reduced-motion static behavior; upload/draft/recovery and flip focus. All 14 captures (including sort focus and sort menu at both widths) are synthetic and external under `/tmp/kala-lane-u-tutor-final/`. No identifying live screenshot, raw provider response or credential was added. (local only, not retained)
 
 The icon-source test adaptation initially still targeted the removed generic wrapper’s span; it now inspects each published icon’s internal SVG animation. This was a harness update, superseded by the final 141 passing assertions. The live local Tutor remains open with a valid session. No hosted ask, upload, rename, pin, deletion or submission was performed.
 
@@ -205,7 +205,7 @@ Live acceptance dependency: the other worktree must integrate/deploy the list ca
 
 AUDIT REPORT
 Task / brief ID: WI-22 / APPROVAL-05 Lane U, Fred’s direct Tutor refinements
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: 2aa449c985b14b8ea6d1d890ddaa2b308a9411d3
 Files changed:
 - apps/web/src/components/ai-elements/dock-layout.ts
@@ -235,7 +235,7 @@ Files changed:
 REQ / WI IDs touched: DIAG-REQ-005; TUTOR-REQ-004, 005, 008, 009, 011; WI-22
 Commands run and results (tests, lint, typecheck, build): 22 frontend + 4 Study tests, 141 browser assertions; lint/typecheck/build/diff check passed; five icon source hashes matched. Exact invocations are recorded above.
 Spec changes made: owned Diagnostic component-boundary rules and change log recorded before each refinement; coordinator-owned Tutor/Design integration amendments remain pending.
-Evidence added: this append-only report; 14 synthetic desktop/mobile captures in /tmp/kala-lane-u-tutor-final; icon URLs, checksums and MIT notice.
+Evidence added: this append-only report; 14 synthetic desktop/mobile captures in /tmp/kala-lane-u-tutor-final; icon URLs, checksums and MIT notice. (local only, not retained)
 Anything not done, and why: live Rename/Pin acceptance requires the other worktree’s API/list deployment; no merge/push/deploy/hosted-data mutation authorized or performed.
 Risks or questions for the planner: integrate matching Tutor/Design text, retain capability gating, complete lead designer review and Fred’s authenticated acceptance. Icon glyphs without a published variant intentionally stay static.
 Secrets printed: none (confirmed); environment contents were not read.
@@ -266,13 +266,13 @@ Final verification:
 | --- | --- |
 | Frontend Node command recorded earlier (same four files) | 21 passed; obsolete radius-class unit test retired, replaced by browser geometry checks |
 | Study deck external-renderer command recorded earlier | 4 passed |
-| Browser command recorded earlier, with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-attachments` | 155 assertions passed |
+| Browser command recorded earlier, with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-attachments` | 155 assertions passed | (local only, not retained)
 | `pnpm --filter web lint` | Passed; 0 errors / 18 existing warnings |
 | `pnpm --filter web typecheck` | Passed; existing route-generator circular dependency warning |
 | `pnpm --filter web build` | Passed; existing chunk-size warning |
 | `git diff --check` | Passed |
 
-Added browser coverage proves no upload/create on selection or preview, local-only removal, raw Markdown/HTML display without execution, dialog focus restoration, reduced-motion/mobile containment, upload-before-ask ordering, partial retry without duplicate successful uploads, draft retention and cross-chat cancellation. Earlier Diagnostic, sidebar, provider-recovery, actual icon-variant, shared dock and flip-focus checks remain passing. All 17 captures under `/tmp/kala-lane-u-attachments/` are synthetic, including staged file cards and desktop/mobile preview. Screenshots wait for expansion/modal opacity to settle; captures of an intermediate animation frame are not final acceptance evidence.
+Added browser coverage proves no upload/create on selection or preview, local-only removal, raw Markdown/HTML display without execution, dialog focus restoration, reduced-motion/mobile containment, upload-before-ask ordering, partial retry without duplicate successful uploads, draft retention and cross-chat cancellation. Earlier Diagnostic, sidebar, provider-recovery, actual icon-variant, shared dock and flip-focus checks remain passing. All 17 captures under `/tmp/kala-lane-u-attachments/` are synthetic, including staged file cards and desktop/mobile preview. Screenshots wait for expansion/modal opacity to settle; captures of an intermediate animation frame are not final acceptance evidence. (local only, not retained)
 
 Intermediate fixes: removed an unused drag-state binding after corner state became constant; waited for the intentional exit/collapse before asserting a card was removed; waited for the expanded geometry rather than its first animation frame; narrowed a synthetic New chat selector to distinguish the action from a chat named “New chat.” The entry-resume defect above was a real behavior fix, not a selector adjustment. Final passing runs supersede these intermediate failures.
 
@@ -280,7 +280,7 @@ Fred’s newest session was opened through the existing launch flow, and the loc
 
 AUDIT REPORT
 Task / brief ID: WI-22 / Tutor local attachment staging and raw-text preview
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: 75ff72a
 Files changed:
 - apps/web/src/components/ai-elements/dock-layout.ts
@@ -297,7 +297,7 @@ Files changed:
 REQ / WI IDs touched: DIAG-REQ-005; TUTOR-REQ-004, 009, 011; WI-22
 Commands run and results (tests, lint, typecheck, build): 21 frontend + 4 Study tests, 155 browser assertions; lint/typecheck/build/diff check passed with existing warnings.
 Spec changes made: owned component-boundary amendment and change-log entry before implementation; coordinator-owned Tutor/Design text remains pending integration.
-Evidence added: this append-only verification, synthetic file-card/raw-preview screenshots in /tmp/kala-lane-u-attachments.
+Evidence added: this append-only verification, synthetic file-card/raw-preview screenshots in /tmp/kala-lane-u-attachments. (local only, not retained)
 Anything not done, and why: image uploads, PDF content preview and restored-file contents need separate contracts; they were not part of the selected local TXT/MD preview scope. No backend, migration, generated type, dependency, infrastructure, push or deployment change.
 Risks or questions for the planner: integrate revised Tutor attachment lifecycle/shape wording; retain existing backend type/size limits and human live acceptance.
 Secrets printed: none (confirmed); environment contents were not read.
@@ -319,17 +319,17 @@ Verification:
 | Command | Result |
 | --- | --- |
 | `pnpm --filter web exec node --test src/features/tutor/components/TutorChat.test.mjs src/features/tutor/schema/tutor.schema.test.ts src/lib/api-error.test.ts src/features/tutor/tests/presentation.test.mjs` | 21 passed |
-| `KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-file-polish node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` | 168 assertions passed |
-| `pnpm --filter web lint` | Passed; 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-file-polish-lint.log` |
+| `KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-file-polish node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` | 168 assertions passed | (local only, not retained)
+| `pnpm --filter web lint` | Passed; 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-file-polish-lint.log` | (local only, not retained)
 | `pnpm --filter web typecheck` | Passed; existing route-generator circular warning |
-| `pnpm --filter web build` | Passed; existing chunk-size warning; `/tmp/kala-file-polish-build.log` |
+| `pnpm --filter web build` | Passed; existing chunk-size warning; `/tmp/kala-file-polish-build.log` | (local only, not retained)
 | `git diff --check` | Passed |
 
-The 20 synthetic captures in `/tmp/kala-lane-u-file-polish/` include drag overlay, staged cards, restored-file metadata, raw previews and toast contrast, as well as the retained Diagnostic/sidebar/dock checks. Staged desktop cards, mobile metadata and toast captures were visually inspected. Browser tests intercept all auth/API traffic and block non-localhost requests; no live upload, ask or mutation occurred. Intermediate test-harness corrections used Vite's canonical module URLs to share Sonner/theme singletons, waited for all four notifications to render, and waited for Radix's deferred focus restoration. Final passing verification supersedes those timing/module-isolation failures.
+The 20 synthetic captures in `/tmp/kala-lane-u-file-polish/` include drag overlay, staged cards, restored-file metadata, raw previews and toast contrast, as well as the retained Diagnostic/sidebar/dock checks. Staged desktop cards, mobile metadata and toast captures were visually inspected. Browser tests intercept all auth/API traffic and block non-localhost requests; no live upload, ask or mutation occurred. Intermediate test-harness corrections used Vite's canonical module URLs to share Sonner/theme singletons, waited for all four notifications to render, and waited for Radix's deferred focus restoration. Final passing verification supersedes those timing/module-isolation failures. (local only, not retained)
 
 AUDIT REPORT
 Task / brief ID: WI-22 / Tutor attachment polish and shared toast contrast
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: f87bbf0
 Files changed:
 - apps/web/src/components/ui/sonner.tsx
@@ -365,20 +365,20 @@ Verification:
 
 | Command | Result |
 | --- | --- |
-| Browser command recorded above with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-diagnostic-polish` | 186 assertions passed |
-| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed; existing renderer deprecation/VM-module notices |
-| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-diagnostic-polish-lint.log` |
-| `pnpm --filter web typecheck` | Passed; existing route-generator circular warning; `/tmp/kala-diagnostic-polish-typecheck.log` |
-| `pnpm --filter web build` | Passed; existing chunk-size warning; `/tmp/kala-diagnostic-polish-build.log` |
+| Browser command recorded above with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-diagnostic-polish` | 186 assertions passed | (local only, not retained)
+| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed; existing renderer deprecation/VM-module notices | (local only, not retained)
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-diagnostic-polish-lint.log` | (local only, not retained)
+| `pnpm --filter web typecheck` | Passed; existing route-generator circular warning; `/tmp/kala-diagnostic-polish-typecheck.log` | (local only, not retained)
+| `pnpm --filter web build` | Passed; existing chunk-size warning; `/tmp/kala-diagnostic-polish-build.log` | (local only, not retained)
 | `git diff --check` | Passed |
 
 New assertions cover purpose copy, header/card/footer edge alignment, top separator, click while leaving the pointer stationary, pointer leave/re-entry, selection changes without double counting, keyboard state, persistent introduction while scrolling, last-question clearance and removal of the introduction on results. Existing synthetic submission assertions still prove the original six-answer payload. CSS hover comparisons wait for the browser's real color transition to finish; an initial fake-JavaScript-clock sample measured intermediate CSS colors and was corrected without changing the implementation.
 
-Desktop introduction, mobile introduction and the long final mobile question were visually inspected. Synthetic screenshots are in `/tmp/kala-lane-u-diagnostic-polish/`, including `diagnostic-introduction-1440.png`, `diagnostic-introduction-375.png` and `diagnostic-375.png`. Browser auth/API are intercepted and non-localhost requests blocked. No live Diagnostic submission, generation, grade write or due-rule change occurred.
+Desktop introduction, mobile introduction and the long final mobile question were visually inspected. Synthetic screenshots are in `/tmp/kala-lane-u-diagnostic-polish/`, including `diagnostic-introduction-1440.png`, `diagnostic-introduction-375.png` and `diagnostic-375.png`. Browser auth/API are intercepted and non-localhost requests blocked. No live Diagnostic submission, generation, grade write or due-rule change occurred. (local only, not retained)
 
 AUDIT REPORT
 Task / brief ID: WI-22 / Diagnostic purpose, aligned submission and selected-answer hover
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: bd5cff0
 Files changed:
 - apps/web/src/components/study/AnswerableCard.tsx
@@ -406,27 +406,27 @@ Implementation and findings:
 - The existing MasteryDelta reveal and prior-to-posterior marker animation run from stable response rows. Kala's existing celebrateOnce helper runs once per submitted sitting when motion is allowed. Reduced motion shows final progression without confetti. The exit icons use existing published lucide-animated components driven from whole-button hover/focus, with reduced-motion gating; no shared wiggle preset.
 - Visual review found mastery labels overlapping at 375px. Mobile rows now stack skill name, track and labels; desktop rows stay inline. Long mobile names wrap and desktop names retain a full-name title. Browser checks assert internal track/label separation, not only absence of viewport overflow.
 - Shared LoadingRegion preserves skeleton layouts and adds one accessible Spinner per region. LoadingPanel, assistant thinking labels and loading toasts now reuse the same primitive. Student coverage includes workspace, Skills/topic pickers, Study/Test browsers, Twin, gamification, lesson checks, Tutor conversation/preview/save/pin/delete, Diagnostic preparation/submission and Study continuation. Instructor coverage includes plan, roster, stats/charts, heatmap, at-risk/triage/record/drill-down, recommendations, matching and proposal review/refresh. Building notices receive indicators only for actual building states. Existing Spinner coverage in launch, ComposeDock, PromptInput and Study/Test actions remains.
-- The waiting inventory distinguishes actual request flags from placeholder ellipses, truncated names, menu dots, static errors, unavailable content and no-data fallbacks. No request, auth, grading, state ownership or pending-lock behavior was changed for the spinner pass. Source inventory: `/tmp/kala-waiting-inventory.txt`.
+- The waiting inventory distinguishes actual request flags from placeholder ellipses, truncated names, menu dots, static errors, unavailable content and no-data fallbacks. No request, auth, grading, state ownership or pending-lock behavior was changed for the spinner pass. Source inventory: `/tmp/kala-waiting-inventory.txt`. (local only, not retained)
 
 Verification:
 
 | Command | Result |
 | --- | --- |
-| Browser command recorded above, with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-completion` | 211 assertions passed against final source |
+| Browser command recorded above, with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-completion` | 211 assertions passed against final source | (local only, not retained)
 | `pnpm --filter web exec node --test src/features/tutor/components/TutorChat.test.mjs src/features/tutor/schema/tutor.schema.test.ts src/lib/api-error.test.ts src/features/tutor/tests/presentation.test.mjs` | 21 passed |
-| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed after Study continuation changes; existing renderer/VM notices |
-| `pnpm --filter web lint` | Passed; 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-completion-lint.log` |
-| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-completion-typecheck.log` |
-| `pnpm --filter web build` | Passed, including project-reference TypeScript build; existing chunk-size warning; `/tmp/kala-completion-build.log` |
+| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | 4 passed after Study continuation changes; existing renderer/VM notices | (local only, not retained)
+| `pnpm --filter web lint` | Passed; 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-completion-lint.log` | (local only, not retained)
+| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-completion-typecheck.log` | (local only, not retained)
+| `pnpm --filter web build` | Passed, including project-reference TypeScript build; existing chunk-size warning; `/tmp/kala-completion-build.log` | (local only, not retained)
 | `git diff --check` | Passed |
 
-Browser coverage includes left-header geometry, shared card/footer alignment, pending submission lock and Spinner, exactly one exit per destination, no dialog/footer on results, real marker movement, once-only real confetti, reduced motion, refetch retention, empty mastery rows, fresh caught-up visit, both navigation destinations, mobile long names and shared loading region resolution. Synthetic auth/API interception and non-localhost blocking prevent live submissions or uploads. Desktop introduction, desktop results/confetti and mobile results captures were visually inspected in `/tmp/kala-lane-u-completion/`, notably `diagnostic-introduction-1440.png`, `diagnostic-results-1440.png`, `diagnostic-results-motion-1440.png` and `diagnostic-results-375.png`.
+Browser coverage includes left-header geometry, shared card/footer alignment, pending submission lock and Spinner, exactly one exit per destination, no dialog/footer on results, real marker movement, once-only real confetti, reduced motion, refetch retention, empty mastery rows, fresh caught-up visit, both navigation destinations, mobile long names and shared loading region resolution. Synthetic auth/API interception and non-localhost blocking prevent live submissions or uploads. Desktop introduction, desktop results/confetti and mobile results captures were visually inspected in `/tmp/kala-lane-u-completion/`, notably `diagnostic-introduction-1440.png`, `diagnostic-results-1440.png`, `diagnostic-results-motion-1440.png` and `diagnostic-results-375.png`. (local only, not retained)
 
 An intermediate invalid animated-icon import was caught by the actual project-reference build and corrected to the existing ChevronLeft component. The final build and browser run pass. The user's supplied session was refreshed through the existing local launch route and course navigation was verified; that is session restoration only, not authenticated Diagnostic feature acceptance. No credential was printed or persisted in source, evidence or screenshots.
 
 AUDIT REPORT
 Task / brief ID: WI-22 / Diagnostic completion and app-wide Spinner visual correction
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: 6e368ae
 Files changed:
 - apps/web/src/components/kala/mastery-delta.tsx
@@ -498,7 +498,7 @@ Recommended follow-up, requiring a deliberate API/spec decision rather than hidi
 
 AUDIT REPORT
 Task / brief ID: WI-22 / dashboard baseline-count investigation
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: fdef8d4
 Files changed: docs/work/handover-2026/evidence/ui-overhaul.md only
 REQ / WI IDs touched: DIAG-REQ-004/007 investigation; WI-22
@@ -517,7 +517,7 @@ Base `fe6a70b`. Fred asked to compare Diagnostic typography with Skills/Twin, tr
 Typography verification:
 
 - Diagnostic, Skills and Twin already render the same PageHeader component. Computed browser styles at 1440px and 375px confirm identical title/eyebrow/description font family, font size, font weight, line height and tracking: 24px page titles and 14px descriptions. No speculative font change was made. The existing Diagnostic left-shell-gutter placement remains. Question prompts retain AnswerableCard's separate 18px reading style; they are not PageHeader titles.
-- Added six cross-route typography assertions to the retained browser suite. Synthetic Skills and Diagnostic header captures were visually compared at the same viewport/zoom. Files include `/tmp/kala-lane-u-review-polish/skills-header-1440.png` and `diagnostic-introduction-1440.png`.
+- Added six cross-route typography assertions to the retained browser suite. Synthetic Skills and Diagnostic header captures were visually compared at the same viewport/zoom. Files include `/tmp/kala-lane-u-review-polish/skills-header-1440.png` and `diagnostic-introduction-1440.png`. (local only, not retained)
 
 Read-only identity investigation:
 
@@ -537,19 +537,19 @@ Verification:
 
 | Command | Result |
 | --- | --- |
-| Retained browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-review-polish` | 217 assertions passed, including six typography checks |
+| Retained browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-review-polish` | 217 assertions passed, including six typography checks | (local only, not retained)
 | Same browser runtime/executable variables, running `node apps/web/src/features/instructor/tests/review-feedback.browser.mjs` | 63 assertions passed for fast approve/reject, slow responses, failures, retries, confirmed recommendation approve/modify/decline, keyboard and reduced motion |
-| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-instructor-polish-lint.log` |
-| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-instructor-polish-typecheck.log` |
-| `pnpm --filter web build` | Passed including project-reference TypeScript check; existing chunk-size warning; `/tmp/kala-instructor-polish-build.log` |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-instructor-polish-lint.log` | (local only, not retained)
+| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-instructor-polish-typecheck.log` | (local only, not retained)
+| `pnpm --filter web build` | Passed including project-reference TypeScript check; existing chunk-size warning; `/tmp/kala-instructor-polish-build.log` | (local only, not retained)
 | Scoped SELECTs and read-only `cohort.roster` | Confirmed identity split and reproduced enrolled-record metrics |
 | `git diff --check` | Passed |
 
-Synthetic pending-state screenshots in `/tmp/kala-instructor-feedback/` were visually inspected: `skill-approved-pending.png`, `skill-rejected-pending.png` and `recommendation-recording.png`. Browser tests block non-localhost requests and intercept all review APIs; no actual approval, rejection, assignment or model call occurred. Initial fixture-only failures were corrected by installing Vite's refresh preamble, using its default ReactDOM export and canonical TanStack Query module URL, and flushing paused-clock notification timers; final passing tests use real components/hooks.
+Synthetic pending-state screenshots in `/tmp/kala-instructor-feedback/` were visually inspected: `skill-approved-pending.png`, `skill-rejected-pending.png` and `recommendation-recording.png`. Browser tests block non-localhost requests and intercept all review APIs; no actual approval, rejection, assignment or model call occurred. Initial fixture-only failures were corrected by installing Vite's refresh preamble, using its default ReactDOM export and canonical TanStack Query module URL, and flushing paused-clock notification timers; final passing tests use real components/hooks. (local only, not retained)
 
 AUDIT REPORT
 Task / brief ID: WI-22 / header comparison, instructor identity trace and visible review feedback
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: fe6a70b
 Files changed:
 - apps/web/src/features/instructor/components/DecisionCenter.tsx
@@ -587,20 +587,20 @@ Verification:
 
 | Command | Result |
 | --- | --- |
-| Retained browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-twin-polish` | 219 assertions passed, including desktop/mobile header geometry and retained Diagnostic/Tutor/Study checks |
+| Retained browser command with `KALA_UI_SCREENSHOTS=/tmp/kala-lane-u-twin-polish` | 219 assertions passed, including desktop/mobile header geometry and retained Diagnostic/Tutor/Study checks | (local only, not retained)
 | Same browser runtime/executable variables, running `node apps/web/src/features/twin/tests/presentation.browser.mjs` | 148 assertions passed |
-| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-twin-polish-lint.log` |
-| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-twin-polish-typecheck.log` |
-| `pnpm --filter web build` | Passed including project-reference TypeScript check; existing chunk-size warning; `/tmp/kala-twin-polish-build.log` |
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; `/tmp/kala-twin-polish-lint.log` | (local only, not retained)
+| `pnpm --filter web typecheck` | Passed; existing route-generator warning; `/tmp/kala-twin-polish-typecheck.log` | (local only, not retained)
+| `pnpm --filter web build` | Passed including project-reference TypeScript check; existing chunk-size warning; `/tmp/kala-twin-polish-build.log` | (local only, not retained)
 | `git diff --check` | Passed |
 
 New checks exercise both motion preferences at 1440px/375px, null/0/100 ring bounds, preserved small-ring density, accessible readiness labels, ten-row boundaries, partial final page, keyboard and numbered navigation, no hash jump, disabled endpoints, 200-event windowing, shrinking/empty/one-page data, no page-entry replay, 40px control heights and horizontal overflow. Integrated real student Twin and instructor LearnerRecord routes verify larger readiness values and the shared ledger. A 1920px comparison verifies the centered margin match and preservation of the singular skill-session layout. An initial synthetic Diagnostic fixture lacked required bloomLevel and was corrected to the actual response schema; the wide-screen failure then exposed and led to the real shell-prefix correction.
 
-Synthetic screenshots were visually inspected in `/tmp/kala-twin-presentation/`: `student-twin-1440.png`, `instructor-readiness-1440.png`, `instructor-ledger-1440.png`, `ledger-1440.png`, `ledger-375.png` and `diagnostic-1920.png`. Retained introduction captures are in `/tmp/kala-lane-u-twin-polish/`. All browser fixtures intercept auth/API and block non-localhost requests. No live Diagnostic submission, teacher decision, upload, model call or hosted data read/write was performed in this task.
+Synthetic screenshots were visually inspected in `/tmp/kala-twin-presentation/`: `student-twin-1440.png`, `instructor-readiness-1440.png`, `instructor-ledger-1440.png`, `ledger-1440.png`, `ledger-375.png` and `diagnostic-1920.png`. Retained introduction captures are in `/tmp/kala-lane-u-twin-polish/`. All browser fixtures intercept auth/API and block non-localhost requests. No live Diagnostic submission, teacher decision, upload, model call or hosted data read/write was performed in this task. (local only, not retained)
 
 AUDIT REPORT
 Task / brief ID: WI-22 / matching margins, readable readiness and bounded evidence browsing
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: fc75b6c
 Files changed:
 - apps/web/src/components/kala/evidence-ledger.tsx
@@ -636,7 +636,7 @@ Verification for this documentation-only task: source/route/spec/evidence inspec
 
 AUDIT REPORT
 Task / brief ID: WI-22 / final student and instructor frontend UI/UX handoff
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-overhaul; .
 Base revision: 47b9700
 Files changed: docs/work/handover-2026/evidence/frontend-finalization-handoff.md; docs/work/handover-2026/evidence/ui-overhaul.md; docs/features/twin/README.md
 REQ / WI IDs touched: DIAG-REQ-001–008, TUTOR-REQ-001–011, INSTR-REQ-001/002, TWIN-REQ-001/002/003 referenced; WI-22; related integration dependencies recorded, no new IDs allocated.

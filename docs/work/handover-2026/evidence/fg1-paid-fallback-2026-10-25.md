@@ -39,7 +39,7 @@ Recovery: a reviewed rollback can move AWSCURRENT back to the previous version r
 
 ```text
 Task / brief ID: FG-1 narrow AWS CLI delegation, paid chat fallback
-Branch and worktree: main; /Users/fred/Documents/Repository/kala
+Branch and worktree: main; .
 Base revision:bff389a7cf511d83d66905da9f9df12eb218c8ee
 Files changed: approval amendment and release evidence only
 REQ / WI IDs touched: AI-REQ-002; TUTOR-REQ-001; WI-01; FG-1

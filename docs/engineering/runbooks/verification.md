@@ -1,8 +1,10 @@
-# Lane R draft verification — WI-06 / WI-07
+# Historical sources — Lane R draft verification
+
+This entire page is an authoring record, not an operating procedure or authority. Current prerequisites and commands belong to the numbered runbooks and local-development.md; do not follow dated lane instructions below.
 
 The initial record below describes the 4f3ec29 draft. The appended APPROVAL-06 refresh supersedes its current-state statements about migration count, B status, approval location and provider diagnostics; the old validation/source record is retained as historical evidence.
 
-Date: 2026-10-25 (Asia/Manila). Approval: APPROVAL-05 rev 2 supplied as the task attachment. Base: `4f3ec29d3f827a1db92e90c4f395947d37744479`. Branch: `codex/handover-runbooks`. Worktree: `/Users/fred/.codex/worktrees/97b5/kala`.
+Date: 2026-10-25 (Asia/Manila). Approval: APPROVAL-05 rev 2 supplied as the task attachment. Base: `4f3ec29d3f827a1db92e90c4f395947d37744479`. Branch: `codex/handover-runbooks`. Worktree: `.`.
 
 ## Scope and result
 
@@ -16,7 +18,7 @@ Write ownership is only this directory. No overlapping write path was identified
 
 Read AGENTS.md, root CLAUDE.md, docs/README.md, documentation template/contract, WI-06/WI-07 in the handover initiative, APPROVAL-01 through 04 and the whole supplied APPROVAL-05 rev 2. No closer CLAUDE.md exists under docs/engineering/runbooks/. Read relevant infra/API/worker/database routing guides, READMEs, committed configuration/source, LTI/security/connector/tests, archived MEMORY/closeout, migration replay/apply notes, incident records and v6 evidence. Historic material supplies evidence only; current approvals/source establish constraints.
 
-Read the Supabase skill from `/Users/fred/.agents/skills/supabase/SKILL.md` during authoring. The skill's generic guidance does not override the accepted Kala migration policy. Consulted official [Supabase environment guidance](https://supabase.com/docs/guides/deployment/managing-environments), changelog and [Postgres minor-release note](https://supabase.com/changelog/postgres-15-19-17-11-breaking-changes), plus official AWS CLI references linked in 13. Public references check documented interfaces, not current hosted state.
+Read the Supabase skill from `/Users/fred/.agents/skills/supabase/SKILL.md` during authoring. The skill's generic guidance does not override the accepted Kala migration policy. Consulted official [Supabase environment guidance](https://supabase.com/docs/guides/deployment/managing-environments), changelog and [Postgres minor-release note](https://supabase.com/changelog/postgres-15-19-17-11-breaking-changes), plus official AWS CLI references linked in 13. Public references check documented interfaces, not current hosted state. (local only, not retained)
 
 No dotenv file, secret payload, Terraform state/tfvars, parent-chat history or credential store was opened. Read-only source inspection never called an application settings loader or live provider. Historic source previews were filtered for credential-like lines; no raw provider payload was copied into these drafts.
 
@@ -64,7 +66,7 @@ Worktree was clean at original `ffeaf28d5e15ddc8771d16af3769c5701b697aa9`. Local
 
 ### Current source and instructions
 
-- Read updated AGENTS.md, router, [APPROVAL-06 rev 2 with confirmed amendments](../../work/handover-2026/approval-06.md), [integration/generation evidence](../../work/handover-2026/evidence/approval-06-integration.md), [exact 0037 runbook](../../runbooks/0037-apply.md), its SQL, manifests, export script, committed service isolation and current diagnostics source. Existing root/area CLAUDE.md remain routing guides; there is no closer runbooks guide.
+- Read updated AGENTS.md, router, [APPROVAL-06 rev 2 with confirmed amendments](../../work/handover-2026/approval-06.md), integration/generation evidence, [exact 0037 runbook](../../runbooks/0037-apply.md), its SQL, manifests, export script, committed service isolation and current diagnostics source. Existing root/area CLAUDE.md remain routing guides; there is no closer runbooks guide.
 - Filesystem count is **37 SQL files** under `packages/db/migrations` (0001–0037). Relocation and local package scripts remain gated by FG-2. Do not convert this source count into a hosted applied-state claim. Historical 36-file audit evidence stays attributed; B's 0037 note separately records its 37-file local replay, real SQL checks and temporary rolled-back fixture-grant limitation.
 - FG-3: Fred confirms exact checksum/project/0001–0036 baseline, absence of pinned_at, RLS/policies/grants, service-role SELECT/UPDATE and counts; applies reviewed 0037 once; records nullable/no-default metadata, preserved rows/null pins and unchanged access controls. Stop on existing column/missing prerequisites; SQL editor does not automatically record CLI history. No SQL was run here. B's runbook and SQL remain unedited.
 - FG-4: after final coordinator checks and FG-3, Fred deploys, verifies alias/worker/startup, pushes main and waits for Vercel Ready. FG-5 is his live acceptance; FG-R is his API/Vercel rollback. FG-1 provider paid fallback/runtime refresh/hint retest is also Fred-only. FG-2 blocks Lane DB only. Same-day gates supersede initial approval timing and stale lane-state snapshots.
@@ -74,3 +76,9 @@ Worktree was clean at original `ffeaf28d5e15ddc8771d16af3769c5701b697aa9`. Local
 ### Refreshed validation
 
 Complete rebased-directory validation passed: 15 Markdown files / 13 procedures; all required fields/sections/unknown markers; 187 local-link occurrences and one local anchor resolve; six shell blocks pass bash -n; the embedded generation Python snippet parses with ast.parse without execution; bounded sensitive-pattern scan has zero hits. Read-only manifest/checksum checks confirm 37 files and the exact 0037 checksum from B's apply note. Branch diff against 6e21eed is confined to the 15 owned files; this refresh changes six of them. Repo-wide inline local-path check improves 29 missing occurrences at the new base to 16, with zero new missing paths (the remaining 16 are inherited outside this lane). git diff --check passes. Tests, lint, typecheck, build, generation and browser/runtime/hosted checks were not run for these Markdown-only changes. Operational verification remains unperformed and all 13 procedures remain execution-unverified. No secrets/dotenv/secret payload, parent-chat history or hosted configuration was read. Review gap list above remains applicable except its superseded migration/B/logging snapshots: hosted Postgres major, FG-3 application, remaining account/setup decisions and live recovery/acceptance are still [Fred to confirm].
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [integration/generation evidence](../../work/handover-2026/evidence/approval-06-integration.md)

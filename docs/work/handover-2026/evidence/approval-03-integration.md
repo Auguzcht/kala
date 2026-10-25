@@ -1,6 +1,6 @@
 # AUDIT REPORT — APPROVAL-03 local integration
 
-Date: 2026-10-25 (Asia/Manila). Coordinator on `main` at `/Users/fred/Documents/Repository/kala`.
+Date: 2026-10-25 (Asia/Manila). Coordinator on `main` at `.`.
 Authorization: [APPROVAL-03](../approval-03.md), implementing APPROVAL-02 section 5.
 
 ## Revision and delivery
@@ -30,7 +30,7 @@ All listed commands exited 0. Each service ran in its own process from its own d
 | `cd services/api && uv run pytest -q --tb=short` | **431 passed**, 30 existing deprecation warnings, 40.85s |
 | `cd services/worker && uv run pytest -q --tb=short` | **117 passed**, 0.47s |
 | `node --test apps/web/src/features/tutor/components/TutorChat.test.mjs apps/web/src/lib/api-error.test.ts apps/web/src/features/tutor/schema/tutor.schema.test.ts` | **14 passed**, no failures/skips |
-| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | **4 passed**, no failures/skips |
+| `KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` | **4 passed**, no failures/skips | (local only, not retained)
 | `pnpm --filter web lint` | Pass; 0 errors, 18 existing Fast Refresh warnings |
 | `pnpm --filter web typecheck` | Pass; existing route-generator circular-dependency warning |
 | `pnpm --filter web build` | Pass; 5,534 modules; Vite phase 6.21s; existing route-generator and large-chunk advisories |
@@ -80,7 +80,7 @@ Accepted final results: API **430 pass / 1 fail**; worker **117 pass** under ver
 
 Disposition: **not green; stopped for the explicit no-test-body-edit gate**. No push or deployment. The final documentation-only evidence commit preserves these results without changing tested code. Fred must not treat this as an all-pass deployment report.
 
-The concrete proposed test-only patch is at `/Users/fred/.codex/visualizations/2026/10/24/01a16e30-fcb8-7b50-91d8-4f38c908acd5/kala-approval03-integration/proposed-test-cleanup-wait.patch`; it has not been applied. Raw fresh-clone attempts and value-free result summaries are retained alongside it. The coordinator requests approval only for that cleanup-wait change; the response-deadline assertions and production code remain untouched.
+The concrete proposed test-only patch is at `/Users/fred/.codex/visualizations/2026/10/24/01a16e30-fcb8-7b50-91d8-4f38c908acd5/kala-approval03-integration/proposed-test-cleanup-wait.patch`; it has not been applied. Raw fresh-clone attempts and value-free result summaries are retained alongside it. The coordinator requests approval only for that cleanup-wait change; the response-deadline assertions and production code remain untouched. (local only, not retained)
 
 ## APPROVAL-04 acceptance and subsequent verification — 2026-10-25
 

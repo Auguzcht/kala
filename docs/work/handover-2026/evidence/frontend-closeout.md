@@ -1,10 +1,10 @@
 # APPROVAL-06 Lane U close-out
 
-Base: e1b0250. Branch: codex/ui-closeout, existing /Users/fred/.codex/worktrees/2e93/kala. codex/ui-overhaul is preserved at the approved e1b0250. Authority: Fred's APPROVAL-06 rev 2 attachment (section 5), relayed by coordinator. No hosted writes, deployment, migration, push, key rotation or identity repair.
+Base: e1b0250. Branch: codex/ui-closeout, existing /Users/fred/.codex/worktrees/2e93/kala. codex/ui-overhaul is preserved at the approved e1b0250. Authority: Fred's APPROVAL-06 rev 2 attachment (section 5), relayed by coordinator. No hosted writes, deployment, migration, push, key rotation or identity repair. (local only, not retained)
 
 ## Early scope and spec release request
 
-Coordinator owns docs/features/diagnostic/README.md exclusively for this approval. U will not edit it. The following is exact proposed spec text for the coordinator to commit separately from G's DIAG-REQ-009–011. Implementation of these parts is held until rebased onto the named spec commit. A draft H05/H07 implementation was made before the ownership clarification; it has been removed from working source and preserved only as /tmp/kala-ui-closeout-held-recovery.patch pending release. No tests or implementation acceptance are claimed for that draft.
+Coordinator owns docs/features/diagnostic/README.md exclusively for this approval. U will not edit it. The following is exact proposed spec text for the coordinator to commit separately from G's DIAG-REQ-009–011. Implementation of these parts is held until rebased onto the named spec commit. A draft H05/H07 implementation was made before the ownership clarification; it has been removed from working source and preserved only as /tmp/kala-ui-closeout-held-recovery.patch pending release. No tests or implementation acceptance are claimed for that draft. (local only, not retained)
 
 ### Proposed DIAG-REQ-012: Recover Diagnostic and skill-picker loading failures
 
@@ -40,11 +40,11 @@ On the coordinator's request U sent SIGTERM to PID 81696 and confirmed no listen
 
 ## Verification commands for coordinator
 
-Dependencies already used by WI-22: pnpm workspace installation; Node; bundled Playwright under /Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node; Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome. Study's existing external renderer fixture is /private/tmp/kala-lane-f-renderer. No new package dependency.
+Dependencies already used by WI-22: pnpm workspace installation; Node; bundled Playwright under /Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node; Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome. Study's existing external renderer fixture is /private/tmp/kala-lane-f-renderer. No new package dependency. (local only, not retained)
 
 ```sh
 pnpm --filter web exec node --test src/features/tutor/components/TutorChat.test.mjs src/features/tutor/schema/tutor.schema.test.ts src/lib/api-error.test.ts src/features/tutor/tests/presentation.test.mjs
-KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs
+KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs # local only, not retained
 pnpm --filter web lint
 pnpm --filter web typecheck
 pnpm --filter web build
@@ -66,16 +66,16 @@ H05/H07/H02-copy spec-dependent implementation is held as described above. Other
 
 The ungated source draft covers H06 keyboard links/disabled endpoints, H08 canonical skill context, H09 role-aware recovery, H10/H11 entry/expiry copy, H12 window labels, retained legacy route bridges and the stale Tutor comment. The dedicated test draft is apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs. H05/H07 source is held separately as above; H02 optional fields have not been implemented pending the coordinated contract.
 
-- `pnpm --filter web lint`: passed, 0 errors / 18 existing warnings; /tmp/kala-ui-closeout-lint.log.
-- `pnpm --filter web typecheck`: passed with the existing route-generator circular warning; /tmp/kala-ui-closeout-typecheck.log.
-- Frontend Node command above: 21 passed; /tmp/kala-ui-closeout-unit.log.
-- Study renderer command above: 4 passed; /tmp/kala-ui-closeout-study.log.
+- `pnpm --filter web lint`: passed, 0 errors / 18 existing warnings; /tmp/kala-ui-closeout-lint.log. (local only, not retained)
+- `pnpm --filter web typecheck`: passed with the existing route-generator circular warning; /tmp/kala-ui-closeout-typecheck.log. (local only, not retained)
+- Frontend Node command above: 21 passed; /tmp/kala-ui-closeout-unit.log. (local only, not retained)
+- Study renderer command above: 4 passed; /tmp/kala-ui-closeout-study.log. (local only, not retained)
 - `node --check apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs`: passed syntax check only, not browser acceptance.
 - Final source whitespace check passed after removing a trailing blank line. No build/browser claim is made before the held pieces are restored and the required rebase occurs. A subsequent small pager clamp/copy correction still requires the final complete checks.
 
 AUDIT REPORT
 Task / brief ID: APPROVAL-06 Lane U / early scope, spec proposal and server handoff
-Branch and worktree: codex/ui-closeout; /Users/fred/.codex/worktrees/2e93/kala
+Branch and worktree: codex/ui-closeout; .
 Base revision: e1b0250; codex/ui-overhaul preserved unchanged
 Files changed: this evidence file committed; frontend source/test drafts held pending the integration/spec SHA and browser-port release
 REQ / WI IDs touched: proposed DIAG-REQ-012/013; existing Twin/Instructor presentation and WI-22; no coordinator-owned spec edited
@@ -104,28 +104,28 @@ Implemented:
 
 | Command / evidence | Result |
 | --- | --- |
-| `node apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs`, with the bundled browser env variables documented above | **110 assertions passed**, /tmp/kala-ui-closeout-browser.log |
-| Existing Tutor/Diagnostic browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-retained | **219 assertions passed**, /tmp/kala-ui-closeout-retained.log |
-| Existing instructor feedback browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-instructor | **63 assertions passed**, /tmp/kala-ui-closeout-instructor.log |
-| Existing Twin presentation browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-twin | **148 assertions passed**, /tmp/kala-ui-closeout-twin.log |
-| Frontend Node command above | **21 passed**, /tmp/kala-ui-closeout-unit.log |
-| Study renderer command above, rerun after rebase | **4 passed**, /tmp/kala-ui-closeout-study.log; existing experimental VM/renderer notices |
-| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; /tmp/kala-ui-closeout-lint.log |
-| `pnpm --filter web typecheck` | Passed, existing route-generator circular warning; /tmp/kala-ui-closeout-typecheck.log |
-| `pnpm --filter web build` | Passed, existing chunk-size warning; /tmp/kala-ui-closeout-build.log |
+| `node apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs`, with the bundled browser env variables documented above | **110 assertions passed**, /tmp/kala-ui-closeout-browser.log | (local only, not retained)
+| Existing Tutor/Diagnostic browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-retained | **219 assertions passed**, /tmp/kala-ui-closeout-retained.log | (local only, not retained)
+| Existing instructor feedback browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-instructor | **63 assertions passed**, /tmp/kala-ui-closeout-instructor.log | (local only, not retained)
+| Existing Twin presentation browser suite, KALA_UI_SCREENSHOTS=/tmp/kala-ui-closeout-twin | **148 assertions passed**, /tmp/kala-ui-closeout-twin.log | (local only, not retained)
+| Frontend Node command above | **21 passed**, /tmp/kala-ui-closeout-unit.log | (local only, not retained)
+| Study renderer command above, rerun after rebase | **4 passed**, /tmp/kala-ui-closeout-study.log; existing experimental VM/renderer notices | (local only, not retained)
+| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings; /tmp/kala-ui-closeout-lint.log | (local only, not retained)
+| `pnpm --filter web typecheck` | Passed, existing route-generator circular warning; /tmp/kala-ui-closeout-typecheck.log | (local only, not retained)
+| `pnpm --filter web build` | Passed, existing chunk-size warning; /tmp/kala-ui-closeout-build.log | (local only, not retained)
 | `git diff --check` and new browser script syntax check | Passed |
 
-New synthetic captures are /tmp/kala-frontend-closeout/{diagnostic-error,skills-error,lessons-error,flashcards-error,not-found-student,not-found-instructor,not-found-no-session,root-error-student,root-error-instructor,public-root,session-expired}-{375,1440}.png. The ten requested Diagnostic error, Skills error, instructor not-found, root and expiry captures at both sizes were visually inspected. All contexts mock session/API and block non-localhost traffic, including mutation attempts. No live ask, submission, upload, teacher decision or hosted data access occurred.
+New synthetic captures are /tmp/kala-frontend-closeout/{diagnostic-error,skills-error,lessons-error,flashcards-error,not-found-student,not-found-instructor,not-found-no-session,root-error-student,root-error-instructor,public-root,session-expired}-{375,1440}.png. The ten requested Diagnostic error, Skills error, instructor not-found, root and expiry captures at both sizes were visually inspected. All contexts mock session/API and block non-localhost traffic, including mutation attempts. No live ask, submission, upload, teacher decision or hosted data access occurred. (local only, not retained)
 
 The new test's initial synthetic session response omitted parentheses around an arrow-function object expression; this caused a fixture-only syntax error and was corrected. Another initial fixture selector used the module name where Twin groups by Bloom level; it was corrected to the real group. Final passing runs supersede these harness failures. No application change was made to satisfy either incorrect fixture.
 
-Port 5173 was restarted only after the coordinator's release. Current Vite PID is **34528**, started from this worktree with `pnpm --filter web exec vite --port 5173 --strictPort` (exec session 77582), output /tmp/kala-ui-closeout-vite.log. Keep it running for Fred unless the coordinator needs it for final combined checks. No second listener or alternate port was used.
+Port 5173 was restarted only after the coordinator's release. Current Vite PID is **34528**, started from this worktree with `pnpm --filter web exec vite --port 5173 --strictPort` (exec session 77582), output /tmp/kala-ui-closeout-vite.log. Keep it running for Fred unless the coordinator needs it for final combined checks. No second listener or alternate port was used. (local only, not retained)
 
 No feature-spec status is changed by U: coordinator can mark DIAG-REQ-012/013 implemented after reviewing this evidence. Full-history paging stays deferred. G's optional-field backend and I's code convergence still need final combined integration; existing split dev-hosted Alfred/Hanna data is explicitly deferred by APPROVAL-06 and was not repaired. FG-1 provider config, FG-3 migration, FG-4 deploy and FG-5 real click-through remain Fred/coordinator gates; these synthetic UI checks do not close them.
 
 AUDIT REPORT
 Task / brief ID: APPROVAL-06 rev 2 Lane U / H05–H11, H12 copy, legacy routes and H02 compatible copy
-Branch and worktree: codex/ui-closeout; /Users/fred/.codex/worktrees/2e93/kala; approved codex/ui-overhaul remains e1b0250
+Branch and worktree: codex/ui-closeout; /Users/fred/.codex/worktrees/2e93/kala; approved codex/ui-overhaul remains e1b0250 (local only, not retained)
 Base revision: integrated/spec release 3128e2c, rebased before held H05/H07/H02 implementation
 Files changed: frontend shell/shared picker; Diagnostic schema/public surface/helper/panel and dedicated tests; selected student routes; instructor pager/count-copy components; TwinBody; FlashcardDeck copy; this dedicated evidence file. Exact manifest is the final commit diff.
 REQ / WI IDs touched: DIAG-REQ-012/013 and APPROVAL-06 cross-surface amendment; DIAG-REQ-009–011 compatibility; existing TWIN-REQ-002/003 and INSTR presentation compatibility; WI-22

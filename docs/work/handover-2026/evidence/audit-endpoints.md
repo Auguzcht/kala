@@ -3,7 +3,7 @@
 KALA HANDOVER — BRIEF-01 PART A ENDPOINT REACHABILITY AUDIT
 2026-10-24, Asia/Manila. Audit-only; no repository file edits.
 
-Worktree: /Users/fred/.codex/worktrees/a705/kala
+Worktree: .
 Branch: codex/endpoint-reachability
 Base/HEAD/local origin/main when first checked: e9de105d7f3074ec39f54e32b1f2b5e2bda669ed
 Branch was created from the assigned detached checkout. No fetch/reset/pull,
@@ -124,7 +124,7 @@ Method(s) | Path | Source | Auth
 --- | --- | --- | ---
 GET, HEAD | /openapi.json | FastAPI default, main.py:29 | none
 GET, HEAD | /docs | FastAPI default, main.py:29 | none
-GET, HEAD | /docs/oauth2-redirect | FastAPI default, main.py:29 | none
+GET, HEAD | docs/oauth2-redirect | FastAPI default, main.py:29 | none
 GET, HEAD | /redoc | FastAPI default, main.py:29 | none
 
 CORS middleware can handle browser preflight OPTIONS (main.py:75-81);
@@ -634,7 +634,7 @@ Evidence files in this scratch directory:
 
 AUDIT REPORT
 Task / brief ID: BRIEF-01 / WI-01, Part A complete as a static audit
-Branch and worktree: codex/endpoint-reachability; /Users/fred/.codex/worktrees/a705/kala
+Branch and worktree: codex/endpoint-reachability; .
 Base revision: e9de105d7f3074ec39f54e32b1f2b5e2bda669ed
 Files changed: none in repository; scratch evidence only outside repository
 REQ / WI IDs touched: WI-01 audited; no REQ/spec/file changes
@@ -642,7 +642,7 @@ Commands run and results (tests, lint, typecheck, build):
   Read-only git/source searches and AST/reference checks; static assertions passed.
   Tests/lint/typecheck/build/runtime/DB checks not run; see checks.txt.
 Spec changes made: none
-Evidence added: /tmp/kala-endpoint-audit-20261024-a705/ (outside repository)
+Evidence added: /tmp/kala-endpoint-audit-20261024-a705/ (outside repository) (local only, not retained)
 Anything not done, and why:
   Part B not authorized. Hosted API/CloudWatch/LTI recovery evidence belongs to Fred.
   No live deployment configuration, HTTP responses, local DB replay or performance

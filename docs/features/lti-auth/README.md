@@ -120,7 +120,7 @@ Lane I preserves Lane P's AUTH-REQ-001–005 baseline from commit `2062784`, wit
 
 ## Identity verification — 2026-10-25
 
-Implementation: `cbc9a0676f805d1b562535bce7351fd3a5ccef5e`, branch `codex/identity-convergence`, worktree `/Users/fred/.codex/worktrees/c191/kala`, integrated base `5afe69518bf51c728a76753527f1682d64041d71`. Spec-first commit: `a618de3`. REQ/WI lineage: AUTH-REQ-002/003/006, handover WI-08, APPROVAL-06 H01(a)/(b). This identity entry supplements Lane P's retained evidence above; it does not replace or upgrade that earlier verification.
+Implementation: `cbc9a0676f805d1b562535bce7351fd3a5ccef5e`, branch `codex/identity-convergence`, worktree `.`, integrated base `5afe69518bf51c728a76753527f1682d64041d71`. Spec-first commit: `a618de3`. REQ/WI lineage: AUTH-REQ-002/003/006, handover WI-08, APPROVAL-06 H01(a)/(b). This identity entry supplements Lane P's retained evidence above; it does not replace or upgrade that earlier verification.
 
 | Check | Result / scope |
 | --- | --- |

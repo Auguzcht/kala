@@ -2,7 +2,7 @@
 
 Date: 2026-10-25 (Asia/Manila).
 Task: Fred reported completing the backend redeployment and explicitly requested image review followed by a scoped push to main. This direct request releases APPROVAL-03/04's no-push gate after Fred's backend deployment. Agents remain prohibited from deploying or changing hosted data.
-Branch/worktree: `main`, `/Users/fred/Documents/Repository/kala`.
+Branch/worktree: `main`, `.`.
 Origin base at review: `e9de105d7f3074ec39f54e32b1f2b5e2bda669ed`.
 Reviewed source revision: `cab26defc93964c92ab52c2dfa657db00434a3d7`.
 

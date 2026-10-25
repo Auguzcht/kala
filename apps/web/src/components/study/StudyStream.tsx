@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 
 // Shared stream container for every surface that presents a sequence of
 // blocks — teaching bubbles, quiz cards, eventually chat messages — instead
-// of a single static panel. Lessons is the first surface on this (Stage 1
-// of the AI-overhaul plan, see docs/AI_OVERHAUL_TODO.md); Tutor and the
-// quiz surfaces follow in later stages.
+// of a single static panel. Current shared-surface boundaries are in
+// docs/features/tutor/README.md#tutor-req-011-preserve-the-tutor-and-study-hub-component-boundary.
+// Tutor owns its conversation surface; reuse does not imply one shared state owner.
 //
 // Built on ai-elements' Conversation, which wraps use-stick-to-bottom:
 // content sticks to the bottom as blocks are added, and stops fighting the

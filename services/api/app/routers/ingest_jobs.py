@@ -2,16 +2,14 @@
 
 The api no longer walks the course tree in the request (that moved to the
 worker's ingest_walk job — see services/worker/app/jobs/ingest_walk.py and
-docs/design/async-ingest.md). POST /ingest now enqueues a job and returns 202.
+docs/features/lms-ingest/README.md#ingest-req-002-enqueue-one-resumable-ingest-job-per-course). POST /ingest now enqueues a job and returns 202.
 
 This module is the thin enqueue helper the /ingest route calls. Kept separate
 so the route change in diagnostic.py is a few lines and the enqueue logic
 (including the "one live job per course" no-op) is testable on its own.
 
-STATUS: SCAFFOLD. Logic is complete and mirrors the codebase's db access
-style. DeepSeek: wire it into diagnostic.py's /ingest route (see
-diagnostic.py.INGEST_ROUTE.PATCH.md) and add tests alongside
-test_course_sync_cache.py.
+The /ingest route in diagnostic.py uses this helper. Enqueue/status behavior
+is covered by tests/test_ingest_route.py; it is not an unwired scaffold.
 """
 from __future__ import annotations
 

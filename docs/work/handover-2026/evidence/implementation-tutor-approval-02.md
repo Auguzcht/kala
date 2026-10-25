@@ -4,7 +4,7 @@
 
 Task: APPROVAL-01, Lane T including A1, and APPROVAL-02 verification refresh; AI-REQ-001 and TUTOR-REQ-001.
 Branch: `codex/tutor-boundary`
-Worktree: `/Users/fred/.codex/worktrees/8491/kala`
+Worktree: `.`
 Base: `e9de105d7f3074ec39f54e32b1f2b5e2bda669ed` (`origin/main` at dispatch).
 Final local commit: `b605a3b852c6eb4573ca6ae8460eec9eff486207`.
 Prior completed UI/implementation commit: `4b0436d4462a4b43dd93707c7b96cc8703ab3434`.
@@ -55,7 +55,7 @@ TUTOR-REQ-001 is `implemented`; its spec includes the granted UI behavior, UI re
 Full API, frontend regressions, web lint, web typecheck, and web build were rerun under APPROVAL-02 after the spec update. Fresh logs and JUnit evidence are under `approval-02/`. All commands below ran from the worktree root unless otherwise stated. Dependency installation and Python Ruff results are carried forward from the prior implementation round; no dependency, Python code, or shared test harness was changed in this round.
 - `uv sync --locked --project services/api` — PASS; created a local .venv using uv.lock; no manifest or lockfile edit.
 - `pnpm install --frozen-lockfile` — PASS; local node_modules, no manifest or lockfile edit.
-- `env -i PATH=/opt/homebrew/bin:/usr/bin:/bin SUPABASE_JWT_SECRET=isolated-fake-test-secret-never-used-live /Users/fred/.codex/worktrees/8491/kala/services/api/.venv/bin/python /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-bebfc6f5e8c6/kala-tutor-boundary/run_api_tests.py -q --junitxml=/Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-bebfc6f5e8c6/kala-tutor-boundary/approval-02/api-tests.xml` — PASS, 400 tests, 31 deprecation/record_property warnings, 27.440s. Includes real 26s request-budget test: HTTP 503 returned in **23.003187624999555s**. Fresh log and JUnit XML: `approval-02/api-tests.log` and `approval-02/api-tests.xml`.
+- `env -i PATH=/opt/homebrew/bin:/usr/bin:/bin SUPABASE_JWT_SECRET=isolated-fake-test-secret-never-used-live services/api/.venv/bin/python /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-bebfc6f5e8c6/kala-tutor-boundary/run_api_tests.py -q --junitxml=/Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-bebfc6f5e8c6/kala-tutor-boundary/approval-02/api-tests.xml` — PASS, 400 tests, 31 deprecation/record_property warnings, 27.440s. Includes real 26s request-budget test: HTTP 503 returned in **23.003187624999555s**. Fresh log and JUnit XML: `approval-02/api-tests.log` and `approval-02/api-tests.xml`. (local only, not retained)
 - `node --test apps/web/src/features/tutor/components/TutorChat.test.mjs apps/web/src/lib/api-error.test.ts apps/web/src/features/tutor/schema/tutor.schema.test.ts` — PASS, 14 tests. Covers flat detail, detail/code, non-JSON, JSON escapes/key order, optional/null code, timeout detail inline/toast, normal saved response, failed/missing refetch, late-save deduplication, historical identical pairs, timestamp ties, local-answer retention and conversation isolation. Fresh log: `approval-02/web-tests.log`.
 - `pnpm --filter web lint` — PASS, 0 errors / 18 pre-existing react-refresh warnings. Fresh log: `approval-02/web-lint.log`.
 - `pnpm --filter web typecheck` — PASS; router CLI circular-dependency warning. Fresh log: `approval-02/web-typecheck.log`. Prior implementation-round follow-up checks `pnpm --filter web exec eslint src/features/tutor/components/TutorChat.tsx` and `pnpm --filter web exec tsc -b` also PASS after timestamp-tie handling.
@@ -83,7 +83,7 @@ No other extra path was edited. No remaining ownership grant is needed.
 
 ## Sources consulted
 - Accepted BRIEF-01 audit report and supplied feature-spec template; root CLAUDE.md read. No AGENTS.md or scoped CLAUDE.md existed in this base checkout. `apps/web/src/styles/DESIGN.md` read before the granted UI edit.
-- Supabase skill: `/Users/fred/.agents/skills/supabase/SKILL.md`. Changelog fetched via curl after web markdown fetch failed; no relevant Data API/HTTP client breaking change found. No schema/auth/RLS capability changed.
+- Supabase skill: `/Users/fred/.agents/skills/supabase/SKILL.md`. Changelog fetched via curl after web markdown fetch failed; no relevant Data API/HTTP client breaking change found. No schema/auth/RLS capability changed. (local only, not retained)
 - [HTTPX timeout semantics](https://www.python-httpx.org/advanced/timeouts/)
 - [AnyIO worker cancellation](https://anyio.readthedocs.io/en/stable/threads.html)
 - [Botocore Config](https://docs.aws.amazon.com/botocore/latest/reference/config.html)

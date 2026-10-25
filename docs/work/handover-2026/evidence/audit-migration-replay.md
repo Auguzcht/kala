@@ -2,12 +2,12 @@
 
 AUDIT REPORT
 Task / brief ID: BRIEF-03 / WI-04 — Part A only, completed 2026-10-24 (Asia/Manila).
-Branch and worktree: codex/supabase-local-stack; /Users/fred/.codex/worktrees/66cc/kala
+Branch and worktree: codex/supabase-local-stack; .
 Base revision: e9de105d7f3074ec39f54e32b1f2b5e2bda669ed; matched origin/main at start. HEAD unchanged.
 Files changed: no tracked edits, no nonignored untracked files, no staged changes. Requested branch was created. Locked root dependencies were installed into ignored node_modules under explicit resume authorization; no tracked manifest/lockfile changed.
 REQ / WI IDs touched: WI-04 audit only; no REQ changes.
 Spec changes made: none.
-Evidence added: scratch outputs only at /var/folders/1q/cltfxktj0tb5rvs32t3n3nn40000gn/T/kala-wi04-audit-kdi9ec8i/resumed. The earlier report in the parent folder is superseded by this report.
+Evidence added: scratch outputs only at /var/folders/1q/cltfxktj0tb5rvs32t3n3nn40000gn/T/kala-wi04-audit-kdi9ec8i/resumed. The earlier report in the parent folder is superseded by this report. (local only, not retained)
 Secrets printed: none (confirmed). No .env or secret files read; no hosted credentials obtained; no hosted project queried.
 
 OUTCOME / RUNTIME PROOF
@@ -35,7 +35,7 @@ VERSIONS / CONFIG
 COMMANDS RUN AND RESULTS
 - git status --porcelain=v1; git branch --show-current; git rev-parse HEAD; git rev-parse origin/main: clean detached base at the named SHA, then requested branch created with git switch -c codex/supabase-local-stack. No reset/fetch/rebase.
 - Read repository CLAUDE.md, inspected ancestor instruction locations and available repository paths; packages/db/CLAUDE.md referenced by root CLAUDE.md:27 is absent. No repository AGENTS.md was found in the checked worktree/ancestors. Proposed pack was not copied into the repository.
-- Read /Users/fred/.agents/skills/supabase/SKILL.md. Consulted public official CLI documentation and fetched the official changelog index and relevant PostgreSQL-major breaking-change pages; these are documentation reads, not hosted-project access.
+- Read /Users/fred/.agents/skills/supabase/SKILL.md. Consulted public official CLI documentation and fetched the official changelog index and relevant PostgreSQL-major breaking-change pages; these are documentation reads, not hosted-project access. (local only, not retained)
 - supabase --version; pnpm --version; pnpm exec which supabase; pnpm exec supabase --version; locked installation as above.
 - CLI --help discovery for init, db start, migration new, migration up, migration list, start, and stop. No migration list without --local was executed; in fact history proof used docker-local psql instead.
 - Every runtime CLI call: pnpm exec supabase --workdir <unique scratch project> <subcommand>. Exact argument arrays, exit codes, durations, and log paths are in commands.json, notice-replay/commands.json, psql-notices/commands.json.

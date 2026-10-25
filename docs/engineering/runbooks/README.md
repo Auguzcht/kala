@@ -20,21 +20,21 @@ All 13 procedures now have **unverified drafts** under WI-06/WI-07. Resolve thei
 
 ## Authoring and verification state
 
-[APPROVAL-05 rev 2](#approval-source) authorizes Lane R's drafts, with priority 03, 04 and 08. **No procedure is execution-verified by Lane R.** Prior observations stay attributed: the [migration replay](../../work/handover-2026/evidence/audit-migration-replay.md) proves empty-schema SQL replay, and [v6 deployment evidence](../../work/handover-2026/evidence/deployment-2026-10-25.md) proves image/alias/health metadata. Neither establishes a fresh environment or authenticated acceptance. [TESTING.md](../../TESTING.md) remains the preserved baseline, incorporated by runbook 10.
+These drafts prioritize Learn acquisition, developer registration and LTI placement (03, 04 and 08). **No procedure is execution-verified by Lane R.** Prior observations stay attributed: the migration replay proves empty-schema SQL replay, and v6 deployment evidence proves image/alias/health metadata. Neither establishes a fresh environment or authenticated acceptance. [TESTING.md](../../TESTING.md) remains the preserved baseline, incorporated by runbook 10.
 
-Read the [draft verification and evidence-gap record](verification.md) before review. Exact time estimates, current portal/console fields and resource/account details are `[Fred to confirm]`; public documentation is not evidence that these procedures ran.
+Each procedure states its own unresolved prerequisites; review those before execution. The source-review transcript is historical, not a required operating input. Exact time estimates, current portal/console fields and resource/account details are `[Fred to confirm]`; public documentation is not evidence that these procedures ran.
 
 ## Dependency and execution gates
 
-1. Start with 01's account/state/quota approval. 02's local workflow waits for Lane DB and Fred's hosted Postgres major. At refreshed base `6e21eed`, **37 repository migration files** (0001–0037) remain in `packages/db/migrations`; relocation is pending FG-2. B's locally merged 0037 and [exact apply runbook](../../runbooks/0037-apply.md) are read-only inputs for Lane R. Hosted application remains Fred's FG-3 before FG-4 deployment; file count does not establish hosted state.
+1. Start with 01's account/state/quota approval. 02's local workflow waits for Lane DB and Fred's hosted Postgres major. At refreshed base `6e21eed`, **37 repository migration files** (0001–0037) remain in `packages/db/migrations`; relocation is pending FG-2. B's locally merged 0037 and [exact apply runbook](../../runbooks/0037-apply.md) are read-only inputs for Lane R. For dev-hosted, Fred reported 0037 application and read-only checks passed on 2026-10-25. Fresh institutional setup still needs reviewed application; file count alone does not establish hosted state.
 2. Obtain Learn via 03, then prepare portal metadata in 04. API endpoint fields cannot be finalized until 06 produces the API; whether provisional registration is supported is unverified. Do not submit invented placeholder URLs.
 3. 05 and 06 are phased together: approved state → ECR/empty secret bootstrap → secret population and images → full reviewed stack. Secret readiness and database readiness must precede worker scheduling/invocation. This sequence is a proposed fresh-environment procedure, not an executed transcript.
 4. Finalize 04/08 after 06 and 09's frontend origin. 08 completes the Learn deployment/placement and separate REST integration; 10 accepts real synthetic-role launches and material/learning flows.
-5. Use 07 for subsequent backend code releases. [APPROVAL-06](../../work/handover-2026/approval-06.md) supersedes earlier release snapshots: coordinator checks stop before FG-3; Fred applies 0037, then at FG-4 deploys, checks alias/worker/startup, pushes main and waits for Vercel Ready; FG-5 is his live acceptance. FG-1 provider configuration/refresh is separate from FG-2, which blocks Lane DB only. 11 and 12 apply when needed; 13 applies only to an EC2 developer Learn instance. Any shutdown/cutover requires separate named human approval.
+5. Use 07 for subsequent backend code releases. Current release sequence: coordinator supplies the reviewed SHA and complete local checks; the maintainer verifies required migrations, deploys backend changes, checks alias/worker/startup, then publishes main and waits for Vercel Ready; live acceptance is a separate named-human gate. For frontend-only changes, publish only after review; no backend deploy is required. FG-1 provider configuration/refresh is separate from FG-2, which blocks Lane DB only. 11 and 12 apply when needed; 13 applies only to an EC2 developer Learn instance. Any shutdown/cutover requires separate named human approval.
 
 All hosted/infrastructure mutation steps in these documents belong to named human maintainers; local verification/generation may run only within its separately authorized coordinator scope. A draft command is not authorization for an agent deploy, hosted migration/write, key rotation, merge or push. Lane R stops with its audit report for coordinator review.
 
-## Approval source
+## Historical sources — authoring approvals
 
 [APPROVAL-05 rev 2](../../work/handover-2026/approval-05.md) is now committed; the original Lane R draft used the supplied attachment. [APPROVAL-06 rev 2](../../work/handover-2026/approval-06.md) continues R/P/C2 docs and sets the current same-day Fred gates. Its Lane R grant is: draft runbooks 01–13 from archived records, MEMORY and READMEs; mark unknowns `[Fred to confirm]`; own only `docs/engineering/runbooks/`. Existing [APPROVAL-01](../../work/handover-2026/approval-01.md), [02](../../work/handover-2026/approval-02.md), [03](../../work/handover-2026/approval-03.md) and [04](../../work/handover-2026/approval-04.md) retain their database, privacy and integration gates. The full approval attachment and all credential material are excluded from these drafts.
 
@@ -45,3 +45,10 @@ All hosted/infrastructure mutation steps in these documents belong to named huma
 | 2026-10-24 | Install registry and two partial knowledge extracts | WI-03, APPROVAL-01. |
 | 2026-10-25 | Draft all 13 procedures and reconcile dependencies/gaps | WI-06/WI-07, APPROVAL-05 rev 2, Lane R. |
 | 2026-10-25 | Refresh from local main 6e21eed: 37 migrations, exact 0037 note and same-day gates | APPROVAL-06 rev 2 and coordinator Lane R continuation. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [v6 deployment evidence](../../work/handover-2026/evidence/deployment-2026-10-25.md)
+- [migration replay](../../work/handover-2026/evidence/audit-migration-replay.md)

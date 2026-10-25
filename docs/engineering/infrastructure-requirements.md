@@ -60,12 +60,19 @@ Any AWS-native alternative needs its own usage and migration estimate after ITO 
 
 ## Verification gap: provisioned concurrency
 
-[MEMORY, original lines 268–274](../archive/session-recaps/MEMORY.md) records an AWS account concurrency cap of 10; PC=1 could not leave Lambda's required 10 unreserved executions. A request for 11 was rejected, and a request for 1,001 was pending at that time. The support identifier is omitted from this extraction. The source therefore does **not** establish a warm provisioned environment.
+MEMORY, original lines 268–274 records an AWS account concurrency cap of 10; PC=1 could not leave Lambda's required 10 unreserved executions. A request for 11 was rejected, and a request for 1,001 was pending at that time. The support identifier is omitted from this extraction. The source therefore does **not** establish a warm provisioned environment.
 
-Before claiming warm-path readiness, Fred/ITO must verify current quota, allocation readiness for the intended alias and observed timing. This lane did not query AWS or execute Terraform. The observation/check is preserved in [recap evidence](../work/handover-2026/evidence/recap-knowledge.md); it is independent of [planned Gateway access logging](../work/handover-2026/work-items/WI-18-api-gateway-access-logs.md).
+Before claiming warm-path readiness, Fred/ITO must verify current quota, allocation readiness for the intended alias and observed timing. This lane did not query AWS or execute Terraform. The observation/check is preserved in recap evidence; it is independent of [planned Gateway access logging](../work/handover-2026/work-items/WI-18-api-gateway-access-logs.md).
 
 ## Change log
 
 | Date | Change | Decision source | IDs affected |
 | --- | --- | --- | --- |
 | 2026-10-25 | Add cost-driver and billing-evidence placeholders for Fred/ITO; leave estimates and sign-off pending | APPROVAL-05 rev 2 section 4, Lane C2 | WI-13 |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [MEMORY, original lines 268–274](../archive/session-recaps/MEMORY.md)
+- [recap evidence](../work/handover-2026/evidence/recap-knowledge.md)

@@ -158,7 +158,7 @@ No new model calls. Diagnostic generation and the provider path are outside this
 
 ## Edge cases and known limits
 
-Availability reads page histories and eligible pools in ordered batches, but do not share a transactional snapshot across concurrent writes. Status performs no generation/write; query cost still grows with history and bank size, and there is no new whole-request deadline/cache. REST caps below the requested 500-row page size remain unverified. Optional counters are validated by frontend Zod; these existing untyped endpoint response models do not yet describe the fields in OpenAPI. See [Lane G evidence](../../work/handover-2026/evidence/diagnostic-availability-lane-g.md).
+Availability reads page histories and eligible pools in ordered batches, but do not share a transactional snapshot across concurrent writes. Status performs no generation/write; query cost still grows with history and bank size, and there is no new whole-request deadline/cache. REST caps below the requested 500-row page size remain unverified. Optional counters are validated by frontend Zod; these existing untyped endpoint response models do not yet describe the fields in OpenAPI. See Lane G evidence.
 
 Preserve partial preparation, pending topics, no-material, failed generation, empty/caught-up states and the submitted-result guard against query invalidation. Preserve keyboard focus, visible focus indicators and reduced motion. The separate Study flip-card fix replaces hidden-face focus exposure with inert faces and deliberate focus handling; it must preserve rating and schedule behavior.
 
@@ -196,3 +196,9 @@ Fred's follow-up requires equal top and left attachment insets, subtle token-bas
 | 2026-10-25 | Specify actionable eligibility, availability-first selection and truthful waiting contracts before Lane G implementation | APPROVAL-06 section 4; G proposal and coordinator contract clarification | DIAG-REQ-009–011 |
 | 2026-10-25 | Define working Retry, optional count compatibility, truthful empty responses and the approved cross-surface recovery/navigation/window copy before close-out implementation | APPROVAL-06 section 5; Lane U proposal plus DIAG-REQ-011 response contract | DIAG-REQ-012, DIAG-REQ-013 |
 | 2026-10-25 | Mark availability and frontend recovery locally implemented after lane audits and combined-main checks; preserve explicit live and scan-cost limits | APPROVAL-06; G9bc8479 and Udb2bb754 | DIAG-REQ-009–013 |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [Lane G evidence](../../work/handover-2026/evidence/diagnostic-availability-lane-g.md)

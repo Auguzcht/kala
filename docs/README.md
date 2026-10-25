@@ -18,7 +18,6 @@ This page decides where every kind of information lives and which document wins 
 | Deploy the API or worker | [engineering/runbooks/deploy-backend.md](engineering/runbooks/deploy-backend.md) |
 | See what is unfinished | [work/README.md](work/README.md) |
 | Know why something was decided | [decisions/README.md](decisions/README.md) |
-| Read old plans or session recaps | [archive](archive/README.md) (history only, not policy) |
 
 ## Where information belongs
 
@@ -43,14 +42,24 @@ This page decides where every kind of information lives and which document wins 
 
 Only these: `planned`, `in-progress`, `blocked`, `deferred`, `done-awaiting-confirmation`, `confirmed-done`. Definitions are in [engineering/documentation/contract.md](engineering/documentation/contract.md).
 
-## Installation boundary
+## Current operating boundary
 
-WI-03 installs the router, templates, archives and focused knowledge extracts. [APPROVAL-01](work/handover-2026/approval-01.md) plus section 5 controls the parallel lane scopes. [Link-check evidence](work/handover-2026/evidence/docs-link-check.md) separates absent cross-lane files, not-yet-authored specs/runbooks, historical missing references and unexpected broken links. Full specs and full operational runbooks remain WI-06/WI-07/WI-08 work; a registry row is not a completed document.
+Use the current feature specifications for requirements, engineering for procedures and decisions for accepted rationale. Requirements marked partial/planned and runbooks marked execution-unverified are explicit limits, not completed capabilities. Agents must not infer acceptance from a registry row or a past successful check.
 
-Retained legacy design/setup documents are reachable as source material through the [82-file disposition map](work/handover-2026/evidence/migration-map.md). Their authority claims are superseded by this router and the approved feature specs. Visual authority remains [DESIGN.md](../apps/web/src/styles/DESIGN.md). [F08/F09](design/handover-findings.md) are recorded findings, with no CSS changes.
+Visual authority remains [DESIGN.md](../apps/web/src/styles/DESIGN.md). The [environment boundary](engineering/environments.md), [database policy](engineering/database.md), [secrets catalogue](engineering/secrets.md), [security limits](engineering/security-and-privacy.md) and [release runbook](engineering/runbooks/deploy-backend.md) carry operational constraints. The local database workflow is not yet installed; do not run future db:* commands as if present. Applied migration files are immutable and a human applies hosted SQL after review. Human deployment and live acceptance are separate from local verification.
+
+Work items track delivery, not requirements. The handover initiative starts with its closeout record and does not define operational authority. Consult records only when the task explicitly names them. Do not read docs/archive/** or docs/work/**/evidence/** by default.
 
 ## Change log
 
 | Date | Change | Source |
 | --- | --- | --- |
 | 2026-10-24 | Install the documentation framework, preserve accepted audit/recap evidence, archive only approved rows, and record six planned findings | APPROVAL-01 including confirmed section 5; WI-02 and WI-03 |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [archive](archive/README.md)
+- [Link-check evidence](work/handover-2026/evidence/docs-link-check.md)
+- [82-file disposition map](work/handover-2026/evidence/migration-map.md)

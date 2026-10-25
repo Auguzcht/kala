@@ -194,7 +194,7 @@ def ingest_course(
     user: CurrentUser = Depends(get_current_user),
 ):
     # INTEGRATION NOTE (this wiring was missing until now — see
-    # docs/design/async-ingest.md): this route used to call
+    # docs/features/lms-ingest/README.md#ingest-req-002-enqueue-one-resumable-ingest-job-per-course): this route used to call
     # connector.get_content(...) synchronously right here, then store + embed
     # inline in this same request. That whole-tree walk measured 31.8s on a
     # real course (AWS101) — over the api Lambda's 30s wall before a single

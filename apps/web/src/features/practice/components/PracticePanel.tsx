@@ -24,8 +24,8 @@ import { useTutorAsk } from "@/features/tutor";
 import type { PracticeSetResults, PracticeSubmitResult } from "@/features/practice/schema/practice.schema";
 import { toast } from "sonner";
 
-// Quick-practice loop, one skill per session (Stage 3 of the AI overhaul,
-// docs/AI_OVERHAUL_TODO.md). `skillId` is a required prop now, not an
+// Quick-practice loop, one skill per session (see
+// docs/features/study/README.md#learning-surface-boundaries). `skillId` is a required prop now, not an
 // internally-managed topic with an in-panel picker to switch it — that
 // picker (first a Select, then a Sheet+Command rebuild) is what produced
 // most of the race-condition scaffolding this file used to carry

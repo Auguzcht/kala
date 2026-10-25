@@ -1,6 +1,6 @@
 # Frontend finalization handoff: student and instructor
 
-Date: 2026-10-25. Audited application revision: `47b9700`, branch `codex/ui-overhaul`, worktree `/Users/fred/.codex/worktrees/2e93/kala`.
+Date: 2026-10-25. Audited application revision: `47b9700`, branch `codex/ui-overhaul`, worktree `.`.
 
 ## Readiness and scope
 
@@ -298,16 +298,16 @@ Keep one dev server on 5173; test from the worktree that changes source. Agents 
 Browser commands (server must already be running on 5173):
 
 ```sh
-KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node \
-KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node \ # local only, not retained
+KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \ # local only, not retained
 node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
 
-KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node \
-KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node \ # local only, not retained
+KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \ # local only, not retained
 node apps/web/src/features/twin/tests/presentation.browser.mjs
 
-KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node \
-KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+KALA_BROWSER_TEST_DEPS=/Users/fred/.cache/codex-runtimes/codex-primary-runtime/dependencies/node \ # local only, not retained
+KALA_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \ # local only, not retained
 node apps/web/src/features/instructor/tests/review-feedback.browser.mjs
 ```
 
@@ -316,7 +316,7 @@ Current implementation milestones: `543a488` Diagnostic/flip focus; `423579e` Tu
 ## Audit report
 
 Task / brief ID: WI-22 final frontend UI/UX audit and student/instructor handoff; related WI-01/08/20/21/23 dependencies.
-Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala.
+Branch and worktree: codex/ui-overhaul; /Users/fred/.codex/worktrees/2e93/kala. (local only, not retained)
 Base revision: 47b9700.
 Files changed: this handoff; ui-overhaul.md handoff/correction entry; focused Twin spec observed-response correction.
 REQ / WI IDs touched: DIAG-REQ-001–008, TUTOR-REQ-001–011, INSTR-REQ-001/002, TWIN-REQ-001/002/003 referenced; WI-22; no new requirement IDs allocated.

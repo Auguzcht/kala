@@ -56,7 +56,7 @@ Only coordinator documentation is committed on local main. No APPROVAL-05 lane c
 ## AUDIT REPORT
 
 - Task / brief ID: APPROVAL-05 coordinator setup and spec releases.
-- Branch and worktree: main; /Users/fred/Documents/Repository/kala.
+- Branch and worktree: main; /Users/fred/Documents/Repository/kala. (local only, not retained)
 - Base revision: 4f3ec29.
 - Files changed: AGENTS.md, DESIGN.md, shared Tutor/AI specs, approval/initiative/coordinator evidence, WI-01 follow-up and WI-21/22/23 documentation.
 - REQ / WI IDs touched: AI-REQ-002; TUTOR-REQ-002–011; WI-01, WI-21, WI-22, WI-23. Existing AI-REQ-001/TUTOR-REQ-001 preserved.

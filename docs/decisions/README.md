@@ -27,4 +27,10 @@ One file per decision: `ADR-001-<slug>.md`, from `../engineering/documentation/t
 - [ADR-016: legacy flashcard XP rollout gate](ADR-016-legacy-flashcard-xp.md). Grandfathering outcome remains a human decision.
 - [ADR-017: feedback by persona](ADR-017-persona-feedback.md). No new dashboard feature is authorized.
 
-ADR-001 through ADR-015 above remain a **seed list**, not authored or accepted records. In particular, ADR-012 live provider configuration and ADR-013 offline/self-hosted model suitability are unverified. See [recap evidence](../work/handover-2026/evidence/recap-knowledge.md).
+ADR-001 through ADR-015 above remain a **seed list**, not authored or accepted records. In particular, ADR-012 live provider configuration and ADR-013 offline/self-hosted model suitability are unverified. See recap evidence.
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [recap evidence](../work/handover-2026/evidence/recap-knowledge.md)

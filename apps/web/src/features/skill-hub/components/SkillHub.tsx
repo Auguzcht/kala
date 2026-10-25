@@ -31,7 +31,7 @@ type AnimatedIcon = ComponentType<{
 }>;
 
 // The skill hub: ONE skill's page, with the three study modes as tabs over it.
-// This is the "deck materials" move from docs/ai-overhaul-v2/05 (Option 2) —
+// Current mode boundary: docs/features/study/README.md#learning-surface-boundaries —
 // Gizmo's deck → modes, mapped onto Kala's real spine (course → module →
 // skill). The rail and the Workspace grid both used to expose Lesson /
 // Practice / Flashcards as three separate top-level destinations even though

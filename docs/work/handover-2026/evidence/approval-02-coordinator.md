@@ -1,7 +1,7 @@
 # APPROVAL-02 coordinator report — 2026-10-24
 
 Task: apply [APPROVAL-02](../approval-02.md) up to the explicit Lane T approval gate.
-Branch/worktree: main, `/Users/fred/Documents/Repository/kala`.
+Branch/worktree: main, `.`.
 Base: e9de105d7f3074ec39f54e32b1f2b5e2bda669ed, matching origin/main after fetch.
 
 ## Delivery

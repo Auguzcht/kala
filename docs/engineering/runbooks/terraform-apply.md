@@ -56,10 +56,17 @@ Preserve state and sanitized failure details. Inspect partial resources and prep
 
 ## Sources
 
-[Terraform README](../../../infra/terraform/README.md), [Makefile](../../../Makefile), [bootstrap lessons](../../work/handover-2026/evidence/recap-knowledge.md) and [deployment evidence](../../work/handover-2026/evidence/deployment-2026-10-25.md). No fresh-account execution was performed by Lane R.
+[Terraform README](../../../infra/terraform/README.md), [Makefile](../../../Makefile), bootstrap lessons and deployment evidence. No fresh-account execution was performed by Lane R.
 
 ## History
 
 | Date | Change to this runbook | Why |
 | --- | --- | --- |
 | 2026-10-25 | Draft phased bootstrap and apply gates | APPROVAL-05 rev 2, Lane R, WI-07. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [deployment evidence](../../work/handover-2026/evidence/deployment-2026-10-25.md)
+- [bootstrap lessons](../../work/handover-2026/evidence/recap-knowledge.md)

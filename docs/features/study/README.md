@@ -19,6 +19,12 @@ tests:
 ## Purpose
 Students recall course material with flip cards and self-ratings. Study advances the recall schedule; Test grades answers and supplies mastery evidence.
 
+## Learning-surface boundaries
+
+The skill hub is the canonical per-skill entry for Lesson, Study and Test, with Study browsing as its default. Skill choice belongs to the session/route, and module grouping keeps unassigned skills visible under Other topics. Legacy course-wide FlashcardDeck retains optional skill selection; do not silently remove it. Shared study presentation primitives are distinct from Tutor's conversation surface (TUTOR-REQ-011).
+
+Practice/Test uses the existing practice router and Test browser. Bank-backed sets accept 5, 10 or 20 items; the legacy generated-set path remains bounded separately. A set groups delivery rather than replacing per-answer grading. Attempt/retake records and XP counting use immutable answer identity; repeated answers must not manufacture XP. [ADR-016](../../decisions/ADR-016-legacy-flashcard-xp.md) preserves the narrower counted-review versus evidence distinction. This boundary documents existing source and retained design rationale; it is not a complete Test specification or new acceptance claim.
+
 ## Actors and permissions
 | Actor (app_role) | Can | Cannot |
 | --- | --- | --- |
@@ -83,6 +89,8 @@ The component interaction tests depend on an external renderer fixture: matching
 | 2026-10-24 | Make ready-course Preparing classification and its regression explicit | APPROVAL-02: retain the fix at the same Study empty-state availability boundary | STUDY-REQ-005 |
 | 2026-10-24 | Record the external renderer fixture as a known verification limitation | APPROVAL-02; dependency and integration harness work stays outside this amendment | STUDY-REQ-003, STUDY-REQ-005 |
 
+| 2026-10-25 | Retain existing mode/session rationale and replace obsolete launcher instructions with committed isolation and portable fixture commands | DOCS-HYGIENE; documentation only | Existing STUDY-REQ-001–005; no new REQs |
+
 ## Verification evidence
 
-`run_study_checks.py` disables dotenv and socket connections and generates an ephemeral signing key for mocked launch tests. Run it with an empty environment as documented in its module docstring. The dedicated component test uses real React hooks with mocked provider hooks/UI shells; its header documents the isolated renderer dependency and command. No shared test harness or package manifest is changed.
+API checks now use the committed shared `services/conftest.py`; the old `run_study_checks.py` launcher was replaced during integration and must not be used. Run `uv run pytest` from `services/api`. The dedicated component test uses real React hooks with mocked provider hooks/UI shells; [current portable commands and external fixture setup](../../engineering/local-development.md#portable-frontend-checks) are retained in the truth layer. No package manifest changes are part of this spec amendment.

@@ -6,7 +6,7 @@ Disposition: committed locally; STOPPED BEFORE MERGE. Coordinator owns integrati
 
 Task: satisfy the conditions on approval of Lane F commit 8e06e6a.
 Branch: codex/study-deck
-Worktree: /Users/fred/.codex/worktrees/0e52/kala
+Worktree: .
 Original lane base: e9de105d7f3074ec39f54e32b1f2b5e2bda669ed
 Amendment base: 8e06e6a2a6a1df1f91ceff23c48435f75599b6aa
 Final commit: 7041bc70dc465a33ff58c36bac034e265c1d9f27
@@ -17,9 +17,9 @@ STUDY-REQ-003 verification limitation documented. Cumulative lane: REQ-001–005
 WI IDs: none separately assigned.
 
 FILES CHANGED IN AMENDMENT (three owned paths)
-/Users/fred/.codex/worktrees/0e52/kala/docs/features/study/README.md
-/Users/fred/.codex/worktrees/0e52/kala/services/api/tests/test_study_deck_approved.py
-/Users/fred/.codex/worktrees/0e52/kala/apps/web/src/features/flashcards/tests/study-deck.test.mjs
+docs/features/study/README.md
+services/api/tests/test_study_deck_approved.py
+apps/web/src/features/flashcards/tests/study-deck.test.mjs
 Cumulative lane still changes the same nine files listed in audit-report.txt.
 No runtime code, test body, shared conftest, harness, config, package manifest
 or lockfile changed in this amendment.
@@ -61,12 +61,12 @@ No dependencies were installed or added for APPROVAL-02. Integration harness
 work remains coordinator-owned and was not touched.
 
 EXACT VERIFICATION COMMANDS / RESULTS
-All commands run from /Users/fred/.codex/worktrees/0e52/kala.
+All commands run from /Users/fred/.codex/worktrees/0e52/kala. (local only, not retained)
 1. env -i PATH="$PATH" services/api/.venv/bin/python services/api/tests/run_study_checks.py services/api/tests/test_study_deck_approved.py services/api/tests/test_membership_due_eligibility.py services/api/tests/test_bank_serving.py -q --tb=short
    PASS: 22 tests, 0.22s; one existing FastAPI/Starlette httpx deprecation
    warning. Network is blocked, dotenv discovery disabled, synthetic signing
    key generated but never displayed by the existing dedicated launcher.
-2. KALA_STUDY_TEST_DEPS=/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs
+2. KALA_STUDY_TEST_DEPS=/tmp/kala-lane-f-renderer node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs (local only, not retained)
    PASS: 4 component tests, including renamed STUDY-REQ-005; 313ms total.
    Existing VM-module and react-test-renderer deprecation warnings.
 3. services/api/.venv/bin/ruff check services/api/tests/test_study_deck_approved.py
@@ -98,6 +98,6 @@ CLEAN STATUS: clean after commit 7041bc70dc465a33ff58c36bac034e265c1d9f27.
 RESOURCE STATE: no servers, listeners, Docker containers or browser sessions
 created. Existing main, Kala Audit, other worktrees and Vite :5173 untouched.
 Previously created worktree-local ignored dependencies/caches/build output and
-/private/tmp/kala-lane-f-renderer fixture retained; no active task processes.
+/private/tmp/kala-lane-f-renderer fixture retained; no active task processes. (local only, not retained)
 No push, merge, rebase or deploy. Stopped for coordinator review.
 Secrets printed: none. No secret files or .env.example read.

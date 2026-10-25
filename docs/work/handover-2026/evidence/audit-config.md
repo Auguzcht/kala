@@ -4,7 +4,7 @@
 
 Task / brief ID: BRIEF-04 / WI-05 — secrets and configuration inventory, names only.
 
-Branch and worktree: `codex/config-inventory` at `/Users/fred/.codex/worktrees/c15f/kala`.
+Branch and worktree: `codex/config-inventory` at `.`.
 
 Base revision: `e9de105d7f3074ec39f54e32b1f2b5e2bda669ed`; local `origin/main` matched at the start. No fetch, reset, commit, push, merge, or deployment occurred. The initially detached checkout was given the requested branch.
 
@@ -95,7 +95,7 @@ The proposed secret table keeps the supplied columns: Name, Secret?, Consumed by
 - Read-only Python AST/name probes of the two config modules, Terraform source, frontend references, Edge references, and Makefile: succeeded; printed names and structural metadata only.
 - Read-only JSON inspection of root/package.json and apps/web/package.json: neither contains a db:* script at this base. No db script was executed or proposed. This does not authorize hosted CLI commands or later script changes.
 - Read-only names/line probes of docs/BACKEND.md, docs/SUPABASE.md, services/api/README.md, services/worker/README.md, and infra/terraform/README.md: configuration-name references only were printed. No secret payload or environment file was opened.
-- `python3 <scratch>/config_inventory.py --root /Users/fred/.codex/worktrees/c15f/kala --out <scratch>`: succeeded after the final scratch proposal update. Results are in summary.json (historical scratch artifact `summary.json`, not promoted).
+- `python3 <scratch>/config_inventory.py --root  --out <scratch>`: succeeded after the final scratch proposal update. Results are in summary.json (historical scratch artifact `summary.json`, not promoted).
 - Independent artifact verification: 11 checks passed; verification.json (historical scratch artifact `verification.json`, not promoted). Checked unique scoped names, forbidden-file absence from the extractor manifest, all 241 source hashes unchanged, all 21 duplicate comparisons, complete/unique/placeholder-only examples, all 47 backend rows, no default-value output column, Python syntax, and unknown actual payload membership.
 - Final `git status --porcelain=v1 --untracked-files=all`, `git diff --quiet`, `git diff --cached --quiet`, HEAD/branch checks: see worktree-state.json; repository remains clean.
 

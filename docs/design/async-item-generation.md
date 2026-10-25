@@ -1,3 +1,5 @@
+> Historical design record, retained at this path for immutable migration 0019. Current behavior and limits are in the [question-bank spec](../features/question-bank/README.md) and [Diagnostic spec](../features/diagnostic/README.md). The sign-off instructions below describe the original proposal and are not current work instructions.
+
 # Async item generation — design
 
 Move diagnostic and batched practice question generation out of the API

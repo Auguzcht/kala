@@ -47,8 +47,8 @@ import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 // (student decides, moves only the schedule). Same question underneath,
 // two honest modes.
 //
-// One topic choice per session (Stage 3 of the AI overhaul,
-// docs/AI_OVERHAUL_TODO.md), but NOT one required skill — `skillId` stays
+// One topic choice per session (see
+// docs/features/study/README.md#learning-surface-boundaries), but NOT one required skill — `skillId` stays
 // optional here on purpose. Practice and Lessons both resolve to exactly
 // one skill either way (a specific pick, or the single weakest skill).
 // Flashcards' natural default is different: "due for review" is a
