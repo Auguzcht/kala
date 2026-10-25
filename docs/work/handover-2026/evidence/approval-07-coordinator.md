@@ -135,3 +135,38 @@ Risks or questions for the planner: retained student enrollment gaps;
   See lane reports for exact locations and bounds.
 Secrets printed: none (confirmed).
 ```
+
+
+## Amendment 7 pre-fix student read inventory
+
+Read-only SEC audit at `105727ef2052ce8ebf8b6b0e5a78176a9c362735`; router source is unchanged through coordinator spec commit `4e7c690`. These are handler source lines at that recorded revision, not inferred future line numbers. All 19 GET handlers below lack student enrollment admission. AUTH-REQ-007 and owning-feature references were committed before implementation. The five GETs with existing side effects are explicitly included for guard-only admission; no enrolled processing or staff branch changes are authorized.
+
+| GET route | Source at audited revision | Existing behavior |
+| --- | --- | --- |
+| `/courses/{course_id}` | `services/api/app/routers/courses.py:20` | read |
+| `/courses/{course_id}/memory/summary` | `services/api/app/routers/courses.py:38` | read |
+| `/courses/{course_id}/twin` | `services/api/app/routers/twin.py:19` | read |
+| `/courses/{course_id}/next-up` | `services/api/app/routers/twin.py:32` | read |
+| `/courses/{course_id}/plan` | `services/api/app/routers/twin.py:72` | read |
+| `/courses/{course_id}/content` | `services/api/app/routers/diagnostic.py:149` | read |
+| `/courses/{course_id}/modules` | `services/api/app/routers/diagnostic.py:387` | read |
+| `/courses/{course_id}/diagnostic/status` | `services/api/app/routers/diagnostic.py:598` | read |
+| `/flashcards/{course_id}/skills/{skill_id}/cards` | `services/api/app/routers/flashcards.py:62` | read |
+| `/gamification/{course_id}/summary` | `services/api/app/routers/gamification.py:15` | read |
+| `/practice/{course_id}/sets` | `services/api/app/routers/practice.py:528` | read |
+| `/practice/{course_id}/sets/{set_id}/results` | `services/api/app/routers/practice.py:700` | read |
+| `/tutor/conversations?course_id=` | `services/api/app/routers/tutor.py:221` | read |
+| `/tutor/conversations/{conversation_id}` | `services/api/app/routers/tutor.py:259` | read; course from owned lookup |
+| `/courses/{course_id}/diagnostic` | `services/api/app/routers/diagnostic.py:617` | GET with existing preparation/queue work |
+| `/flashcards/{course_id}/deck` | `services/api/app/routers/flashcards.py:143` | GET with existing claims/exposures; limit=0 stays read-only |
+| `/practice/{course_id}/next` | `services/api/app/routers/practice.py:178` | GET with existing generation/exposure work |
+| `/practice/{course_id}/sets/{set_id}` | `services/api/app/routers/practice.py:573` | GET with existing exposure work |
+| `/lessons/{course_id}/skill/{skill_id}` | `services/api/app/routers/lessons.py:29` | GET with existing generation/assignment work |
+
+Already guarded: `GET /courses/{course_id}/bank/status`, `services/api/app/routers/bank.py:30`, uses `_course_for_user` at line15. It checks course institution and enrollment presence; this follow-up reuses it unchanged, only for the validated student branch. It does not add enrollment-role/institution predicates inside that helper. H’s new own-history route is separately guarded and will be re-inventoried after H merges.
+
+Necessary import resolution: Diagnostic/Bank already depend on Diagnostic staff helpers. A function-local Bank module import in the new student branch avoids both import initialization orders without moving helpers or introducing a replacement guard. Tutor detail keeps its owner-scoped lookup before the new course check, then reads messages/attachments. The shared ownership helper and mutation callers are unchanged.
+
+Separate mutation findings, not authorized for edits by Amendment7: Diagnostic submit; flashcard review; Lesson check; Test create/from-items/retake/submit; Tutor create/patch/upload/delete-attachment/delete-conversation/ask (13 routes). They remain a recorded follow-up, not silently included in this read-only guard change.
+
+Implementation is serialized after H thenM integration. Existing test admission fixtures may be corrected while preserving business assertions; the lane must list those test paths. Strict AST proof compares the exact approved student guard/import additions and proves all staff/helper/processing code unchanged.
