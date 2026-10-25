@@ -104,3 +104,7 @@ On2026-10-25 Fred requested current model-state verification and0037 pre-checks.
 ## FG-3 complete, pending Fred deployment
 
 Fred reported applying0037 on2026-10-25. [Post-check evidence](0037-postchecks-2026-10-25.md) confirms nullable/no-default pinned_at, unchanged RLS/policies/grants, service privileges, count1/pins0 and Data API200. Fetch/ancestry checks confirm0 behind origin/main. The earlier pending FG-3 state is superseded by this evidence; FG-4 deployment/push and FG-5 acceptance remain Fred-only. Current chat fallback is still the free model; the proposed paid configuration is not applied by the coordinator.
+
+## Paid fallback saved under explicit delegation
+
+[FG-1 update evidence](fg1-paid-fallback-2026-10-25.md) supersedes the earlier pending secret-edit state: the coordinator used AWS CLI under Fred’s narrow authorization to add the paid fallback, verify all25 existing entries unchanged and retain the previous version. Runtime refresh and hint acceptance remain pending Fred’s deploy/retest. Migration-history gaps are explicitly non-blocking for this deploy by Fred’s decision and remain in the database stream.

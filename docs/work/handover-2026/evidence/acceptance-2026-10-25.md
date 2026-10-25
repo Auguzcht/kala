@@ -7,7 +7,7 @@ Authority: [APPROVAL-06](../approval-06.md). Owner/operator: Fred. This is a pre
 | Field | Recorded result |
 | --- | --- |
 | Approved source SHA | pending final coordinator report |
-| FG-1 paid fallback on a different serving provider, fresh runtime and hint retest | not-run / not reported |
+| FG-1 paid fallback on a different serving provider, fresh runtime and hint retest | Paid fallback saved/verified by explicitly delegated CLI update at08:01+08; fresh runtime and hint retest pending. [Evidence](fg1-paid-fallback-2026-10-25.md) |
 | FG-2 hosted Postgres major (Lane DB only) | Direct authorized pre-check observed17.6/major17 on2026-10-25; dashboard confirmation not reported |
 | FG-3 migration0037 operator/time/environment | Fred reports applied on2026-10-25, dev-hosted; post-checks verified at07:50+08 |
 | FG-3 checksum / pre-checks / post-checks | Passed; unchanged RLS/policies/grants, count1, pins0, Data API200. [Post-check evidence](0037-postchecks-2026-10-25.md) |
@@ -54,3 +54,7 @@ Fred directly authorized provider metadata review and0037 pre-checks. [Results](
 ## FG-3 verification update — 2026-10-25
 
 Fred reported applying0037. [Read-only post-checks](0037-postchecks-2026-10-25.md) pass, including a zero-row Data API column probe. Git fetch confirms main is0 behind origin/main and the remote is an ancestor. Schema/Git prerequisites for the approved deploy are green; provider paid-fallback configuration and live recovery remain FG-1. No deployment, push or live feature acceptance is claimed.
+
+## FG-1 configuration update — 2026-10-25
+
+Fred delegated the single fallback edit through AWS CLI. The paid chat fallback is now stored and readback-verified, with all25 prior entries unchanged and a retained previous version. No deployment/runtime refresh or model answer is claimed. Fred confirms the migration-history finding is recorded for the database stream and does not block this deploy.
