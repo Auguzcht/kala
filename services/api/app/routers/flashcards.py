@@ -46,6 +46,7 @@ from app.deps import (
 )
 from app.learn import items as item_gen
 from app.learn import srs, xp
+from app.routers import bank as bank_router
 
 router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 
@@ -69,6 +70,8 @@ def skill_cards(
     This is a browse list, not a session selector. It never creates schedule,
     exposure, review, or mastery rows.
     """
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     skills = db.select("skills", {
         "id": f"eq.{skill_id}", "institution_id": f"eq.{user.institution_id}",
         "course_id": f"eq.{course_id}", "status": "eq.approved",
@@ -158,6 +161,8 @@ def deck(
     """
     # An omitted mode preserves the original route contract and selection
     # size. New modes are bounded to one 20-card session batch.
+    if user.app_role == "student":
+        bank_router._course_for_user(course_id, user)
     page_size = 10 if limit is None else max(1, limit)
     if mode is not None:
         page_size = min(20, 20 if limit is None else max(1, limit))

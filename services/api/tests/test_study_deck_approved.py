@@ -8,6 +8,7 @@ from app.learn import srs
 from app.routers import flashcards
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from wi26_student_fixtures import enrolled_student_reads
 
 COURSE = "00000000-0000-4000-8000-000000000001"
 SKILL = "00000000-0000-4000-8000-000000000010"
@@ -86,7 +87,7 @@ def study(monkeypatch):
             })
 
     store = Store()
-    monkeypatch.setattr(flashcards.db, "select", store.select)
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(store.select))
     for method in ("insert", "upsert", "update", "delete"):
         monkeypatch.setattr(flashcards.db, method, store.write)
     monkeypatch.setattr(flashcards.db, "rpc", store.claim)

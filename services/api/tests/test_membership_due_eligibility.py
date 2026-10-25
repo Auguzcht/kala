@@ -6,6 +6,7 @@ import pytest
 from app.deps import CurrentUser
 from app.learn import srs
 from app.routers import flashcards
+from wi26_student_fixtures import enrolled_student_reads
 
 
 NOW = datetime(2026, 10, 18, 4, tzinfo=timezone.utc)
@@ -53,7 +54,7 @@ def membership_data(monkeypatch):
     def no_writes(*args, **kwargs):
         pytest.fail("membership and existing due-card selection must not write")
 
-    monkeypatch.setattr(flashcards.db, "select", select)
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(flashcards.db, "insert", no_writes)
     monkeypatch.setattr(flashcards.db, "update", no_writes)
     monkeypatch.setattr(flashcards.db, "rpc", no_writes)

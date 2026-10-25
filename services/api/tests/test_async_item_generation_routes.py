@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import diagnostic, item_generation_jobs, practice
+from wi26_student_fixtures import enrolled_student_reads
 
 _COURSE = "00000000-0000-4000-8000-000000000001"
 _SKILL = "00000000-0000-4000-8000-000000000010"
@@ -35,7 +36,7 @@ def test_diagnostic_enqueue_race_returns_winner_and_keeps_tenant_filters(monkeyp
         response = httpx.Response(409, request=httpx.Request("POST", "https://db"))
         raise httpx.HTTPStatusError("duplicate", request=response.request, response=response)
 
-    monkeypatch.setattr(item_generation_jobs.db, "select", select)
+    monkeypatch.setattr(item_generation_jobs.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(item_generation_jobs.db, "insert", insert)
 
     row, created = item_generation_jobs.enqueue_diagnostic(
@@ -67,7 +68,7 @@ def test_diagnostic_partial_terminal_failure_stays_ready(monkeypatch):
             }]
         return []
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(diagnostic, "enqueue_diagnostic", lambda **kwargs: (
         ({"id": "job-2", "status": "failed"}, False)
         if kwargs["skill_id"] == _SKILL_2 else
@@ -101,7 +102,7 @@ def test_practice_enqueue_race_reads_existing_offsets_with_tenant_scope(monkeypa
         response = httpx.Response(409, request=httpx.Request("POST", "https://db"))
         raise httpx.HTTPStatusError("duplicate", request=response.request, response=response)
 
-    monkeypatch.setattr(item_generation_jobs.db, "select", select)
+    monkeypatch.setattr(item_generation_jobs.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(item_generation_jobs.db, "insert", insert)
 
     rows = item_generation_jobs.enqueue_practice(
@@ -133,7 +134,7 @@ def test_lesson_enqueue_race_reads_existing_step_with_tenant_scope(monkeypatch):
         response = httpx.Response(409, request=httpx.Request("POST", "https://db"))
         raise httpx.HTTPStatusError("duplicate", request=response.request, response=response)
 
-    monkeypatch.setattr(item_generation_jobs.db, "select", select)
+    monkeypatch.setattr(item_generation_jobs.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(item_generation_jobs.db, "insert", insert)
 
     row, created = item_generation_jobs.enqueue_lesson(
@@ -179,14 +180,14 @@ def test_new_practice_set_does_not_return_a_dead_zero_queue_set(monkeypatch, cap
 
 def test_practice_set_detail_reports_generating_with_ready_items(monkeypatch):
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(practice.db, "select", lambda table, params: (
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: (
         [{"id": _SET, "skill_id": _SKILL, "kind": "practice", "size": 3,
           "created_at": "2026-09-25T00:00:00Z"}]
         if table == "quiz_sets" else
         [{"id": "item-1", "skill_id": _SKILL, "prompt": "Q", "choices": [],
           "bloom_level": "apply"}]
         if table == "generated_items" else []
-    ))
+    )))
     monkeypatch.setattr(practice, "practice_jobs", lambda **kwargs: [
         {"status": "complete", "context_offset": 0},
         {"status": "in_progress", "context_offset": 1},
@@ -210,14 +211,14 @@ def test_practice_set_detail_reports_generating_with_ready_items(monkeypatch):
 
 def test_practice_set_detail_partial_failure_is_ready_and_playable(monkeypatch):
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(practice.db, "select", lambda table, params: (
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: (
         [{"id": _SET, "skill_id": _SKILL, "kind": "practice", "size": 3,
           "created_at": "2026-09-25T00:00:00Z"}]
         if table == "quiz_sets" else
         [{"id": "item-1", "skill_id": _SKILL, "prompt": "Q", "choices": [],
           "bloom_level": "apply"}]
         if table == "generated_items" else []
-    ))
+    )))
     monkeypatch.setattr(practice, "practice_jobs", lambda **kwargs: [
         {"status": "complete", "context_offset": 0},
         {"status": "failed", "context_offset": 1},

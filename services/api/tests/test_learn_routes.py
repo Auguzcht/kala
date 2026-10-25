@@ -25,6 +25,7 @@ def test_flashcard_back_falls_back_for_null_back(monkeypatch):
     monkeypatch.setattr(flashcards.item_gen, "correct_label", lambda item: "resolved")
     assert flashcards._card_back_label({"back": None}) == "resolved"
 from fastapi.testclient import TestClient
+from wi26_student_fixtures import enrolled_student_reads
 
 
 @pytest.fixture(autouse=True)
@@ -71,7 +72,7 @@ def test_srs_stats_selects_item_ids_before_filtering_active_cards(monkeypatch) -
             return rows
         return [{"id": "learning"}, {"id": "known"}]
 
-    monkeypatch.setattr(srs.db, "select", fake_select)
+    monkeypatch.setattr(srs.db, "select", enrolled_student_reads(fake_select))
     result = srs.stats(
         institution_id="institution-1", user_id="student-1", course_id="course-1",
     )
@@ -82,6 +83,7 @@ def test_srs_stats_selects_item_ids_before_filtering_active_cards(monkeypatch) -
 
 def test_practice_next_returns_none_when_course_has_no_skills(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: []))
     monkeypatch.setattr(practice.item_gen, "weakest_skill", lambda **kwargs: None)
 
     try:
@@ -96,6 +98,7 @@ def test_practice_next_returns_none_when_course_has_no_skills(monkeypatch) -> No
 
 def test_practice_next_generates_an_item_for_the_weakest_skill(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: []))
     monkeypatch.setattr(
         practice.item_gen, "weakest_skill",
         lambda **kwargs: {"id": "00000000-0000-4000-8000-000000000010", "name": "Recursion", "bloom_level": "apply"},
@@ -118,6 +121,7 @@ def test_practice_next_generates_an_item_for_the_weakest_skill(monkeypatch) -> N
 
 def test_practice_next_returns_safe_502_when_generation_is_invalid(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: []))
     monkeypatch.setattr(
         practice.item_gen,
         "weakest_skill",
@@ -266,7 +270,7 @@ def test_practice_set_results_hide_answer_key_for_unanswered_items(monkeypatch) 
             }]
         return []
 
-    monkeypatch.setattr(practice.db, "select", fake_select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(fake_select))
     try:
         with TestClient(app) as client:
             response = client.get("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/results")
@@ -302,7 +306,7 @@ def test_flashcards_deck_without_bank_returns_no_material_without_model_call(mon
             return []
         return []
 
-    monkeypatch.setattr(flashcards.db, "select", fake_select)
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(flashcards.srs, "due_cards", lambda **kwargs: [])
     monkeypatch.setattr(flashcards.srs, "ensure_tracked", lambda **kwargs: None)
     monkeypatch.setattr(flashcards.srs, "stats",
@@ -356,7 +360,7 @@ def test_flashcard_membership_is_read_only_and_includes_eligible_live_cards(monk
         if table == "institutions": return [{"timezone": "Asia/Manila"}]
         return []
 
-    monkeypatch.setattr(flashcards.db, "select", fake_select)
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(fake_select))
     def unexpected_write(*args, **kwargs):
         raise AssertionError("membership must be read-only")
     monkeypatch.setattr(flashcards.db, "insert", unexpected_write)
@@ -391,7 +395,7 @@ def test_flashcards_deck_bank_status_omits_usable(monkeypatch) -> None:
         if table == "srs_state": return []
         if table == "skill_bank_state": return [{"status": "ready", "mcq_ready": 8, "mcq_target": 10}]
         return []
-    monkeypatch.setattr(flashcards.db, "select", fake_select)
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(fake_select))
     monkeypatch.setattr(flashcards.srs, "due_cards", lambda **kwargs: [])
     monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {})
     monkeypatch.setattr(flashcards, "pick_bank_items", lambda *args, **kwargs: [])
@@ -412,7 +416,7 @@ def test_flashcards_study_all_is_capped_to_twenty_and_uses_atomic_daily_claim(mo
     rpc_calls = []
     monkeypatch.setattr(flashcards, "_skill_map", lambda **kwargs: {skill_id: {"name": "Recursion"}})
     monkeypatch.setattr(flashcards, "_study_pool", lambda **kwargs: items)
-    monkeypatch.setattr(flashcards.db, "select", lambda table, params: (
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(lambda table, params: (
         [{"id": "course", "bank_serving": True}] if table == "courses" else
         [{"item_id": item_id, "box": 0, "ease_milli": 2500, "streak": 0, "reps": 0,
           "lapses": 0, "last_outcome": None, "due_at": datetime.now(timezone.utc).isoformat()}
@@ -421,7 +425,7 @@ def test_flashcards_study_all_is_capped_to_twenty_and_uses_atomic_daily_claim(mo
         [{"id": item["id"], "kind": "practice", "correct_choice_id": None,
           "choices": [], "explanation": ""} for item in items]
         if table == "generated_items" else []
-    ))
+    )))
     monkeypatch.setattr(flashcards.db, "rpc", lambda name, args: rpc_calls.append((name, args)) or
                         [{"item_id": item["id"], "is_new": True} for item in items[:20]])
     monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {"due": 0})
@@ -462,11 +466,11 @@ def test_flashcards_review_mode_puts_slipping_before_most_overdue(monkeypatch) -
     monkeypatch.setattr(flashcards.srs, "stats", lambda **kwargs: {"due": 3})
     monkeypatch.setattr(flashcards, "pick_bank_items", lambda *args, **kwargs: [])
     monkeypatch.setattr(flashcards, "record_exposure", lambda **kwargs: None)
-    monkeypatch.setattr(flashcards.db, "select", lambda table, params: (
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(lambda table, params: (
         [{"id": "course", "bank_serving": True}] if table == "courses" else
         items if table == "generated_items" else
         [{"timezone": "Asia/Manila"}] if table == "institutions" else []
-    ))
+    )))
     try:
         with TestClient(app) as client:
             response = client.get("/flashcards/00000000-0000-4000-8000-000000000001/deck?mode=review&limit=3")
@@ -498,13 +502,13 @@ def test_course_memory_summary_counts_membership_without_writing(monkeypatch) ->
         {"item_id": "known", "box": 5, "ease_milli": 2500, "streak": 3, "reps": 3,
          "lapses": 0, "last_outcome": "good", "due_at": "2099-01-01T00:00:00Z"},
     ]
-    monkeypatch.setattr(courses.db, "select", lambda table, params: (
+    monkeypatch.setattr(courses.db, "select", enrolled_student_reads(lambda table, params: (
         [{"id": skill, "name": "Recursion"}] if table == "skills" else
         items if table == "generated_items" else
         [] if table == "srs_state" and params.get("daily_new_claimed") == "eq.true" else
         schedules if table == "srs_state" else
         [{"timezone": "Asia/Manila"}] if table == "institutions" else []
-    ))
+    )))
     def no_writes(*args, **kwargs):
         raise AssertionError("memory summary must be read-only")
     monkeypatch.setattr(courses.db, "rpc", no_writes)
@@ -531,7 +535,7 @@ def test_flashcards_review_is_a_self_mark_that_never_moves_the_twin(monkeypatch)
 
     monkeypatch.setattr(
         flashcards.db, "select",
-        lambda table, params: [{"id": "card-1", "skill_id": "00000000-0000-4000-8000-000000000010"}],
+        enrolled_student_reads(lambda table, params: [{"id": "card-1", "skill_id": "00000000-0000-4000-8000-000000000010"}]),
     )
     # The module must not even import the tracer any more — that is the
     # strongest form of "study never moves mastery": there is no code path
@@ -584,9 +588,9 @@ def test_flashcard_review_accepts_additive_memory_fields(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     rpc_calls = []
     due_at = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
-    monkeypatch.setattr(flashcards.db, "select", lambda table, params: [{
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(lambda table, params: [{
         "id": "card-1", "skill_id": "00000000-0000-4000-8000-000000000010",
-    }])
+    }]))
     monkeypatch.setattr(flashcards.db, "rpc", lambda fn, args: rpc_calls.append(args) or [{
         "counted": True, "was_due": True, "box": 1, "ease_milli": 2560,
         "streak": 1, "reps": 1, "lapses": 0, "last_outcome": "good",
@@ -785,7 +789,7 @@ def test_practice_set_uses_an_explicit_skill_id_when_given(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     monkeypatch.setattr(
         practice.db, "select",
-        lambda table, params: [{"id": "skill-7", "name": "Graphs", "bloom_level": "analyze"}],
+        enrolled_student_reads(lambda table, params: [{"id": "skill-7", "name": "Graphs", "bloom_level": "analyze"}]),
     )
     monkeypatch.setattr(
         practice.db, "insert",
@@ -812,7 +816,7 @@ def test_practice_set_uses_an_explicit_skill_id_when_given(monkeypatch) -> None:
 
 def test_practice_set_404s_an_unknown_skill_id(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(practice.db, "select", lambda table, params: [])
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: []))
 
     try:
         with TestClient(app) as client:
@@ -844,7 +848,7 @@ def test_set_from_items_groups_existing_items_without_generating(monkeypatch) ->
              "choices": [{"id": "b", "label": "B"}], "bloom_level": "apply"},
         ]
 
-    monkeypatch.setattr(practice.db, "select", select_items)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(select_items))
     monkeypatch.setattr(
         practice.db, "insert",
         lambda table, rows, prefer="return=representation": inserted_sets.extend(rows)
@@ -889,7 +893,7 @@ def test_set_from_items_404s_when_no_items_belong_here(monkeypatch) -> None:
     """Tenant safety: ids that aren't in this course/institution must not be
     grouped — the query returns nothing and the request 404s."""
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(practice.db, "select", lambda table, params: [])
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: []))
 
     def fail_insert(*args, **kwargs):
         raise AssertionError("must not create a set with no valid items")
@@ -914,10 +918,10 @@ def test_set_from_items_rejects_a_cross_skill_batch(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     monkeypatch.setattr(
         practice.db, "select",
-        lambda table, params: [
+        enrolled_student_reads(lambda table, params: [
             {"id": "item-1", "skill_id": "00000000-0000-4000-8000-000000000010", "prompt": "Q1", "choices": [], "bloom_level": None},
             {"id": "item-2", "skill_id": "00000000-0000-4000-8000-000000000011", "prompt": "Q2", "choices": [], "bloom_level": None},
-        ],
+        ]),
     )
 
     try:
@@ -970,7 +974,7 @@ def test_list_sets_returns_saved_sets_newest_first(monkeypatch) -> None:
              "created_at": "2026-02-01T00:00:00Z"},
         ]
 
-    monkeypatch.setattr(practice.db, "select", fake_select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(fake_select))
 
     try:
         with TestClient(app) as client:
@@ -1013,7 +1017,7 @@ def test_get_set_returns_its_items_in_order(monkeypatch) -> None:
             ]
         return []
 
-    monkeypatch.setattr(practice.db, "select", fake_select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(fake_select))
 
     try:
         with TestClient(app) as client:
@@ -1049,7 +1053,7 @@ def test_saved_set_with_only_retired_items_is_unavailable(monkeypatch) -> None:
             generated_filters.append(params)
             return []
         return []
-    monkeypatch.setattr(practice.db, "select", fake_select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(fake_select))
     try:
         with TestClient(app) as client:
             response = client.get("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020")
@@ -1073,7 +1077,7 @@ def test_saved_set_counts_only_live_approved_items(monkeypatch) -> None:
         if table == "generated_items":
             return [{"id": "live"}]
         return []
-    monkeypatch.setattr(practice.db, "select", select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(select))
     assert practice._item_counts_by_set(institution_id="inst", set_ids=["set-1"]) == {"set-1": 1}
     item_params = calls[-1][1]
     assert item_params["retired_at"] == "is.null"
@@ -1094,7 +1098,7 @@ def test_flashcard_due_rows_cannot_reintroduce_retired_items(monkeypatch) -> Non
             item_queries.append(params)
             return []
         return []
-    monkeypatch.setattr(flashcards.db, "select", select)
+    monkeypatch.setattr(flashcards.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(flashcards.srs, "due_cards", lambda **kwargs: [
         {"item_id": "retired-1", "skill_id": "skill-1", "box": 2}
     ])
@@ -1114,7 +1118,7 @@ def test_flashcard_due_rows_cannot_reintroduce_retired_items(monkeypatch) -> Non
 def test_get_set_404s_for_another_course(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     # quiz_sets lookup filtered by course returns nothing -> 404, no items read.
-    monkeypatch.setattr(practice.db, "select", lambda table, params: [])
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: []))
 
     try:
         with TestClient(app) as client:
@@ -1209,7 +1213,7 @@ def test_get_set_includes_this_students_attempt_row(monkeypatch) -> None:
                      "last_attempted_at": "2026-02-03T09:00:00Z"}]
         return []
 
-    monkeypatch.setattr(practice.db, "select", fake_select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(fake_select))
 
     try:
         with TestClient(app) as client:
@@ -1288,7 +1292,7 @@ def test_list_sets_reports_actual_item_count_not_the_stale_size_column(monkeypat
                  "size": 5, "created_at": "2026-02-02T00:00:00Z",  # column lies
                  }]
 
-    monkeypatch.setattr(practice.db, "select", fake_select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(fake_select))
 
     try:
         with TestClient(app) as client:
@@ -1315,7 +1319,7 @@ def test_practice_retake_returns_201_with_new_attempt(monkeypatch) -> None:
         assert params["institution_id"] == "eq.institution-1"
         return [{"id": "00000000-0000-4000-8000-000000000020"}]
 
-    monkeypatch.setattr(practice.db, "select", select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(select))
     monkeypatch.setattr(practice.db, "rpc", lambda fn, args: calls.append((fn, args)) or [{
         "attempt_id": "00000000-0000-4000-8000-000000000021", "attempt_number": 2,
     }])
@@ -1337,7 +1341,7 @@ def test_practice_retake_returns_201_with_new_attempt(monkeypatch) -> None:
 
 def test_practice_retake_returns_409_when_latest_attempt_in_progress(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(practice.db, "select", lambda table, params: [{"id": "set-1"}])
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: [{"id": "set-1"}]))
 
     def rpc(fn, args):
         raise _practice_rpc_error("P0001", "attempt_in_progress")
@@ -1354,7 +1358,7 @@ def test_practice_retake_returns_409_when_latest_attempt_in_progress(monkeypatch
 
 def test_practice_retake_returns_409_when_no_attempt_exists(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
-    monkeypatch.setattr(practice.db, "select", lambda table, params: [{"id": "set-1"}])
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(lambda table, params: [{"id": "set-1"}]))
 
     def rpc(fn, args):
         raise _practice_rpc_error("P0001", "no_attempt")
@@ -1451,7 +1455,7 @@ def _attempt_results_fixture(*, selected_id: str):
 def test_results_default_to_latest_attempt_and_return_attempt_summaries(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     select, attempt_ids = _attempt_results_fixture(selected_id="latest")
-    monkeypatch.setattr(practice.db, "select", select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(select))
     try:
         with TestClient(app) as client:
             response = client.get("/practice/00000000-0000-4000-8000-000000000001/sets/00000000-0000-4000-8000-000000000020/results")
@@ -1475,7 +1479,7 @@ def test_results_default_to_latest_attempt_and_return_attempt_summaries(monkeypa
 def test_results_accept_explicit_attempt_id(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = authenticated_user
     select, attempt_ids = _attempt_results_fixture(selected_id="first")
-    monkeypatch.setattr(practice.db, "select", select)
+    monkeypatch.setattr(practice.db, "select", enrolled_student_reads(select))
     try:
         with TestClient(app) as client:
             response = client.get(
