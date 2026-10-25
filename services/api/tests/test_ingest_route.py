@@ -211,7 +211,9 @@ def test_propose_skills_endpoint_queues_without_model_or_content_calls(monkeypat
     app.dependency_overrides[get_lms_connector] = IngestConnector
     monkeypatch.setattr(
         diagnostic.db, "select",
-        lambda table, params: [{"lms_course_id": "_4_1"}] if table == "courses" else [],
+        lambda table, params: ([{"lms_course_id": "_4_1"}] if table == "courses" else
+                               ([{"course_id": "00000000-0000-4000-8000-000000000001"}]
+                                if table == "enrollments" and params.get("role") == "eq.instructor" else [])),
     )
     queue_calls = []
     monkeypatch.setattr(diagnostic.db, "upsert", lambda table, rows, **kwargs: queue_calls.append(("queued", rows[0]["value"]["status"])))

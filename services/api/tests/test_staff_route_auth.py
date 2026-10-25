@@ -112,7 +112,7 @@ def test_INGEST_REQ_001_student_gets_403(boundary, gradebook_request):
     _enrollment(role="student"),
     _enrollment(user_id=USER_ID_2),
 ], ids=["other-course", "other-institution", "student-enrollment", "other-user"])
-def test_INGEST_REQ_001_unauthorized_instructor_gets_403(
+def test_INGEST_REQ_001_unauthorized_instructor_gets_404(
     boundary, gradebook_request, enrollment,
 ):
     client, user, enrollments, reads, connector, gate, _ = boundary
@@ -120,8 +120,8 @@ def test_INGEST_REQ_001_unauthorized_instructor_gets_403(
 
     response = gradebook_request(client)
 
-    assert response.status_code == 403
-    assert response.json() == {"detail": "insufficient course access"}
+    assert response.status_code == 404
+    assert response.json() == {"detail": "course not found"}
     gate.assert_called_once_with(user=user, course_id=COURSE_ID)
     assert [table for table, _ in reads] == ["enrollments"]
     assert connector.mock_calls == []

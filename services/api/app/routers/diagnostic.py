@@ -162,14 +162,7 @@ def get_assessments(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    try:
-        _assert_teaches_course(user=user, course_id=course_id)
-    except HTTPException as exc:
-        # These gradebook routes expose course authorization denials as 403.
-        # Keep the shared upload gate's 404 contract unchanged elsewhere.
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
-            raise
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient course access") from exc
+    _assert_teaches_course(user=user, course_id=course_id)
     return connector.get_assessments(_course_ref(course_id, user.institution_id))
 
 
@@ -179,6 +172,8 @@ def propose_course_skills(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
 ):
     """Queue proposal work; the worker owns all model and content work."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
     now = datetime.now(UTC).isoformat()
     db.upsert("worker_state", [{"key": f"proposal:{course_id}", "value": {
         "status": "queued", "queued_at": now, "updated_at": now, "last_error": None,
@@ -440,13 +435,7 @@ def post_grade(
     user: CurrentUser = Depends(require_role('instructor', 'admin')),
     connector: BlackboardConnector = Depends(get_lms_connector),
 ):
-    try:
-        _assert_teaches_course(user=user, course_id=course_id)
-    except HTTPException as exc:
-        # Match assessment reads without changing the shared upload gate.
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
-            raise
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient course access") from exc
+    _assert_teaches_course(user=user, course_id=course_id)
     connector.post_grade(
         _course_ref(course_id, user.institution_id),
         column_id,
