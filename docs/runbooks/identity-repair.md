@@ -6,7 +6,7 @@ Read [database policy](../engineering/database.md), [AUTH contract](../features/
 
 ## Bounded local design decisions
 
-Coordinator decisions authorize collision-free source merges and explicit SRS/attempt collision rules locally. Any blocked pair refuses the entire apply transaction before writes. Refuse source idempotency/session collisions, unequal dual profiles, legacy consents/DSRs/attachments, multiple unfinished attempts, ambiguous roles/aliases, foreign tenant relations and stale canonical mastery keys absent combined evidence. Never rewrite source keys, outcomes, counted flags, XP or timestamps; never deduplicate distinct source rows.
+Coordinator decisions authorize collision-free source merges and explicit SRS/attempt collision rules locally. Any blocked pair refuses the entire apply transaction before writes. Refuse source idempotency/session collisions, unequal dual profiles, consents/DSRs on either anchor and legacy attachments, multiple unfinished attempts, ambiguous roles/aliases, foreign tenant relations and stale canonical mastery keys absent combined evidence. Never rewrite source keys, outcomes, counted flags, XP or timestamps; never deduplicate distinct source rows.
 
 Checked marker: `wi24-retired:<legacy-users.id>`. Preserve the original LMS ID in private backup and the new in-DB merge audit. Keep legacy users.id, role and historical metadata. The coordinator committed the AUTH manual-repair exception at `bf750f7` before alias-changing implementation. Refuse any existing tombstone/third-user identifier conflict. Application resolver simulations must prove canonical exact UUID/sub resolution before/after and retired legacy alias resolution afterward.
 
@@ -36,8 +36,8 @@ The complete catalog of **all** public primary/unique/FK constraints, unique ind
 | tutor_messages.conversation_id | No user column; UUID PK, conversation FK cascade. Preserve messages unchanged via unchanged conversation IDs. |
 | tutor_attachments.user_id, storage_path | UUID PK; user/conversation/institution FKs. Preserve attachment metadata/content and conversation IDs. Any legacy attachment blocks the entire transaction; canonical attachments stay unchanged. |
 | recommendations.user_id, decided_by | UUID PK; user/course/skill/institution and deciding-user FKs. Move learner target; preserve decisions/status/rationale/times. Keep decided_by historical actor unchanged. No user composite uniqueness. |
-| consents.user_id | UUID PK; user/institution FKs. Historical legal consent, not ordinary derived state. Stop if any legacy rows: merging latest-wins consent can change research access. Separate explicit policy required. Audit trigger remains active. |
-| data_subject_requests.user_id | UUID PK; user/institution FKs. Governance records: stop if legacy rows pending explicit legal identity decision. Audit trigger remains active. |
+| consents.user_id | UUID PK; user/institution FKs. Historical legal consent, not ordinary derived state. For non-converged pairs, stop if either anchor has any row: canonical consent can expose moved legacy evidence through research_evidence_anon/has_consent even when consent rows are untouched. Already-converged no-op changes no attribution. Separate explicit policy required. Audit trigger remains active. |
+| data_subject_requests.user_id | UUID PK; user/institution FKs. Governance records: for non-converged pairs, stop if either anchor has rows pending an explicit legal identity decision; preserve already-converged no-op. Audit trigger remains active. |
 | lti_launches.user_id | UUID PK; user/institution FKs; t_immutable. Preserve launch provenance on legacy with merge linkage; never reattribute. No assumption that launches are actually recorded by current routes. |
 | researcher_grants.granted_by | UUID without user FK; researcher_id references separate researchers, not users. Historical actor: retain original. Audit trigger remains active. |
 | skills.reviewed_by | Text LMS ID, no user FK. Never guess or globally replace matching strings. Historical actor: retain original. |
@@ -166,3 +166,9 @@ uv run --directory services/api --no-sync python ../../scripts/repair_identity_s
 ```
 
 10. Keep maintenance quiescence until post-check/capture or rollback completes. Coordinator releases views and runs the separate FG-9 acceptance; WI-24 stays open until FG-7b plus FG-9. Later use deliberately invalidates exact rollback. No automatic rollback after later learner activity is claimed.
+
+## Governance reach amendment
+
+Canonical-only consent is a stop condition, not evidence that legacy consent transfers. The local counterexample uses the real has_consent/research_evidence_anon logic: zero visible legacy rows before attribution can become visible under canonical consent. Consent and DSR rows on either anchor therefore refuse a non-converged transaction, before writes; a converged no-op remains allowed. No consent/view/policy is changed.
+
+Later-activity audit guards include exact actor/row and old_data/new_data identity references, so service-role consent/DSR changes remain detectable even after their live rows are removed. Source rollback preserves newly appended maintenance audits, while independently proving the entire original scoped audit prefix unchanged. It never removes audit history to force preimage equality.
