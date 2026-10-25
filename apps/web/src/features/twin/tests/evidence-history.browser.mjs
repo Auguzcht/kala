@@ -55,7 +55,7 @@ try {
     state.nextStatus=500;
     await older.focus();await older.press('Enter');
     await page.getByRole('button',{name:'Retry activity',exact:true}).waitFor();
-    check((await rowNames(page)).length===10,'failure retains loaded rows');
+    check(mode==='student'?(await rowNames(page)).length===10:await page.getByRole('list',{name:'Evidence ledger',exact:true}).count()===0,'transient own history retains rows; failed staff history hides rows');
     await page.getByRole('button',{name:'Retry activity',exact:true}).click();
     await page.getByText(`Showing 50 of ${noun} activity`,{exact:true}).waitFor();
     state.nextStatus=422;
