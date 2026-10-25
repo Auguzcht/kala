@@ -1,0 +1,582 @@
+COLUMN|assessments|course_id|uuid
+COLUMN|assessments|created_at|timestamp with time zone
+COLUMN|assessments|id|uuid
+COLUMN|assessments|institution_id|uuid
+COLUMN|assessments|lms_ref|text
+COLUMN|assessments|skill_id|uuid
+COLUMN|assessments|title|text
+COLUMN|audit_log|action|text
+COLUMN|audit_log|actor_id|uuid
+COLUMN|audit_log|actor_role|text
+COLUMN|audit_log|id|bigint
+COLUMN|audit_log|institution_id|uuid
+COLUMN|audit_log|metadata|jsonb
+COLUMN|audit_log|new_data|jsonb
+COLUMN|audit_log|occurred_at|timestamp with time zone
+COLUMN|audit_log|old_data|jsonb
+COLUMN|audit_log|row_id|text
+COLUMN|audit_log|table_name|text
+COLUMN|consents|created_at|timestamp with time zone
+COLUMN|consents|granted|boolean
+COLUMN|consents|id|uuid
+COLUMN|consents|institution_id|uuid
+COLUMN|consents|policy_version|text
+COLUMN|consents|purpose|text
+COLUMN|consents|user_id|uuid
+COLUMN|content_items|chunk_text|text
+COLUMN|content_items|course_id|uuid
+COLUMN|content_items|created_at|timestamp with time zone
+COLUMN|content_items|embedding|vector(1024)
+COLUMN|content_items|folder_path|jsonb
+COLUMN|content_items|id|uuid
+COLUMN|content_items|institution_id|uuid
+COLUMN|content_items|lms_ref|text
+COLUMN|content_items|module_ref|text
+COLUMN|content_items|parent_lms_ref|text
+COLUMN|content_items|skill_id|uuid
+COLUMN|content_items|tag_ambiguous|boolean
+COLUMN|content_items|tag_attempted_at|timestamp with time zone
+COLUMN|content_items|tag_margin|numeric
+COLUMN|content_items|tag_method|text
+COLUMN|content_items|tag_score|numeric
+COLUMN|courses|bank_kicked_at|timestamp with time zone
+COLUMN|courses|bank_serving|boolean
+COLUMN|courses|created_at|timestamp with time zone
+COLUMN|courses|id|uuid
+COLUMN|courses|institution_id|uuid
+COLUMN|courses|last_roster_sync_at|timestamp with time zone
+COLUMN|courses|last_skill_seed_at|timestamp with time zone
+COLUMN|courses|lms_course_external_id|text
+COLUMN|courses|lms_course_id|text
+COLUMN|courses|title|text
+COLUMN|courses|updated_at|timestamp with time zone
+COLUMN|data_subject_requests|id|uuid
+COLUMN|data_subject_requests|institution_id|uuid
+COLUMN|data_subject_requests|kind|text
+COLUMN|data_subject_requests|requested_at|timestamp with time zone
+COLUMN|data_subject_requests|resolved_at|timestamp with time zone
+COLUMN|data_subject_requests|status|text
+COLUMN|data_subject_requests|user_id|uuid
+COLUMN|enrollments|course_id|uuid
+COLUMN|enrollments|created_at|timestamp with time zone
+COLUMN|enrollments|institution_id|uuid
+COLUMN|enrollments|role|text
+COLUMN|enrollments|user_id|uuid
+COLUMN|evidence_events|correct|boolean
+COLUMN|evidence_events|course_id|uuid
+COLUMN|evidence_events|created_at|timestamp with time zone
+COLUMN|evidence_events|hints_used|integer
+COLUMN|evidence_events|id|uuid
+COLUMN|evidence_events|institution_id|uuid
+COLUMN|evidence_events|latency_ms|integer
+COLUMN|evidence_events|skill_id|uuid
+COLUMN|evidence_events|type|text
+COLUMN|evidence_events|user_id|uuid
+COLUMN|generated_items|back|text
+COLUMN|generated_items|bloom_level|text
+COLUMN|generated_items|choices|jsonb
+COLUMN|generated_items|correct_choice_id|text
+COLUMN|generated_items|course_id|uuid
+COLUMN|generated_items|created_at|timestamp with time zone
+COLUMN|generated_items|embedded_at|timestamp with time zone
+COLUMN|generated_items|embedding|vector(1024)
+COLUMN|generated_items|explanation|text
+COLUMN|generated_items|front|text
+COLUMN|generated_items|generation_version|text
+COLUMN|generated_items|id|uuid
+COLUMN|generated_items|institution_id|uuid
+COLUMN|generated_items|kind|text
+COLUMN|generated_items|module_ref|text
+COLUMN|generated_items|origin|text
+COLUMN|generated_items|prompt|text
+COLUMN|generated_items|retired_at|timestamp with time zone
+COLUMN|generated_items|set_id|uuid
+COLUMN|generated_items|skill_id|uuid
+COLUMN|generated_items|source_chunk_ids|jsonb
+COLUMN|generated_items|source_content_id|uuid
+COLUMN|generated_items|stem_hash|text
+COLUMN|guided_lesson_steps|bloom_level|text
+COLUMN|guided_lesson_steps|check_item_id|uuid
+COLUMN|guided_lesson_steps|created_at|timestamp with time zone
+COLUMN|guided_lesson_steps|detail_points|jsonb
+COLUMN|guided_lesson_steps|embedding|vector(1024)
+COLUMN|guided_lesson_steps|id|uuid
+COLUMN|guided_lesson_steps|key_takeaway|text
+COLUMN|guided_lesson_steps|lesson_id|uuid
+COLUMN|guided_lesson_steps|misconception|text
+COLUMN|guided_lesson_steps|position|smallint
+COLUMN|guided_lesson_steps|summary|text
+COLUMN|guided_lessons|course_id|uuid
+COLUMN|guided_lessons|created_at|timestamp with time zone
+COLUMN|guided_lessons|id|uuid
+COLUMN|guided_lessons|institution_id|uuid
+COLUMN|guided_lessons|module_ref|text
+COLUMN|guided_lessons|skill_id|uuid
+COLUMN|guided_lessons|source_chunk_ids|jsonb
+COLUMN|guided_lessons|status|text
+COLUMN|guided_lessons|title|text
+COLUMN|ingest_jobs|course_id|uuid
+COLUMN|ingest_jobs|created_at|timestamp with time zone
+COLUMN|ingest_jobs|finished_at|timestamp with time zone
+COLUMN|ingest_jobs|folders_expanded|integer
+COLUMN|ingest_jobs|frontier|jsonb
+COLUMN|ingest_jobs|id|uuid
+COLUMN|ingest_jobs|include_attachments|boolean
+COLUMN|ingest_jobs|institution_id|uuid
+COLUMN|ingest_jobs|items_stored|integer
+COLUMN|ingest_jobs|last_error|text
+COLUMN|ingest_jobs|not_before|timestamp with time zone
+COLUMN|ingest_jobs|pdfs_fetched|integer
+COLUMN|ingest_jobs|seen|jsonb
+COLUMN|ingest_jobs|started_at|timestamp with time zone
+COLUMN|ingest_jobs|status|text
+COLUMN|ingest_jobs|updated_at|timestamp with time zone
+COLUMN|institutions|created_at|timestamp with time zone
+COLUMN|institutions|deployment_id|text
+COLUMN|institutions|id|uuid
+COLUMN|institutions|lms_issuer|text
+COLUMN|institutions|lms_type|text
+COLUMN|institutions|name|text
+COLUMN|institutions|region|text
+COLUMN|institutions|timezone|text
+COLUMN|institutions|updated_at|timestamp with time zone
+COLUMN|item_exposures|course_id|uuid
+COLUMN|item_exposures|created_at|timestamp with time zone
+COLUMN|item_exposures|institution_id|uuid
+COLUMN|item_exposures|item_id|uuid
+COLUMN|item_exposures|last_answered_at|timestamp with time zone
+COLUMN|item_exposures|last_correct|boolean
+COLUMN|item_exposures|last_studied_at|timestamp with time zone
+COLUMN|item_exposures|last_tested_at|timestamp with time zone
+COLUMN|item_exposures|skill_id|uuid
+COLUMN|item_exposures|times_tested|integer
+COLUMN|item_exposures|updated_at|timestamp with time zone
+COLUMN|item_exposures|user_id|uuid
+COLUMN|item_generation_jobs|attempt_count|integer
+COLUMN|item_generation_jobs|context_offset|integer
+COLUMN|item_generation_jobs|course_id|uuid
+COLUMN|item_generation_jobs|created_at|timestamp with time zone
+COLUMN|item_generation_jobs|finished_at|timestamp with time zone
+COLUMN|item_generation_jobs|id|uuid
+COLUMN|item_generation_jobs|institution_id|uuid
+COLUMN|item_generation_jobs|item_id|uuid
+COLUMN|item_generation_jobs|kind|text
+COLUMN|item_generation_jobs|last_error|text
+COLUMN|item_generation_jobs|lesson_step_id|uuid
+COLUMN|item_generation_jobs|next_attempt_at|timestamp with time zone
+COLUMN|item_generation_jobs|set_id|uuid
+COLUMN|item_generation_jobs|skill_id|uuid
+COLUMN|item_generation_jobs|started_at|timestamp with time zone
+COLUMN|item_generation_jobs|status|text
+COLUMN|item_generation_jobs|updated_at|timestamp with time zone
+COLUMN|item_reviews|counted|boolean
+COLUMN|item_reviews|course_id|uuid
+COLUMN|item_reviews|created_at|timestamp with time zone
+COLUMN|item_reviews|id|uuid
+COLUMN|item_reviews|idempotency_key|text
+COLUMN|item_reviews|institution_id|uuid
+COLUMN|item_reviews|item_id|uuid
+COLUMN|item_reviews|mode|text
+COLUMN|item_reviews|outcome|text
+COLUMN|item_reviews|session_id|uuid
+COLUMN|item_reviews|skill_id|uuid
+COLUMN|item_reviews|user_id|uuid
+COLUMN|item_reviews|was_due|boolean
+COLUMN|lms_identity_aliases|created_at|timestamp with time zone
+COLUMN|lms_identity_aliases|institution_id|uuid
+COLUMN|lms_identity_aliases|lms_user_id|text
+COLUMN|lms_identity_aliases|source|text
+COLUMN|lms_identity_aliases|updated_at|timestamp with time zone
+COLUMN|lms_identity_aliases|user_id|uuid
+COLUMN|lti_launches|course_id|uuid
+COLUMN|lti_launches|id|uuid
+COLUMN|lti_launches|institution_id|uuid
+COLUMN|lti_launches|ip|inet
+COLUMN|lti_launches|message_type|text
+COLUMN|lti_launches|occurred_at|timestamp with time zone
+COLUMN|lti_launches|role|text
+COLUMN|lti_launches|user_agent|text
+COLUMN|lti_launches|user_id|uuid
+COLUMN|mastery_state|attempts|integer
+COLUMN|mastery_state|course_id|uuid
+COLUMN|mastery_state|estimate|numeric
+COLUMN|mastery_state|institution_id|uuid
+COLUMN|mastery_state|last_seen|timestamp with time zone
+COLUMN|mastery_state|skill_id|uuid
+COLUMN|mastery_state|updated_at|timestamp with time zone
+COLUMN|mastery_state|user_id|uuid
+COLUMN|practice_answer_results|attempt_id|uuid
+COLUMN|practice_answer_results|choice_id|text
+COLUMN|practice_answer_results|choice_text|text
+COLUMN|practice_answer_results|choices|jsonb
+COLUMN|practice_answer_results|correct|boolean
+COLUMN|practice_answer_results|correct_answer_text|text
+COLUMN|practice_answer_results|correct_option_id|text
+COLUMN|practice_answer_results|course_id|uuid
+COLUMN|practice_answer_results|created_at|timestamp with time zone
+COLUMN|practice_answer_results|explanation|text
+COLUMN|practice_answer_results|id|uuid
+COLUMN|practice_answer_results|idempotency_key|text
+COLUMN|practice_answer_results|institution_id|uuid
+COLUMN|practice_answer_results|item_id|uuid
+COLUMN|practice_answer_results|mastery_after|numeric
+COLUMN|practice_answer_results|mastery_after_level|text
+COLUMN|practice_answer_results|mastery_before|numeric
+COLUMN|practice_answer_results|mastery_before_level|text
+COLUMN|practice_answer_results|prompt|text
+COLUMN|practice_answer_results|session_id|uuid
+COLUMN|practice_answer_results|set_id|uuid
+COLUMN|practice_answer_results|skill_id|uuid
+COLUMN|practice_answer_results|user_id|uuid
+COLUMN|practice_answer_results|xp_awarded|integer
+COLUMN|quiz_set_attempts|attempt_number|smallint
+COLUMN|quiz_set_attempts|attempted_count|smallint
+COLUMN|quiz_set_attempts|completed_at|timestamp with time zone
+COLUMN|quiz_set_attempts|correct_count|smallint
+COLUMN|quiz_set_attempts|course_id|uuid
+COLUMN|quiz_set_attempts|created_at|timestamp with time zone
+COLUMN|quiz_set_attempts|id|uuid
+COLUMN|quiz_set_attempts|institution_id|uuid
+COLUMN|quiz_set_attempts|last_attempted_at|timestamp with time zone
+COLUMN|quiz_set_attempts|set_id|uuid
+COLUMN|quiz_set_attempts|user_id|uuid
+COLUMN|quiz_set_items|item_id|uuid
+COLUMN|quiz_set_items|position|smallint
+COLUMN|quiz_set_items|set_id|uuid
+COLUMN|quiz_sets|course_id|uuid
+COLUMN|quiz_sets|created_at|timestamp with time zone
+COLUMN|quiz_sets|id|uuid
+COLUMN|quiz_sets|institution_id|uuid
+COLUMN|quiz_sets|kind|text
+COLUMN|quiz_sets|size|smallint
+COLUMN|quiz_sets|skill_id|uuid
+COLUMN|readiness_snapshots|course_id|uuid
+COLUMN|readiness_snapshots|created_at|timestamp with time zone
+COLUMN|readiness_snapshots|id|uuid
+COLUMN|readiness_snapshots|institution_id|uuid
+COLUMN|readiness_snapshots|score|numeric
+COLUMN|readiness_snapshots|user_id|uuid
+COLUMN|recommendations|action|text
+COLUMN|recommendations|confidence|numeric
+COLUMN|recommendations|course_id|uuid
+COLUMN|recommendations|created_at|timestamp with time zone
+COLUMN|recommendations|decided_at|timestamp with time zone
+COLUMN|recommendations|decided_by|uuid
+COLUMN|recommendations|decision_note|text
+COLUMN|recommendations|evidence|jsonb
+COLUMN|recommendations|expected_gain|numeric
+COLUMN|recommendations|id|uuid
+COLUMN|recommendations|institution_id|uuid
+COLUMN|recommendations|instructor_note|text
+COLUMN|recommendations|kind|text
+COLUMN|recommendations|priority|text
+COLUMN|recommendations|rationale|text
+COLUMN|recommendations|skill_id|uuid
+COLUMN|recommendations|source|text
+COLUMN|recommendations|status|text
+COLUMN|recommendations|title|text
+COLUMN|recommendations|updated_at|timestamp with time zone
+COLUMN|recommendations|user_id|uuid
+COLUMN|researcher_grants|created_at|timestamp with time zone
+COLUMN|researcher_grants|expires_at|timestamp with time zone
+COLUMN|researcher_grants|granted_by|uuid
+COLUMN|researcher_grants|id|uuid
+COLUMN|researcher_grants|institution_id|uuid
+COLUMN|researcher_grants|researcher_id|uuid
+COLUMN|researcher_grants|scope|text
+COLUMN|researcher_grants|status|text
+COLUMN|researchers|created_at|timestamp with time zone
+COLUMN|researchers|display_name|text
+COLUMN|researchers|email|text
+COLUMN|researchers|id|uuid
+COLUMN|skill_bank_state|consecutive_failures|integer
+COLUMN|skill_bank_state|course_id|uuid
+COLUMN|skill_bank_state|depth|integer
+COLUMN|skill_bank_state|institution_id|uuid
+COLUMN|skill_bank_state|last_error|text
+COLUMN|skill_bank_state|leased_until|timestamp with time zone
+COLUMN|skill_bank_state|mcq_ready|integer
+COLUMN|skill_bank_state|mcq_target|integer
+COLUMN|skill_bank_state|next_attempt_at|timestamp with time zone
+COLUMN|skill_bank_state|saturated_at|timestamp with time zone
+COLUMN|skill_bank_state|saturated_depth|integer
+COLUMN|skill_bank_state|skill_id|uuid
+COLUMN|skill_bank_state|status|text
+COLUMN|skill_bank_state|updated_at|timestamp with time zone
+COLUMN|skills|bloom_level|text
+COLUMN|skills|blueprint_weight|numeric
+COLUMN|skills|canonical_skill_id|uuid
+COLUMN|skills|course_id|uuid
+COLUMN|skills|created_at|timestamp with time zone
+COLUMN|skills|embedding|vector(1024)
+COLUMN|skills|id|uuid
+COLUMN|skills|institution_id|uuid
+COLUMN|skills|module_ref|text
+COLUMN|skills|name|text
+COLUMN|skills|proposed_source|text
+COLUMN|skills|reviewed_at|timestamp with time zone
+COLUMN|skills|reviewed_by|text
+COLUMN|skills|status|text
+COLUMN|srs_state|box|smallint
+COLUMN|srs_state|course_id|uuid
+COLUMN|srs_state|created_at|timestamp with time zone
+COLUMN|srs_state|daily_new_claimed|boolean
+COLUMN|srs_state|due_at|timestamp with time zone
+COLUMN|srs_state|ease_milli|integer
+COLUMN|srs_state|institution_id|uuid
+COLUMN|srs_state|item_id|uuid
+COLUMN|srs_state|lapses|integer
+COLUMN|srs_state|last_outcome|text
+COLUMN|srs_state|last_reviewed_at|timestamp with time zone
+COLUMN|srs_state|module_ref|text
+COLUMN|srs_state|reps|integer
+COLUMN|srs_state|skill_id|uuid
+COLUMN|srs_state|streak|smallint
+COLUMN|srs_state|user_id|uuid
+COLUMN|tutor_attachments|conversation_id|uuid
+COLUMN|tutor_attachments|created_at|timestamp with time zone
+COLUMN|tutor_attachments|extracted_text|text
+COLUMN|tutor_attachments|filename|text
+COLUMN|tutor_attachments|id|uuid
+COLUMN|tutor_attachments|institution_id|uuid
+COLUMN|tutor_attachments|mime_type|text
+COLUMN|tutor_attachments|size_bytes|integer
+COLUMN|tutor_attachments|status|text
+COLUMN|tutor_attachments|storage_path|text
+COLUMN|tutor_attachments|user_id|uuid
+COLUMN|tutor_conversations|course_id|uuid
+COLUMN|tutor_conversations|created_at|timestamp with time zone
+COLUMN|tutor_conversations|id|uuid
+COLUMN|tutor_conversations|institution_id|uuid
+COLUMN|tutor_conversations|pinned_at|timestamp with time zone
+COLUMN|tutor_conversations|skill_id|uuid
+COLUMN|tutor_conversations|title|text
+COLUMN|tutor_conversations|updated_at|timestamp with time zone
+COLUMN|tutor_conversations|user_id|uuid
+COLUMN|tutor_messages|content|text
+COLUMN|tutor_messages|conversation_id|uuid
+COLUMN|tutor_messages|created_at|timestamp with time zone
+COLUMN|tutor_messages|id|uuid
+COLUMN|tutor_messages|role|text
+COLUMN|tutor_messages|style|text
+COLUMN|user_profiles|display_name|text
+COLUMN|user_profiles|email|text
+COLUMN|user_profiles|updated_at|timestamp with time zone
+COLUMN|user_profiles|user_id|uuid
+COLUMN|users|created_at|timestamp with time zone
+COLUMN|users|id|uuid
+COLUMN|users|institution_id|uuid
+COLUMN|users|lms_user_id|text
+COLUMN|users|pseudonym|text
+COLUMN|users|role|text
+COLUMN|users|updated_at|timestamp with time zone
+COLUMN|worker_state|key|text
+COLUMN|worker_state|updated_at|timestamp with time zone
+COLUMN|worker_state|value|jsonb
+CONSTRAINT|assessments|assessments_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|assessments|assessments_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|assessments|assessments_pkey|PRIMARY KEY (id)
+CONSTRAINT|assessments|assessments_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|audit_log|audit_log_pkey|PRIMARY KEY (id)
+CONSTRAINT|consents|consents_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|consents|consents_pkey|PRIMARY KEY (id)
+CONSTRAINT|consents|consents_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|content_items|content_items_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|content_items|content_items_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|content_items|content_items_pkey|PRIMARY KEY (id)
+CONSTRAINT|content_items|content_items_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|courses|courses_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|courses|courses_institution_id_lms_course_id_key|UNIQUE (institution_id, lms_course_id)
+CONSTRAINT|courses|courses_pkey|PRIMARY KEY (id)
+CONSTRAINT|data_subject_requests|data_subject_requests_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|data_subject_requests|data_subject_requests_pkey|PRIMARY KEY (id)
+CONSTRAINT|data_subject_requests|data_subject_requests_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|enrollments|enrollments_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|enrollments|enrollments_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|enrollments|enrollments_pkey|PRIMARY KEY (user_id, course_id)
+CONSTRAINT|enrollments|enrollments_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|evidence_events|evidence_events_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|evidence_events|evidence_events_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|evidence_events|evidence_events_pkey|PRIMARY KEY (id)
+CONSTRAINT|evidence_events|evidence_events_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|evidence_events|evidence_events_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|generated_items|generated_items_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|generated_items|generated_items_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|generated_items|generated_items_pkey|PRIMARY KEY (id)
+CONSTRAINT|generated_items|generated_items_set_id_fkey|FOREIGN KEY (set_id) REFERENCES quiz_sets(id) ON DELETE CASCADE
+CONSTRAINT|generated_items|generated_items_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|generated_items|generated_items_source_content_id_fkey|FOREIGN KEY (source_content_id) REFERENCES content_items(id) ON DELETE SET NULL
+CONSTRAINT|guided_lesson_steps|guided_lesson_steps_check_item_id_fkey|FOREIGN KEY (check_item_id) REFERENCES generated_items(id) ON DELETE SET NULL
+CONSTRAINT|guided_lesson_steps|guided_lesson_steps_lesson_id_fkey|FOREIGN KEY (lesson_id) REFERENCES guided_lessons(id) ON DELETE CASCADE
+CONSTRAINT|guided_lesson_steps|guided_lesson_steps_lesson_id_position_key|UNIQUE (lesson_id, "position")
+CONSTRAINT|guided_lesson_steps|guided_lesson_steps_pkey|PRIMARY KEY (id)
+CONSTRAINT|guided_lessons|guided_lessons_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|guided_lessons|guided_lessons_course_id_skill_id_key|UNIQUE (course_id, skill_id)
+CONSTRAINT|guided_lessons|guided_lessons_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|guided_lessons|guided_lessons_pkey|PRIMARY KEY (id)
+CONSTRAINT|guided_lessons|guided_lessons_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+CONSTRAINT|ingest_jobs|ingest_jobs_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|ingest_jobs|ingest_jobs_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|ingest_jobs|ingest_jobs_pkey|PRIMARY KEY (id)
+CONSTRAINT|institutions|institutions_lms_issuer_deployment_id_key|UNIQUE (lms_issuer, deployment_id)
+CONSTRAINT|institutions|institutions_pkey|PRIMARY KEY (id)
+CONSTRAINT|item_exposures|item_exposures_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|item_exposures|item_exposures_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|item_exposures|item_exposures_item_id_fkey|FOREIGN KEY (item_id) REFERENCES generated_items(id) ON DELETE CASCADE
+CONSTRAINT|item_exposures|item_exposures_pkey|PRIMARY KEY (user_id, item_id)
+CONSTRAINT|item_exposures|item_exposures_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+CONSTRAINT|item_exposures|item_exposures_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|item_generation_jobs|item_generation_jobs_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|item_generation_jobs|item_generation_jobs_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|item_generation_jobs|item_generation_jobs_item_id_fkey|FOREIGN KEY (item_id) REFERENCES generated_items(id) ON DELETE SET NULL
+CONSTRAINT|item_generation_jobs|item_generation_jobs_lesson_step_id_fkey|FOREIGN KEY (lesson_step_id) REFERENCES guided_lesson_steps(id) ON DELETE CASCADE
+CONSTRAINT|item_generation_jobs|item_generation_jobs_pkey|PRIMARY KEY (id)
+CONSTRAINT|item_generation_jobs|item_generation_jobs_set_id_fkey|FOREIGN KEY (set_id) REFERENCES quiz_sets(id) ON DELETE CASCADE
+CONSTRAINT|item_generation_jobs|item_generation_jobs_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+CONSTRAINT|item_reviews|item_reviews_item_id_fkey|FOREIGN KEY (item_id) REFERENCES generated_items(id)
+CONSTRAINT|item_reviews|item_reviews_pkey|PRIMARY KEY (id)
+CONSTRAINT|item_reviews|item_reviews_user_id_idempotency_key_key|UNIQUE (user_id, idempotency_key)
+CONSTRAINT|lms_identity_aliases|lms_identity_aliases_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|lms_identity_aliases|lms_identity_aliases_pkey|PRIMARY KEY (institution_id, lms_user_id)
+CONSTRAINT|lms_identity_aliases|lms_identity_aliases_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|lti_launches|lti_launches_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|lti_launches|lti_launches_pkey|PRIMARY KEY (id)
+CONSTRAINT|lti_launches|lti_launches_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+CONSTRAINT|mastery_state|mastery_state_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|mastery_state|mastery_state_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|mastery_state|mastery_state_pkey|PRIMARY KEY (user_id, skill_id)
+CONSTRAINT|mastery_state|mastery_state_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+CONSTRAINT|mastery_state|mastery_state_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|practice_answer_results|practice_answer_results_attempt_id_fkey|FOREIGN KEY (attempt_id) REFERENCES quiz_set_attempts(id) ON DELETE CASCADE
+CONSTRAINT|practice_answer_results|practice_answer_results_attempt_item_key|UNIQUE (attempt_id, item_id)
+CONSTRAINT|practice_answer_results|practice_answer_results_item_id_fkey|FOREIGN KEY (item_id) REFERENCES generated_items(id)
+CONSTRAINT|practice_answer_results|practice_answer_results_pkey|PRIMARY KEY (id)
+CONSTRAINT|practice_answer_results|practice_answer_results_user_id_idempotency_key_key|UNIQUE (user_id, idempotency_key)
+CONSTRAINT|quiz_set_attempts|quiz_set_attempts_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|quiz_set_attempts|quiz_set_attempts_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|quiz_set_attempts|quiz_set_attempts_pkey|PRIMARY KEY (id)
+CONSTRAINT|quiz_set_attempts|quiz_set_attempts_set_id_fkey|FOREIGN KEY (set_id) REFERENCES quiz_sets(id) ON DELETE CASCADE
+CONSTRAINT|quiz_set_attempts|quiz_set_attempts_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|quiz_set_attempts|quiz_set_attempts_user_set_number_key|UNIQUE (user_id, set_id, attempt_number)
+CONSTRAINT|quiz_set_items|quiz_set_items_item_id_fkey|FOREIGN KEY (item_id) REFERENCES generated_items(id)
+CONSTRAINT|quiz_set_items|quiz_set_items_pkey|PRIMARY KEY (set_id, "position")
+CONSTRAINT|quiz_set_items|quiz_set_items_set_id_fkey|FOREIGN KEY (set_id) REFERENCES quiz_sets(id) ON DELETE CASCADE
+CONSTRAINT|quiz_set_items|quiz_set_items_set_id_item_id_key|UNIQUE (set_id, item_id)
+CONSTRAINT|quiz_sets|quiz_sets_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|quiz_sets|quiz_sets_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|quiz_sets|quiz_sets_pkey|PRIMARY KEY (id)
+CONSTRAINT|quiz_sets|quiz_sets_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+CONSTRAINT|readiness_snapshots|readiness_snapshots_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|readiness_snapshots|readiness_snapshots_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|readiness_snapshots|readiness_snapshots_pkey|PRIMARY KEY (id)
+CONSTRAINT|readiness_snapshots|readiness_snapshots_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|recommendations|recommendations_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|recommendations|recommendations_decided_by_fkey|FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+CONSTRAINT|recommendations|recommendations_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|recommendations|recommendations_pkey|PRIMARY KEY (id)
+CONSTRAINT|recommendations|recommendations_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|recommendations|recommendations_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|researcher_grants|researcher_grants_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|researcher_grants|researcher_grants_pkey|PRIMARY KEY (id)
+CONSTRAINT|researcher_grants|researcher_grants_researcher_id_fkey|FOREIGN KEY (researcher_id) REFERENCES researchers(id) ON DELETE CASCADE
+CONSTRAINT|researchers|researchers_email_key|UNIQUE (email)
+CONSTRAINT|researchers|researchers_pkey|PRIMARY KEY (id)
+CONSTRAINT|skill_bank_state|skill_bank_state_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|skill_bank_state|skill_bank_state_course_id_skill_id_key|UNIQUE (course_id, skill_id)
+CONSTRAINT|skill_bank_state|skill_bank_state_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|skill_bank_state|skill_bank_state_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+CONSTRAINT|skills|skills_canonical_skill_id_fkey|FOREIGN KEY (canonical_skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|skills|skills_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|skills|skills_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|skills|skills_pkey|PRIMARY KEY (id)
+CONSTRAINT|srs_state|srs_state_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|srs_state|srs_state_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|srs_state|srs_state_item_id_fkey|FOREIGN KEY (item_id) REFERENCES generated_items(id) ON DELETE CASCADE
+CONSTRAINT|srs_state|srs_state_pkey|PRIMARY KEY (user_id, item_id)
+CONSTRAINT|srs_state|srs_state_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|srs_state|srs_state_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|tutor_attachments|tutor_attachments_conversation_id_fkey|FOREIGN KEY (conversation_id) REFERENCES tutor_conversations(id) ON DELETE CASCADE
+CONSTRAINT|tutor_attachments|tutor_attachments_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|tutor_attachments|tutor_attachments_pkey|PRIMARY KEY (id)
+CONSTRAINT|tutor_attachments|tutor_attachments_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|tutor_conversations|tutor_conversations_course_id_fkey|FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+CONSTRAINT|tutor_conversations|tutor_conversations_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|tutor_conversations|tutor_conversations_pkey|PRIMARY KEY (id)
+CONSTRAINT|tutor_conversations|tutor_conversations_skill_id_fkey|FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE SET NULL
+CONSTRAINT|tutor_conversations|tutor_conversations_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|tutor_messages|tutor_messages_conversation_id_fkey|FOREIGN KEY (conversation_id) REFERENCES tutor_conversations(id) ON DELETE CASCADE
+CONSTRAINT|tutor_messages|tutor_messages_pkey|PRIMARY KEY (id)
+CONSTRAINT|user_profiles|user_profiles_pkey|PRIMARY KEY (user_id)
+CONSTRAINT|user_profiles|user_profiles_user_id_fkey|FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CONSTRAINT|users|users_institution_id_fkey|FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+CONSTRAINT|users|users_institution_id_lms_user_id_key|UNIQUE (institution_id, lms_user_id)
+CONSTRAINT|users|users_pkey|PRIMARY KEY (id)
+CONSTRAINT|worker_state|worker_state_pkey|PRIMARY KEY (key)
+INDEX|assessments|assessments_pkey|CREATE UNIQUE INDEX assessments_pkey ON public.assessments USING btree (id)
+INDEX|audit_log|audit_log_pkey|CREATE UNIQUE INDEX audit_log_pkey ON public.audit_log USING btree (id)
+INDEX|consents|consents_pkey|CREATE UNIQUE INDEX consents_pkey ON public.consents USING btree (id)
+INDEX|content_items|content_items_pkey|CREATE UNIQUE INDEX content_items_pkey ON public.content_items USING btree (id)
+INDEX|courses|courses_institution_id_lms_course_id_key|CREATE UNIQUE INDEX courses_institution_id_lms_course_id_key ON public.courses USING btree (institution_id, lms_course_id)
+INDEX|courses|courses_institution_lms_external_id_key|CREATE UNIQUE INDEX courses_institution_lms_external_id_key ON public.courses USING btree (institution_id, lms_course_external_id) WHERE (lms_course_external_id IS NOT NULL)
+INDEX|courses|courses_pkey|CREATE UNIQUE INDEX courses_pkey ON public.courses USING btree (id)
+INDEX|data_subject_requests|data_subject_requests_pkey|CREATE UNIQUE INDEX data_subject_requests_pkey ON public.data_subject_requests USING btree (id)
+INDEX|enrollments|enrollments_pkey|CREATE UNIQUE INDEX enrollments_pkey ON public.enrollments USING btree (user_id, course_id)
+INDEX|evidence_events|evidence_events_pkey|CREATE UNIQUE INDEX evidence_events_pkey ON public.evidence_events USING btree (id)
+INDEX|generated_items|generated_items_bank_stem_uidx|CREATE UNIQUE INDEX generated_items_bank_stem_uidx ON public.generated_items USING btree (course_id, skill_id, stem_hash) WHERE ((origin = 'bank'::text) AND (retired_at IS NULL))
+INDEX|generated_items|generated_items_pkey|CREATE UNIQUE INDEX generated_items_pkey ON public.generated_items USING btree (id)
+INDEX|guided_lesson_steps|guided_lesson_steps_lesson_id_position_key|CREATE UNIQUE INDEX guided_lesson_steps_lesson_id_position_key ON public.guided_lesson_steps USING btree (lesson_id, "position")
+INDEX|guided_lesson_steps|guided_lesson_steps_pkey|CREATE UNIQUE INDEX guided_lesson_steps_pkey ON public.guided_lesson_steps USING btree (id)
+INDEX|guided_lessons|guided_lessons_course_id_skill_id_key|CREATE UNIQUE INDEX guided_lessons_course_id_skill_id_key ON public.guided_lessons USING btree (course_id, skill_id)
+INDEX|guided_lessons|guided_lessons_pkey|CREATE UNIQUE INDEX guided_lessons_pkey ON public.guided_lessons USING btree (id)
+INDEX|ingest_jobs|ingest_jobs_one_live_per_course|CREATE UNIQUE INDEX ingest_jobs_one_live_per_course ON public.ingest_jobs USING btree (course_id) WHERE (status = ANY (ARRAY['pending'::text, 'in_progress'::text]))
+INDEX|ingest_jobs|ingest_jobs_pkey|CREATE UNIQUE INDEX ingest_jobs_pkey ON public.ingest_jobs USING btree (id)
+INDEX|institutions|institutions_lms_issuer_deployment_id_key|CREATE UNIQUE INDEX institutions_lms_issuer_deployment_id_key ON public.institutions USING btree (lms_issuer, deployment_id)
+INDEX|institutions|institutions_pkey|CREATE UNIQUE INDEX institutions_pkey ON public.institutions USING btree (id)
+INDEX|item_exposures|item_exposures_pkey|CREATE UNIQUE INDEX item_exposures_pkey ON public.item_exposures USING btree (user_id, item_id)
+INDEX|item_generation_jobs|item_generation_jobs_one_live_diagnostic|CREATE UNIQUE INDEX item_generation_jobs_one_live_diagnostic ON public.item_generation_jobs USING btree (institution_id, course_id, skill_id) WHERE ((kind = 'diagnostic'::text) AND (status = ANY (ARRAY['pending'::text, 'in_progress'::text])))
+INDEX|item_generation_jobs|item_generation_jobs_one_live_lesson_step|CREATE UNIQUE INDEX item_generation_jobs_one_live_lesson_step ON public.item_generation_jobs USING btree (institution_id, lesson_step_id) WHERE ((kind = 'lesson'::text) AND (status = ANY (ARRAY['pending'::text, 'in_progress'::text])))
+INDEX|item_generation_jobs|item_generation_jobs_one_live_practice_offset|CREATE UNIQUE INDEX item_generation_jobs_one_live_practice_offset ON public.item_generation_jobs USING btree (institution_id, set_id, context_offset) WHERE ((kind = 'practice'::text) AND (status = ANY (ARRAY['pending'::text, 'in_progress'::text])))
+INDEX|item_generation_jobs|item_generation_jobs_pkey|CREATE UNIQUE INDEX item_generation_jobs_pkey ON public.item_generation_jobs USING btree (id)
+INDEX|item_reviews|item_reviews_first_session_rating_idx|CREATE UNIQUE INDEX item_reviews_first_session_rating_idx ON public.item_reviews USING btree (user_id, item_id, session_id) WHERE (counted AND (session_id IS NOT NULL))
+INDEX|item_reviews|item_reviews_pkey|CREATE UNIQUE INDEX item_reviews_pkey ON public.item_reviews USING btree (id)
+INDEX|item_reviews|item_reviews_user_id_idempotency_key_key|CREATE UNIQUE INDEX item_reviews_user_id_idempotency_key_key ON public.item_reviews USING btree (user_id, idempotency_key)
+INDEX|lms_identity_aliases|lms_identity_aliases_pkey|CREATE UNIQUE INDEX lms_identity_aliases_pkey ON public.lms_identity_aliases USING btree (institution_id, lms_user_id)
+INDEX|lti_launches|lti_launches_pkey|CREATE UNIQUE INDEX lti_launches_pkey ON public.lti_launches USING btree (id)
+INDEX|mastery_state|mastery_state_pkey|CREATE UNIQUE INDEX mastery_state_pkey ON public.mastery_state USING btree (user_id, skill_id)
+INDEX|practice_answer_results|practice_answer_results_attempt_item_key|CREATE UNIQUE INDEX practice_answer_results_attempt_item_key ON public.practice_answer_results USING btree (attempt_id, item_id)
+INDEX|practice_answer_results|practice_answer_results_pkey|CREATE UNIQUE INDEX practice_answer_results_pkey ON public.practice_answer_results USING btree (id)
+INDEX|practice_answer_results|practice_answer_results_user_id_idempotency_key_key|CREATE UNIQUE INDEX practice_answer_results_user_id_idempotency_key_key ON public.practice_answer_results USING btree (user_id, idempotency_key)
+INDEX|quiz_set_attempts|quiz_set_attempts_pkey|CREATE UNIQUE INDEX quiz_set_attempts_pkey ON public.quiz_set_attempts USING btree (id)
+INDEX|quiz_set_attempts|quiz_set_attempts_user_set_number_key|CREATE UNIQUE INDEX quiz_set_attempts_user_set_number_key ON public.quiz_set_attempts USING btree (user_id, set_id, attempt_number)
+INDEX|quiz_set_items|quiz_set_items_pkey|CREATE UNIQUE INDEX quiz_set_items_pkey ON public.quiz_set_items USING btree (set_id, "position")
+INDEX|quiz_set_items|quiz_set_items_set_id_item_id_key|CREATE UNIQUE INDEX quiz_set_items_set_id_item_id_key ON public.quiz_set_items USING btree (set_id, item_id)
+INDEX|quiz_sets|quiz_sets_pkey|CREATE UNIQUE INDEX quiz_sets_pkey ON public.quiz_sets USING btree (id)
+INDEX|readiness_snapshots|readiness_snapshots_pkey|CREATE UNIQUE INDEX readiness_snapshots_pkey ON public.readiness_snapshots USING btree (id)
+INDEX|recommendations|recommendations_pkey|CREATE UNIQUE INDEX recommendations_pkey ON public.recommendations USING btree (id)
+INDEX|researcher_grants|researcher_grants_pkey|CREATE UNIQUE INDEX researcher_grants_pkey ON public.researcher_grants USING btree (id)
+INDEX|researchers|researchers_email_key|CREATE UNIQUE INDEX researchers_email_key ON public.researchers USING btree (email)
+INDEX|researchers|researchers_pkey|CREATE UNIQUE INDEX researchers_pkey ON public.researchers USING btree (id)
+INDEX|skill_bank_state|skill_bank_state_course_id_skill_id_key|CREATE UNIQUE INDEX skill_bank_state_course_id_skill_id_key ON public.skill_bank_state USING btree (course_id, skill_id)
+INDEX|skills|skills_pkey|CREATE UNIQUE INDEX skills_pkey ON public.skills USING btree (id)
+INDEX|srs_state|srs_state_pkey|CREATE UNIQUE INDEX srs_state_pkey ON public.srs_state USING btree (user_id, item_id)
+INDEX|tutor_attachments|tutor_attachments_pkey|CREATE UNIQUE INDEX tutor_attachments_pkey ON public.tutor_attachments USING btree (id)
+INDEX|tutor_conversations|tutor_conversations_pkey|CREATE UNIQUE INDEX tutor_conversations_pkey ON public.tutor_conversations USING btree (id)
+INDEX|tutor_messages|tutor_messages_pkey|CREATE UNIQUE INDEX tutor_messages_pkey ON public.tutor_messages USING btree (id)
+INDEX|user_profiles|user_profiles_pkey|CREATE UNIQUE INDEX user_profiles_pkey ON public.user_profiles USING btree (user_id)
+INDEX|users|users_institution_id_lms_user_id_key|CREATE UNIQUE INDEX users_institution_id_lms_user_id_key ON public.users USING btree (institution_id, lms_user_id)
+INDEX|users|users_pkey|CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)
+INDEX|worker_state|worker_state_pkey|CREATE UNIQUE INDEX worker_state_pkey ON public.worker_state USING btree (key)
+TRIGGER|audit_log|t_immutable|CREATE TRIGGER t_immutable BEFORE DELETE OR UPDATE ON public.audit_log FOR EACH ROW EXECUTE FUNCTION forbid_mutation()
+TRIGGER|consents|t_audit|CREATE TRIGGER t_audit AFTER INSERT OR DELETE OR UPDATE ON public.consents FOR EACH ROW EXECUTE FUNCTION audit_row()
+TRIGGER|courses|t_updated_at|CREATE TRIGGER t_updated_at BEFORE UPDATE ON public.courses FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+TRIGGER|data_subject_requests|t_audit|CREATE TRIGGER t_audit AFTER INSERT OR DELETE OR UPDATE ON public.data_subject_requests FOR EACH ROW EXECUTE FUNCTION audit_row()
+TRIGGER|enrollments|t_audit|CREATE TRIGGER t_audit AFTER INSERT OR DELETE OR UPDATE ON public.enrollments FOR EACH ROW EXECUTE FUNCTION audit_row()
+TRIGGER|evidence_events|t_immutable|CREATE TRIGGER t_immutable BEFORE DELETE OR UPDATE ON public.evidence_events FOR EACH ROW EXECUTE FUNCTION forbid_mutation()
+TRIGGER|institutions|t_updated_at|CREATE TRIGGER t_updated_at BEFORE UPDATE ON public.institutions FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+TRIGGER|item_reviews|t_immutable|CREATE TRIGGER t_immutable BEFORE DELETE OR UPDATE ON public.item_reviews FOR EACH ROW EXECUTE FUNCTION forbid_mutation()
+TRIGGER|lti_launches|t_immutable|CREATE TRIGGER t_immutable BEFORE DELETE OR UPDATE ON public.lti_launches FOR EACH ROW EXECUTE FUNCTION forbid_mutation()
+TRIGGER|mastery_state|t_updated_at|CREATE TRIGGER t_updated_at BEFORE UPDATE ON public.mastery_state FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+TRIGGER|practice_answer_results|practice_answer_results_immutable|CREATE TRIGGER practice_answer_results_immutable BEFORE DELETE OR UPDATE ON public.practice_answer_results FOR EACH ROW EXECUTE FUNCTION forbid_mutation()
+TRIGGER|researcher_grants|t_audit|CREATE TRIGGER t_audit AFTER INSERT OR DELETE OR UPDATE ON public.researcher_grants FOR EACH ROW EXECUTE FUNCTION audit_row()
+TRIGGER|user_profiles|t_updated_at|CREATE TRIGGER t_updated_at BEFORE UPDATE ON public.user_profiles FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+TRIGGER|users|t_updated_at|CREATE TRIGGER t_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION set_updated_at()
