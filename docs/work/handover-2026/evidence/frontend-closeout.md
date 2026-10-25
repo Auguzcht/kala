@@ -135,3 +135,11 @@ Evidence added: final implementation mapping, synthetic browser suite/captures, 
 Anything not done, and why: no merge/push/deploy, migration, hosted writes or identity repair; backend I/G and real acceptance remain coordinator/Fred work
 Risks or questions for the planner: integrate I then G then this lane with full combined checks; retain optional legacy compatibility; mark spec statuses after review; H12 remains bounded history, not full-history paging
 Secrets printed: none (confirmed)
+
+## Release-state correction — 2026-10-25
+
+Fred confirms API alias `live` v7 was deployed at **00:04 UTC (08:04 Asia/Manila)**, after the paid-fallback secret change at **00:01 UTC (08:01 Asia/Manila)**. The backend runtime refresh is complete. This is Fred's deployment confirmation, not a new AWS image inspection by the documentation lane. It supersedes earlier pending-runtime statements; the original observation timeline remains above.
+
+The I, G and U close-out backend code is included in v7. Their frontend changes become live only after Fred's authorized Git publication and a Ready Vercel deployment. Saving the fallback and refreshing Lambda do not establish successful model responses: real Study Hint, Explain and dock success remain **FG-5 pending**, along with the other live role/feature acceptance checks. No additional backend deploy is required for the docs/tour changes.
+
+WI-24 (historical identity repair), WI-25 (full-history paging) and WI-26 (instructor course authorization/recommendation visibility) remain open, owner **ITO**, unless Fred changes that assignment. No repair or security completion is claimed.

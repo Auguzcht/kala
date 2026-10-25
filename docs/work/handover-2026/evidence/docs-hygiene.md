@@ -196,3 +196,7 @@ Risks or questions for the planner: nine replaced originals cannot be
   TOUR must rebase/check the approved shared-file exception after docs
 Secrets printed: none (confirmed)
 ```
+
+## Subsequent release authorization and correction
+
+2026-10-25: Fred approved TOUR-REFRESH 627ba9b subject to the docs-first rebase gate, then explicitly authorized the coordinator to push origin/main once all required checks pass and complete closeout. The earlier stop-before-push statement records the prior gate, now superseded for this release. Documentation-first merge, narrow PracticePanel comment/attribute coexistence, fresh tour/219/110/frontend/web checks and no backend deploy remain the sequence. Release evidence/current runbooks/closeout now record v7 at 00:04 UTC after the 00:01 UTC paid fallback change, runtime refresh complete, I/G/U backend present, frontend pending publication, and FG-5 live success unconfirmed. WI-24/25/26 statuses remain nonterminal and owner ITO.
