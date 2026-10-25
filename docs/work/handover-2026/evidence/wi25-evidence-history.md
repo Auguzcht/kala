@@ -38,3 +38,18 @@ New own/staff routes, authorization integration tests and generated OpenAPI/type
 Retained fixture proposal: add a synthetic `/evidence` handler only where those suites intend active full history, and change their `Last 20/25 events` assertions to the loaded-activity wording with the synthetic feed's count. Fixtures that intentionally omit/fail history may retain legacy expectations. H does not change retained fixtures without coordinator direction.
 
 No hosted read/write, deployment, push, migration application, real-user fixture or 5173 server action occurred.
+
+## Amendment 2: existing staff 404 presentation audit
+
+Static source findings at H commit `02e5b90`; these are not browser observations. API 404 denial semantics remain unchanged. The shared client throws `Error` with prefix `API 404:`; feature-local recognition needs no shared-client change.
+
+| Source | Observed failure presentation | Scope/disposition |
+| --- | --- | --- |
+| `apps/web/src/features/instructor/components/RosterTable.tsx:96,103,152,209` | Reads only data/loading, defaults missing students to an empty array and count zero; failure can show “No students enrolled yet” | Outside H manifest; recorded for coordinator/U |
+| `apps/web/src/features/instructor/components/AtRiskList.tsx:50,63` | Reads only data/loading and defaults missing flags to an empty array; failure can show reassuring no-support-needed copy | Outside H manifest; recorded for coordinator/U |
+| `apps/web/src/features/instructor/components/CohortStats.tsx:71,73` | Missing data always returns skeletons, including after a failed request | Outside H manifest; recorded for coordinator/U |
+| `apps/web/src/features/instructor/components/LearnerRecord.tsx:67–77` | Error branch prevents a missing-data crash, but 404 gets connection/retry wording | H caller; exact unavailable-copy/navigation proposal submitted, awaiting coordinator spec release |
+| `apps/web/src/features/instructor/components/StudentDrillDown.tsx:23–29` | Same generic error/retry behavior on 404 | H caller; same pending proposal |
+| `apps/web/src/features/instructor/components/Heatmap.tsx:27–31` | Error branch prevents a missing-data crash, but 404 gets connection/retry wording | Outside H manifest; recorded for coordinator/U |
+
+Proposed INSTR-REQ-009 clarification: learner record and Twin drill-down render HTTP 404 as “Learner unavailable”, with “This learner or course is unavailable. Return to your class to choose an available learner.” Provide a “Back to class” action to `/class`; preserve generic retry for other failures. Do not disclose whether the requested resource exists. Dedicated synthetic 404 checks must assert truthful copy and zero mutating requests. This proposal is not implemented or an amendment to the coordinator-owned spec.
