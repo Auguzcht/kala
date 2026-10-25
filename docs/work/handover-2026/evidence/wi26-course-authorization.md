@@ -95,7 +95,7 @@ H owns Amendment 6 denial/error presentation: prior LearnerRecord/LearnerTriage/
 
 ## AUTH-REQ-007 / Amendment 7 student-read continuation
 
-Read-only audit base: `105727ef2052ce8ebf8b6b0e5a78176a9c362735`. Coordinator committed AUTH-REQ-007 and cross-feature references before releasing implementation, and released this phase only after H then M merged. Implementation/scope-proof base: `38f6c75dbf025097bb5b09b45def24bc497450bd`. This continuation changes admission only; no shared spec, generated contract, SQL, infrastructure, frontend or mutation handler is edited.
+Read-only audit base: `105727ef2052ce8ebf8b6b0e5a78176a9c362735`. Coordinator committed AUTH-REQ-007 and cross-feature references before releasing implementation, and released this phase only after H then M merged. Implementation/scope-proof base: `38f6c75dbf025097bb5b09b45def24bc497450bd`. Final clean-rebase integration base: `aa91f880f99360bc89bf3da5b62a0fca5729ca6c`; intervening main changes affect only coordinator documentation and a non-overlapping local migration verifier. This continuation changes admission only; no shared spec, generated contract, SQL, infrastructure, frontend or mutation handler is edited.
 
 ### Guard placement and complete coverage
 
@@ -124,7 +124,7 @@ All 13 inventoried student POST/PATCH/DELETE routes remain unchanged, as do ever
 
 `cd services/api && uv run python tests/wi26_student_scope_local.py` passes. It requires exactly 19 known branches, exact import nodes and exact placement (after docstring, except after Tutor's unchanged owner assignment). Removing only those exact nodes must reproduce the whole pre-change module AST. It does not normalize arbitrary if statements, helpers or processing blocks. It additionally checks Bank/dashboard byte identity. New verifiers run with API uv Python 3.13.14; repository runtime minimum remains 3.12+.
 
-The retained full API suite passes 1,014 tests (30 existing dependency warnings, 29.21s); worker passes 117 (0.36s). New dedicated files pass Ruff. Changed files add no lint findings relative to base. Web lint/typecheck/build pass with 18 existing Fast Refresh warnings, the existing generator circular-dependency notice and large-bundle warning. No server/browser session is used. Documentation and immutable-file checks are recorded in the final lane report.
+The retained full API suite passes 1,014 tests after the final rebase (30 existing dependency warnings, 29.26s); worker passes 117 (0.36s). New dedicated files pass Ruff. Changed files add no lint findings relative to base. Web lint/typecheck/build pass with 18 existing Fast Refresh warnings, the existing generator circular-dependency notice and large-bundle warning. No server/browser session is used. Documentation checker and its 18 unit tests pass. All 39 migration files are byte-identical to the final integration base; shared specs, infrastructure, web/generated files are unchanged. The final working tree is clean after commits.
 
 Initial full run found 82 failures while retained fixtures lacked new admission data; after fixture adaptation four higher-level-only tests still lacked a DB admission stub. Those now supply enrollment/course rows. Scope review also caught and restored logger declarations during import formatting before final verification. The final strict AST proof confirms no executable change beyond admission. No existing business assertion was changed or weakened.
 
