@@ -87,3 +87,24 @@ The dedicated instructor read-state suite now includes the actual roster → key
 Before browser execution, coordinator review found the copied synthetic API client lacked the production error prefix's colon. Both the read-state and older-history suites now throw `API <status>: synthetic failure`; production parsing is unchanged. The read-state learner fixture now returns a genuinely successful zero-attempt, zero-evidence, empty-skill record with absent readiness/activity, rather than the inherited populated example. Its Activity-tab assertions require a loaded count of zero and the empty ledger state.
 
 Class failure cases now wait for and independently check roster, at-risk, charts and the statistics strip, including an exact four-panel error count. These corrections improve written coverage; they remain unexecuted until server handover. Node syntax and whitespace checks pass. No product behavior changed in this correction.
+
+## Released router phase and integrated verification
+
+Coordinator released the router phase after SEC merged. H rebased cleanly onto integrated local main `afe0c1cb0f35b86a4fddad4d61f83a9ea1067038` before touching routers. The earlier pending-route statements above are superseded by this section.
+
+Added only these endpoints:
+
+- `GET /courses/{course_id}/twin/evidence`: validated student role, token-institution course resolution, scoped own student enrollment, then history query. A query-string user ID cannot override the authenticated identity.
+- `GET /dashboard/{course_id}/students/{user_id}/evidence`: validated instructor/admin role, existing `_assert_teaches_course`, existing `_course_ref`, existing `_assert_teaches_student`, then history query, in that order.
+
+Both declare the dedicated Pydantic page response and query limit bounds 1–100/default 25. Existing response shapes and SEC guards are unchanged. AST comparison against integrated main proves every pre-existing twin/dashboard function and class is identical; only the two new route functions and required imports were added. Generated OpenAPI/frontend types remain coordinator-owned and untouched.
+
+Dedicated `test_evidence_history_routes.py` uses the real admitted route/SEC helpers with a synthetic DB boundary and blocks all writes/RPCs. Together with the query tests it covers 69 cases: first/next/final/empty, equal timestamps, limits, malformed/tampered/cross-caller/cross-course cursors, authentication, own enrollment refusal, student staff-route denial, untaught/foreign instructor and foreign admin refusal, unavailable target, allowed teacher/same-institution admin, exact guard order, admission recheck after enrollment removal, identity override prevention and zero writes. Scope/malformed-cursor refusals assert no evidence read.
+
+Integrated API suite: `cd services/api && uv run pytest -q` — **898 passed**, 30 dependency deprecation warnings, 28.84s. Test isolation remains committed `services/conftest.py`, with dotenv disabled and IPv4/IPv6/DNS blocked. No hosted or provider calls.
+
+After the SEC rebase, web lint passes with 18 existing warnings; typecheck and production build pass with existing warnings. All three new browser scripts pass syntax checks. Browser execution still awaits Fred/coordinator handover of the single 5173 server; no browser acceptance claim is made.
+
+The dedicated local Postgres fixture now also executes the route's exact own-enrollment admission predicate with allowed/other-user synthetic cases. Admission and keyset/index checks passed and rolled back all fixtures. All 37 historical migration files remain byte-identical against integrated main; SEC's 0038 was not changed by H. H adds only index migration 0039.
+
+Current H file manifest: twin/dashboard routers (new endpoints/imports only); `app/twin/evidence_history.py`; two dedicated Python history test files and their local SQL fixture; twin history API/schema/hook/wrapper/public export and TwinBody; shared evidence ledger; instructor roster/at-risk/stats/charts/heatmap/learner record/drill-down/triage and feature-local failure helper; three dedicated browser suites; 0039 index/runbook; this evidence record. No shared specs, generated types, infrastructure, dependency manifests, shared DB/config/client/auth files, retained UI/tour fixtures, or class routes were edited.

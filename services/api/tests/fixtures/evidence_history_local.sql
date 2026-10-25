@@ -7,6 +7,24 @@ insert into public.users (id,institution_id,lms_user_id,role,pseudonym)
 values ('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','synthetic-wi25','student','Synthetic');
 insert into public.courses (id,institution_id,lms_course_id,title)
 values ('00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000001','synthetic-wi25','Synthetic');
+insert into public.enrollments (institution_id,user_id,course_id,role)
+values ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002',
+        '00000000-0000-0000-0000-000000000003','student');
+do $$
+begin
+  if not exists (
+    select course_id from public.enrollments
+    where institution_id='00000000-0000-0000-0000-000000000001'
+    and user_id='00000000-0000-0000-0000-000000000002'
+    and course_id='00000000-0000-0000-0000-000000000003' and role='student' limit 1
+  ) then raise exception 'own history admission query failed'; end if;
+  if exists (
+    select course_id from public.enrollments
+    where institution_id='00000000-0000-0000-0000-000000000001'
+    and user_id='00000000-0000-0000-0000-000000000004'
+    and course_id='00000000-0000-0000-0000-000000000003' and role='student' limit 1
+  ) then raise exception 'other user admitted'; end if;
+end $$;
 insert into public.evidence_events (id,institution_id,user_id,course_id,type,correct,created_at)
 select lpad(to_hex(n),32,'0')::uuid,'00000000-0000-0000-0000-000000000001',
 '00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003',
