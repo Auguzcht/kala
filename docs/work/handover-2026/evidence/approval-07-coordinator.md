@@ -98,3 +98,40 @@ Independent coordinator checks: all 37 historical SQL files match the published 
 H's router phase was released only after this merge. H subsequently reported 898 API tests, including 69 dedicated history cases, and web/docs checks passing on the SEC-integrated base at its candidate `785a7046215a9161a01b42fb8c1102d940f70fc8`. Existing Twin/dashboard handlers remain AST-identical; only new route/import nodes are allowed. These are lane results, not final merged verification. H remains unmerged: browser suites require the temporary 5173 switch decision, which is pending. The existing Kala U server has not been stopped or replaced. Generated contract artifacts, H/M integration and all full merged suites remain pending.
 
 No hosted action, push, deployment, migration application or live acceptance occurred. FG-6 is not released by this progress record. WI-24/25/26 remain open.
+
+
+## Repair governance review and current stop point
+
+Coordinator source review found a canonical-side consent hazard: `0001_init.sql:313–321` resolves research consent by user_id and `0003_research.sql:33–48` filters the evidence view by that identity. Re-attribution could therefore expose previously excluded legacy evidence when only canonical consent exists. M was instructed to document and test refusal for consent/DSR ambiguity on either anchor before a non-converged apply, without changing governance records or research policies. Its earlier 13 local scenario groups passed, but the updated guard and final report remain in progress; no claim of a green final M revision or real-pair repair is made here.
+
+H candidate `785a704` remains unmerged despite passing independent API/web checks: three new browser suites and retained browser/tour suites have not run on the changed checkout. A question is pending for a temporary move of the existing Kala U port-5173 server to H and restoration afterward. No elapsed time is treated as permission. SEC is locally merged; H and M are retained branches; full generated-contract/integrated verification and every Fred gate remain pending.
+
+```text
+AUDIT REPORT
+Task / brief ID: APPROVAL-07 coordinator; confirmed Amendments 4–6
+Branch and worktree: main, primary Kala checkout
+Base revision: da765cbd27bd06c53c04ef3698c9410b503eb94a
+Files changed: approval/spec/work-item/acceptance/coordinator records;
+  SEC's 18-file implementation and proof manifest is in its full report.
+  H/M candidate changes remain on their own branches. No deletions.
+REQ / WI IDs touched: AUTH-REQ-006; INSTR-REQ-008–011;
+  TWIN-REQ-003/009/010; INGEST-REQ-001/008; SKILL-REQ-006;
+  WI-24/25/26. All work items remain open and owned by ITO.
+Commands run and results: coordinator strict Diagnostic AST proof passed;
+  37 historical migration checksums unchanged; 0038 policy-only scope passed;
+  docs check passed, 18 checker tests passed, whitespace check passed.
+  SEC reports 829 API / 117 worker / 219 focused / 350 RLS read checks passed.
+  H reports 898 API (69 history cases) and web checks passed.
+  These lane results are not final merged integration or live acceptance.
+Spec changes made: coordinator commits precede affected implementation;
+  denial semantics, ownership, scoped recommendation updates, error states,
+  cache identity and bounded manual-repair exception are recorded.
+Evidence added: this record, SEC inventory/runbook and prepared acceptance.
+Anything not done, and why: H browser execution awaits server-switch decision;
+  M final governance guard/proof/report is in progress. H/M merges, generated
+  contracts, full integrated suites and Fred gates are therefore not released.
+Risks or questions for the planner: retained student enrollment gaps;
+  legacy in-place session cache limitation; real repair pairs may be refused.
+  See lane reports for exact locations and bounds.
+Secrets printed: none (confirmed).
+```
