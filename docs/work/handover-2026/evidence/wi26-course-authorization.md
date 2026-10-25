@@ -1,87 +1,92 @@
 # WI-26 course authorization — Lane SEC
 
-Source base: `9c24a85b4bd21ca9995073dd078e2b3f66ea8325`; branch `codex/wi26-course-authorization`. This records local implementation and synthetic checks, not hosted acceptance. Coordinator owns all feature specs, WI status and generated API artifacts.
+Integration base: `0a2be1250dabd216bdaa28c0b3d6b5e0c23e7037`, followed by the coordinator's documentation-only `872c464` amendment. Branch: `codex/wi26-course-authorization`. Initial checkpoint `01c30a4` remains in Git history (rebased as `b926a36` before the final docs rebase); its earlier route/target blockers were resolved by Amendments 4–5. This is local implementation/proof, not hosted acceptance. Coordinator owns specs, WI status and generated API artifacts.
 
-## Inventory and resulting boundary
+## Complete route and direct-read inventory
 
-Every changed staff route reuses `require_role('instructor', 'admin')` where staff-only, `_assert_teaches_course` and existing institution-scoped `_course_ref`. Shared own-user routes apply the two course guards only for instructor/admin callers; student behavior remains unchanged. UUID validation is shape-only. The helper's admin early return is unchanged, so `_course_ref` is necessary to refuse foreign admins. Current enrollment row presence represents current enrollment; there is no active flag in the schema.
+All staff admission reuses validated role, existing `_assert_teaches_course` and institution-scoped `_course_ref`; UUID validation proves shape only. The helper, including its admin early return, is unchanged. `_course_ref` proves admin institution scope. Current enrollment row presence represents current membership; there is no active flag.
 
-| Source / operation | Before: role / course / institution | Result or explicit remainder |
+| Route/source | Before | Final boundary |
 | --- | --- | --- |
-| dashboard heatmap, at-risk | Staff / no caller enrollment / filtered learning queries | Course + institution admission before queries |
-| dashboard roster, stats and charts | Staff / no caller enrollment / institution passed to cohort | Course + institution admission before cohort loading |
-| learner record | Staff / target student only / institution-filtered | Caller course admission, then existing target membership |
-| learner Twin drill-down | Staff / no caller or target enrollment / target user institution | Caller admission + existing target-student guard before identity/Twin loading |
-| recommendation GET/POST, intervention POST | Staff / target student only / institution-course filters | Caller admission before target guard, model/read/write |
-| recommendation PATCH decision | Staff / none / institution-course update filter | Caller admission before update; target membership remains unresolved below |
-| proposed/auto-matched skills GET | Staff / none / scoped skills, course-keyed worker state | Admission before skills/state reads |
-| proposed review, detach | Staff / none / scoped updates | Admission before validation/write/wake |
-| approved rejection | Staff / instructor enrollment, admin exemption / RPC institution | Reuse existing helper plus institution course resolver before RPC |
-| refresh POST skills/propose | Staff / none / course-keyed queue | Admission before queue and worker kick; existing queue logic unchanged |
-| GET assessments / PATCH grade | Staff / helper / course resolver | Remove 404-to-403 translation; wrong-role 403, course denial 404 |
-| own Twin / next-up / plan | Session / no enrollment admission / token institution, own user | Guard staff callers; preserve own-student queries and response fields |
-| course metadata / memory summary | Session / no enrollment admission / institution queries, own memory | Guard staff callers; preserve own-student access |
-| bank status | Session / students enrolled, staff exempt / institution course | Staff teacher + institution admission before bank reads/kick; student path preserved |
-| LMS roster/content preview | Session / none / institution course resolver | Unchanged by explicit diagnostic three-route restriction; existing student preview access retained |
-| ingest POST/status GET | Session / none / POST receives institution; status uses course only | Unchanged by diagnostic restriction; material unresolved gap |
-| modules GET | Session / none / institution-filtered content/skills | Unchanged by diagnostic restriction; staff admission gap remains |
-| upload / retag | Staff / existing helper / filtered content, helper exempts admin | Unchanged by diagnostic restriction; explicit institution course admission missing for admin |
+| Dashboard heatmap, at-risk | Staff role + filtered data | Caller course/institution admission before learning queries |
+| Roster, stats and charts | Staff role + institution passed to cohort | Admission before cohort loading |
+| Learner record | Target-student membership, no caller course gate | Caller admission then existing target-student guard |
+| Another learner's Twin | Staff role + target-user institution only | Caller admission + enrolled target-student guard before identity/Twin loading |
+| Recommendations GET/POST; interventions POST | Target membership only | Caller admission then target guard before read/model/write |
+| Recommendation PATCH by rec_id | Scoped update only | Caller admission, one id/institution/course lookup, existing target guard, UPDATE bound to looked-up user_id; missing/zero-update retains 404 |
+| Proposed/auto-matched skills GET | Staff role + scoped skill query | Admission before skills and course-keyed worker state |
+| Review/detach/approved rejection | Inconsistent caller enrollment checks | Existing shared guards before validation/write/RPC/kick |
+| Refresh skills/propose | Staff role only | Admission before unchanged queue/kick logic |
+| Assessments GET / grade PATCH | Existing course gate with 403 translation | Staff 403; course/institution 404; existing LMS work unchanged |
+| LMS roster preview | Session + institution resolver | Staff-only 403 for students; staff course/institution admission |
+| LMS content preview | Session + institution resolver | Staff admission added; existing student preview branch unchanged |
+| Ingest POST / status GET | Session; status used course-only lookup | Staff role/course/institution admission before unchanged enqueue/status work |
+| Content upload / retag | Staff role + helper, admin early exemption | Add institution-scoped course resolution before processing/storage/RPC |
+| Modules GET | Session + filtered content/skill counts | Staff admission; existing student branch unchanged |
+| Diagnostic status/get/submit | Session, own identity | Staff admission before availability/generation/grading/evidence work; student branch unchanged |
+| Own Twin/next-up/plan | Session, own user + institution | Staff admission; own-student data and responses unchanged |
+| Course metadata/memory summary | Session + institution/own memory | Staff admission; student branch unchanged |
+| Bank status | Student enrollment, staff exemption | Staff admission before bank reads/kick; student path preserved |
 
-`/class/` renders roster, cohort stats/charts, at-risk, heatmap and skill review/refresh through the listed API client. Learner sheet, triage and `/class/student/$uid` use learner-record/at-risk plus recommendations/interventions; the legacy student-Twin API is also inventoried and guarded. The class top bar uses course metadata. The class layout redirects students to `/unauthorized`; backend denial does not depend on this UI guard.
+`/class/` consumes roster, stats/charts, at-risk, heatmap and skill review/refresh. Learner sheet/triage and `/class/student/$uid` consume learner record/at-risk plus recommendations/interventions. The class top bar reads course metadata. Students are redirected to `/unauthorized` by the class layout and independently refused by staff APIs.
 
-Static frontend search found no direct Supabase table/RPC read: `apps/web/src/lib/supabase/client.ts` defines `getSupabase()` with no callers/imports. Learning data is read through the API. No hosted exposure inspection was performed.
+There is exactly one recommendation-ID route: PATCH `/dashboard/{course_id}/recommendations/{rec_id}`. Lookup uses only user_id and is filtered by id, validated institution and route course. A moved target cannot pass the bound UPDATE. Decisions/notes/history/response shape remain unchanged.
 
-## RLS inventory
+Frontend source search found no direct Supabase table/RPC caller. `getSupabase()` is an unused factory. This does not establish Data API confidentiality; policies were independently tested below. No hosted exposure inspection occurred.
 
-- 0002 `recs_read` allows own rows regardless of status, teachers via `teaches(course_id)`, or institution admins. 0009 adds staff insert/update. Service-role API access bypasses RLS.
-- 0001 `teaches()` checks caller user/course and enrollment role only, without token institution or app role. All historical helper bytes remain unchanged.
-- 0038 tightens only recommendation policies: explicit token institution/course match; student self-read limited to approved/modified/completed; instructor token role and matching institution enrollment; institution admin retained. INSERT/UPDATE gain the same staff boundaries. No additional privilege, table, helper or index is created.
-- Evidence, mastery, readiness and enrollment policies still use self/teacher/admin branches. Users permit institution-wide staff reads; courses permit institution/grant reads; skills and assessments permit institution reads. 0023 content/item/quiz-set reads and 0017 ingest-job reads use teacher/admin policies. These other policies were inventoried, not changed; full exposed-schema hardening is not claimed. No current frontend direct reader was found.
+## Policy inventory and proof
 
-## Local proof
+0038 alters 22 policies on 20 tables, and nothing else. The migration remains unapplied to hosted systems and was extended in place under explicit coordinator release. All historical SQL/helper definitions are immutable.
 
-- `test_wi26_course_authorization.py`: 24 route operations × six actor cases, plus five target-student denials. Real role/course helpers execute; only persistence/LMS/model/worker boundaries are synthetic. Denials assert no protected operation; allowed refresh asserts queue then kick. Shared routes separately preserve student success.
-- Existing Lane S tests now expect 404 for course denial and retain wrong-role 403. Existing dashboard/ingest functional assertions are unchanged by AST comparison; only valid admission fixtures were added.
-- Diagnostic AST comparison against the base proves exactly `get_assessments`, `post_grade`, `propose_course_skills` changed. The first two only lose the translation wrapper; refresh gains the two existing guard calls. The helper, imports, student previews, queue and debounce logic are identical.
-- Complete 0001–0037 byte-preserving replay plus 0038 ran on PostgreSQL 17.6 (aarch64), image `public.ecr.aws/supabase/postgres:17.6.1.158`, inside the dedicated `kala-wi26-sec-2d3d` container, Docker network `none`, no published ports. Each successful verifier run creates a fresh `wi26_synthetic_*` database. Minimal Auth/Storage platform SQL is a fixture, not full Supabase integration. No environment files or hosted credentials were used.
-- Final local RLS proof: owning student sees 5 → 3 recommendation rows; right instructor 5 → 5; other-course instructor 0 → 0; same-institution admin 5 → 5; foreign instructor/admin 0 → 0; student token carrying stale instructor enrollment 5 → 0; teacher token with wrong institution 5 → 0. UPDATE/INSERT succeed only for authorized teacher/admin and are rolled back. Five fixture rows are preserved. Policy dumps differ only in recs_read/recs_insert/recs_update. Public schema/grants compare identical after removing policy definitions. Historical migration SHA-256 checks remain equal.
-- Initial local setup attempts found that the image's `postgres` role cannot create vector and Auth functions are absent. No application replay progressed past that missing platform setup. The committed verifier uses the image's local superuser and minimal platform fixture, then fresh application databases. No historical SQL was altered to make replay pass.
-- Public Supabase changelog and RLS documentation were checked on 2026-10-25. No relevant breaking change changes the approved policy workflow. Numeric filenames and local-only execution follow the task's explicit overrides.
-
-Local proof directory: `/var/folders/1q/cltfxktj0tb5rvs32t3n3nn40000gn/T/kala-wi26-rls-o0j0psh0` — local only, not retained. Contains policy/schema before/after, counts and 37-file hash manifest; all data is synthetic.
-
-## Final verification
-
-| Command / proof | Result |
+| Surface | Concrete prior gap / final treatment |
 | --- | --- |
-| `cd services/api && uv run pytest -q --tb=short` | 759 passed, 30 existing dependency warnings, 28.04s |
-| `cd services/worker && uv run pytest -q` | 117 passed, 0.61s |
-| Focused matrix + Lane S + dashboard | 180 passed before final fixture-only ingest update |
-| `uv run --project services/api ruff check services/api/tests/test_wi26_course_authorization.py services/api/tests/wi26_rls_local.py` | Passed |
-| Changed router lint against base | No added findings; existing Depends/datetime/style findings remain |
-| Diagnostic AST ownership proof | Only the three authorized functions changed; helper/preview/queue logic identical |
-| Other changed router AST proof | After removing admission imports/calls and the replaced inline enrollment gate, all executable AST nodes identical |
-| Retained dashboard/ingest assertion AST proof | Every functional assertion identical to base |
-| Local Docker SQL verifier | Two fresh complete replays passed; read/update/insert allow/deny and policy-only schema/grant proof passed |
-| `pnpm --filter web lint` | Passed, 0 errors / 18 existing Fast Refresh warnings |
-| `pnpm --filter web typecheck` | Passed, existing route-generator circular dependency notice |
-| `pnpm --filter web build` | Passed, existing large bundle warning |
-| `python3 scripts/docs_check.py` | Passed, zero record-link / machine-path violations |
-| `python3 -m unittest discover -s scripts -p 'test_docs_check.py'` | 18 passed |
-| `git diff --check` | Passed |
+| Evidence/mastery/readiness/enrollment/quiz attempts/exposures/reviews | Stale student token with instructor enrollment and wrong-institution teacher claims could use role-less teaches(); now token role/institution/course admission is explicit |
+| SRS | Another-course instructor could read institution-wide learner schedules; now restricted to taught course/current learner |
+| Users/aliases | Another-course instructor could read learner identity/aliases institution-wide; now instructor peer reads require enrolled learner in a taught course |
+| Profiles | Peer reads remain admin-only; removed learner profiles now follow enrolled-target visibility through the tightened users policy; own profiles and admin institutional staff oversight retained |
+| Recommendations | Own student previously saw suggested/rejected; staff could act on an unenrolled learner. Now only assigned statuses for owning student; staff read/INSERT/UPDATE require current target enrollment + student user role and course/institution admission |
+| Courses/skills/assessments/guided lessons | Another-course instructor could read institution-wide curriculum. Staff branch narrowed; original non-staff curriculum and granted researcher access preserved |
+| Content/generated items/quiz sets/ingest jobs | Role-less teacher helper accepted stale-role/foreign claims. Staff role/institution/enrollment explicit; ingest has no persistent authenticated SELECT grant in this local replay |
+| Lesson steps / quiz-set items | Unchanged policies query RLS-protected parents; matrices prove the narrower staff scope propagates |
+| Research views/grants | Definitions and grants unchanged; granted researcher still sees the same consented evidence/mastery rows and permitted courses |
+| Institutions, launches, audit, consents, data-subject requests, researchers/grants | Governance/self/admin institution or explicit researcher-grant boundaries; no arbitrary instructor peer-learning branch. Institutional governance access after unenrollment is intentionally retained |
+| Tutor conversations/messages/attachments | Self-only reads, without a staff peer override; retained own-history access rather than adding a new staff capability |
+| Operational/service-only tables | Replay grant inventory confirms no authenticated SELECT path without RLS; no new grants. Hosted grants/exposure remain unknown |
 
-`pnpm install --frozen-lockfile` installed locked dependencies without manifest/lock changes. The initial version probe resolved global CLI 2.111.0 before installation; the installed pinned CLI is 2.114.0. Replay used Docker directly, not either CLI or a linked project. No db:* or hosted type-generation command ran. The dedicated Docker container and its anonymous volumes were removed after verification; no other container, worktree or server was touched. No browser suite ran because the port-5173 server belongs to another worktree and no server handoff was requested. Generated OpenAPI/API types and shared specs are unchanged by this lane.
+Enrollment rows are admission metadata: the current teacher must read their own instructor enrollment so dependent policies can authorize the course. Instructors can read student enrollments in taught courses; admins retain institution enrollment oversight. Target user-role checks on learning records/identities prevent stale student enrollment on a staff identity becoming learner access. No policy helper is created and no recursive users/enrollments policy dependency is introduced. This is a staff course/learner boundary change, not a comprehensive audit of all governance APIs, researcher scope semantics, SQL RPCs or denormalized-data integrity.
 
-The first focused run found missing valid-admission fixtures in ten retained dashboard tests. The first full run found the same omission in one refresh/ingest test (758 passed / 1 failed). Adding valid synthetic enrollment/course rows fixed these fixtures; no business assertion was removed or weakened. Final full API run passed all 759 tests.
+## Real local PostgreSQL verification
 
-## Unresolved scope and acceptance blockers
+Dedicated container `kala-wi26-sec-policy-2d3d`: Supabase Postgres image `17.6.1.158`, PostgreSQL 17.6 aarch64, Docker network `none`, no published ports. Each verifier run creates a fresh `wi26_synthetic_*` database and replays unchanged 0001–0037. Minimal Auth/Storage platform fixtures are explicitly not full Supabase service integration. No environment files, hosted credentials, real identities or content are used.
 
-1. `diagnostic.py` may change executable behavior only in three named routes. Roster/content previews, ingest/status, modules, upload and retag cannot gain the missing admission checks in this lane. Particularly, ingest/status remains session-only with a course-only job lookup. Moving the check into ingest_jobs would require changing signatures/callers or creating a new gate; neither is authorized. These remain material gaps under INSTR-REQ-009.
-2. Recommendation decision has rec_id but no target user argument or pre-update lookup. Caller course/institution is now guarded, but target student membership cannot be established solely by an existing guard call. A scoped recommendation lookup plus target guard needs coordinator approval beyond guard-call-only edits. No full target-membership completion is claimed.
-3. Broader Data API policy exposures above remain unmodified; hosted grants, exposure, policy state and authenticated acceptance are unknown. Local service-role mocks cannot establish hosted isolation.
-4. Staff error UI needs H/U follow-up: LearnerRecord, LearnerTriage and Heatmap give connection advice for 404. RosterTable ignores query errors and may show “No students enrolled yet.” No API denial was weakened and no frontend file was edited. Static source findings only; browser worktree server was not started or borrowed.
-5. FG-6 migration application, FG-8 deployment and FG-9 live role/course click-through remain Fred gates. Keep WI-26 open; green local tests are not full security sign-off.
+- Ten authenticated actor cases × 35 read boundaries pass: own/other student, right/other teacher, same-institution admin, foreign teacher/admin, stale-role token, wrong-institution claim and granted researcher. Of 350 checks, 20 ingest policy checks use a temporary SELECT grant inside each rolled-back transaction. Persistent ingest SELECT stays absent before/after. Direct-grant and conditional-policy evidence are not conflated.
+- Recommendations: owning student 5 → 3 statuses; right teacher/admin retain all five; outside-course/foreign staff remain zero; stale student token and wrong-institution teacher claim go 5 → 0. INSERT/UPDATE only succeed for authorized teacher/admin and are rolled back.
+- Removed learner before/after counterexample: teacher/admin could previously read personal records, identity/aliases/profile and five recommendations. After tightening, staff personal reads and recommendation INSERT/UPDATE are denied; own student history/identity/profile remains and assigned recommendations remain three. Enrollment is restored only in the synthetic fixture.
+- Removed instructor: 20 read boundaries plus recommendations deny after removing the teacher's enrollment.
+- All sampled post-migration counts are subsets of the baseline audience. Shared student curriculum reads, own identity/history, admin staff profile oversight and granted researcher views retain tested behavior.
+- Policy dumps identify exactly the 22 intended changes. Full public schema/grants/helpers/views/indexes compare identical after removing policy definitions. Fixture table counts and all 37 migration byte/checksum comparisons pass. Every public table with authenticated SELECT in this replay has RLS enabled. No rows are migrated or rewritten by 0038.
+- Initial image setup failures (postgres cannot create vector; Auth helpers absent) did not progress to application table replay. The verifier uses the image's local superuser and explicit platform fixture. The expanded baseline probe also discovered missing ingest SELECT; the verifier now records this and rolls back its temporary policy-test grant. No historical SQL was changed to make tests pass.
+
+Final local proof artifacts: `/var/folders/1q/cltfxktj0tb5rvs32t3n3nn40000gn/T/kala-wi26-rls-vyjyr6pw` — local only, not retained. Includes before/after policies/schema/access metadata, actor matrices, removed-target matrix and historical checksums. All fixtures are synthetic.
+
+Official Supabase changelog/RLS and PostgreSQL row-security documentation were consulted on 2026-10-25. Numeric filenames and local-only execution follow the explicit task override. Pinned installed Supabase CLI is 2.114.0; initial pre-install probe resolved global 2.111.0. Docker performs replay directly; neither CLI nor any linked project is used.
+
+## Application tests and scope proof
+
+- Dedicated matrix: 34 operations × six actor cases, five target-student denials, four recommendation scoped-lookup/race cases and six decision-role/status cases: 219 passed. Real role/course/target guards execute; persistence/LMS/model/storage/worker boundaries are synthetic. Denials assert no protected work. Refresh queues/kicks once when allowed; recommendation decision updates once, with all four identity predicates.
+- Full API: 829 passed, 30 existing dependency warnings, 28.32s. Worker checkpoint: 117 passed. Both use committed shared test isolation, fake settings, dotenv disabled and blocked network sockets.
+- Diagnostic AST proof inventories all 13 routes and proves only authorized guard/dependency changes; helper, imports, queue/debounce/kick logic, upload/retag processing and response shaping are identical. The earlier gradebook translation removal is explicitly authorized. Retained dashboard/ingest/upload functional assertion ASTs are unchanged. The course-data regression changes only student roster expectations to the authorized 403; content remains 200.
+- Other routers contain admission guards/imports and, for the sole recommendation-ID route, only the explicitly authorized scoped lookup/target guard/bound UPDATE. Decision state/notes/history/response logic is unchanged.
+- Dedicated test/verifier Ruff passes. Changed-router lint adds no unsuppressed baseline findings; three new FastAPI role dependencies carry targeted B008 explanations.
+- Web lint/typecheck/build pass on the amended base: 18 existing Fast Refresh warnings, existing route-generator circular dependency notice and large-bundle warning. No frontend or generated API/type file changed. No dev server or browser suite was run; H owns the approved denial UI/browser follow-up.
+- Documentation checker, its 18 unit tests and git diff whitespace checks pass. Frozen-lock installation changed no dependency manifest/lockfile. No infrastructure, Docker configuration, CI or shared spec file was edited.
+
+## Explicit follow-up boundary
+
+Student branches intentionally remain unchanged. `diagnostic.py` GET content (`get_content`, line 149) resolves institution but does not check student course enrollment; GET modules (`list_modules`, line 387) filters by institution/course without enrollment. Diagnostic status/get/submit (lines 598/617/646) use own user/institution but no course enrollment gate. Own Twin/next-up/plan and course metadata/memory retain their prior student admission behavior. These are the requested follow-up findings; this lane does not claim complete student course-enrollment enforcement.
+
+H owns Amendment 6 denial/error presentation: prior LearnerRecord/LearnerTriage/Heatmap connection advice and RosterTable false-empty behavior were reported. SEC does not claim browser/UI acceptance. FG-6, FG-8 and FG-9 remain Fred gates; WI-26 stays open until integration and real acceptance. No hosted policy/grant state, hosted major, full Supabase service stack or hosted Data API acceptance is claimed.
 
 ## Historical sources
 
-- [APPROVAL-07](../approval-07.md), including all three confirmed amendments and the coordinator's implementation release.
+- [APPROVAL-07](../approval-07.md), section 1 and confirmed Amendments 1–6, plus coordinator releases for policy and target-membership review.

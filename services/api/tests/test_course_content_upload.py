@@ -10,10 +10,28 @@ import io
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 from app.deps import CurrentUser, get_current_user
 from app.main import app
 from app.routers import diagnostic
 
+
+
+def with_staff_admission(select):
+    """Add valid course/enrollment fixtures without changing business assertions."""
+    def scoped(table, params):
+        if table == "courses" and params.get("select") == "lms_course_id":
+            return [{"lms_course_id": "_4_1"}]
+        if table == "enrollments" and params.get("role") == "eq.instructor":
+            return [{"course_id": "00000000-0000-4000-8000-000000000001"}]
+        return select(table, params)
+    return scoped
+
+
+@pytest.fixture(autouse=True)
+def valid_admission_default(monkeypatch):
+    monkeypatch.setattr(diagnostic.db, "select", with_staff_admission(lambda table, params: []))
 
 def _staff(role="admin"):
     return CurrentUser(user_id="00000000-0000-4000-8000-000000000040", institution_id="institution-1", app_role=role)
@@ -49,7 +67,7 @@ def _wire(monkeypatch, *, inserted, updates, embedded_text=None):
             return []
         return []
 
-    monkeypatch.setattr(diagnostic.db, "select", fake_select)
+    monkeypatch.setattr(diagnostic.db, "select", with_staff_admission(fake_select))
     monkeypatch.setattr(diagnostic.storage, "upload", lambda *a, **k: None)
     monkeypatch.setattr(diagnostic.bedrock, "embed", lambda text: [0.0] * 1024)
 

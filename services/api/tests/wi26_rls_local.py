@@ -12,6 +12,8 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from wi26_rls_extended import snapshot, verify
+
 ROOT = Path(__file__).resolve().parents[3]
 DB = "wi26_synthetic_" + uuid.uuid4().hex[:8]
 
@@ -93,12 +95,102 @@ def main():
               (2, "student", 1), (2, "instructor", 2)]
     pre_counts = [count(*a) for a in actors]
     assert pre_counts == [5, 5, 0, 5, 0, 0, 5, 5], pre_counts
+    table_counts_query = """select jsonb_object_agg(table_name, row_count) from (
+      select 'recommendations' table_name, count(*) row_count from public.recommendations
+      union all select 'users',count(*) from public.users
+      union all select 'enrollments',count(*) from public.enrollments
+      union all select 'evidence_events',count(*) from public.evidence_events
+      union all select 'mastery_state',count(*) from public.mastery_state
+      union all select 'readiness_snapshots',count(*) from public.readiness_snapshots
+      union all select 'srs_state',count(*) from public.srs_state
+      union all select 'quiz_set_attempts',count(*) from public.quiz_set_attempts
+      union all select 'item_exposures',count(*) from public.item_exposures
+      union all select 'item_reviews',count(*) from public.item_reviews
+      union all select 'lms_identity_aliases',count(*) from public.lms_identity_aliases
+      union all select 'courses',count(*) from public.courses
+      union all select 'skills',count(*) from public.skills
+      union all select 'assessments',count(*) from public.assessments
+      union all select 'guided_lessons',count(*) from public.guided_lessons
+      union all select 'content_items',count(*) from public.content_items
+      union all select 'generated_items',count(*) from public.generated_items
+      union all select 'quiz_sets',count(*) from public.quiz_sets
+      union all select 'ingest_jobs',count(*) from public.ingest_jobs
+    ) counts;"""
+    fixture_counts = sql(table_counts_query)
+    grants_query = """select jsonb_agg(jsonb_build_object('table',t.tablename,
+        'authenticatedSelect',has_table_privilege('authenticated',format('%I.%I',t.schemaname,t.tablename),'SELECT'),
+        'rls',c.relrowsecurity) order by t.tablename)
+      from pg_tables t join pg_class c on c.oid=format('%I.%I',t.schemaname,t.tablename)::regclass
+      where t.schemaname='public';"""
+    grant_inventory = sql(grants_query)
+    assert all(not row['authenticatedSelect'] or row['rls'] for row in json.loads(grant_inventory))
+    (out / 'table-access-before.json').write_text(grant_inventory)
+    assert sql("select has_table_privilege('authenticated','public.ingest_jobs','SELECT');") == 'f'
+    def remove_learner():
+        sql("""delete from public.enrollments
+            where user_id='20000000-0000-4000-8000-000000000001'
+              and course_id='30000000-0000-4000-8000-000000000001';""")
+
+    def restore_learner():
+        sql("""insert into public.enrollments(institution_id,user_id,course_id,role)
+          values ('10000000-0000-4000-8000-000000000001',
+                  '20000000-0000-4000-8000-000000000001',
+                  '30000000-0000-4000-8000-000000000001','student');""")
+
+    remove_learner()
+    removed_before = snapshot(sql)
+    removed_rec_before = [count(1, 'student'), count(2, 'instructor'), count(4, 'admin')]
+    restore_learner()
+    extended_before = snapshot(sql)
+    (out / "extended-before.json").write_text(json.dumps(extended_before, indent=2))
     migration = ROOT / "packages/db/migrations/0038_recommendation_visibility.sql"
     sql(migration.read_text())
     after = json.loads(sql(policies_query))
     (out / "policies-after.json").write_text(json.dumps(after, indent=2))
     changed = [a["policyname"] for a, b in zip(before, after) if a != b]
-    assert len(before) == len(after) and changed == ["recs_insert", "recs_read", "recs_update"], changed
+    expected_changes = {"recs_insert", "recs_read", "recs_update", "enroll_read", "evidence_read", "mastery_read", "readiness_read", "srs_read", "quiz_set_attempts_read", "item_exposures_read", "item_reviews_read", "users_read", "lms_identity_aliases_read", "courses_read", "skills_read", "assess_read", "lessons_read", "content_read", "items_read", "quiz_sets_read", "ingest_jobs_read", "profiles_read"}
+    assert len(before) == len(after) and set(changed) == expected_changes, changed
+    extended_after = snapshot(sql)
+    (out / "extended-after.json").write_text(json.dumps(extended_after, indent=2))
+    verify(extended_before, extended_after)
+    assert sql(table_counts_query) == fixture_counts
+    assert sql(grants_query) == grant_inventory
+    (out / 'table-access-after.json').write_text(sql(grants_query))
+    assert sql("select has_table_privilege('authenticated','public.ingest_jobs','SELECT');") == 'f'
+    remove_learner()
+    removed_after = snapshot(sql)
+    removed_rec_after = [count(1, 'student'), count(2, 'instructor'), count(4, 'admin')]
+    assert removed_rec_before == [5, 5, 5] and removed_rec_after == [3, 0, 0]
+    for table in ['evidence_events', 'mastery_state', 'readiness_snapshots', 'srs_state',
+                  'quiz_set_attempts', 'item_exposures', 'item_reviews', 'users', 'aliases']:
+        assert removed_after['owner'][table] == removed_before['owner'][table] == 1
+        for actor in ['teacher', 'admin']:
+            assert removed_before[actor][table] == 1 and removed_after[actor][table] == 0, (actor, table)
+    for actor in [(2, 'instructor'), (4, 'admin')]:
+        user, role = actor
+        claims = json.dumps({'sub': f'20000000-0000-4000-8000-{user:012d}',
+                             'app_role': role, 'institution_id': '10000000-0000-4000-8000-000000000001'})
+        assert sql(f"""begin; set local role authenticated; set local request.jwt.claims='{claims}';
+          with changed as (update public.recommendations set instructor_note='synthetic'
+                           returning id) select count(*) from changed; rollback;""") == '0'
+        try:
+            sql(f"""begin; set local role authenticated; set local request.jwt.claims='{claims}';
+              insert into public.recommendations(institution_id,user_id,course_id,action)
+              values ('10000000-0000-4000-8000-000000000001',
+                      '20000000-0000-4000-8000-000000000001',
+                      '30000000-0000-4000-8000-000000000001','practice'); rollback;""")
+        except subprocess.CalledProcessError as exc:
+            assert 'row-level security' in exc.stderr
+        else:
+            raise AssertionError('staff inserted a recommendation for a removed learner')
+    assert removed_before['admin']['profile'] == 1 and removed_after['admin']['profile'] == 0
+    assert removed_after['owner']['profile'] == 1
+    restore_learner()
+    (out / 'removed-learner.json').write_text(json.dumps({
+        'before': removed_before, 'after': removed_after,
+        'recommendationsBefore': removed_rec_before, 'recommendationsAfter': removed_rec_after,
+    }, indent=2))
+    print('Removed learner: teacher/admin reads and recommendation writes denied; own history retained')
     post_counts = [count(*a) for a in actors]
     assert post_counts == [3, 5, 0, 5, 0, 0, 0, 0], post_counts
     # No policy allows more rows for any tested actor.
@@ -141,6 +233,18 @@ def main():
     assert without_policies(schema_before) == without_policies(schema_after), "non-policy schema/grant change"
     (out / "counts.json").write_text(json.dumps({"before": pre_counts, "after": post_counts}))
     print("RLS read/update/insert actor matrix passed; policy-only schema/grant diff; 5 rows preserved; historical checksums unchanged")
+    sql("""delete from public.enrollments
+        where user_id='20000000-0000-4000-8000-000000000002'
+          and course_id='30000000-0000-4000-8000-000000000001';""")
+    revoked = snapshot(sql)
+    for key in ["enrollments", "evidence_events", "mastery_state", "readiness_snapshots",
+                "srs_state", "quiz_set_attempts", "item_exposures", "item_reviews",
+                "users", "aliases", "courses:1", "skills:1", "assessments:1",
+                "guided_lessons:1", "content_items:1", "generated_items:1", "quiz_sets:1",
+                "ingest_jobs:1", "lesson-steps:1", "set-items:1"]:
+        assert revoked['teacher'][key] == 0, key
+    assert count(2, 'instructor', 1) == 0
+    print("Removed instructor enrollment: 20 read boundaries and recommendations denied")
     print("Local proof artifacts:", out)
 
 

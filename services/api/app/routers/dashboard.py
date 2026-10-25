@@ -699,6 +699,14 @@ def decide_recommendation(
     """
     _assert_teaches_course(user=user, course_id=course_id)
     _course_ref(course_id, user.institution_id)
+    rows = db.select("recommendations", {
+        "id": f"eq.{rec_id}", "institution_id": f"eq.{user.institution_id}",
+        "course_id": f"eq.{course_id}", "select": "user_id", "limit": "1",
+    })
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "recommendation not found")
+    target_user_id = rows[0]["user_id"]
+    _assert_teaches_student(user=user, course_id=course_id, user_id=target_user_id)
     if body.status not in ("approved", "modified", "rejected"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "status must be approved, modified, or rejected",
@@ -726,7 +734,7 @@ def decide_recommendation(
     updated = db.update(
         "recommendations",
         {"id": f"eq.{rec_id}", "institution_id": f"eq.{user.institution_id}",
-         "course_id": f"eq.{course_id}"},
+         "course_id": f"eq.{course_id}", "user_id": f"eq.{target_user_id}"},
         values,
     )
     if not updated:
