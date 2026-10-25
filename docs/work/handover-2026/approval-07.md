@@ -44,10 +44,10 @@ Spec first: the coordinator commits the requirement text to the instructor and t
    - it would change admin scope beyond their institution
    - it needs a schema change other than policy tightening
 5. **Tests, for every fixed route:**
-   - student: 403
-   - instructor of another course: 403
-   - instructor from another institution: 403 or 404
-   - admin of another institution: refused
+   - student on a staff route: 403
+   - instructor of another course: 404
+   - instructor from another institution: 404
+   - admin of another institution: 404
    - correct instructor: allowed
    - admin of the same institution: allowed
 
@@ -68,9 +68,9 @@ Spec first: the coordinator commits `TWIN-REQ-0xx` (student, own history) and `I
 1. **API:**
    - `GET /courses/{course_id}/twin/evidence?cursor=&limit=` for the student's own history.
    - The matching instructor route for a learner, guarded by SEC's gate.
-   - Keyset pagination on `(occurred_at desc, id desc)`, default limit 25, maximum 100, returning an opaque `nextCursor`.
+   - Keyset pagination on `(created_at desc, id desc)`, default limit 25, maximum 100, returning an opaque `nextCursor`.
    - Existing response fields are unchanged. All new fields are optional.
-2. **Query cost:** check the existing indexes on `evidence_events` for `(user_id, course_id, occurred_at)`.
+2. **Query cost:** check the existing indexes on `evidence_events` for `(user_id, course_id, created_at)`.
    - If a suitable index exists, no migration.
    - If not, write an index-only migration `0039_*` with a runbook. It goes to **FG-6**. Use `create index if not exists`, no table rewrite.
 3. **Frontend:** the shared evidence ledger keeps its 10-row pages and labels, and adds "Load older activity" from the cursor for student Twin and instructor learner views. Change "Last 20/25 events" labels to "Showing N of your activity" wording only where full paging is active. Keep reduced motion, keyboard access and 40px controls.
@@ -145,3 +145,19 @@ Add these to the existing FG-5 checklist and record them in `acceptance-2026-10-
 The coordinator updates `closeout.md`: WI-24, WI-25 and WI-26 move to confirmed done, or partial with the exact remainder and branch. The record includes the new SHA, alias version, applied migrations and the repair's post-check counts. Then remove merged worktrees, and the freeze begins.
 
 If a lane is not green when Fred is ready for FG-8, it is left out and recorded with its branch. The deploy does not wait. WI-26 is the exception: if SEC is not green, Fred is told plainly, because it is the security item. He decides whether to deploy without it.
+
+## Confirmed amendments — 2026-10-25
+
+### Amendment 1: created_at, not occurred_at
+
+The original paging column did not exist. Lane H pages on `(created_at DESC, id DESC)` and preserves the existing `createdAt` response field. The ID tiebreak is required for equal timestamps. The index check is `(user_id, course_id, created_at)`; if needed, 0039 indexes those columns plus `id` for the tiebreak, using `create index if not exists`, index-only. Lane M must not change `evidence_events.created_at` when re-attributing rows; before/after post-checks prove identical timestamps for every moved row. No other schema change is authorized.
+
+### Amendment 2: course denial is 404, role denial is 403
+
+An untaught/unavailable course or learner and another institution return 404, hiding existence. A wrong role on a staff route returns 403. SEC tests require other-course instructor 404, cross-institution instructor/admin 404, student on a staff route 403, correct instructor allowed and same-institution admin allowed. Reuse the existing helper behavior. SEC may remove the gradebook routes' 404-to-403 translation in GET assessments and PATCH grade; the coordinator updates INGEST-REQ-001 first and SEC updates Lane S tests. Confirm staff screens show a truthful unavailable/not-found state for 404; record any crash or misleading empty roster for H/U rather than changing API denial semantics.
+
+### Amendment 3: refresh route added to SEC's diagnostic.py scope
+
+SEC may add existing staff/course guards to `POST /courses/{course_id}/skills/propose`. Denials match Amendment 2; correct instructors and same-institution admins can queue refresh. Denied requests enqueue nothing and kick no worker. In diagnostic.py, only guard calls on GET assessments, PATCH grade and POST skills/propose may change executable behavior. Do not change the helper, queue/debounce logic or student preview routes. Prove this narrow scope by AST/diff comparison.
+
+Standing clarification: every route the inventory finds serving staff course/learner data or triggering staff course actions is in SEC's scope for guard calls in any router file no other active lane owns. Stop when another active lane owns the file or the fix needs more than guard calls. H's router additions remain serialized after SEC merges. Preserve legitimate student own-data and existing preview access; do not broaden admin scope.
