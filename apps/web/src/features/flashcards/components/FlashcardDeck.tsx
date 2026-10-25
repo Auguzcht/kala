@@ -447,7 +447,7 @@ export function FlashcardDeck({
         }
       >
         <StudyStream>
-          <div className="relative border bg-card p-6">
+          <div data-tour="study-complete" className="relative border bg-card p-6">
             <CornerBrackets />
             <p className="text-xs font-medium uppercase tracking-[0.06em] text-brand-slate">
               {isReplay ? "Practice complete" : "Study complete"}

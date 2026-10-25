@@ -1,4 +1,20 @@
-/** A wildcard observes a hub route selected by the preceding tour click. */
+/** Match concrete routes, parameter segments and a trailing hub wildcard. */
 export function matchesTourRoute(pathname: string, route: string): boolean {
-  return route.endsWith("/*") ? pathname.startsWith(route.slice(0, -1)) : pathname === route;
+  const actual = pathname.split("/").filter(Boolean);
+  const expected = route.split("/").filter(Boolean);
+  const wildcard = expected.at(-1) === "*";
+  if ((!wildcard && actual.length !== expected.length) || (wildcard && actual.length < expected.length)) return false;
+  return expected.every((segment, index) =>
+    segment === "*" && index === expected.length - 1 ||
+    (segment.startsWith("$") ? Boolean(actual[index]) && !actual[index].startsWith("$") : segment === actual[index])
+  );
+}
+
+/** Only these read/navigation controls may be clicked by the runner. */
+export function isTourUiClick(selector: string): boolean {
+  return [
+    "#tour-roster-first-row", "[data-slot='sheet-close']",
+    "#tour-tab-heatmap", "#tour-skill-review-trigger", "#tour-at-risk-first-flag",
+    "#tour-tab-decide", "#tour-tab-mastery", "#tour-tab-activity",
+  ].includes(selector);
 }

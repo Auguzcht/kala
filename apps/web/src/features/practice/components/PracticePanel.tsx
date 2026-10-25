@@ -108,7 +108,7 @@ function PracticeRecap({
   return (
     <StudySurface bar={<SessionBar />}>
       <StudyStream>
-        <div className="overflow-hidden border bg-card">
+        <div data-tour="test-results" className="overflow-hidden border bg-card">
           <header className="border-b bg-muted/30 px-5 py-5 sm:px-7 sm:py-6">
             <div>
               <div className="flex items-baseline gap-2">

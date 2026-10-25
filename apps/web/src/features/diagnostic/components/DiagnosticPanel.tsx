@@ -148,7 +148,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
 
   return (
     <div data-study-surface className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 border-b bg-background">
+      <header data-tour="diagnostic-header" className="shrink-0 border-b bg-background">
         <PageHeader
           eyebrow="Diagnostic"
           title="Find your starting point"

@@ -462,7 +462,7 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
 
       <BloomsLadder skills={skills} />
 
-      <Card>
+      <Card data-tour="twin-ledger">
         <CardHeader>
           <CardTitle className="text-base">Evidence ledger</CardTitle>
           <p className="text-xs text-muted-foreground">Last 20 events</p>
