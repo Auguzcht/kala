@@ -95,6 +95,14 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Status: partial
 - Verified by: `test_dashboard_routes.py::test_heatmap_requires_instructor` proves role denial only; approved-skill rejection has a teacher gate. `_assert_teaches_student` only checks the target learner's membership; it does not check caller enrollment. Most dashboard endpoints use require_role plus data filters rather than this full requirement. Enforcement is an explicit unresolved finding, not asserted as complete.
 
+### INSTR-REQ-009: Authorize staff course and learner access
+- Rule: Before any staff-facing course/learner read or staff course action, require instructor/admin role from the validated token. Instructors must have a current instructor enrollment for that exact course in the token institution. Admins may access only courses belonging to their token institution. Learner-specific reads/writes also require the target to be an enrolled student in that course and institution. Enforce before roster, cohort stats/charts, heatmap, at-risk, learner record, another learner's Twin, recommendations read/generate/decide, interventions, skill review and refresh, and shared course sources used by staff screens. UUID validation and institution-filtered result queries alone are insufficient admission checks.
+- Rule: Wrong role on a staff route returns 403. Untaught/unavailable course or learner, and cross-institution access by instructors/admins, return generic 404 without revealing existence. Reuse the existing staff course gate plus existing institution-scoped course resolution; do not create a replacement gate. Preserve legitimate own-student and preview access on shared routes; apply staff admission guards without converting those routes to staff-only.
+- Rule: Direct recommendation reads expose only approved/modified/completed rows to the owning student. Authorized course instructors and same-institution admins retain decision history. New RLS may only tighten access; applied migrations and helper definitions are immutable in this round.
+- Acceptance: Each fixed staff route covers student 403, other-course instructor 404, cross-institution instructor/admin 404, correct instructor allowed, same-institution admin allowed, and no protected read/write/queue/model/worker action after denial. Local authenticated RLS tests cover owning student, other-course instructor and correct teacher with before/after policies. Refresh denial queues nothing and kicks no worker. Staff frontend 404s produce truthful unavailable/not-found UI; UI defects are findings, never a reason to loosen API checks.
+- Status: planned
+- Verified by: pending Lane SEC route inventory, dedicated denial/allow tests and real local policy replay; no implementation or hosted acceptance claimed.
+
 ## API contract
 
 ### Accepted presentation boundary
@@ -197,3 +205,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | 2026-10-25 | Define a minimum visible review interval and confirmed recommendation transition before implementation | Fred's direct instructor feedback request in WI-22; supersedes the old optimistic transition | INSTR-REQ-001, INSTR-REQ-002 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | INSTR-REQ-003 through INSTR-REQ-008 |
 | 2026-10-25 | Consolidate accepted presentation requirements and mapped backend draft; preserve H12 windows, WI-25 deferral and revision-specific evidence | Coordinator-approved Lane P reconciliation after APPROVAL-06 Lane I merge; draft `2062784` mapping above | INSTR-REQ-001 through INSTR-REQ-008 |
+
+| 2026-10-25 | Define complete staff course/learner admission and direct recommendation visibility; preserve own-student access and truthful denials | APPROVAL-07 section 1 and Amendments 2–3, WI-26; coordinator spec before Lane SEC implementation | INSTR-REQ-008, INSTR-REQ-009 |

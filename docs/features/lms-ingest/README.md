@@ -36,10 +36,13 @@ Bring Blackboard course material into a tenant-scoped, chunked and embedded corp
 - Rule: both routes use the upload route's `require_role('instructor', 'admin')`
   dependency and `_assert_teaches_course` gate before course resolution or an
   LMS call. The existing gate permits institution-wide admins.
-- Acceptance: a student receives 403; an instructor without an instructor
-  enrollment in this institution and course receives 403; an instructor of
-  this course reaches the mocked LMS operation. These two routes translate
-  the gate's 404 denial to 403 without changing the shared gate or upload.
+- Acceptance: a student on either staff route receives 403. An instructor
+  without the matching instructor enrollment receives generic 404; an
+  instructor or admin from another institution receives 404. Correct
+  instructors and same-institution admins reach the LMS operation. Reuse
+  the gate's 404 without translation, preserving wrong-role 403. The shared
+  helper and student preview routes remain unchanged. This amended denial
+  contract awaits SEC implementation; earlier Lane S proof records 403.
 - Status: implemented
 - Verified by: `services/api/tests/test_staff_route_auth.py`, tests named
   `test_INGEST_REQ_001_*`, and the existing student course-data regression in
@@ -150,3 +153,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | 2026-10-24 | Minimal freeze spec; reuse upload staff/course gate on gradebook routes; correct upload timing comment | APPROVAL-01 sections 1, 2 Lane S, and confirmed amendment A4; accepted BRIEF-01 endpoint audit | INGEST-REQ-001 |
 | 2026-10-25 | Extend to full source-backed ingest spec, retaining accepted INGEST-REQ-001 wording and evidence | APPROVAL-05 rev 2 Lane P; WI-08; Lane S acceptance remains APPROVAL-02 | INGEST-REQ-001 through INGEST-REQ-007 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | INGEST requirements above |
+
+| 2026-10-25 | Preserve helper 404 for untaught/foreign course gradebook denials; wrong role stays 403 | APPROVAL-07 Amendment 2; coordinator commits before SEC changes and Lane S test updates | INGEST-REQ-001 |

@@ -100,6 +100,12 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 - Status: implemented
 - Verified by: static `routers/twin.py::next_up`, `learn/items.py::weakest_skill`; related weakest-skill serving tests in `test_learn_routes.py`. There is no dedicated browser next-up acceptance test.
 
+### TWIN-REQ-009: Preserve own-data and guarded staff Twin boundaries
+- Rule: Own Twin, next-up and plan derive user/institution from the validated session; students cannot select another user. Staff access to any course/learner data satisfies INSTR-REQ-009 before data access, with target-student membership for learner views. Preserve legitimate own-student access and existing response shapes; presentation or paging grants no extra access. Own plans contain only approved/modified/completed recommendations.
+- Acceptance: Existing own-student reads remain intact. Staff wrong-role, untaught-course, foreign-institution and target-membership cases follow INSTR-REQ-009, with allowed correct instructors and same-institution admins. No protected operation occurs after denial.
+- Status: planned
+- Verified by: pending Lane SEC route/role/institution matrix; not a claim of current enforcement or live acceptance.
+
 ## API contract
 
 ### Accepted presentation boundary
@@ -189,3 +195,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | 2026-10-25 | Require explicit 20/25-event window labels and recent-activity wording; full-history pagination deferred | APPROVAL-06 H12; Lane U close-out implements copy | TWIN-REQ-003 |
 | 2026-10-25 | Write full source-backed feature spec; identify limits and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | TWIN-REQ-004 through TWIN-REQ-008 |
 | 2026-10-25 | Consolidate accepted presentation requirements and mapped backend draft; preserve H12 windows, WI-25 deferral and revision-specific evidence | Coordinator-approved Lane P reconciliation after APPROVAL-06 Lane I merge; draft `2062784` mapping above | TWIN-REQ-001 through TWIN-REQ-008 |
+
+| 2026-10-25 | Define own-student and staff-authorized Twin access before guard implementation | APPROVAL-07 section 1 and Amendments 2–3, WI-26; coordinator | TWIN-REQ-009 |
