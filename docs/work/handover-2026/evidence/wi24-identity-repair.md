@@ -40,3 +40,8 @@ The collision tests cover item_reviews idempotency, its partial session uniquene
 Runner startup initially sampled the image's temporary init server; replaced readiness sampling with its configured healthy state. An intermediate docker top attempt lacked a PID column and was removed. Final fresh replay passes; failures did not change retained migrations or reach hosted data.
 
 Documentation checks: `python3 scripts/docs_check.py` passed; `python3 -m unittest discover -s scripts -p 'test_docs_check.py'` passed 18 tests. These results do not close WI-24 or release FG-7a. Safe one-sided/two-sided apply, no-op rerun, exact backup/restore, derived recomputation and concurrency remain unimplemented because the design explicitly stops on unresolved source/provenance decisions.
+
+
+## Amendment 1 alignment
+
+Rebased the clean lane branch onto local main `9c24a85b4bd21ca9995073dd078e2b3f66ea8325` after reading all confirmed APPROVAL-07 amendments. Retained the design-before-code history. Restored WI-24 owner to ITO; status remains blocked pending design decisions and real acceptance. Runbook now requires exact `(id,created_at)` preimages and per-ID timestamp equality for every moved evidence row, plus zero missing IDs. No occurred_at field is introduced. Successful apply timestamp proof remains pending because no apply implementation is released.

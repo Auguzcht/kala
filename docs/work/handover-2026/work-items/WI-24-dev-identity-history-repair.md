@@ -1,7 +1,7 @@
 ---
 id: WI-24
 status: blocked
-owner: Lane M / Fred
+owner: ITO
 ---
 
 # Reconcile historical dev-hosted identity history
