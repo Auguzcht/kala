@@ -170,3 +170,10 @@ Necessary import resolution: Diagnostic/Bank already depend on Diagnostic staff 
 Separate mutation findings, not authorized for edits by Amendment7: Diagnostic submit; flashcard review; Lesson check; Test create/from-items/retake/submit; Tutor create/patch/upload/delete-attachment/delete-conversation/ask (13 routes). They remain a recorded follow-up, not silently included in this read-only guard change.
 
 Implementation is serialized after H thenM integration. Existing test admission fixtures may be corrected while preserving business assertions; the lane must list those test paths. Strict AST proof compares the exact approved student guard/import additions and proves all staff/helper/processing code unchanged.
+
+
+## Retained tour comparator correction
+
+H's browser suites passed 1,474 assertions and restored U (original launcher/listener39390/39396; H83494/83515 stopped; restored U85651/85666, verified cwd and HTTP200). Its retained unit suite exposed one obsolete whole-file TwinBody comparison against the pre-tour source. WI-25 intentionally changes that component beyond the historical tour attribute, so comparing the current feature to the old whole-file baseline is no longer a valid tour-only scope check.
+
+The coordinator owns the narrow test correction: compare TwinBody's exact normalized executable source at accepted tour revision `c3d6b6351f7adbfc6e8da1d43e371014473c8b74` against pre-tour `3a6a0aa`, preserving the one-attribute-only historical proof. A separate assertion requires current TwinBody to retain exactly the accepted `twin-ledger` anchor. The other six current-file scope comparators and PracticePanel comment/attribute check remain unchanged. No test is skipped or removed and no runtime source changes. H must incorporate this commit and rerun all retained frontend/tour unit tests before merge; prior failed result remains in H evidence.
