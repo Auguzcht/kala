@@ -1,6 +1,6 @@
 # Fred's live acceptance — 2026-10-25
 
-Authority: [APPROVAL-06](../approval-06.md). Owner/operator: Fred. This is a prepared checklist, not executed acceptance. Record only sanitized status, counts and timing; no credentials, tokens, launch URLs, provider bodies or student content. Append failures and later retests separately.
+Release records: [APPROVAL-06](../approval-06.md) and [APPROVAL-07 with confirmed amendments](../approval-07.md). Owner/operator: Fred. This is a prepared checklist, not executed acceptance. Record only sanitized status, counts and timing; no credentials, tokens, launch URLs, provider bodies or student content. Append failures and later retests separately.
 
 ## Release identity and prerequisite gates
 
@@ -37,7 +37,7 @@ Authority: [APPROVAL-06](../approval-06.md). Owner/operator: Fred. This is a pre
 | Existing tours: record actual broken step only | not-run | not-run | |
 | CloudWatch stage/status diagnostics for any remaining provider failure | not-run | not-run | No raw log bodies |
 
-Synthetic automated checks do not fill these live rows. A healthy health endpoint does not prove model access, LTI, permissions or pin persistence. If a case is not reproducible, record not-run with its reason. Full-history paging and historical identity repair are not included.
+Synthetic automated checks do not fill these live rows. A healthy health endpoint does not prove model access, LTI, permissions or pin persistence. If a case is not reproducible, record not-run with its reason. Full-history paging and historical identity repair are added below for APPROVAL-07; they were not included in the original FG-5 pass.
 
 ## Failure/retest record
 
@@ -58,3 +58,41 @@ Fred reported applying0037. [Read-only post-checks](0037-postchecks-2026-10-25.m
 ## FG-1 configuration update — 2026-10-25
 
 Fred delegated the single fallback edit through AWS CLI. The paid chat fallback is now stored and readback-verified, with all25 prior entries unchanged and a retained previous version. No deployment/runtime refresh or model answer is claimed. Fred confirms the migration-history finding is recorded for the database stream and does not block this deploy.
+
+## Runtime correction recorded before APPROVAL-07
+
+Fred confirmed API live alias v7 deployed at 00:04 UTC on 2026-10-25, after the paid fallback change at 00:01 UTC. Runtime refresh is complete; live Hint/Explain/dock success is still not-run here. The earlier pending-refresh entries above preserve the state when written. No APPROVAL-07 deployment is implied.
+
+## APPROVAL-07 gates — not executed
+
+Order is FG-6, FG-8, FG-7a, FG-7b, then FG-9. Local lane tests do not satisfy a Fred gate. The coordinator supplies reviewed commands, expected results and rollback before each gate.
+
+| Gate / field | Result |
+| --- | --- |
+| Reviewed integrated source SHA | pending lane completion and integration checks |
+| FG-6: reviewed 0038 / 0039, operator, environment, time and post-checks | not-run |
+| FG-8: previous alias, immutable worker image and Vercel rollback identity | Fred records privately before deploy |
+| FG-8: new API alias/version, worker update and health | not-run |
+| FG-8: Fred's fast-forward push and Vercel Ready revision | not-run |
+| FG-7a: counts-only repair dry run and planner review | not-run; after FG-8 |
+| FG-7b: apply, source/timestamp conservation, alias/enrollment convergence and restored triggers | not-run |
+| FG-7b: worker completeness, rebuilt mastery/readiness and exact rollback artifact | not-run |
+| FG-9: tester, time/timezone, frontend revision and API version | not-run |
+
+## FG-9 additions — APPROVAL-07
+
+Run alongside the still-pending FG-5 cases. Use approved test accounts; record only sanitized observations and counts. Inaccessible resources must remain non-disclosing.
+
+| Check | 375px | 1440px | Status/timing/notes |
+| --- | --- | --- | --- |
+| WI-26: instructor sees only the course they teach | not-run | not-run | |
+| WI-26: another course's learner URL is unavailable; no learner data or misleading empty class | not-run | not-run | |
+| WI-26: student opening a staff `/class/*` URL is refused | not-run | not-run | |
+| WI-25: student Twin loads older activity through the first event; labels match loaded rows | not-run | not-run | |
+| WI-25: instructor learner record loads older activity through the first event; labels match | not-run | not-run | |
+| WI-24: Alfred and Hanna each appear once in the roster after approved repair | not-run | not-run | |
+| WI-24: each shows combined activity and recent last-active | not-run | not-run | |
+| WI-24: student Twin and instructor record agree for the same activity window | not-run | not-run | |
+| WI-24: opening these views creates no new XP or evidence | not-run | not-run | |
+
+WI-24/25/26 remain open until their actual checks pass. No repair, new migration, deploy, push or acceptance is claimed by preparing this checklist.
