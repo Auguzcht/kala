@@ -178,3 +178,16 @@ Any recommendation-ID read/decide/modify/decline route uses one read-only lookup
 H may minimally correct denial/error states only in roster, at-risk, cohort stats/charts, heatmap and learner record/drill-down callers consuming SEC-guarded routes. Use existing SystemState/EmptyState/LoadingRegion, DESIGN tokens and sentence case. Loading skeletons end when requests settle. Failed requests, including 403/404, show clear unavailability ("This class isn't available to you") or a generic transient-load message ("Couldn't load the class, try again"), with Retry when useful. Never render failure as empty roster/zero stats or a permanent skeleton. Successful empty responses retain existing empty states. An unavailable learner URL has a way back to `/class`.
 
 No API change or new retry loop is authorized. Synthetic browser tests at 375px and 1440px cover 404, 403, 500, network failure, slow response and genuine emptiness for roster, at-risk, cohort stats and learner record; assert no false empty/zero stats, no stuck skeleton and Retry recovery after transient failure.
+
+
+### Amendment 7: student enrollment guards
+
+Inventory every student course-scoped read that lacks a check that the validated student is enrolled in that exact course; record route and source line in the coordinator report. A short follow-up lane, or reopened SEC after router ownership release, may add the existing enrollment guard to those student branches. Non-enrolled and other-institution students receive the same existence-hiding 404; enrolled students and staff branches remain unchanged. Guard calls only, with strict AST scope proof and enrolled/non-enrolled/foreign-student tests for each fixed route. Stop if a fix requires more than guard calls or cuts off legitimate enrolled access. Mutation routes are inventoried separately rather than silently included in this read-route authorization.
+
+Integration order is H after browser green, M after its final guard/report, then this student-enrollment follow-up. Shared routers remain H-owned until that handoff. Coordinator commits affected requirement text before implementation; generated contracts and full merged checks follow the final merge, then FG-6 for reviewed 0038 and 0039 if required.
+
+### Confirmed execution decisions for this continuation
+
+Fred approves temporarily stopping the verified Kala U server on port 5173, running H's three new browser suites plus retained browser/tour suites from H's worktree on that port, and restoring Kala U afterward. Record original, temporary and restored PIDs, worktree identity and restored HTTP 200. Only one port-5173 server runs at a time; restore U even if checks fail.
+
+Governance ambiguity is a valid refused FG-7 outcome, not a requirement to force a merge. If a pair has mismatched consent or data-subject-request state on either account, refuse with `refused: governance ambiguity`, pair label and counts only. Do not alter consent records or research policies to make it mergeable. WI-24 records actual safe merges and actual refusals distinctly, after Fred's gate results. A conservative local refusal pending governance review is never promoted into inferred consent transfer.
