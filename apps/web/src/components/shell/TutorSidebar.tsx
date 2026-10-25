@@ -81,7 +81,7 @@ export function TutorSidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-card">
+    <div data-tour="tutor-history" className="flex h-full min-h-0 flex-col bg-card">
       <div className="flex h-12 shrink-0 items-center border-b px-4">
         <span className="font-display text-sm font-semibold">Chats</span>
       </div>

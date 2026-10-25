@@ -48,6 +48,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-roster-first-row",
+    optional: true,
     title: "Triage a learner",
     description:
       "Click a row to open the triage sheet — the roster stays underneath, so triaging three learners in a row costs no re-orientation.",
@@ -61,6 +62,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-standing",
+    optional: true,
     title: "Triage a learner",
     description:
       "Standing at a glance: readiness, class standing, accuracy, and momentum — the numbers that only exist by comparison. This is the whole sheet — triage, not a deep dive.",
@@ -69,6 +71,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-decide-center",
+    optional: true,
     title: "The gate",
     description:
       "Kala proposes next actions for this learner, each with the evidence behind it. Nothing reaches the learner until you decide.",
@@ -76,6 +79,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-standing",
+    optional: true,
     title: "Triage a learner",
     description:
       "Close the sheet and keep triaging — or open the full record for the deep dive.",
@@ -137,6 +141,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-skill-approve",
+    optional: true,
     title: "Skill mapping and review",
     description:
       "Approve makes the skill live for learners to practice against; reject sends it back. Nothing proposed here reaches anyone until you decide — the same gate as the learner recommendations.",
@@ -145,6 +150,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-at-risk-first-flag",
+    optional: true,
     title: "One learner",
     description:
       "Open the full record — the deep dive that needs width: mastery instruments and the evidence ledger.",
@@ -183,11 +189,12 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     selector: "#tour-run-analysis",
     title: "Decide",
     description:
-      "Generate or regenerate this learner's recommendations from their current twin.",
+      "Run analysis prepares recommendations from the learner’s current evidence only when you choose it. The tour never runs an analysis.",
   },
   {
     route: "/class/student/$uid",
     selector: "#tour-rec-card",
+    optional: true,
     title: "Decide",
     description:
       "Every recommendation shows the evidence it was derived from — you are asked to exercise judgement, not rubber-stamp a score.",
@@ -196,6 +203,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-decision-buttons",
+    optional: true,
     title: "Decide",
     description:
       "Three real outcomes: approve, modify if the activity is wrong, or decline with a reason that stays in the audit trail.",
@@ -233,7 +241,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
     selector: "#tour-record-ledger",
     title: "Activity",
     description:
-      "The append-only evidence ledger. Every recommendation traces back to these rows — nothing here is a guess Kala cannot show its work for.",
+      "Review the recent learning evidence behind this record. Use the ledger’s pages to move through the available events.",
     waitFor: "#tour-record-ledger",
   },
 ];

@@ -32,6 +32,7 @@ function AttachButton({ disabled }: { disabled: boolean }) {
   const attachments = usePromptInputAttachments();
   return (
     <PromptInputButton
+      data-tour="tutor-attach"
       aria-label="Attach a file"
       type="button"
       disabled={disabled}

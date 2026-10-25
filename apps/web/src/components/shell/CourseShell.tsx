@@ -342,7 +342,7 @@ export function CourseShell({
             <div className={cn("flex items-center gap-4", isTutorRoute && "gap-2 sm:gap-4")}>
               {isTutorRoute ? (
                 <Sheet open={tutorHistoryOpen} onOpenChange={setTutorHistoryOpen}>
-                  <SheetTrigger asChild><Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open chat history"><PanelLeft size={18} /></Button></SheetTrigger>
+                  <SheetTrigger asChild><Button data-tour="tutor-history-mobile" variant="ghost" size="icon" className="lg:hidden" aria-label="Open chat history"><PanelLeft size={18} /></Button></SheetTrigger>
                   <SheetContent side="left" className="gap-0 p-0 motion-reduce:animate-none motion-reduce:transition-none">
                     <SheetTitle className="sr-only">Chat history</SheetTitle>
                     <SheetDescription className="sr-only">Choose a saved conversation or start a new chat.</SheetDescription>
