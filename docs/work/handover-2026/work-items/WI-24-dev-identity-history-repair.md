@@ -22,3 +22,15 @@ Bounded local implementation is complete for coordinator review: source collisio
 ## Verified by
 
 - [Local inventory and limits](../evidence/wi24-identity-repair.md)
+
+
+## Valid FG-7 outcome tracking
+
+No real pair has been supplied or run by this lane. For each future Fred-proved pair, coordinator records only its pair label, counts and actual outcome:
+
+| Outcome | Meaning / follow-through | Actual result |
+| --- | --- | --- |
+| Safe no-record case, applied and verified | No consent/DSR rows on either anchor; all other guards and post-worker verification pass; continue separate FG-9 acceptance | Pending Fred gates |
+| `refused: governance ambiguity` | Valid FG-7 safe refusal; record consent_count/dsr_count and pair label only. Entire transaction has no source writes; pair is not described as repaired. Preserve records/policies and record the exact unresolved remainder | No real pair assumed |
+
+Records on either anchor conservatively refuse non-converged repair, including mismatched or apparently matching state. Never alter consent, research policies or views to enable merging. Already-converged no-op remains allowed. An expected refusal is recorded rather than treated as authorization to weaken the guard.

@@ -846,6 +846,19 @@ def restore_exact(source, local, directory, *, inject_failure=False):
         shutil.rmtree(work)
 
 
+def emit_governance_refusal(report):
+    counts = {}
+    for row in report["issues"]:
+        if row["reason"] not in {"CONSENT_PRESENT", "DSR_PRESENT"}:
+            continue
+        pair = counts.setdefault(row["label"], {"consent_count": 0, "dsr_count": 0})
+        key = "consent_count" if row["reason"] == "CONSENT_PRESENT" else "dsr_count"
+        pair[key] += row["n"]
+    for label, pair in sorted(counts.items()):
+        print(f"pair {label} refused: governance ambiguity consent_count={pair['consent_count']} dsr_count={pair['dsr_count']}")
+    return bool(counts)
+
+
 def emit(report):
     rules = {"srs_state":"latest_whole_state", "quiz_set_attempts":"append_attempt_numbers",
              "item_exposures":"verified_disjoint_counts", "enrollments":"same_role",
@@ -934,6 +947,9 @@ def main():
         columns = schema(source)
         validate_triggers(source)
         report = plan(source)
+        if emit_governance_refusal(report):
+            source.run("ROLLBACK;")
+            return 2
         emit(report)
         if report["issues"]:
             raise Refused("BLOCKED_PAIR")

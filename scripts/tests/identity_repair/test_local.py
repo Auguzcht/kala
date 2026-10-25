@@ -3,6 +3,7 @@ from pathlib import Path
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -96,6 +97,9 @@ def run():
             for pair in pairs:
                 assert pair["canonical_id"] not in text and pair["legacy_id"] not in text and inst not in text
             assert "Synthetic" not in text and "synthetic-sub" not in text
+            if "refused: governance ambiguity" in text:
+                assert all(re.fullmatch(r"pair [1-9][0-9]* refused: governance ambiguity consent_count=[0-9]+ dsr_count=[0-9]+",line)
+                           for line in text.splitlines()), "governance refusal included extra output"
             return text
         cli("single-flag",["--apply"],expected=2)
         cli("dry")
@@ -137,9 +141,9 @@ def run():
         guard_case("profile-conflict", "UPDATE public.user_profiles t SET display_name='Unequal synthetic' FROM wi24_pairs p WHERE t.user_id=p.legacy_id;",
                    "UPDATE public.user_profiles SET display_name='Synthetic';", "PROFILE_CONFLICT")
         guard_case("consent", "INSERT INTO public.consents(institution_id,user_id,granted,policy_version) SELECT institution_id,legacy_id,true,'synthetic' FROM wi24_pairs;",
-                   "DELETE FROM public.consents WHERE policy_version='synthetic';", "CONSENT_PRESENT")
+                   "DELETE FROM public.consents WHERE policy_version='synthetic';", "refused: governance ambiguity consent_count=1 dsr_count=0")
         guard_case("dsr", "INSERT INTO public.data_subject_requests(institution_id,user_id,kind) SELECT institution_id,legacy_id,'export' FROM wi24_pairs;",
-                   "DELETE FROM public.data_subject_requests;", "DSR_PRESENT")
+                   "DELETE FROM public.data_subject_requests;", "refused: governance ambiguity consent_count=0 dsr_count=1")
         guard_case("legacy-attachment", "INSERT INTO public.tutor_attachments(institution_id,user_id,conversation_id,storage_path,filename,mime_type,size_bytes) "
                    "SELECT c.institution_id,c.user_id,c.id,'synthetic/legacy','Synthetic legacy blocker','text/plain',1 FROM public.tutor_conversations c JOIN wi24_pairs p ON c.user_id=p.legacy_id;",
                    "DELETE FROM public.tutor_attachments WHERE filename='Synthetic legacy blocker';", "LEGACY_ATTACHMENTS")
@@ -178,13 +182,13 @@ def run():
         assert db.scalar("SELECT to_jsonb(count(*)) FROM public.research_evidence_anon;")==1
         db.run("ROLLBACK;")
         assert repair.snapshot(db)==governance_before
-        assert "CONSENT_PRESENT" in cli("canonical-consent",["--apply","--confirm"],expected=2)
+        assert cli("canonical-consent",["--apply","--confirm"],expected=2) == "pair 1 refused: governance ambiguity consent_count=1 dsr_count=0\n"
         assert repair.snapshot(db)==governance_before
         db.run("SET request.jwt.claims='{}'; DELETE FROM public.consents WHERE policy_version='canonical-probe'; "
                "DELETE FROM public.researcher_grants WHERE researcher_id IN(SELECT id FROM research_probe); "
                "DELETE FROM public.researchers WHERE id IN(SELECT id FROM research_probe);")
         guard_case("canonical-dsr", "INSERT INTO public.data_subject_requests(institution_id,user_id,kind) SELECT institution_id,canonical_id,'export' FROM wi24_pairs;",
-                   "DELETE FROM public.data_subject_requests;", "DSR_PRESENT")
+                   "DELETE FROM public.data_subject_requests;", "refused: governance ambiguity consent_count=0 dsr_count=1")
         def restored_preimage_matches(expected):
             current=repair.snapshot(db)
             return all(current[t]==expected[t] for t in current if t!="audit_log")
