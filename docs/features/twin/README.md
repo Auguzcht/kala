@@ -48,7 +48,7 @@ This focused WI-22 amendment defines readiness-number legibility and bounded evi
 
 ## Student read admission
 
-Own Twin, next-up and assigned-plan GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads). The full-history endpoint keeps TWIN-REQ-010’s explicit student-role and scoped-enrollment guard; staff admission remains INSTR-REQ-009. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+Own Twin, next-up and assigned-plan GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads). The full-history endpoint keeps TWIN-REQ-010’s explicit student-role and scoped-enrollment guard; staff admission remains INSTR-REQ-009. Admission is implemented locally and verified by the 116-case AUTH-REQ-007 route/import matrix and strict AST scope proof; hosted deployment and live acceptance remain pending.
 
 ## Requirements
 
@@ -107,8 +107,8 @@ Own Twin, next-up and assigned-plan GETs follow [AUTH-REQ-007](../lti-auth/READM
 ### TWIN-REQ-009: Preserve own-data and guarded staff Twin boundaries
 - Rule: Own Twin, next-up and plan derive user/institution from the validated session; students cannot select another user. Staff access to any course/learner data satisfies INSTR-REQ-009 before data access, with target-student membership for learner views. Student GETs also satisfy AUTH-REQ-007; preserve enrolled own-student access and existing response shapes. Presentation or paging grants no extra access. Own plans contain only approved/modified/completed recommendations.
 - Acceptance: Existing own-student reads remain intact. Staff wrong-role, untaught-course, foreign-institution and target-membership cases follow INSTR-REQ-009, with allowed correct instructors and same-institution admins. No protected operation occurs after denial.
-- Status: planned
-- Verified by: pending Lane SEC route/role/institution matrix; not a claim of current enforcement or live acceptance.
+- Status: done-awaiting-confirmation; local implementation verified, hosted acceptance pending.
+- Verified by: `services/api/tests/test_wi26_course_authorization.py`, `test_wi26_student_read_admission.py` and the student AST scope verifier; INSTR-REQ-009 states the separate local policy proof and hosted gate.
 
 ### TWIN-REQ-010: Browse complete own evidence history
 - Rule: An authenticated student with student enrollment in the requested course and token institution can read only their own evidence through `GET /courses/{course_id}/twin/evidence`. UUID validation alone does not authorize access. This is a new history endpoint; existing Twin/next-up/plan responses remain unchanged.
@@ -118,21 +118,23 @@ Own Twin, next-up and assigned-plan GETs follow [AUTH-REQ-007](../lti-auth/READM
 - Concurrency: Read strictly below the last returned tuple. Equal timestamps order by ID; newer arrivals appear after refreshing the first page. Merge loaded pages deterministically and deduplicate by ID. Cache identity includes institution, caller, validated role, target learner, course and cursor; reset visible pagination on scope changes and never keep another scope's previous data. Do not claim snapshot isolation or lifetime totals.
 - Presentation: Keep ten-row ledger pages, keyboard access, reduced motion and 40px controls. Active own-history surfaces say “Showing N of your activity”, where N is the loaded count. Show “Load older activity” only with a live next cursor. Start the independent history feed rather than mixing its first page with legacy 20/25-row arrays. On a transient own-history fetch failure retain loaded rows and offer retry; a 403/404 hides loaded and fallback rows and shows unavailability. Instructor callers also follow INSTR-REQ-011's failed-request state. Full-history labels appear only after the new request succeeds; retain bounded labels elsewhere.
 - Acceptance: First/next/last/empty pages, equal timestamps, invalid/tampered/cross-scope cursors, limit bounds, unavailable course, account/role/course switches, concurrent arrivals, retry and deduplication, and 375px/1440px keyboard/reduced-motion browser tests. Reading creates no evidence or XP; existing charts/statistics and response fields remain unchanged.
-- Status: planned
-- Verified by: pending Lane H dedicated API, local index and browser tests; no implemented or hosted acceptance claim.
+- Status: done-awaiting-confirmation; local implementation verified, hosted index/deployment and acceptance pending.
+- Verified by: `services/api/tests/test_evidence_history.py`, `test_evidence_history_routes.py`, `tests/fixtures/evidence_history_local.sql` and the Twin evidence-history/scope browser suites at 375px/1440px. No hosted acceptance claim.
 
 ## API contract
 
 ### Accepted presentation boundary
 
-No API, schema, authorization or query change. Existing student Twin response contains at most 20 recent events. The instructor learner-record implementation reads at most 200 events internally for its statistics, but serializes only the latest 25 into its evidence array; the instructor Twin drill-down uses the Twin response. Pagination navigates the returned array and does not imply access to all historical evidence. Labels explicitly say “Last 20 events” for Twin and “Last 25 events” for learner-record ledgers; bounded statistics say “Based on recent activity”. Full-history server pagination is deferred under WI-25. The earlier 200-row response description confused the internal read limit with the serialized ledger window; the finalization handoff records this correction.
+The original presentation-only amendment retained bounded legacy responses: Twin returns at most 20 events; learner-record statistics read at most 200 and serialize 25. WI-25 now implements an independent authorized keyset history feed under TWIN-REQ-010 / INSTR-REQ-010. Active feeds use loaded-activity wording and ten-row local pages with Load older activity; bounded fallback surfaces retain “Last 20 events” / “Last 25 events”. Statistics still say “Based on recent activity” and remain bounded. Paging does not change existing summary responses, calculations or evidence. The earlier 200-row response description confused internal reads with serialized ledger rows.
 
 ### Backend contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
-| GET /courses/{course_id}/twin | Own skills/readiness/evidence | Session | Read only; malformed course ID 404 |
+| GET /courses/{course_id}/twin | Own skills/readiness/recent evidence | Session; student enrollment under AUTH-REQ-007 | Read only; unavailable course/enrollment 404 |
+| GET /courses/{course_id}/twin/evidence | Independent own full-history feed | Student, token institution and current student enrollment | TWIN-REQ-010 cursor/limit contract; no writes |
+| GET /dashboard/{course_id}/students/{user_id}/evidence | Independent learner history | INSTR-REQ-009 staff/course/learner admission | INSTR-REQ-010; no writes |
 | GET /courses/{course_id}/next-up | Own next suggested skill | Session | Returns next=null when no candidate; no generation |
-| GET /dashboard/{course_id}/students/{user_id}/twin | Staff drill-down | Instructor/admin | Same institution user lookup; course-gate gap in instructor spec |
+| GET /dashboard/{course_id}/students/{user_id}/twin | Staff drill-down | Instructor/admin | INSTR-REQ-009 staff/course/learner admission |
 
 `/courses/{course_id}/plan` belongs to [instructor-insights](../instructor-insights/README.md). Student twin UI groups skills by module and Bloom (`TwinBody.tsx`, `lib/group-by-module.ts`); it does not write mastery.
 
@@ -193,7 +195,7 @@ Coordinator-approved consolidation onto `8bc569e36b52488b4e05202a90cb18c8ba0db58
 | TWIN-REQ-004 | TWIN-REQ-007 | Reconcile mastery and preserve readiness history |
 | TWIN-REQ-005 | TWIN-REQ-008 | Suggest a next skill without generating an item |
 
-Static reconciliation review confirms returned Twin evidence is capped at 20, learner-record statistics read at most 200 events and serialize 25 ledger rows, and cohort roster/statistics evidence reads are capped at 2,000 class-wide. H12 labels remain “Last 20 events”, “Last 25 events” and “Based on recent activity”; full-history paging stays deferred under [WI-25](../../work/handover-2026/work-items/WI-25-full-history-evidence-paging.md). These are bounded-window counts, not lifetime totals.
+Historical reconciliation at `8bc569e` confirmed the legacy 20/25-row responses, 200-event learner statistics read and 2,000-event class-wide statistics bound. APPROVAL-07 now supersedes the WI-25 paging deferral: the independent cursor feed is locally implemented while those summary/statistics bounds remain unchanged. Active full-history ledgers use loaded-activity wording; inactive bounded surfaces retain H12 labels. Hosted acceptance remains pending.
 
 ## Current source revalidation
 
@@ -201,10 +203,15 @@ Static review at `8bc569e36b52488b4e05202a90cb18c8ba0db589` preserves accepted p
 
 Documentation validation for this reconciliation passed: YAML and referenced code/test paths, requirement fields and unique IDs, local links, source line bounds, accepted presentation/changelog preservation, exact draft-to-final mapping, unchanged Lane S requirement, auth byte identity and eight-path ownership. Runtime tests were not rerun.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | TWIN-REQ-003/009/010; AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Define prominent readiness numbers, plain Focus area heading and shared ten-row ledger pagination before implementation | Fred's direct WI-22 visual/pagination request for student and instructor views | TWIN-REQ-001, TWIN-REQ-002, TWIN-REQ-003 |
 | 2026-10-25 | Correct the observed instructor ledger response window to 25; distinguish the internal 200-event statistics read | Final UI/UX handoff source trace of cohort.learner_record; no runtime or intended-behavior change | TWIN-REQ-003 |

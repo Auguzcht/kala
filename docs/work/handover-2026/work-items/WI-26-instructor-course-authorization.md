@@ -14,7 +14,7 @@ Some dashboard reads/decisions use an instructor/admin role gate and institution
 
 Define and review course ownership/admin policy before changing behavior. Add denial tests for same-institution instructors outside a course, removed instructors, students, cross-institution calls and decisions against an unowned course. Verify legitimate teachers and institution admins retain intended access. Review every dashboard route, not only the learner-record helper. Determine whether direct authenticated recommendation reads need status filtering; any SQL correction is a new forward migration with real local RLS tests, then a reviewed Fred/ITO apply runbook. Never edit applied0002.
 
-The H01(a) UUID fix removes stale enrollments after a complete successful roster sync, but it does not supply missing checks to routes that never consult that enrollment. No security fix or hosted exploit check is claimed here. Record this risk explicitly in release review; passing UI/API regression suites is not a security sign-off.
+The H01(a) UUID fix removes stale enrollments after a complete successful roster sync, but it does not supply missing checks to routes that never consult that enrollment. The original finding is now addressed locally below; no hosted exploit check or acceptance is claimed. Record this risk explicitly in release review; passing UI/API regression suites is not a security sign-off.
 
 ## APPROVAL-07 implementation round
 
@@ -22,7 +22,9 @@ Lane SEC followed coordinator-owned INSTR-REQ-009 / TWIN-REQ-009, INGEST-REQ-001
 
 Final SEC revision `9208875cb5bc22f50ce903cf90ef1e680a709e25` merged locally at `afe0c1cb0f35b86a4fddad4d61f83a9ea1067038`. Lane verification: 829 API tests, 117 worker tests, 219 focused authorization cases, 350 local authenticated read cases plus recommendation writes/removed-membership counterexamples, strict 13-route Diagnostic AST proof, unchanged 0001–0037 checksums, and web/docs checks passed. These are local implementation results, not deployed security acceptance. H owns the approved denial/error browser checks. Full merged integration, FG-6, FG-8 and FG-9 remain open.
 
-Student enrollment checks missing from retained shared content/Diagnostic/own-data routes remain explicit follow-up findings; this lane was instructed to preserve those student branches. Hosted grants and Data API state have not been inspected in this round. See the complete inventory for exact routes and lines.
+The initial staff lane preserved student branches. Amendment 7 subsequently authorized the 19 inventoried student GET enrollment guards under AUTH-REQ-007. Revision `9f2d5fb9b527d96ba8b766057ce74e8c0b78d5e0` merged at `63230a3`, after H then M. Dedicated admission/import tests pass 116; exact AST proof permits only those student branches/imports and proves staff, helpers, mutations, response fields and H history unchanged. Full merged API passes 1,014; worker 117; generated contracts are committed. The coordinator report contains every pre-fix route and source line.
+
+Thirteen student mutation methods remain outside Amendment7 and unchanged: Diagnostic submit; flashcard review; Lesson check; Test create/from-items/retake/submit; Tutor create/patch/upload/delete-attachment/delete-conversation/ask. They remain an explicit follow-up finding, not a claimed guard fix. Hosted grants and Data API state have not been inspected in this round. FG-6/8/9 remain open; owner remains ITO.
 
 ## Verified by
 

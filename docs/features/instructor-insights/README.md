@@ -39,7 +39,7 @@ This focused amendment defines visible feedback for instructor skill reviews and
 | Actor (app_role) | Can | Cannot |
 | --- | --- | --- |
 | student | Read their own approved/modified/completed plan | View undecided/rejected recommendations through the plan API or access dashboard routes |
-| instructor | Inspect their class, generate proposals and decide/author actions | Access arbitrary courses merely by guessing IDs (intended; enforcement gap below) |
+| instructor | Inspect their class, generate proposals and decide/author actions | Access an untaught course or another institution |
 | admin | Support institution-level oversight | Access another institution's data |
 | model | Propose bounded actions from an allow-listed context | Publish directly to the learner's plan |
 
@@ -92,8 +92,8 @@ This focused amendment defines visible feedback for instructor skill reviews and
 ### INSTR-REQ-008: Enforce staff course ownership before service-role access
 - Rule: course staff must teach the requested course; institution admins are institution-scoped. A target learner must be an enrolled student. Apply this before all reads/writes, including recommendation decisions.
 - Acceptance: student gets 403; instructor outside course and cross-institution requests get 404 before data access; decisions cannot alter an unowned course.
-- Status: partial
-- Verified by: `test_dashboard_routes.py::test_heatmap_requires_instructor` proves role denial only; approved-skill rejection has a teacher gate. `_assert_teaches_student` only checks the target learner's membership; it does not check caller enrollment. Most dashboard endpoints use require_role plus data filters rather than this full requirement. Enforcement is an explicit unresolved finding, not asserted as complete.
+- Status: done-awaiting-confirmation; locally enforced under INSTR-REQ-009, hosted acceptance pending.
+- Verified by: `services/api/tests/test_wi26_course_authorization.py`; course, institution and target-learner guards now precede protected work. The historical role-only finding is locally resolved; 0038 direct-access policies await Fred FG-6.
 
 ### INSTR-REQ-009: Authorize staff course and learner access
 - Rule: Before any staff-facing course/learner read or staff course action, require instructor/admin role from the validated token. Instructors must have a current instructor enrollment for that exact course in the token institution. Admins may access only courses belonging to their token institution. Learner-specific reads/writes also require the target to be an enrolled student in that course and institution. Enforce before roster, cohort stats/charts, heatmap, at-risk, learner record, another learner's Twin, recommendations read/generate/decide, interventions, skill review and refresh, and shared course sources used by staff screens. UUID validation and institution-filtered result queries alone are insufficient admission checks.
@@ -102,22 +102,22 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Rule: Review authenticated policies on personal learning, identity and course data as well as recommendations. Staff policy access requires the same token role, institution and current taught-course boundary; an unused frontend client is not evidence of safe direct access. Preserve legitimate student own-data access and existing non-staff curriculum/research access. Tightening must be proved against the local replay without changing authorization helpers.
 - Rule: Recommendation-ID operations perform one id/token-institution/route-course-scoped lookup, then existing course and target-student guards; absent/out-of-scope is generic 404. Bind mutation to the looked-up `user_id` as well as id/institution/course so a moved/changed target cannot be updated by stale admission. Zero updated rows preserves the existing 404 pattern. Decision semantics, confirmation, response fields and history stay unchanged.
 - Acceptance: Each fixed staff route covers student 403, other-course instructor 404, cross-institution instructor/admin 404, correct instructor allowed, same-institution admin allowed, and no protected read/write/queue/model/worker action after denial. Local authenticated RLS tests cover owning student, other-course instructor and correct teacher with before/after policies. Refresh denial queues nothing and kicks no worker. Staff frontend 404s produce truthful unavailable/not-found UI; UI defects are findings, never a reason to loosen API checks.
-- Status: planned
-- Verified by: pending Lane SEC route inventory, dedicated denial/allow tests and real local policy replay; no implementation or hosted acceptance claimed.
+- Status: done-awaiting-confirmation; local guards/policy proof complete, hosted application and acceptance pending.
+- Verified by: `services/api/tests/test_wi26_course_authorization.py` (219 focused cases in the SEC implementation), local `wi26_rls_local.py` (350 authenticated read cases plus write/removal counterexamples), and reviewed Diagnostic AST scope proof at the staff-only checkpoint. The later student proof permits only AUTH-REQ-007 additions. Fred applies reviewed 0038; no hosted policy state is inferred.
 
 ### INSTR-REQ-010: Browse authorized learner evidence history
 - Rule: `GET /dashboard/{course_id}/students/{user_id}/evidence` uses TWIN-REQ-010's response, cursor and stable `(created_at DESC, id DESC)` paging contract. Enforce SEC's INSTR-REQ-009 staff/course/institution gate and target-student membership before evidence access. Correct instructors and same-institution admins are allowed; wrong role is 403, untaught/unavailable or foreign-institution course/learner is 404. Identity/presentation never grants new access.
 - Presentation: The shared ledger and instructor learner views keep ten-row pages and add “Load older activity” only with a next cursor. A successful active full-history request says “Showing N of this learner's activity”, where N is loaded rows. Preserve existing bounded statistics and legacy labels wherever full paging is inactive. Apply TWIN-REQ-010 cache/scope/reset/deduplication/failure/retry and keyboard/reduced-motion rules.
 - Acceptance: Correct teacher and same-institution admin succeed; student, outside-course instructor, foreign-institution instructor/admin and unenrolled target are refused before data access. Cover TWIN-REQ-010 paging/cursor/limit scenarios, browser loading at 375px/1440px and zero evidence/XP writes from views.
-- Status: planned
-- Verified by: pending Lane H dedicated route, query and browser tests after SEC integration; no hosted acceptance claim.
+- Status: done-awaiting-confirmation; local integration verified, hosted acceptance pending.
+- Verified by: `services/api/tests/test_evidence_history.py`, `test_evidence_history_routes.py`, the local index/keyset fixture and Twin history/scope browser suites; no hosted acceptance claim.
 
 ### INSTR-REQ-011: Distinguish loading, unavailable, failed and empty instructor views
 - Rule: Roster, at-risk, cohort stats/charts, heatmap and learner record/drill-down callers use existing UI primitives and tokens. Loading uses the current skeleton only while loading. Any failed request, including a refetch after cached success, is not an empty class, zero statistics or a stuck skeleton. For 403/404 show “This class isn't available to you”; for other failures show “Couldn't load the class, try again”, with Retry where meaningful. Successful empty data keeps the actual empty state.
 - Rule: An inaccessible learner URL uses “Learner unavailable”, non-disclosing course/learner copy and Back to class linking `/class`; transient learner failures retain retry. No API change or additional query retry loop. Never expose raw error bodies or resource existence.
 - Acceptance: Synthetic browser cases at 375px/1440px for 404, 403, 500, network failure, slow response and genuine empty class across roster, at-risk, cohort stats and learner record. No false empty roster/zero stats on error, no permanent skeleton, and successful transient Retry recovery. Existing charts/stats/learning behavior and accessible controls remain intact.
-- Status: planned
-- Verified by: pending H dedicated synthetic denial-state tests; static findings are recorded and not declared fixed.
+- Status: done-awaiting-confirmation; synthetic verification complete, live acceptance pending.
+- Verified by: `apps/web/src/features/instructor/tests/read-states.browser.mjs` (222 assertions at 375px/1440px, including denied, failed, slow, empty and retry cases).
 
 ## API contract
 
@@ -131,9 +131,9 @@ This focused amendment defines visible feedback for instructor skill reviews and
 ### Backend contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
-| GET /dashboard/{course_id}/roster | Class roster rollups | Instructor/admin | Institution-scoped data; teacher-gate gap |
-| GET /dashboard/{course_id}/stats | Cohort KPIs/charts | Instructor/admin | Bounded histories; teacher-gate gap |
-| GET /dashboard/{course_id}/heatmap | Approved-skill cells | Instructor/admin | Optional module_ref; teacher-gate gap |
+| GET /dashboard/{course_id}/roster | Class roster rollups | Instructor/admin | INSTR-REQ-009 staff/course admission |
+| GET /dashboard/{course_id}/stats | Cohort KPIs/charts | Instructor/admin | Bounded statistics; INSTR-REQ-009 admission |
+| GET /dashboard/{course_id}/heatmap | Approved-skill cells | Instructor/admin | Optional module_ref; INSTR-REQ-009 admission |
 | GET /dashboard/{course_id}/at-risk | Support reasons | Instructor/admin | Empty list is normal |
 | GET /dashboard/{course_id}/students/{user_id}/twin | Legacy student twin | Instructor/admin | Same-institution user lookup; not full learner record |
 | GET /dashboard/{course_id}/students/{user_id}/record | Learner record | Instructor/admin | Target student-membership check; 404 missing |
@@ -152,9 +152,9 @@ Skill review API is specified in [skills](../skills/README.md). PATCH decision h
 No new persistence or identity mapping. TanStack Query owns server responses. The presentation interval exists only while an existing mutation runs. Hosted identity repair is outside this amendment.
 
 ### Backend contract
-Read enrollments/users/profiles, skills, mastery_state, evidence_events and readiness_snapshots; write recommendations via API service role. RLS 0002 allows self/course teachers/institution admins to read recommendations; 0009 allows teacher/admin insert/update. The own-student RLS read policy does not filter recommendation status, so hiding undecided proposals is currently a plan-API boundary, not a proven direct-DB confidentiality boundary. Service-role access bypasses RLS; missing caller course gates are material.
+Read enrollments/users/profiles, skills, mastery_state, evidence_events and readiness_snapshots; write recommendations via API service role. API admission now satisfies INSTR-REQ-009 before service-role operations. Historical 0002/0009 recommendation policies are narrowed by reviewed 0038, locally proved but not yet applied by Fred: own students see only approved/modified/completed, and staff access is course/institution/target scoped. Service-role access bypasses RLS, so both API guards and direct authenticated policy acceptance are required.
 
-The presentation table retains its accepted access description. Actual service-role enforcement remains partial under INSTR-REQ-008; a successful role gate is not proof that the caller teaches the course.
+The presentation table retains its accepted access description. Service-role admission is implemented locally under INSTR-REQ-009; a role gate alone remains insufficient. Hosted acceptance is separate.
 
 ## AI usage (if any)
 
@@ -168,18 +168,18 @@ None added. Reviewing an existing proposal or recommendation does not introduce 
 
 Network errors, fast responses, slow responses, keyboard activation, reduced motion and repeated clicks are covered. This local implementation does not deploy changes to the separate hosted instructor site. Duplicate enrolled/LTI identities require a separately reviewed human-run repair; never merge by display name in the UI.
 
-- Shared queries cap evidence, snapshots and decisions. Roster/statistics evidence is capped at 2,000 events class-wide; learner-record statistics read at most 200 and return only 25 ledger rows. Bounded counts/accuracy/last activity do not represent lifetime history; legacy responses remain bounded; WI-25 full-history ledger paging is newly authorized under INSTR-REQ-010, with implementation and live acceptance still pending.
+- Shared queries cap evidence, snapshots and decisions. Roster/statistics evidence is capped at 2,000 events class-wide; learner-record statistics read at most 200 and return only 25 ledger rows. Bounded counts/accuracy/last activity do not represent lifetime history; legacy responses remain bounded; WI-25 implements an independent history feed under INSTR-REQ-010 locally, with hosted deployment and live acceptance still pending.
 - Median implementation uses the upper middle element for even samples; percentile uses strict-below peers. Ties and sparse cohorts need cautious interpretation.
 - Zero evidence is distinct from zero mastery; roster and at-risk use related but different rules. Heatmap/stats cohort means have different denominators.
-- Plans navigate via compatibility routes for lesson/practice/flashcards; routing fixes belong to UI scope. Recommendation lifecycle completion, teacher audit immutability and course gate hardening remain incomplete.
+- Plans navigate via compatibility routes for lesson/practice/flashcards; routing fixes belong to UI scope. Recommendation lifecycle completion and teacher audit immutability remain incomplete; course admission is locally implemented and awaits hosted acceptance.
 - No notifications, email dispatch, AGS grade passback or hosted interventions are performed by this feature.
 
 ## Contradictions requiring planner resolution
 
 | Locations at source revision | Finding | Proposed resolution (not implemented here) |
 | --- | --- | --- |
-| `services/api/app/routers/dashboard.py:516` (teacher/student guard wording); `services/api/app/routers/dashboard.py:520` (target membership only); `services/api/app/db/supabase.py:25` (service role) | The guard does not prove caller teaches the course. Role-only dashboard/decision routes can bypass course-scoped RLS. | Authorize a security lane to add shared course gates and denial tests across all dashboard paths. |
-| `services/api/app/routers/twin.py:76` (undecided proposals invisible); `packages/db/migrations/0002_rls.sql:106` (self read regardless of status) | Plan API hides suggested/rejected; direct authenticated table policy does not. | Review Data API exposure and decide whether status filtering must be enforced with a forward RLS change; no hosted check claimed. |
+| `services/api/app/routers/dashboard.py:516` (teacher/student guard wording); `services/api/app/routers/dashboard.py:520` (target membership only); `services/api/app/db/supabase.py:25` (service role) | The guard does not prove caller teaches the course. Role-only dashboard/decision routes can bypass course-scoped RLS. | Locally resolved by INSTR-REQ-009 shared guards and denial tests. Hosted acceptance remains pending. |
+| `services/api/app/routers/twin.py:76` (undecided proposals invisible); `packages/db/migrations/0002_rls.sql:106` (self read regardless of status) | Plan API hides suggested/rejected; direct authenticated table policy does not. | Locally resolved by reviewed forward migration 0038 and authenticated replay; Fred FG-6 hosted application/grants and acceptance remain pending. |
 | `services/api/app/twin/cohort.py:63` (both roles must be student); `services/api/app/routers/dashboard.py:55` (heatmap enrollment-only filter) | Older heatmap/at-risk cohort helper does not apply the same dual-role exclusion as roster/stats. | Unify student selection in a separately scoped task and add regression tests. |
 
 ## Evidence and verification limits
@@ -206,7 +206,7 @@ Coordinator-approved consolidation onto `8bc569e36b52488b4e05202a90cb18c8ba0db58
 | INSTR-REQ-005 | INSTR-REQ-007 | Let instructors author direct actions and learners see only assigned work |
 | INSTR-REQ-006 | INSTR-REQ-008 | Enforce staff course ownership before service-role access |
 
-Static reconciliation review confirms returned Twin evidence is capped at 20, learner-record statistics read at most 200 events and serialize 25 ledger rows, and cohort roster/statistics evidence reads are capped at 2,000 class-wide. H12 labels remain “Last 20 events”, “Last 25 events” and “Based on recent activity”; full-history paging stays deferred under [WI-25](../../work/handover-2026/work-items/WI-25-full-history-evidence-paging.md). These are bounded-window counts, not lifetime totals.
+Historical reconciliation at `8bc569e` confirmed the legacy 20/25-row responses, 200-event learner statistics read and 2,000-event class-wide statistics bound. APPROVAL-07 now supersedes the WI-25 paging deferral: the independent cursor feed is locally implemented while those summary/statistics bounds remain unchanged. Active full-history ledgers use loaded-activity wording; inactive bounded surfaces retain H12 labels. Hosted acceptance remains pending.
 
 ## Current source revalidation
 
@@ -214,10 +214,15 @@ Static review at `8bc569e36b52488b4e05202a90cb18c8ba0db589` preserves accepted p
 
 Documentation validation for this reconciliation passed: YAML and referenced code/test paths, requirement fields and unique IDs, local links, source line bounds, accepted presentation/changelog preservation, exact draft-to-final mapping, unchanged Lane S requirement, auth byte identity and eight-path ownership. Runtime tests were not rerun.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | INSTR-REQ-008–011 |
 | 2026-10-25 | Define a minimum visible review interval and confirmed recommendation transition before implementation | Fred's direct instructor feedback request in WI-22; supersedes the old optimistic transition | INSTR-REQ-001, INSTR-REQ-002 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | INSTR-REQ-003 through INSTR-REQ-008 |
 | 2026-10-25 | Consolidate accepted presentation requirements and mapped backend draft; preserve H12 windows, WI-25 deferral and revision-specific evidence | Coordinator-approved Lane P reconciliation after APPROVAL-06 Lane I merge; draft `2062784` mapping above | INSTR-REQ-001 through INSTR-REQ-008 |

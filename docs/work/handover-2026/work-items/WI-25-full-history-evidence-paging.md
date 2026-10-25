@@ -10,9 +10,9 @@ Requirements: [TWIN-REQ-010](../../../features/twin/README.md#twin-req-010-brows
 
 ## Original bounded-history finding
 
-Current Twin responses expose up to 20 recent events; learner-record responses expose 25 despite the internal 200-event statistics read. Current ledger pagination navigates only the returned array. Copy must disclose those windows and describe bounded statistics as recent activity.
+At the original finding, Twin responses exposed up to 20 recent events; learner-record responses exposed 25 despite the internal 200-event statistics read. Ledger pagination navigated only that array. The independent history feed now implements paging locally; legacy responses/statistics retain these bounds.
 
-Future work defines authorized cursor pagination, deterministic ordering, scope boundaries and honest total/count semantics before implementation. Cover concurrent arrivals, empty pages, learner switching and tenant isolation. Do not enlarge or relabel today's window as a lifetime history.
+TWIN-REQ-010 / INSTR-REQ-010 now define and implement authorized cursor pagination, deterministic ordering, scope boundaries and loaded-row semantics. Local tests cover concurrent arrivals, empty pages, learner switching and tenant isolation. No lifetime totals or expanded statistics are claimed.
 
 ## APPROVAL-07 implementation round
 
@@ -23,7 +23,7 @@ The earlier same-day deferral is superseded by APPROVAL-07 and Amendment 1. Lane
 
 H revision `cf169ec587a639feaeae86cdc429f9ca1ae9550a` merged at `bc8a2f5`. API history, 0039 index, shared ledger and instructor denial states are implemented locally. H reports 898 API tests (69 history cases), 1,474 browser assertions, 33 frontend/tour unit tests with zero skips, four Study component tests and web/docs checks passing. Existing handler ASTs and historical SQL bytes are preserved. The original comparator failure is retained in evidence with its reviewed correction; it is not silently omitted.
 
-Port5173 was restored to Kala U after H testing and independently verified HTTP200. Generated contracts, final full integrated checks, Fred FG-6/FG-8 and FG-9 remain required. Owner stays ITO and status stays in-progress; no hosted migration or live full-history acceptance is claimed.
+Port5173 was restored to Kala U after H testing and independently verified HTTP200. Generated contracts are committed at `8e51040`; full merged API/worker/frontend and web checks pass, with final integrated browser results in the coordinator report. Fred FG-6/FG-8 and FG-9 remain required. Owner stays ITO and status stays in-progress; no hosted migration or live full-history acceptance is claimed.
 
 ## Verified by
 

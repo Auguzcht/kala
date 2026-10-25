@@ -66,14 +66,14 @@ Course authorization is incomplete for several review routes; see the finding be
 ### SKILL-REQ-006: Authorize skill review and refresh before privileged work
 - Rule: Every staff skill proposal/review/detach/reject/retag action requires validated instructor/admin role, current instructor enrollment in the exact course for instructors, and token-institution course ownership for admins. Reuse existing admission guards; wrong role is 403 and untaught/unavailable/foreign-institution course is 404. Refresh admission precedes queue/debounce/model/worker work, without changing that work's semantics or response fields.
 - Acceptance: Wrong-role student, outside-course instructor and foreign instructor/admin are denied before protected operations; correct teacher and same-institution admin retain behavior. Denied refresh queues nothing and kicks no worker. Shared student content-read branches remain unchanged; no new gate/helper policy is introduced.
-- Status: planned
-- Verified by: pending SEC guard/denial matrix and local proof; course authorization is not marked implemented by this spec commit.
+- Status: done-awaiting-confirmation; local implementation verified, hosted acceptance pending.
+- Verified by: `services/api/tests/test_wi26_course_authorization.py` and the reviewed staff guard scope proof; denied refresh performs no queue/model/worker work.
 
 ## API contract
 
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
-| POST /courses/{course_id}/skills/propose | Persist queued state and wake worker | Instructor/admin | 202; role-only gate currently |
+| POST /courses/{course_id}/skills/propose | Persist queued state and wake worker | Instructor/admin | 202; existing staff/course/institution admission before queue work |
 | GET /dashboard/{course_id}/skills/proposed | Queue plus proposalStatus | Instructor/admin | proposed rows only; absent/unrecognized state normalizes to done |
 | GET /dashboard/{course_id}/skills/auto-matched | Inherited approved skills | Instructor/admin | canonical_skill_id nonnull |
 | PATCH /dashboard/{course_id}/skills/{skill_id}/review | Review/edit proposal | Instructor/admin | Body status, optional name/bloom_level/blueprint_weight; 400/404 |
@@ -119,10 +119,15 @@ Reconciliation source base: `8bc569e36b52488b4e05202a90cb18c8ba0db589` (integrat
 
 Documentation validation for this reconciliation passed: YAML and referenced code/test paths, requirement fields and unique IDs, local links, source line bounds, accepted presentation/changelog preservation, exact draft-to-final mapping, unchanged Lane S requirement, auth byte identity and eight-path ownership. Runtime tests were not rerun.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | SKILL-REQ-006 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | SKILL-REQ-001 through SKILL-REQ-005 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | SKILL requirements above |
 

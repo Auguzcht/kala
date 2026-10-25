@@ -2,6 +2,8 @@
 
 2026-10-25. Runtime/publication baseline: `da765cbd27bd06c53c04ef3698c9410b503eb94a`, after DOCS-HYGIENE and TOUR-REFRESH. Local coordinator requirements are committed before lane implementation; no hosted interaction, push or deployment is authorized to agents in this round.
 
+**Current outcome:** all authorized local integrations and final checks pass at code/contracts `8e51040f1dda4235f9b12ad344da4cd81442e1e9`. See [the final integrated report](#final-integrated-report--stop-at-fg-6). Earlier stop points below are retained history and are superseded by that report; no hosted gate is recorded as executed.
+
 ## Lane ownership and release
 
 | Lane | Branch | Initial phase | Serialized / forbidden paths |
@@ -195,3 +197,139 @@ The current database guide now registers reviewed0038/0039 and the separate repa
 Coordinator added the opt-in standalone `services/api/tests/handover_migrations_local.py` so the two new migrations can be verified together rather than depending on separate lane evidence. It reuses the committed SEC replay/RLS verifier, H's runbook SQL and keyset fixture; no application/default test behavior changes. This new path has no competing owner and is listed here with its integration-only reason. No dependency or infrastructure configuration changes.
 
 On merged H/M main, the command passes all four proof groups: 37-file replay plus0038 authenticated matrices; repeated0039 and guarded runbook/keyset checks after0038; documented index removal/reapply with policies unchanged; local PostgreSQL17.6/no hosted access. Its dedicated Docker container is network-disabled with no published ports and is removed on exit. This also proves the runbook recovery statement on a real local database. NewSQL files remain unmodified; no hosted delivery or performance claim follows from this proof.
+
+
+## Final integrated report — stop at FG-6
+
+Recorded 2026-10-25. Reviewed code/contracts: `8e51040f1dda4235f9b12ad344da4cd81442e1e9`; subsequent changes in this closeout pass are documentation only. Final main SHA is the commit containing this record, obtained with `git rev-parse HEAD` after committing. No self-referential hash is invented inside its own commit. Root working tree is the primary Kala checkout on main; lane worktrees/chats are retained.
+
+### Ordered delivery and verification
+
+1. Initial SEC staff scope: `9208875cb5bc22f50ce903cf90ef1e680a709e25`, merged at `afe0c1c`. Existing staff guards precede privileged work; recommendation-ID routes use scoped lookup, learner guard and learner-bound update. Wrong role 403; course/learner/institution denial 404. Strict staff Diagnostic scope proof was completed at that checkpoint.
+2. H: `cf169ec587a639feaeae86cdc429f9ca1ae9550a`, merged at `bc8a2f5` after browser green and retained-suite correction. Independent signed keyset history, scope-isolated cache, truthful labels and instructor failure states. Existing summary/statistics remain bounded. 0039 adds only the reviewed index.
+3. M: `cfe83110f8d496146c3c6452a4a5452bcc69bf2f`, merged at `38f6c75` after 14 local CLI proof groups and final governance review. No real pair has been run. A non-converged pair with consent/DSR ambiguity on either anchor returns `refused: governance ambiguity`, pair label/counts only, with no source writes. No consent/policy override. Already-converged no-op remains non-mutating. Whole-batch refusal is fail closed.
+4. Student follow-up: `9f2d5fb9b527d96ba8b766057ce74e8c0b78d5e0`, merged at `63230a3` after H then M. Spec-first AUTH-REQ-007 at `4e7c690`; 19 GET branches reuse unchanged Bank admission, including the five approved GETs with existing side effects. Every missing/foreign enrollment returns 404; enrolled and staff paths remain unchanged. Exact pre-fix route/line table is above.
+5. Generated OpenAPI and frontend contracts committed at `8e51040`. Re-export using shared test isolation (dotenv disabled, fake settings/generated JWT and network blocked), then `pnpm --filter web exec openapi-typescript ../../services/api/openapi.json -o src/lib/api/types.gen.ts`; regeneration is deterministic and produces no tracked diff.
+
+The 10 retained API test fixture changes in the student follow-up supply only the admission guard's exact course/enrollment projections and preserve existing business assertions. The dedicated denial matrix does not use that permissive fixture. The original staff AST verifier remains a checkpoint proof, not a final verifier silently weakened to accept student changes. The follow-up's strict verifier chains the reviewed H/M base to final source.
+
+### Final merged commands and counts
+
+All rows below are local. API/worker run in separate processes with the committed shared test isolation. Browser suites use synthetic fixtures and deny non-local requests; real Blackboard, providers and hosted data are not contacted.
+
+| Check / command | Final result |
+| --- | --- |
+| `cd services/api && uv run pytest -q` | **1,014 passed**, 30 dependency deprecation warnings, 29.38s |
+| `cd services/worker && uv run pytest -q` | **117 passed**, 0.41s |
+| Frontend/Tutor/schema/API-error/presentation/tour Node tests, `KALA_TOUR_REQUIRE_DOCS=1` | **33 passed,0 failed,0 skipped** |
+| Study component renderer suite | **4 passed**, 0 skipped; existing external renderer fixture retained |
+| H evidence-history browser suite | **80 assertions passed** |
+| H evidence-history scope browser suite | **16 passed** |
+| H instructor read-state browser suite | **222 passed** |
+| Retained Tutor UI browser suite | **219 passed** |
+| Retained Twin presentation browser suite | **148 passed** |
+| Retained instructor review browser suite | **63 passed** |
+| Retained Diagnostic frontend closeout browser suite | **110 passed** |
+| Retained student/instructor tour browser suite | **616 passed**, including no mutating tour requests |
+| Browser total at 375px/1440px | **1,474 assertions passed** |
+| `pnpm --filter web lint` | PASS,0 errors; 18 existing Fast Refresh warnings |
+| `pnpm --filter web typecheck` | PASS |
+| `pnpm --filter web build` | PASS; existing router circular-dependency notice and large-chunk warning |
+| `uv run --directory services/api python ../../scripts/config_inventory.py --check` | PASS; names/stores only |
+| `uv run --directory services/api python -m unittest discover -s ../../scripts -p 'test_*.py'` | **29 passed** |
+| `python3 scripts/docs_check.py` and docs checker unit suite | PASS; **18 tests**, 0 record-link violations,0 unmarked machine-local paths |
+| `cd services/api && uv run python tests/wi26_student_scope_local.py` | PASS: exact 19 student guards/imports only; Bank helper/H dashboard bytes and H own-history AST unchanged |
+| `cd services/api && uv run python tests/handover_migrations_local.py` | PASS, **4 proof groups**: immutable 37-file replay + 0038 RLS; repeated 0039/runbook/keyset; index recovery/reapply with policies unchanged; PG 17.6/no hosted access |
+| M catalog/replay and full public-CLI local verifier on H/M-integrated main | PASS: 37 historical files/catalog; **14 scenario groups**, including exact sanitized governance refusal, conservation, worker capture and exact restore |
+| Historical SQL, configuration and deletion diff checks | PASS: 0001–0037 byte-identical; only new 0038/0039; no Terraform/Docker/CI/Vercel config changes; no tracked deletions |
+| `git diff --check` | PASS |
+
+Frontend unit command (from repo root):
+
+```sh
+KALA_TOUR_REQUIRE_DOCS=1 node --experimental-vm-modules --test \
+  apps/web/src/features/tutor/components/TutorChat.test.mjs \
+  apps/web/src/features/tutor/schema/tutor.schema.test.ts \
+  apps/web/src/lib/api-error.test.ts \
+  apps/web/src/features/tutor/tests/presentation.test.mjs \
+  apps/web/src/components/shell/tests/tour-route.test.mjs \
+  apps/web/src/components/shell/tests/tour-anchors.test.mjs
+```
+
+Study uses `KALA_STUDY_TEST_DEPS` pointing privately to the existing external renderer fixture and runs `node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs`. Browser commands use `KALA_BROWSER_TEST_DEPS` pointing privately to the bundled runtime and `node <suite>` for each script listed in H's full report. No dependency was added; fixture portability remains WI-20.
+
+The combined migration verifier uses its own throwaway Docker PostgreSQL17.6 container with network `none`, no published ports and cleanup on exit. Minimal synthetic Auth/Storage scaffolding is not a full hosted Supabase recreation. The local37-file replay does not repair or establish hosted CLI migration history. No hosted lock-duration or performance guarantee follows from the index eligibility proof.
+
+### Port 5173 restoration evidence
+
+| Cycle | Original U launcher / listener | Temporary H launcher / listener | Restored U launcher / listener |
+| --- | --- | --- | --- |
+| H pre-merge browser pass |39390/39396 |83494/83515, stopped |85651/85666, HTTP200 |
+| Final integrated pass at 8e51040 |85651/85666 |90608/90623, stopped |91781/91800, HTTP200 |
+
+Coordinator independently checked the final sole 5173 listener 91800, launcher 91781, cwd in the existing U worktree's apps/web directory, and `curl http://localhost:5173/` returning 200. H is clean at the tested source. No U source was edited. Servers were switched only within the approved temporary scope.
+
+### Final schema/source bounds
+
+All 37 original SQL checksums match the published baseline `da765cbd27bd06c53c04ef3698c9410b503eb94a`, including 0036's historical path comment. The only migration delta is:
+
+| New file | SHA-256 | Scope |
+| --- | --- | --- |
+| `packages/db/migrations/0038_recommendation_visibility.sql` | `aef2053f98368d691bb2735ec6ffbeafc603426b10eef6b24b516f076ad83485` | 22 existing policy expressions across 20 tables; no rows/schema/grants/helpers/views changed |
+| `packages/db/migrations/0039_evidence_history_index.sql` | `d0e727d0ce33eecd12fcbb8a169e7efcb2a649943e925a0434af4f7511a20f95` | Index-only `(user_id, course_id, created_at DESC, id DESC)` |
+
+No infrastructure, Lambda, EventBridge, Vercel configuration, Docker or CI file changed. No files/worktrees/chats were deleted. No secret values were printed, logged or committed by this round.
+
+### Explicit remaining limits
+
+- WI-24/25/26 remain **in-progress**, owner ITO, awaiting their human gates. Specs describe locally implemented behavior as done-awaiting-confirmation; none is confirmed-done or deployed by this report. The closeout page is a progress draft only.
+- Thirteen student mutation methods remain unchanged and outside Amendment7: Diagnostic submit; flashcard review; Lesson check; Test create/from-items/retake/submit; Tutor create/patch/upload/delete-attachment/delete-conversation/ask. This is a follow-up finding; the 19 GET guard claim must not be extended to these methods.
+- Existing instructor caches can survive an in-place identity/role replacement because not all legacy keys include validated identity/role. A fresh-document LTI navigation clears in-memory cache. New history keys do isolate caller/role/institution/target/course/cursor and hide 403/404 rows. Legacy cache hardening was not silently added.
+- No real repair pairs supplied: historical split remains. Any future governance refusal is a valid safe FG-7 outcome and must leave affected history unrepaired; never alter research consent/DSR policies or claim combined history after refusal.
+- Hosted grants/policies/major/exposure, actual LTI/student/instructor acceptance, provider Hint/Explain/dock recovery and exact Vercel Ready source remain human evidence. Health200 alone proves none of them.
+- Standard frontend runner, broader sanitization/call bounds, citations, logs, local DB workflow/fresh ITO recreation and designer review remain their existing work streams.
+
+### FG-6 handoff — Fred only
+
+**Gate:** apply reviewed 0038 then 0039 in the intended dev-hosted project, before FG-8 deploy/publication.
+
+1. Open [0038 runbook](../../../runbooks/0038-apply.md). Privately confirm intended project and reviewed source/checksum. Save metadata/count pre-checks and compare against the reviewed baseline; stop on prerequisite, RLS/grant/policy mismatch. Run the entire reviewed 0038 transaction, then all post-checks and synthetic authenticated actor checks.
+2. Expected 0038: only 22 reviewed policy expressions differ, across 20 tables. Names/commands/roles/RLS flags/grants/helpers/views/indexes and rows remain unchanged. Own-student retained access and correct staff access work; wrong-course/institution and undecided recommendation visibility are refused as specified. Never use service-role success as authenticated acceptance.
+3. Open [0039 runbook](../../../runbooks/0039-apply.md). Run exact-definition/validity pre-check. Wrong/invalid existing definition means stop. Run its guarded transaction and repeat definition query. Expected one valid/ready B-tree index on exactly `(user_id, course_id, created_at DESC, id DESC)`; no data/policy change. Schedule the ordinary index build with its documented lock window in mind.
+4. Return only reviewed revision, operator, environment label, timestamp and sanitized pre/post-check status/counts. Do not send keys, connection strings, user rows or raw hosted data. Record actual results in the prepared acceptance table; an unperformed check remains not-run.
+
+**Recovery:** uncommitted failure → ROLLBACK and stop. After successful 0038, retain tighter policies during application rollback and prepare a reviewed forward correction for legitimate-access regression; do not restore broad policies or edit applied SQL. 0039 is additive and may remain during app rollback; index removal is a separate reviewed step in its runbook. Unknown outcome → inspect metadata before retrying. No deploy/push or real repair follows until FG-6 results are reviewed.
+
+After FG-6: Fred FG-8 backend/alias/worker/health, fast-forward push and Vercel Ready; then FG-7a dry run/planner review, FG-7b apply/recompute/capture or valid refusal; then FG-9 live acceptance. Each gate receives its own packet. No automatic cleanup or closeout completion.
+
+```text
+AUDIT REPORT
+Task / brief ID: APPROVAL-07 coordinator; Amendments 1–7; WI-24/25/26
+Branch and worktree: main; primary Kala checkout
+Base revision: da765cbd27bd06c53c04ef3698c9410b503eb94a
+Tested code/contracts: 8e51040f1dda4235f9b12ad344da4cd81442e1e9
+Files changed: reviewed SEC/H/M/follow-up manifests; generated OpenAPI/web
+  types; shared specs/current DB guide, runbooks, approval/work-item/
+  acceptance/evidence/closeout records; optional local migration verifier;
+  retained tour scope comparator. No tracked deletion or infrastructure edit.
+REQ / WI IDs touched: AUTH-REQ-006/007; INSTR-REQ-008–011;
+  TWIN-REQ-003/009/010; INGEST-REQ-001/008; SKILL-REQ-006;
+  owning-feature admission cross-references; WI-24/25/26. All remain open.
+Commands run and results: final API 1014, worker 117, frontend/tour 33,
+  Study 4, synthetic browser 1474; lint/typecheck/build/config PASS;
+  script unit 29, docs unit 18, docs policy PASS; strict19-guard AST PASS;
+  combined local migration 4 proof groups PASS; M 14 local scenario groups
+  PASS; historical 37 SQL bytes unchanged, whitespace/config/deletion PASS.
+Spec changes made: coordinator spec commits precede each behavior change;
+  current local verification/status and formerly deferred/pending boundaries
+  reconciled after integration. No new intended behavior in final docs commit.
+Evidence added: this full report; lane final integrated browser/PID record;
+  WI delivery and prepared acceptance/closeout progress. Earlier failures and
+  checkpoint proofs remain attributed, not erased.
+Anything not done, and why: all hosted/live gates reserved for Fred;
+  no push/deploy/migration/repair/hosted inspection or cleanup. Stop at FG-6.
+Risks or questions for planner: retained 13 mutation findings, legacy in-place
+  cache limit, possible governance refusal and external test fixtures;
+  none silently fixed or accepted. See explicit limits above.
+Secrets printed: none (confirmed).
+```

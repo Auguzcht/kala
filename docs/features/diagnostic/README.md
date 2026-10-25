@@ -25,7 +25,7 @@ Students establish a baseline for course skills through the Diagnostic entry in 
 
 ## Student read admission
 
-Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing preparation or worker activity. The submit method and enrolled sitting/availability behavior are unchanged by this read-route amendment. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing preparation or worker activity. The submit method and enrolled sitting/availability behavior are unchanged by this read-route amendment. Admission is implemented locally and verified by the 116-case AUTH-REQ-007 route/import matrix and strict AST scope proof; hosted deployment and live acceptance remain pending.
 
 ## Requirements
 
@@ -178,10 +178,15 @@ Local .txt/.md files open in a keyboard-accessible dialog showing bounded raw te
 
 Fred's follow-up requires equal top and left attachment insets, subtle token-based format accents with visible type labels, and the published lucide-animated Upload variant in the drop overlay. Play that glyph on drag entry, respecting reduced motion; no shared icon motion preset. The shared Sonner bug fix must respect Kala's forced theme over a saved preference and use readable semantic description text for badge, error and other notices. No gamification behavior changes.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Define Diagnostic presentation, scroll reachability, route audit and component boundary before implementation | APPROVAL-05 rev 2, Lane U | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-003, DIAG-REQ-004, DIAG-REQ-005 |
 | 2026-10-25 | Record the narrow pill exception: only ComposeDock/PromptInput text-entry containers may be pills when empty; Tutor uses an existing token radius while dragging or holding attachments; every control remains boxy | Fred's APPROVAL-05 clarification relayed by the coordinator; DESIGN.md exception must be committed before implementation | DIAG-REQ-005 |

@@ -69,7 +69,7 @@ Order is FG-6, FG-8, FG-7a, FG-7b, then FG-9. Local lane tests do not satisfy a 
 
 | Gate / field | Result |
 | --- | --- |
-| Reviewed integrated source SHA | pending lane completion and integration checks |
+| Reviewed integrated source SHA | `8e51040f1dda4235f9b12ad344da4cd81442e1e9` code/contracts; final documentation-only SHA in coordinator report |
 | FG-6: reviewed 0038 / 0039, operator, environment, time and post-checks | not-run |
 | FG-8: previous alias, immutable worker image and Vercel rollback identity | Fred records privately before deploy |
 | FG-8: new API alias/version, worker update and health | not-run |
@@ -77,6 +77,7 @@ Order is FG-6, FG-8, FG-7a, FG-7b, then FG-9. Local lane tests do not satisfy a 
 | FG-7a: counts-only repair dry run and planner review | not-run; after FG-8 |
 | FG-7b: apply, source/timestamp conservation, alias/enrollment convergence and restored triggers | not-run |
 | FG-7b: worker completeness, rebuilt mastery/readiness and exact rollback artifact | not-run |
+| FG-7 valid safe refusal | not-run; record pair label and consent/DSR counts only as `refused: governance ambiguity`; no repair or policy/consent change |
 | FG-9: tester, time/timezone, frontend revision and API version | not-run |
 
 ## FG-9 additions — APPROVAL-07
@@ -96,3 +97,7 @@ Run alongside the still-pending FG-5 cases. Use approved test accounts; record o
 | WI-24: opening these views creates no new XP or evidence | not-run | not-run | |
 
 WI-24/25/26 remain open until their actual checks pass. No repair, new migration, deploy, push or acceptance is claimed by preparing this checklist.
+
+## APPROVAL-07 local integration prerequisite update
+
+H, M and Amendment7 are merged locally in the approved order. Generated contracts and full merged local tests are prepared; exact final counts/source, browser server restoration and migration checksum proof are in the coordinator report. These do not fill any hosted or live row. A real governance refusal is a valid FG-7 outcome, with the affected history explicitly unrepaired; success-only FG-9 repair rows must be marked not-run with that reason rather than fabricated as passed.

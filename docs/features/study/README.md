@@ -32,7 +32,7 @@ Practice/Test uses the existing practice router and Test browser. Bank-backed se
 
 ## Student read admission
 
-Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing claims, generation or exposure writes. Enrolled selection, counting, grading and reward rules remain unchanged; mutation methods are outside this amendment. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before existing claims, generation or exposure writes. Enrolled selection, counting, grading and reward rules remain unchanged; mutation methods are outside this amendment. Admission is implemented locally and verified by the 116-case AUTH-REQ-007 route/import matrix and strict AST scope proof; hosted deployment and live acceptance remain pending.
 
 ## Requirements
 
@@ -85,9 +85,14 @@ Daily cap applies only to fresh review claims, not resuming unrated cards or Stu
 
 The component interaction tests depend on an external renderer fixture: matching `react` and `react-test-renderer` packages (verified with 19.2.8) resolved through `KALA_STUDY_TEST_DEPS`, plus Node's `--experimental-vm-modules` flag. The fixture is outside the repository; a clean checkout alone cannot run these tests until that fixture is supplied. The tests mock provider hooks and UI shells, so they do not verify browser layout or live HTTP integration. React emits a renderer deprecation warning. No dependency or shared test-harness change is included; integration harness work belongs to the coordinator.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-24 | Define minimal freeze scope before implementation | APPROVAL-01, Lane F and confirmed section 5 | STUDY-REQ-001, STUDY-REQ-002, STUDY-REQ-003 |
 | 2026-10-24 | Make native flip-card fresh selection and its regression explicit | APPROVAL-02: retain the fix because eligible native cards could be omitted before an empty/caught-up result | STUDY-REQ-004 |

@@ -27,7 +27,7 @@ Kala rewards learning activity through derived XP, UTC-day streaks and mastery b
 
 ## Student read admission
 
-The reward-summary GET follows [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before computing reward data. Enrolled XP, streak and badge calculations remain unchanged; the guard introduces no reward writes. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+The reward-summary GET follows [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads) before computing reward data. Enrolled XP, streak and badge calculations remain unchanged; the guard introduces no reward writes. Admission is implemented locally and verified by the 116-case AUTH-REQ-007 route/import matrix and strict AST scope proof; hosted deployment and live acceptance remain pending.
 
 ## Requirements
 
@@ -64,7 +64,7 @@ The reward-summary GET follows [AUTH-REQ-007](../lti-auth/README.md#auth-req-007
 `attempts`/`correct` summarize non-practice evidence plus counted reviews; practice XP is separately summed from saved answer snapshots. These counters must not be described as a complete count of every historic practice submission.
 
 ## Data
-Read evidence_events, item_reviews, practice_answer_results, approved skills and mastery_state. Summary writes nothing; authoritative writers are the learning routes/RPCs. Evidence/mastery RLS allow self/course staff/institution admin; review/result tables use owner-oriented policies from their migrations. The API uses service-role DB access: the summary's event/review/result queries filter user/course but omit an explicit institution filter; the badge queries do include it. The audited baseline lacked student course-enrollment enforcement; AUTH-REQ-007 now requires the existing admission guard before this read, with implementation verification pending.
+Read evidence_events, item_reviews, practice_answer_results, approved skills and mastery_state. Summary writes nothing; authoritative writers are the learning routes/RPCs. Evidence/mastery RLS allow self/course staff/institution admin; review/result tables use owner-oriented policies from their migrations. The API uses service-role DB access: the summary's event/review/result queries filter user/course but omit an explicit institution filter; the badge queries do include it. The audited baseline lacked student course-enrollment enforcement; AUTH-REQ-007 now requires the existing admission guard before this read, implemented locally and covered by the dedicated route matrix/AST proof; hosted acceptance remains pending.
 
 ## AI usage (if any)
 None. Reward arithmetic and badge decisions are deterministic. Generated content or tutor answers earn nothing merely by being viewed.
@@ -97,10 +97,15 @@ Reconciliation source base: `8bc569e36b52488b4e05202a90cb18c8ba0db589` (integrat
 
 Documentation validation for this reconciliation passed: YAML and referenced code/test paths, requirement fields and unique IDs, local links, source line bounds, accepted presentation/changelog preservation, exact draft-to-final mapping, unchanged Lane S requirement, auth byte identity and eight-path ownership. Runtime tests were not rerun.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Write full source-backed feature spec; identify limits and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | GAME-REQ-001 through GAME-REQ-004 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | GAME requirements above |

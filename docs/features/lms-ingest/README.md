@@ -32,7 +32,7 @@ Bring Blackboard course material into a tenant-scoped, chunked and embedded corp
 
 ## Student read admission
 
-Student content-preview and module GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads). Roster remains staff-only. Staff processing and enrollment-allowed preview responses are unchanged. Admission implementation/verification is pending the approved follow-up; this requirement is not a live acceptance claim.
+Student content-preview and module GETs follow [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-require-existing-course-enrollment-on-student-reads). Roster remains staff-only. Staff processing and enrollment-allowed preview responses are unchanged. Admission is implemented locally and verified by the 116-case AUTH-REQ-007 route/import matrix and strict AST scope proof; hosted deployment and live acceptance remain pending.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ Student content-preview and module GETs follow [AUTH-REQ-007](../lti-auth/README
   instructors and same-institution admins reach the LMS operation. Reuse
   the gate's 404 without translation, preserving wrong-role 403. The shared
   helper and student preview routes remain unchanged. This amended denial
-  contract awaits SEC implementation; earlier Lane S proof records 403.
+  contract is implemented locally by SEC; earlier Lane S proof records the superseded course-denial 403.
 - Status: implemented
 - Verified by: `services/api/tests/test_staff_route_auth.py`, tests named
   `test_INGEST_REQ_001_*`, and the existing student course-data regression in
@@ -56,7 +56,7 @@ Student content-preview and module GETs follow [AUTH-REQ-007](../lti-auth/README
 - Rule: POST ingest accepts include_attachments=false by default, enqueues pending work and returns 202 without a Blackboard tree walk. Existing pending/in_progress job is returned unchanged; partial unique index and 409 reread recover a concurrent enqueue. Polling returns newest job or never_ingested.
 - Acceptance: double-click returns the live job rather than creating a second walk; worker progress is observable in counters/status; enqueue does not perform model/LMS work.
 - Status: implemented
-- Verified by: `services/api/tests/test_ingest_route.py`; static `routers/ingest_jobs.py::enqueue_ingest`, `ingest_job_status`. Current route scope is session-only; see authorization finding below.
+- Verified by: `services/api/tests/test_ingest_route.py`; static `routers/ingest_jobs.py::enqueue_ingest`, `ingest_job_status`. Staff/course/institution admission now follows INGEST-REQ-008 before enqueue or status work.
 
 ### INGEST-REQ-003: Walk bounded slices with durable hierarchy and throttle recovery
 - Rule: worker handles up to three jobs/run, 20 folders and five PDFs per job slice; checkpoint frontier, seen containers and counters so interrupted work resumes. Preserve full folder ancestry, parent reference and module_ref; deduplicate stored content by LMS reference. On 429, retain frontier and set not_before using Retry-After, or 900 seconds when absent; real errors mark failed.
@@ -80,7 +80,7 @@ Student content-preview and module GETs follow [AUTH-REQ-007](../lti-auth/README
 - Rule: content preview walks metadata without attachments by default. Modules report distinct nonnull module references from stored content and skills, per-module counts and unscoped counts; no institution-specific module naming assumption. Roster/content preview resolves the course under authenticated institution.
 - Acceptance: preview does not download course PDFs; module inventory distinguishes unscoped content; invalid/outside-institution course reference returns 404 on resolver routes.
 - Status: implemented
-- Verified by: `test_blackboard_content.py`, `test_lms_hierarchy.py`, `test_course_data_routes.py`; static `diagnostic.py::get_content`, `list_modules`. Some route gates are session-only, not course-teacher gates.
+- Verified by: `test_blackboard_content.py`, `test_lms_hierarchy.py`, `test_course_data_routes.py`; static `diagnostic.py::get_content`, `list_modules`. Staff admission follows INGEST-REQ-008; student content/module reads follow AUTH-REQ-007.
 
 ### INGEST-REQ-007: Add whole-request bounds for upload and LMS calls
 - Rule: planned deadlines must include extraction/storage/chunk persistence/embedding for upload and multi-call LMS work for preview/launch paths, with safe retryable responses.
@@ -92,21 +92,21 @@ Student content-preview and module GETs follow [AUTH-REQ-007](../lti-auth/README
 - Rule: All inventoried staff branches in diagnostic routes reuse validated role, existing course-teaching guard and institution-scoped course resolution before protected work: roster, content preview, ingest/status, modules, upload/retag, gradebook and skill refresh. Roster is staff-only; a student receives 403. Staff-only operations use require_role; wrong role is 403, untaught/unavailable or foreign-institution course is 404. Denied ingest/upload/retag/refresh stores/enqueues nothing and wakes no worker.
 - Rule: Preserve the existing helper, processing/queue/debounce/kick logic, response fields and legitimate student branches on course-content reads. The initial staff lane preserved student reads; the separately approved AUTH-REQ-007 follow-up now adds existing enrollment admission to those student GET branches. Staff branches and enrolled-student processing remain unchanged.
 - Acceptance: Inventory every diagnostic route and prove only the authorized admission changes by AST/diff. Per fixed staff route cover student denial where staff-only, outside-course instructor, foreign instructor/admin, correct teacher and same-institution admin. Source payloads, worker behavior and allowed student content reads remain unchanged. Update the earlier course-data regression so student roster is 403 while student content preview retains its existing response.
-- Status: planned
-- Verified by: pending SEC expanded route matrix and AST scope proof; not a hosted or full student-enrollment enforcement claim.
+- Status: done-awaiting-confirmation; local implementation verified, hosted acceptance pending.
+- Verified by: `services/api/tests/test_wi26_course_authorization.py`, the reviewed 13-route Diagnostic staff AST proof and later `wi26_student_scope_local.py` student-only scope proof. No hosted acceptance claim.
 
 ## API contract
 
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
-| GET /courses/{course_id}/assessments | Read LMS gradebook columns | Instructor enrollment for this course, or institution admin | 403 on role/course denial; existing course lookup and UUID validation retain 404 |
-| PATCH /courses/{course_id}/assessments/{column_id}/grade | Existing Blackboard REST grade write-through | Same staff course gate | Body remains `{user_id, score}`; 403 before LMS write; AGS passback remains planned |
-| POST /courses/{course_id}/ingest | Enqueue LMS walk | Session only in current implementation | Query include_attachments=false; 202 queued/already_in_progress plus job |
-| GET /courses/{course_id}/ingest/status | Latest job and counters | Session only in current implementation | never_ingested/job=null when absent; includes operational error/frontier fields |
+| GET /courses/{course_id}/assessments | Read LMS gradebook columns | Instructor enrollment for this course, or institution admin | 403 wrong role; 404 untaught/unavailable/foreign course |
+| PATCH /courses/{course_id}/assessments/{column_id}/grade | Existing Blackboard REST grade write-through | Same staff course gate | Body remains `{user_id, score}`; 403 wrong role / 404 course denial before LMS write; AGS passback remains planned |
+| POST /courses/{course_id}/ingest | Enqueue LMS walk | Staff/course/institution gate under INGEST-REQ-008 | Query include_attachments=false; 202 queued/already_in_progress plus job |
+| GET /courses/{course_id}/ingest/status | Latest job and counters | Staff/course/institution gate under INGEST-REQ-008 | never_ingested/job=null when absent; includes operational error/frontier fields |
 | POST /courses/{course_id}/content/upload | Supplementary document | Course instructor or institution admin | Multipart file + optional module_ref; 413/415/422; upload gate retains 404 course denial |
-| GET /courses/{course_id}/content | Metadata/content preview | Session + institution course resolution | No attachment download by default |
-| GET /courses/{course_id}/roster | LMS roster preview | Session + institution course resolution | Legacy route, distinct from dashboard roster |
-| GET /courses/{course_id}/modules | Stored module inventory | Session | Content/skill/unscoped counts |
+| GET /courses/{course_id}/content | Metadata/content preview | Student enrollment or staff/course/institution gate | No attachment download by default |
+| GET /courses/{course_id}/roster | LMS roster preview | Staff/course/institution gate | Student 403; distinct from dashboard roster |
+| GET /courses/{course_id}/modules | Stored module inventory | Student enrollment or staff/course/institution gate | Content/skill/unscoped counts |
 | POST /courses/{course_id}/content/retag | Embedding-tag recomputation | Course instructor or institution admin | See skills spec; no model call |
 
 ## Data
@@ -116,7 +116,7 @@ Course resolution reads `courses`, filtered by authenticated institution and
 requested course ID. Neither gradebook route writes Supabase rows; grade PATCH writes
 through the mocked Blackboard connector in tests. No schema or RLS changes were made by Lane S or this documentation extension.
 
-The content pipeline writes ingest_jobs and content_items through service-role API/worker access; optional original bytes go to storage. Read courses for LMS reference and status; worker persists frontier/seen/not_before/counters and writes embeddings. RLS 0017 gives job reads to course teachers or institution admins; 0023 restricts raw content reads to the same staff scope. Service-role routes bypass these policies: missing API gates below are not rescued by RLS. Content source IDs deduplicate LMS re-walks; supplementary uploads have no LMS reference and no equivalent dedupe. Source content deletion/update refresh semantics are not proven by a repeat ingest.
+The content pipeline writes ingest_jobs and content_items through service-role API/worker access; optional original bytes go to storage. Read courses for LMS reference and status; worker persists frontier/seen/not_before/counters and writes embeddings. RLS 0017 gives job reads to course teachers or institution admins; 0023 restricts raw content reads to the same staff scope. Service-role routes bypass these policies: INGEST-REQ-008 / AUTH-REQ-007 admission must precede work; RLS alone cannot protect those API paths. Content source IDs deduplicate LMS re-walks; supplementary uploads have no LMS reference and no equivalent dedupe. Source content deletion/update refresh semantics are not proven by a repeat ingest.
 
 ## AI usage (if any)
 None in the two gradebook routes. Content embeddings call the configured provider on sanitized chunk text; active tagging uses vectors without a chat call. Generation/proposal is downstream in the skills/bank features, not a synchronous enqueue operation. The current sanitizer masks emails and explicit name-patterns only; it does not provide comprehensive anonymization.
@@ -124,8 +124,8 @@ None in the two gradebook routes. Content embeddings call the configured provide
 ## Edge cases and known limits
 - Admins retain the upload gate's institution-wide exemption from enrollment
   checks; course resolution remains institution-scoped.
-- The 403 mapping is local to these two routes. The upload gate continues to
-  return 404 for an instructor who does not teach the course.
+- Staff-only wrong-role denial is 403; untaught/unavailable/foreign course denial
+  is 404, consistently with the unchanged upload gate.
 - Grade passback through AGS is planned; securing the legacy REST route does
   not implement it. No live Blackboard verification is claimed.
 - Upload timing correction (comment only): the embedding loop checks a
@@ -139,8 +139,8 @@ None in the two gradebook routes. Content embeddings call the configured provide
 | Locations at source revision | Finding | Proposed resolution (not implemented here) |
 | --- | --- | --- |
 | `services/api/app/routers/ingest_jobs.py:11` (SCAFFOLD/unwired description); `services/api/app/routers/diagnostic.py:212` (enqueue call); `services/api/tests/test_ingest_route.py:1` | Helper's stale header says wiring is pending, while route and tests demonstrate integration. | Correct the stale module description in an API-owned documentation task; preserve current queue contract. |
-| `packages/db/migrations/0017_ingest_jobs.sql:95` (staff/course read RLS); `services/api/app/routers/diagnostic.py:190` and `services/api/app/routers/diagnostic.py:227` (session-only enqueue/status); `services/api/app/db/supabase.py:25` (service role) | Enqueue/status do not assert institution course ownership or staff membership; status helper filters course only. | Authorize explicit course/tenant gates and cross-institution denial tests; review status error/frontier disclosure. |
-| `packages/db/migrations/0023_course_scoped_staff_reads.sql:6`; `services/api/app/routers/diagnostic.py:137` and `services/api/app/routers/diagnostic.py:146` | LMS roster/content previews use session + institution resolver, without the staff/course gate used by gradebook/upload. | Decide preview visibility and add route denial coverage in a separately scoped security task. |
+| `packages/db/migrations/0017_ingest_jobs.sql:95` (staff/course read RLS); `services/api/app/routers/diagnostic.py:190` and `services/api/app/routers/diagnostic.py:227` (session-only enqueue/status); `services/api/app/db/supabase.py:25` (service role) | Enqueue/status do not assert institution course ownership or staff membership; status helper filters course only. | Locally resolved by INGEST-REQ-008 course/institution/staff gates and denial tests; hosted acceptance remains pending. |
+| `packages/db/migrations/0023_course_scoped_staff_reads.sql:6`; `services/api/app/routers/diagnostic.py:137` and `services/api/app/routers/diagnostic.py:146` | LMS roster/content previews use session + institution resolver, without the staff/course gate used by gradebook/upload. | Locally resolved: roster staff-only, content/module student enrollment under AUTH-REQ-007, and guarded staff admission under INGEST-REQ-008; hosted acceptance pending. |
 
 ## Evidence and verification limits
 
@@ -157,10 +157,15 @@ Reconciliation source base: `8bc569e36b52488b4e05202a90cb18c8ba0db589` (integrat
 
 Documentation validation for this reconciliation passed: YAML and referenced code/test paths, requirement fields and unique IDs, local links, source line bounds, accepted presentation/changelog preservation, exact draft-to-final mapping, unchanged Lane S requirement, auth byte identity and eight-path ownership. Runtime tests were not rerun.
 
+## APPROVAL-07 local verification boundary
+
+At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff guards, H history/error states, M repair tooling and student-read admission are locally integrated. Full API: 1,014; worker: 117; frontend/tour unit: 33; Study component: four. Web lint/typecheck/build and configuration inventory pass. Final integrated synthetic browser verification passes 1,474 assertions; real LTI acceptance is not inferred. Earlier revision-specific evidence retains its recorded attribution. Hosted 0038/0039 application, release, real-pair repair or safe refusal, and live acceptance are separate human gates; this record upgrades no live result.
+
 ## Change log
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | INGEST-REQ-001/008; AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-24 | Minimal freeze spec; reuse upload staff/course gate on gradebook routes; correct upload timing comment | APPROVAL-01 sections 1, 2 Lane S, and confirmed amendment A4; accepted BRIEF-01 endpoint audit | INGEST-REQ-001 |
 | 2026-10-25 | Extend to full source-backed ingest spec, retaining accepted INGEST-REQ-001 wording and evidence | APPROVAL-05 rev 2 Lane P; WI-08; Lane S acceptance remains APPROVAL-02 | INGEST-REQ-001 through INGEST-REQ-007 |
