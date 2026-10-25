@@ -195,7 +195,12 @@ def scope(table, alias="t"):
     if table == "tutor_messages":
         return (f"EXISTS(SELECT 1 FROM public.tutor_conversations c JOIN wi24_pairs p "
                 f"ON c.user_id IN(p.canonical_id,p.legacy_id) WHERE c.id={alias}.conversation_id)")
-    column = "id" if table == "users" else "actor_id" if table == "audit_log" else "user_id"
+    if table == "audit_log":
+        refs = (f"{alias}.actor_id::text", f"{alias}.row_id", f"{alias}.old_data->>'user_id'",
+                f"{alias}.new_data->>'user_id'", f"{alias}.old_data->>'id'", f"{alias}.new_data->>'id'")
+        return "EXISTS(SELECT 1 FROM wi24_pairs p WHERE " + " OR ".join(
+            f"({ref}) IN(p.canonical_id::text,p.legacy_id::text)" for ref in refs) + ")"
+    column = "id" if table == "users" else "user_id"
     return f"EXISTS(SELECT 1 FROM wi24_pairs p WHERE {alias}.{column} IN (p.canonical_id,p.legacy_id))"
 
 
@@ -253,8 +258,8 @@ def plan(db):
           "IS DISTINCT FROM (to_jsonb(l)-'user_id'-'updated_at') GROUP BY p.label")
     for table, reason in (("consents", "CONSENT_PRESENT"), ("data_subject_requests", "DSR_PRESENT"),
                           ("tutor_attachments", "LEGACY_ATTACHMENTS")):
-        issue(reason, f"SELECT p.label,count(*) n FROM wi24_pairs p JOIN public.{ident(table)} t "
-              "ON t.user_id=p.legacy_id GROUP BY p.label")
+        owner = "t.user_id=p.legacy_id" if table == "tutor_attachments" else "t.user_id IN(p.canonical_id,p.legacy_id) AND NOT p.converged"
+        issue(reason, f"SELECT p.label,count(*) n FROM wi24_pairs p JOIN public.{ident(table)} t ON {owner} GROUP BY p.label")
     for table in TABLES:
         if table == "users":
             continue
@@ -413,7 +418,8 @@ def local_backup(source, local, directory, columns):
         source.run(f"\\copy (SELECT t.* FROM public.{ident(table)} t WHERE {scope(table)}) TO {literal(str(path))} WITH (FORMAT binary)")
         os.chmod(path, 0o600)
         local.run(f"\\copy wi24_backup.{ident(table)} FROM {literal(str(path))} WITH (FORMAT binary)")
-    manifest = {"preimage": before, "columns": {t: columns[t] for t in TABLES}, "format": 1,
+    audit_floor = source.scalar("SELECT to_jsonb(coalesce(max(id),0)) FROM public.audit_log;")
+    manifest = {"preimage": before, "audit_floor": audit_floor, "columns": {t: columns[t] for t in TABLES}, "format": 1,
                 "source_major": source_info["major"], "source_encoding": source_info["encoding"],
                 "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 "catalog_sha256": hashlib.sha256((FIXTURE / "catalog.txt").read_bytes()).hexdigest(),
@@ -821,8 +827,14 @@ def restore_exact(source, local, directory, *, inject_failure=False):
                        f"WHERE NOT EXISTS(SELECT 1 FROM public.{ident(table)} t WHERE {join});")
             if inject_failure and table == "item_reviews":
                 raise Refused("INJECTED_RESTORE_FAILURE")
-        if snapshot(source) != manifest["preimage"]:
+        restored_image = snapshot(source)
+        if any(restored_image[t] != manifest["preimage"][t] for t in restored_image if t != "audit_log"):
             raise Refused("RESTORE_PREIMAGE_MISMATCH")
+        old_audit = source.scalar("SELECT jsonb_build_object('count',count(*),'hash',"
+            "encode(digest(coalesce(string_agg(to_jsonb(t)::text,E'\\n' ORDER BY to_jsonb(t)::text COLLATE \"C\"),''),'sha256'),'hex')) "
+            "FROM public.audit_log t WHERE " + scope("audit_log") + " AND t.id<=" + str(int(manifest["audit_floor"])) + ";")
+        if old_audit != manifest["preimage"]["audit_log"]:
+            raise Refused("ORIGINAL_AUDIT_PREFIX_CHANGED")
         validate_triggers(source)
         source.run("INSERT INTO public.audit_log(institution_id,actor_role,action,table_name,metadata) "
                    "SELECT p.institution_id,'maintainer','WI24_ROLLBACK','users',jsonb_build_object("

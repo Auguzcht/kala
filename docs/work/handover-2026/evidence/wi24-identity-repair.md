@@ -31,9 +31,10 @@ git diff --check
 
 The real-PG inventory proof passes all 37 migration replays, catalog/checksum comparison, immutable review/result key/session collisions, exact resolver-conflict predicate, and narrow-trigger failure rollback/source conservation.
 
-The full CLI proof passes these **13 groups**:
+The full CLI proof passes these **14 groups**:
 
 ```text
+PASS canonical-only consent exposure counterexample; governance refusal and converged no-op
 PASS canonical/legacy schedule winners and exact ties; multiple attempt renumbering and restore
 PASS public CLI dry-run/apply/no-op/unsafe collision refusal; counts-only stdout
 PASS unchanged resolver function body before/after tombstone and alias transition
@@ -72,7 +73,7 @@ Documentation checker and **18** checker unit tests pass; Python compilation and
 - Full canonical replay estimates are verified with the existing worker `_replay` body, not merged/written by the repair. Fred must confirm the actual deployed worker revision/K at FG-7b; local K=0.15 does not establish hosted configuration.
 - The worker's 50,000 code ceiling is distinct from a lower PostgREST row cap. Apply refuses institutions at/above the code ceiling; capture checks all affected evidence groups, exact attempts/last_seen/estimates and readiness against direct SQL, detecting incomplete affected-pair reads. Mixed-outcome equal timestamps refuse because worker replay has no ID tiebreak.
 - Capture requires one controlled readiness pass while learner writes remain quiesced. Multiple runs, changed canonical history or later activity refuse; no general rollback after resumed live use is claimed.
-- Readiness jobs append current snapshots and do not recreate historical readiness. Only legacy derived rows are deleted; canonical history survives. Legacy attachments/consents/DSRs, unequal profiles, ambiguous identities/roles and stale canonical mastery refuse instead of guessing.
+- Readiness jobs append current snapshots and do not recreate historical readiness. Only legacy derived rows are deleted; canonical history survives. Legacy attachments, consent/DSR records on either anchor for non-converged pairs, unequal profiles, ambiguous identities/roles and stale canonical mastery refuse instead of guessing.
 - Actual hosted mappings/counts, local/hosted server compatibility, human gate review, repair, deployed worker result and live acceptance remain unverified. WI-24 stays open.
 
 ## Earlier setup findings
@@ -89,3 +90,9 @@ Current official Supabase changelog was checked on 2026-10-25; the recent breaki
 - [PostgreSQL 17 COPY](https://www.postgresql.org/docs/17/sql-copy.html)
 - [PostgreSQL 17 connection services](https://www.postgresql.org/docs/17/libpq-pgservice.html)
 - [PostgreSQL 17 environment settings](https://www.postgresql.org/docs/17/libpq-envars.html)
+
+## Focused final governance finding
+
+Coordinator identified that canonical-only consent could broaden research reach without changing a consent row. Design boundary was committed at `83dafa1` before the guard change. A synthetic researcher/grant/canonical-consent fixture uses the real has_consent/research_evidence_anon logic: visible rows are **0**, a narrowly scoped attribution inside an isolated transaction makes them **1**, and rollback restores **0**. Public apply then refuses CONSENT_PRESENT before any source write. Canonical-only DSR also refuses. Already-converged no-op remains allowed with canonical consent and changes no source row. No policy, view or consent semantics were modified.
+
+Related later-activity audit guards now include exact actor/row and old/new user/identity fields, detecting service-role governance changes even if their live rows are removed. Exact restore preserves appended maintenance audits and verifies the original scoped audit prefix unchanged, rather than deleting history to match an old row count. The full 14-group CLI proof passes with these guards.

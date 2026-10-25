@@ -162,6 +162,32 @@ def run():
                    "FROM wi24_pairs p JOIN public.generated_items i ON i.course_id=p.course_ids[1] WHERE p.label=1;",
                    "ALTER TABLE public.item_reviews DISABLE TRIGGER t_immutable; DELETE FROM public.item_reviews WHERE idempotency_key='synthetic-bad-tenant'; "
                    "ALTER TABLE public.item_reviews ENABLE TRIGGER t_immutable;", "TENANT_SCOPE")
+        # Canonical-only consent counterexample through the actual research view.
+        db.run("CREATE TEMP TABLE research_probe AS SELECT gen_random_uuid() id; "
+               "INSERT INTO public.researchers(id,email) SELECT id,'synthetic-probe@example.test' FROM research_probe; "
+               "INSERT INTO public.researcher_grants(researcher_id,institution_id,scope,expires_at) "
+               "SELECT r.id,p.institution_id,'row_anon',now()+interval '1 day' FROM research_probe r CROSS JOIN wi24_pairs p WHERE p.label=1; "
+               "INSERT INTO public.consents(institution_id,user_id,granted,policy_version,purpose) "
+               "SELECT institution_id,canonical_id,true,'canonical-probe','research' FROM wi24_pairs WHERE label=1; "
+               "DO $$ BEGIN PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',(SELECT id FROM research_probe),'app_role','researcher')::text,false); END $$;")
+        assert db.scalar("SELECT to_jsonb(count(*)) FROM public.research_evidence_anon;")==0
+        governance_before=repair.snapshot(db)
+        db.run("BEGIN; ALTER TABLE public.evidence_events DISABLE TRIGGER t_immutable; "
+               "UPDATE public.evidence_events e SET user_id=p.canonical_id FROM wi24_pairs p WHERE p.label=1 AND e.user_id=p.legacy_id; "
+               "ALTER TABLE public.evidence_events ENABLE TRIGGER t_immutable;")
+        assert db.scalar("SELECT to_jsonb(count(*)) FROM public.research_evidence_anon;")==1
+        db.run("ROLLBACK;")
+        assert repair.snapshot(db)==governance_before
+        assert "CONSENT_PRESENT" in cli("canonical-consent",["--apply","--confirm"],expected=2)
+        assert repair.snapshot(db)==governance_before
+        db.run("SET request.jwt.claims='{}'; DELETE FROM public.consents WHERE policy_version='canonical-probe'; "
+               "DELETE FROM public.researcher_grants WHERE researcher_id IN(SELECT id FROM research_probe); "
+               "DELETE FROM public.researchers WHERE id IN(SELECT id FROM research_probe);")
+        guard_case("canonical-dsr", "INSERT INTO public.data_subject_requests(institution_id,user_id,kind) SELECT institution_id,canonical_id,'export' FROM wi24_pairs;",
+                   "DELETE FROM public.data_subject_requests;", "DSR_PRESENT")
+        def restored_preimage_matches(expected):
+            current=repair.snapshot(db)
+            return all(current[t]==expected[t] for t in current if t!="audit_log")
         original = repair.snapshot(db)
         assert "CONFIRMED_WORKER_K_REQUIRED" in cli("missing-k",["--apply","--confirm"],expected=2,worker_config=False)
         servicefile.write_text(servicefile.read_text()+f"[remote_stage]\nhost=203.0.113.1\nport=5432\nuser=postgres\ndbname=wi24_bad\n"
@@ -244,7 +270,7 @@ def run():
         repair.validate_triggers(db)
         restore_db=repair.Psql("wi24_restore",env=env); restore_db.run("DROP SCHEMA wi24_backup CASCADE; DROP SCHEMA wi24_recompute CASCADE;"); restore_db.close()
         assert "restored_pairs=2 timestamp_mismatches=0" in cli("restore",["--apply","--confirm","--restore","--backup-service","wi24_restore"],directory=private/"apply")
-        assert repair.snapshot(db)==original,"exact post-worker restore differs"
+        assert restored_preimage_matches(original),"exact post-worker restore differs"
         repair.validate_triggers(db)
         assert db.scalar("SELECT to_jsonb(count(*)) FROM public.audit_log WHERE action='WI24_MERGE';")==2
         assert db.scalar("SELECT to_jsonb(count(*)) FROM public.audit_log WHERE action='WI24_ROLLBACK';")==2
@@ -260,7 +286,7 @@ def run():
             cli(scenario,["--apply","--confirm","--backup-service","wi24_backup"])
             assert db.scalar("SELECT to_jsonb(s.box) FROM public.srs_state s JOIN wi24_pairs p ON p.canonical_id=s.user_id WHERE p.label=2;")==1
             cli(scenario+"-restore",["--apply","--confirm","--restore","--backup-service","wi24_restore"],directory=private/scenario)
-            assert repair.snapshot(db)==branch_preimage
+            assert restored_preimage_matches(branch_preimage)
             # Only the first loop had a recompute archive/staging schema.
             if scenario=="canonical-wins":
                 local.run("CREATE SCHEMA wi24_recompute;")
@@ -276,7 +302,15 @@ def run():
         cli("multiple-attempts",["--apply","--confirm","--backup-service","wi24_backup"])
         assert db.scalar("SELECT to_jsonb(max(attempt_number)) FROM public.quiz_set_attempts;")==3
         cli("multiple-attempts-restore",["--apply","--confirm","--restore","--backup-service","wi24_restore"],directory=private/"multiple-attempts")
-        assert repair.snapshot(db)==attempt_preimage
+        assert restored_preimage_matches(attempt_preimage)
+        # Consent added after an already-converged merge does not cause a rewrite.
+        local.run("DROP SCHEMA wi24_backup CASCADE;")
+        cli("converged-governance",["--apply","--confirm","--backup-service","wi24_backup"])
+        db.run("INSERT INTO public.consents(institution_id,user_id,granted,policy_version) SELECT institution_id,canonical_id,true,'after-convergence' FROM wi24_pairs;")
+        converged_governance=repair.snapshot(db)
+        assert "converged=true source_writes=0" in cli("noop-governance",["--apply","--confirm"])
+        assert repair.snapshot(db)==converged_governance
+        print("PASS canonical-only consent exposure counterexample; governance refusal and converged no-op")
         print("PASS canonical/legacy schedule winners and exact ties; multiple attempt renumbering and restore")
         print("PASS public CLI dry-run/apply/no-op/unsafe collision refusal; counts-only stdout")
         print("PASS unchanged resolver function body before/after tombstone and alias transition")
