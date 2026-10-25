@@ -1,3 +1,4 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtRisk } from "@/features/instructor";
@@ -47,7 +48,7 @@ export function AtRiskList({
   deidentified?: boolean;
   onViewAllInRoster?: () => void;
 }) {
-  const { data, isLoading } = useAtRisk(courseId);
+  const { data, isLoading, isError, error, refetch } = useAtRisk(courseId);
   const navigate = useNavigate();
 
   if (isLoading) {
@@ -59,6 +60,8 @@ export function AtRiskList({
       </LoadingRegion>
     );
   }
+
+  if (isError || !data) return <InstructorReadFailure error={error} retry={refetch} />;
 
   const flags = data?.flags ?? [];
   const scrollable = flags.length > VISIBLE_BEFORE_SCROLL;

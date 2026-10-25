@@ -30,6 +30,7 @@ async function fixture(width,{role='student',pagers=false,rootError=false}={}){
   if(!url.pathname.startsWith('/__closeout_api'))return route.continue();
   if(route.request().method()!=='GET'){state.mutations++;return route.fulfill({status:405,json:{}});}
   const path=url.pathname.slice('/__closeout_api'.length),reply=(json,status=200)=>route.fulfill({json,status});
+  if(path.startsWith('/dashboard/')&&path.endsWith('/evidence'))return reply({courseId:'course',evidence:Array.from({length:25},(_,i)=>({id:`event-${i}`,type:'practice',correct:true,latencyMs:1000,skillName:'Cloud skill 00',createdAt:'2026-10-25T00:00:00Z'})),nextCursor:null});
   if(path==='/courses/course')return reply({id:'course',title:'AWS101'});
   if(path.endsWith('/twin')){state.twinCalls++;return reply({courseId:'course',readiness:0.5,skills:state.empty?[]:Array.from({length:17},(_,i)=>skill(i)),evidence:[]},state.failTwin?500:200);}
   if(path.endsWith('/next-up'))return reply({courseId:'course',next:null});
@@ -121,7 +122,7 @@ try{
    [{questions:[],readyCount:0},"You're all caught up"],
   ]){a.state.diagnosticResponse=response;await a.page.goto('http://localhost:5173/course/diagnostic');await a.page.getByText(label,{exact:true}).waitFor();check(true,'question availability/material/preparation precedence: '+label);}
   check(a.state.mutations===0&&a.errors.length===0,'availability changes never write or cause runtime errors');await a.context.close();
-  const record=await fixture(width,{role:'instructor'});await record.page.goto('http://localhost:5173/class/student/learner');await record.page.getByText('Based on recent activity',{exact:true}).waitFor();check(await record.page.getByText(/200 recent evidence events \(up to 200\)/).isVisible(),'record statistics label their bounded recent sample');await record.page.getByRole('tab',{name:'Activity',exact:true}).click();await record.page.getByText('Last 25 events. Evidence is append-only; earlier events are not shown here.',{exact:true}).waitFor();await record.page.getByText('1–10 of 25 recent events',{exact:true}).waitFor();check(record.errors.length===0&&record.state.mutations===0,'instructor record labels 25 returned rows without writes');await record.context.close();
+  const record=await fixture(width,{role:'instructor'});await record.page.goto('http://localhost:5173/class/student/learner');await record.page.getByText('Based on recent activity',{exact:true}).waitFor();check(await record.page.getByText(/200 recent evidence events \(up to 200\)/).isVisible(),'record statistics label their bounded recent sample');await record.page.getByRole('tab',{name:'Activity',exact:true}).click();await record.page.getByText("Showing 25 of this learner's activity",{exact:true}).waitFor();await record.page.getByText('1–10 of 25 loaded events',{exact:true}).waitFor();check(record.errors.length===0&&record.state.mutations===0,'instructor record labels 25 returned rows without writes');await record.context.close();
  }
  console.log(`Frontend close-out passed: ${assertions} assertions; screenshots: ${out}`);
 }finally{await browser.close();}

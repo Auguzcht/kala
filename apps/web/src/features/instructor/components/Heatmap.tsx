@@ -1,7 +1,7 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useHeatmap } from "@/features/instructor";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CornerBrackets } from "@/components/kala";
 import type { MasteryBand } from "@/features/twin";
@@ -21,18 +21,10 @@ const BAND_META: Record<MasteryBand, { short: string; cell: string; label: strin
 };
 
 export function Heatmap({ courseId, deidentified = false }: { courseId: string; deidentified?: boolean }) {
-  const { data, isLoading, isError, refetch } = useHeatmap(courseId);
+  const { data, isLoading, isError, error, refetch } = useHeatmap(courseId);
 
   if (isLoading) return <LoadingRegion><Skeleton className="h-80 w-full" /></LoadingRegion>;
-  if (isError || !data) {
-    return (
-      <EmptyState
-        title="We could not load the heatmap"
-        description="Check your connection and try again."
-        action={<Button variant="outline" onClick={() => refetch()}>Retry</Button>}
-      />
-    );
-  }
+  if (isError || !data) return <InstructorReadFailure error={error} retry={refetch} />;
 
   if (data.skills.length === 0) {
     return (

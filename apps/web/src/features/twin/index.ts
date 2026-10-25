@@ -9,3 +9,5 @@ export type {
   NextUpRecommendation,
   MasteryBand,
 } from "@/features/twin/schema/twin.schema";
+
+export { EvidenceHistoryLedger } from "@/features/twin/components/EvidenceHistoryLedger";

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.ai import prescriber
@@ -26,7 +26,7 @@ from app.deps import (
     require_valid_user_id,
 )
 from app.routers.diagnostic import _assert_teaches_course, _course_ref
-from app.twin import cohort, summary
+from app.twin import cohort, evidence_history, summary
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -793,3 +793,21 @@ def create_intervention(
     }])
     names = _skill_names(institution_id=user.institution_id, course_id=course_id)
     return _rec_out(rows[0], skill_names=names)
+
+
+@router.get("/{course_id}/students/{user_id}/evidence", response_model=evidence_history.EvidenceHistoryPage)
+def learner_evidence_history(
+    course_id: str = Depends(require_valid_course_id),
+    user_id: str = Depends(require_valid_user_id),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(require_role("instructor", "admin")),
+):
+    """INSTR-REQ-010: repeat SEC admission before each page's protected read."""
+    _assert_teaches_course(user=user, course_id=course_id)
+    _course_ref(course_id, user.institution_id)
+    _assert_teaches_student(user=user, course_id=course_id, user_id=user_id)
+    return evidence_history.history_page(
+        institution_id=user.institution_id, caller_id=user.user_id,
+        user_id=user_id, course_id=course_id, cursor=cursor, limit=limit,
+    )

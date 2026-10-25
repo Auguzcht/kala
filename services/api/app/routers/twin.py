@@ -4,13 +4,13 @@ append-only evidence ledger. Reads are scoped to the calling student's own
 state (RLS enforces the boundary; the API shapes the response)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import supabase as db
-from app.deps import CurrentUser, get_current_user, require_valid_course_id
+from app.deps import CurrentUser, get_current_user, require_role, require_valid_course_id
 from app.learn import items as item_gen
 from app.routers.diagnostic import _assert_teaches_course, _course_ref
-from app.twin import summary
+from app.twin import evidence_history, summary
 
 router = APIRouter(prefix="/courses", tags=["twin"])
 
@@ -25,6 +25,28 @@ def get_twin(
         _course_ref(course_id, user.institution_id)
     return summary.twin_payload(
         institution_id=user.institution_id, user_id=user.user_id, course_id=course_id,
+    )
+
+
+@router.get("/{course_id}/twin/evidence", response_model=evidence_history.EvidenceHistoryPage)
+def own_evidence_history(
+    course_id: str = Depends(require_valid_course_id),
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=25, ge=1, le=100),
+    user: CurrentUser = Depends(require_role("student")),
+):
+    """TWIN-REQ-010: own enrolled-course history; UUID shape is not admission."""
+    _course_ref(course_id, user.institution_id)
+    enrolled = db.select("enrollments", {
+        "institution_id": f"eq.{user.institution_id}", "user_id": f"eq.{user.user_id}",
+        "course_id": f"eq.{course_id}", "role": "eq.student",
+        "select": "course_id", "limit": "1",
+    })
+    if not enrolled:
+        raise HTTPException(404, "course not found")
+    return evidence_history.history_page(
+        institution_id=user.institution_id, caller_id=user.user_id,
+        user_id=user.user_id, course_id=course_id, cursor=cursor, limit=limit,
     )
 
 

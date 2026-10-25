@@ -27,8 +27,9 @@ import {
 } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { useGamification } from "@/features/gamification";
+import { EvidenceHistoryLedger } from "@/features/twin/components/EvidenceHistoryLedger";
 import type { Twin, TwinSkill } from "@/features/twin";
-import { MasteryBand, BloomsLadder, EvidenceLedger, MasteryRing, MasteryRadar } from "@/components/kala";
+import { MasteryBand, BloomsLadder, MasteryRing, MasteryRadar } from "@/components/kala";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -180,7 +181,7 @@ function SkillGroupList({ skills }: { skills: TwinSkill[] }) {
   );
 }
 
-export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
+export function TwinBody({ twin, own = true, historyTargetId }: { twin: Twin; own?: boolean; historyTargetId?: string }) {
   const navigate = useNavigate();
   const skills = twin.skills;
   // The streak/XP tile and the "Practice this" CTA are OWNER-scoped: they
@@ -465,10 +466,10 @@ export function TwinBody({ twin, own = true }: { twin: Twin; own?: boolean }) {
       <Card data-tour="twin-ledger">
         <CardHeader>
           <CardTitle className="text-base">Evidence ledger</CardTitle>
-          <p className="text-xs text-muted-foreground">Last 20 events</p>
         </CardHeader>
         <CardContent>
-          <EvidenceLedger events={twin.evidence} />
+          <EvidenceHistoryLedger courseId={twin.courseId} targetId={historyTargetId}
+            fallbackEvents={twin.evidence} fallbackLabel="Last 20 events" />
         </CardContent>
       </Card>
     </div>

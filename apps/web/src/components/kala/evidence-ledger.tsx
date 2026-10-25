@@ -42,7 +42,9 @@ function outcomeStyles(e: EvidenceEvent): { dot: string; word: string; wordClass
   return { dot: "bg-destructive", word: "not quite", wordClass: "text-destructive" };
 }
 
-export function EvidenceLedger({ events, className }: { events: EvidenceEvent[]; className?: string }) {
+export function EvidenceLedger({ events, className, totalLabel = "recent events" }: {
+  events: EvidenceEvent[]; className?: string; totalLabel?: string;
+}) {
   const reduceMotion = useReducedMotion();
   const [page, setPage] = useState(0);
   const pages = Math.max(1, Math.ceil(events.length / PAGE_SIZE));
@@ -94,7 +96,7 @@ export function EvidenceLedger({ events, className }: { events: EvidenceEvent[];
       </ol>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p role="status" className="font-mono text-[11px] text-muted-foreground">
-          {safePage * PAGE_SIZE + 1}–{Math.min(events.length, (safePage + 1) * PAGE_SIZE)} of {events.length} recent events
+          {safePage * PAGE_SIZE + 1}–{Math.min(events.length, (safePage + 1) * PAGE_SIZE)} of {events.length} {totalLabel}
         </p>
         {pages > 1 ? (
           <Pagination aria-label={`Evidence pages, page ${safePage + 1} of ${pages}`}>
