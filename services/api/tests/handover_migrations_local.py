@@ -9,13 +9,13 @@ from __future__ import annotations
 import contextlib
 import io
 import os
-from pathlib import Path
 import re
 import runpy
 import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 IMAGE = "public.ecr.aws/supabase/postgres:17.6.1.158"
