@@ -1,6 +1,6 @@
 # APPROVAL-06 coordinator integration evidence
 
-Date: 2026-10-25. Environment: local. Coordinator checkout: /Users/fred/Documents/Repository/kala, branch main. Authority: [APPROVAL-06](../approval-06.md). Published comparison base: 4f3ec29. Existing main descended from cab26de with approved documentation; it was preserved, not reset.
+Date: 2026-10-25. Environment: local. Coordinator checkout: ., branch main. Authority: [APPROVAL-06](../approval-06.md). Published comparison base: 4f3ec29. Existing main descended from cab26de with approved documentation; it was preserved, not reset.
 
 ## First integration pass
 
@@ -12,9 +12,9 @@ Date: 2026-10-25. Environment: local. Coordinator checkout: /Users/fred/Document
 
 Every row also passed web lint, typecheck, build and config_inventory --check. Existing lint warnings (18), dependency deprecations and bundle-size warnings remain; no new success claim is made for live providers. X verification overlapped the documentation-only ownership commit f2c30eb; application source was unchanged during that run.
 
-Commands: each service runs `uv run pytest` in its own directory under committed services/conftest.py (dotenv disabled, generated fake signing key, sockets blocked). Frontend uses Node --test over checked-in *.test.ts/*.test.mjs files; Study uses `node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` with KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer. Then `pnpm --filter web lint`, `typecheck`, `build`, and `uv run --project services/api python scripts/config_inventory.py --check`. The external renderer remains a WI-20 limitation; no dependency added. Raw logs: /tmp/kala-approval06-checks/merge-x, merge-b and merge-u.
+Commands: each service runs `uv run pytest` in its own directory under committed services/conftest.py (dotenv disabled, generated fake signing key, sockets blocked). Frontend uses Node --test over checked-in *.test.ts/*.test.mjs files; Study uses `node --experimental-vm-modules --test apps/web/src/features/flashcards/tests/study-deck.test.mjs` with KALA_STUDY_TEST_DEPS=/private/tmp/kala-lane-f-renderer. Then `pnpm --filter web lint`, `typecheck`, `build`, and `uv run --project services/api python scripts/config_inventory.py --check`. The external renderer remains a WI-20 limitation; no dependency added. Raw logs: /tmp/kala-approval06-checks/merge-x, merge-b and merge-u. (local only, not retained)
 
-Three browser suites ran against main 5afe695 on the sole strict-port Vite server at localhost:5173: Tutor/Diagnostic 219 assertions, Twin 148, instructor feedback 63, all passed. Synthetic authenticated fixtures intercepted API traffic and blocked external traffic; these are not Blackboard/Lambda acceptance. Commands: node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; node apps/web/src/features/twin/tests/presentation.browser.mjs; node apps/web/src/features/instructor/tests/review-feedback.browser.mjs. Bundled Playwright/Chrome supplied through KALA_BROWSER_TEST_DEPS and KALA_BROWSER_EXECUTABLE. Logs/screenshots: /tmp/kala-approval06-checks/initial-browser. Coordinator stopped its own Vite PID32455 and returned port5173 to U afterwards.
+Three browser suites ran against main 5afe695 on the sole strict-port Vite server at localhost:5173: Tutor/Diagnostic 219 assertions, Twin 148, instructor feedback 63, all passed. Synthetic authenticated fixtures intercepted API traffic and blocked external traffic; these are not Blackboard/Lambda acceptance. Commands: node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; node apps/web/src/features/twin/tests/presentation.browser.mjs; node apps/web/src/features/instructor/tests/review-feedback.browser.mjs. Bundled Playwright/Chrome supplied through KALA_BROWSER_TEST_DEPS and KALA_BROWSER_EXECUTABLE. Logs/screenshots: /tmp/kala-approval06-checks/initial-browser. Coordinator stopped its own Vite PID32455 and returned port5173 to U afterwards. (local only, not retained)
 
 Migration/infra scope: `git diff --name-status 4f3ec29..5afe695 -- packages/db/migrations supabase/migrations infra/terraform` contains only added packages/db/migrations/0037_tutor_conversation_pin.sql. Historical SQL unchanged; no Terraform change. 0037 checksum: 82c9297ea08b4c16c3ba03bb2cc64eb222e67dd4276e9b4f7a8db22efe873450. Real local SQL verification is in [0037 runbook](../../../runbooks/0037-apply.md); hosted application remains FG-3.
 
@@ -57,7 +57,7 @@ Runtime integration base:8bc569e36b52488b4e05202a90cb18c8ba0db589. Generated fil
 - Browser suites against the one main5173 server: Tutor/Diagnostic **219**, Twin **148**, instructor **63**, close-out **110** assertions: **540 passed** total. APIs/auth were synthetic and non-local traffic blocked. These counts are not live acceptance.
 - Scope: only added0037 under migration paths versus published4f3ec29; no historical migration or infra/terraform file changed. `git diff --check` passed.
 
-Logs: /tmp/kala-approval06-checks/combined-main, combined-browser and combined-closeout.log. Captures: combined-browser/screenshots and combined-closeout-screenshots. Commands remain those in the first-pass section, plus `node apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs` with the same browser environment. Inspected first-pass Tutor desktop/Diagnostic mobile captures; U inspected the required recovery views at375/1440. The coordinator's second VitePID38458 was stopped after final browser tests. U fast-forwarded its clean codex/ui-closeout branch to4a6ccac, restarted strict5173 asPID39396 and confirmed localHTTP200. Original codex/ui-overhaul remains e1b0250. No worktree cleanup before FG-5; Kala Audit retained.
+Logs: /tmp/kala-approval06-checks/combined-main, combined-browser and combined-closeout.log. Captures: combined-browser/screenshots and combined-closeout-screenshots. Commands remain those in the first-pass section, plus `node apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs` with the same browser environment. Inspected first-pass Tutor desktop/Diagnostic mobile captures; U inspected the required recovery views at375/1440. The coordinator's second VitePID38458 was stopped after final browser tests. U fast-forwarded its clean codex/ui-closeout branch to4a6ccac, restarted strict5173 asPID39396 and confirmed localHTTP200. Original codex/ui-overhaul remains e1b0250. No worktree cleanup before FG-5; Kala Audit retained. (local only, not retained)
 
 ### Findings still open
 
@@ -76,7 +76,7 @@ FG-3 instructions were sent after first integration was green: exact0037 checksu
 
 ```text
 Task / brief ID: APPROVAL-06 coordinator, H01–H12 integration and audit review
-Branch and worktree: main; /Users/fred/Documents/Repository/kala
+Branch and worktree: main; .
 Base revision: published4f3ec29; first-pass runtime5afe695; combined runtime8bc569e
 Files changed: approved X/B/U/I/G source and tests, generated API artifacts,
   shared specs/design, handover evidence/work items, reviewed R/P/C2 docs.
@@ -108,3 +108,11 @@ Fred reported applying0037 on2026-10-25. [Post-check evidence](0037-postchecks-2
 ## Paid fallback saved under explicit delegation
 
 [FG-1 update evidence](fg1-paid-fallback-2026-10-25.md) supersedes the earlier pending secret-edit state: the coordinator used AWS CLI under Fred’s narrow authorization to add the paid fallback, verify all25 existing entries unchanged and retain the previous version. Runtime refresh and hint acceptance remain pending Fred’s deploy/retest. Migration-history gaps are explicitly non-blocking for this deploy by Fred’s decision and remain in the database stream.
+
+## Release-state correction — 2026-10-25
+
+Fred confirms API alias `live` v7 was deployed at **00:04 UTC (08:04 Asia/Manila)**, after the paid-fallback secret change at **00:01 UTC (08:01 Asia/Manila)**. The backend runtime refresh is complete. This is Fred's deployment confirmation, not a new AWS image inspection by the documentation lane. It supersedes earlier pending-runtime statements; the original observation timeline remains above.
+
+The I, G and U close-out backend code is included in v7. Their frontend changes become live only after Fred's authorized Git publication and a Ready Vercel deployment. Saving the fallback and refreshing Lambda do not establish successful model responses: real Study Hint, Explain and dock success remain **FG-5 pending**, along with the other live role/feature acceptance checks. No additional backend deploy is required for the docs/tour changes.
+
+WI-24 (historical identity repair), WI-25 (full-history paging) and WI-26 (instructor course authorization/recommendation visibility) remain open, owner **ITO**, unless Fred changes that assignment. No repair or security completion is claimed.

@@ -49,10 +49,17 @@ For a school test instance, ask the Learn administrator to remove only the new t
 
 ## Sources and evidence gaps
 
-[Blackboard README](../../../infra/blackboard/README.md), [archived MEMORY](../../archive/session-recaps/MEMORY.md) and [archived closeout](../../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md) provide historical architecture context. They do not contain a reproducible AMI import manifest, a confirmed static-IP procedure or current portal screenshots. No parent-chat material was consulted. All missing details above require Fred's evidence before execution.
+[Blackboard README](../../../infra/blackboard/README.md), archived MEMORY and archived closeout provide historical architecture context. They do not contain a reproducible AMI import manifest, a confirmed static-IP procedure or current portal screenshots. No parent-chat material was consulted. All missing details above require Fred's evidence before execution.
 
 ## History
 
 | Date | Change to this runbook | Why |
 | --- | --- | --- |
 | 2026-10-25 | Draft school-instance path and gated developer-image path | APPROVAL-05 rev 2, Lane R, WI-06; no provisioning performed. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [archived closeout](../../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md)
+- [archived MEMORY](../../archive/session-recaps/MEMORY.md)

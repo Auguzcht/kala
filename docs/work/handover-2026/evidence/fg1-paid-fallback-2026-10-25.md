@@ -39,7 +39,7 @@ Recovery: a reviewed rollback can move AWSCURRENT back to the previous version r
 
 ```text
 Task / brief ID: FG-1 narrow AWS CLI delegation, paid chat fallback
-Branch and worktree: main; /Users/fred/Documents/Repository/kala
+Branch and worktree: main; .
 Base revision:bff389a7cf511d83d66905da9f9df12eb218c8ee
 Files changed: approval amendment and release evidence only
 REQ / WI IDs touched: AI-REQ-002; TUTOR-REQ-001; WI-01; FG-1
@@ -55,3 +55,11 @@ Risks or questions for planner: cached warm settings need replacement;
   no successful live answer claimed; history gap remains DB-stream work
 Secrets printed: none (confirmed)
 ```
+
+## Release-state correction — 2026-10-25
+
+Fred confirms API alias `live` v7 was deployed at **00:04 UTC (08:04 Asia/Manila)**, after the paid-fallback secret change at **00:01 UTC (08:01 Asia/Manila)**. The backend runtime refresh is complete. This is Fred's deployment confirmation, not a new AWS image inspection by the documentation lane. It supersedes earlier pending-runtime statements; the original observation timeline remains above.
+
+The I, G and U close-out backend code is included in v7. Their frontend changes become live only after Fred's authorized Git publication and a Ready Vercel deployment. Saving the fallback and refreshing Lambda do not establish successful model responses: real Study Hint, Explain and dock success remain **FG-5 pending**, along with the other live role/feature acceptance checks. No additional backend deploy is required for the docs/tour changes.
+
+WI-24 (historical identity repair), WI-25 (full-history paging) and WI-26 (instructor course authorization/recommendation visibility) remain open, owner **ITO**, unless Fred changes that assignment. No repair or security completion is claimed.

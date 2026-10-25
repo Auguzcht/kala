@@ -56,7 +56,7 @@ export const atRiskSchema = z.object({
 // Instructor's read of one student's twin: the twin shape + pseudonym.
 export const studentTwinSchema = twinSchema.extend({ pseudonym: z.string() });
 
-// HITL skill proposals awaiting review (docs/SKILL_PIPELINE.md). Rows come
+// HITL skill proposals awaiting review (docs/features/skills/README.md#skill-req-004-persist-human-review-and-retire-rejected-skill-bank-items). Rows come
 // back snake_case from the review endpoint (DB-shaped, not generated types).
 export const proposedSkillSchema = z.object({
   id: z.string(),

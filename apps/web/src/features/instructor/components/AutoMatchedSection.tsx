@@ -10,7 +10,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-// Auto-matched skills audit (docs/DEEPSEEK_DEDUP_AND_AUDIT.md): skills this
+// Auto-matched skills audit (docs/features/skills/README.md#skill-req-003-make-institutional-canonical-reuse-visible-and-reversible): skills this
 // course inherited via cross-course auto-match (they resembled an
 // already-approved skill in another course, >= 0.92 similarity). Reuse is a
 // default, not a lock-in — each row can be detached back to a course-local

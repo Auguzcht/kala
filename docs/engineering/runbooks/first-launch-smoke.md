@@ -34,7 +34,7 @@ Accept a new environment or verify a release after 01–09. This WI-07 draft ext
 
 ## Verify it worked
 
-Each required scenario passes under both roles as applicable; ingest has an observed terminal success and usable material, and both tutor modes answer. A healthy API alone does not pass acceptance. [The v6 record](../../work/handover-2026/evidence/deployment-2026-10-25.md) left these live checks outstanding; APPROVAL-06 identifies primary HTTP 429 and leaves paid fallback/runtime refresh/hint recovery at FG-1; merged diagnostics do not prove live recovery. This draft contains no recovery claim. Do not transfer or shut down personal environments until ITO separately verifies and authorizes cutover.
+Each required scenario passes under both roles as applicable; ingest has an observed terminal success and usable material, and both tutor modes answer. A healthy API alone does not pass acceptance. The v6 record left these live checks outstanding; APPROVAL-06 identifies primary HTTP 429 and leaves paid fallback/runtime refresh/hint recovery at FG-1; merged diagnostics do not prove live recovery. This draft contains no recovery claim. Do not transfer or shut down personal environments until ITO separately verifies and authorizes cutover.
 
 ## Undo / roll back
 
@@ -55,3 +55,9 @@ Stop testing on failure and preserve sanitized evidence. Do not delete append-on
 | --- | --- | --- |
 | 2026-10-25 | Draft acceptance sequence and release-specific checks | APPROVAL-05 rev 2, Lane R, WI-07. |
 | 2026-10-25 | Refresh to current staged-file behavior and Fred-only 0037/deploy/acceptance gates | APPROVAL-06 rev 2; source 6e21eed. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [The v6 record](../../work/handover-2026/evidence/deployment-2026-10-25.md)

@@ -3,7 +3,7 @@
 - Date: 2026-10-24 (extraction; source records earlier decisions)
 - Status: accepted (preservation of historical rationale under APPROVAL-01)
 - Decided by: Fred, approval to preserve the accepted audit's recap-only knowledge
-- Source: [APPROVAL-01](../work/handover-2026/approval-01.md), [original recap](../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md), [inventory section 2](../work/handover-2026/evidence/audit-docs-inventory.md#2-knowledge-surviving-only-in-session-recaps-or-local-history)
+- Source: [APPROVAL-01](../work/handover-2026/approval-01.md), original recap, inventory section 2
 
 ## Context
 A local closeout explains why student rewards should not be extended mechanically to teachers and admins.
@@ -16,3 +16,10 @@ Full instructor/admin requirements and acceptance remain WI-08/WI-10. Historic X
 
 ## Alternatives considered
 Teacher XP/badges would reward tool usage instead of the cohort changes teachers can act on.
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [inventory section 2](../work/handover-2026/evidence/audit-docs-inventory.md#2-knowledge-surviving-only-in-session-recaps-or-local-history)
+- [original recap](../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md)

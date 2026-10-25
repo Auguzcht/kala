@@ -12,10 +12,10 @@ idempotent, all safe to retry:
      Lambda's 30s wall before a single PDF, so ingest silently timed out.
      /ingest now writes an ingest_jobs row and returns 202; this job drains
      it over successive scheduled runs, no manual re-POSTing. See
-     docs/design/async-ingest.md.
+     docs/features/lms-ingest/README.md#ingest-req-003-walk-bounded-slices-with-durable-hierarchy-and-throttle-recovery.
   3. embed_backfill — fill any content_items row a flaky embedding call
      left behind, so RAG retrieval quality doesn't silently degrade over
-     time (see docs/UI_AND_MODULES.md section 4 for the failure this
+     time (see docs/features/lms-ingest/README.md#ingest-req-004-preserve-sanitized-chunks-and-recover-missing-embeddings for the failure this
      repairs).
   4. readiness_snapshot — write one readiness_snapshots row per active
      student per run, so the twin has an actual history, not just a

@@ -1,6 +1,6 @@
 # Lane D — documentation framework verification
 
-Date: 2026-10-24 (Asia/Manila). Authorization: APPROVAL-01 including section 5. Worktree: `/Users/fred/.codex/worktrees/04ae/kala`; branch: `codex/docs-framework`; base: `e9de105d7f3074ec39f54e32b1f2b5e2bda669ed`.
+Date: 2026-10-24 (Asia/Manila). Authorization: APPROVAL-01 including section 5. Worktree: `.`; branch: `codex/docs-framework`; base: `e9de105d7f3074ec39f54e32b1f2b5e2bda669ed`.
 
 ## Result
 
@@ -26,8 +26,8 @@ WI-02 accepted inventory is preserved; WI-03 framework is locally implemented an
 Executed from the assigned worktree; helper scripts are task-owned local audit utilities outside the repo and are not installed framework code:
 
 ```sh
-python3 /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-be93d8bef6db/lane-d/verify_scope.py
-python3 /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-be93d8bef6db/lane-d/check_docs_links.py
+python3 /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-be93d8bef6db/lane-d/verify_scope.py # local only, not retained
+python3 /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-be93d8bef6db/lane-d/check_docs_links.py # local only, not retained
 git diff --cached --check
 git diff --cached --name-status --no-renames
 git status --porcelain=v1 --untracked-files=all

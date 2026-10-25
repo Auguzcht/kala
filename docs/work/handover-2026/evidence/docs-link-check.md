@@ -93,7 +93,7 @@ Temporary/worktree links have been adapted to repository-relative evidence/archi
 Exact command (exit 0 with categorized expected gaps):
 
 ```sh
-python3 /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-be93d8bef6db/lane-d/check_docs_links.py
+python3 /Users/fred/.codex/visualizations/2026/10/24/01a16e82-b88c-7ee1-b65d-be93d8bef6db/lane-d/check_docs_links.py # local only, not retained
 ```
 
 The full categorized result is preserved above; helper code/JSON is external task scratch and is not copied into the repository. No live smoke, Blackboard or hosted check was run.

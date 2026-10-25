@@ -35,7 +35,7 @@ import { pageWindow } from "@/lib/pagination";
 const PAGE_SIZE = 8;
 const PROPOSAL_STATUS_FALLBACK_MS = 15 * 60 * 1_000;
 
-// HITL skill proposals (docs/SKILL_PIPELINE.md). AI proposes skills from
+// HITL skill proposals (docs/features/skills/README.md#skill-req-004-persist-human-review-and-retire-rejected-skill-bank-items). AI proposes skills from
 // the course's content, one module at a time; nothing proposed reaches
 // learners until a human approves here. The "Refresh skills" button in the
 // header is the on-demand trigger. It queues worker proposal work and polls

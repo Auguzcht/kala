@@ -18,7 +18,7 @@ The target environment boundary is a complete separately owned set of systems. T
 | `local` | Day-to-day development | Vite :5173 | uvicorn :8000 | Local Supabase in Docker | Mock LTI launch script |
 | `local-on-dev` | UI work with real data | Vite :5173 | dev API Gateway | dev Supabase | Real launch, token copied to localhost |
 | `dev-hosted` | Current live system (pilot and demos) | Vercel production deployment | API Gateway `live` alias | Personal Supabase project | EC2 developer AMI |
-| `prod` | School-owned system, provisioned by ITO from scratch in the Mapua landing zone | ITO chooses | ITO's AWS | ITO's new Supabase project, built from `supabase/migrations` | School Learn instance |
+| `prod` | School-owned system, provisioned by ITO from scratch in the Mapua landing zone | ITO chooses | ITO's AWS | ITO's new Supabase project, built from the complete reviewed numeric migration manifest (currently `packages/db/migrations`; relocation is pending) | School Learn instance |
 
 The pack names the personal pilot/demo system `dev-hosted`, even where older notes call it "production". In the docs it is called `dev-hosted` so nobody mistakes personal accounts for the school's production. It is a full transfer: nothing in `dev-hosted` is migrated. No data, no accounts, no keys. Any later shutdown requires its own explicit human authorization after ITO verification (runbook 10); it is not an action for this lane. What ITO provisions is listed in `infrastructure-requirements.md`.
 
@@ -34,4 +34,10 @@ Follow [the runbook registry](runbooks/README.md) once its procedures are author
 - The API CORS allows `http://localhost:5173` only for local work.
 - The Blackboard developer image expires. Plan a migration before the expiry date shown on the download page.
 
-See [APPROVAL-01](../work/handover-2026/approval-01.md) for current gates. Source defaults do not establish deployed provider selection. [The config audit](../work/handover-2026/evidence/audit-config.md) proves source precedence only; actual hosted secret memberships are unknown. Lane C owns the [names-only secrets catalogue](secrets.md).
+Use [database policy](database.md), [security/privacy boundaries](security-and-privacy.md) and the [runbooks](runbooks/README.md) for current gates. Source defaults and a source precedence audit do not establish deployed provider selection or runtime cache contents. The [names-only secrets catalogue](secrets.md) records stores and owners; inspect selected effective configuration privately before operations.
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [The config audit](../work/handover-2026/evidence/audit-config.md)

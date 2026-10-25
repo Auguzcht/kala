@@ -65,10 +65,16 @@ The human may reverse an approved start with a coordinated stop, or reverse a st
 
 ## Sources
 
-[Blackboard README](../../../infra/blackboard/README.md), [environment guide](../environments.md), [archived closeout](../../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md). The API Terraform stack does not manage the Learn EC2 instance. Official CLI references confirm the documented [start](https://docs.aws.amazon.com/cli/latest/reference/ec2/start-instances.html), [stop](https://docs.aws.amazon.com/cli/latest/reference/ec2/stop-instances.html), [status](https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instance-status.html) and [running waiter](https://docs.aws.amazon.com/cli/latest/reference/ec2/wait/instance-running.html) interfaces; this is syntax/reference checking, not an instance test.
+[Blackboard README](../../../infra/blackboard/README.md), [environment guide](../environments.md), archived closeout. The API Terraform stack does not manage the Learn EC2 instance. Official CLI references confirm the documented [start](https://docs.aws.amazon.com/cli/latest/reference/ec2/start-instances.html), [stop](https://docs.aws.amazon.com/cli/latest/reference/ec2/stop-instances.html), [status](https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instance-status.html) and [running waiter](https://docs.aws.amazon.com/cli/latest/reference/ec2/wait/instance-running.html) interfaces; this is syntax/reference checking, not an instance test.
 
 ## History
 
 | Date | Change to this runbook | Why |
 | --- | --- | --- |
 | 2026-10-25 | Draft scoped operations and expiry gates | APPROVAL-05 rev 2, Lane R, WI-07. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [archived closeout](../../archive/session-recaps/DEEPSEEK_SEPT1_CLOSEOUT.md)

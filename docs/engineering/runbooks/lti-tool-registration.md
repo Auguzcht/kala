@@ -50,10 +50,16 @@ The Learn administrator can hide/disable the newly created course placement whil
 
 ## Sources and evidence gaps
 
-[Routes](../../../services/api/app/lti/routes.py), [security primitives](../../../services/api/app/lti/security.py), [claims](../../../services/api/app/lti/claims.py), [launch tests](../../../services/api/tests/test_lti_launch.py), [REST connector](../../../services/api/app/lms/blackboard.py), [quota incident](../../archive/bugs/blackboard-rest-quota-exhaustion.md). Historic ngrok registrations are not current endpoint evidence. Current placement screenshots, permission settings, deployment mapping and two-role launch results: [Fred to confirm].
+[Routes](../../../services/api/app/lti/routes.py), [security primitives](../../../services/api/app/lti/security.py), [claims](../../../services/api/app/lti/claims.py), [launch tests](../../../services/api/tests/test_lti_launch.py), [REST connector](../../../services/api/app/lms/blackboard.py), quota incident. Historic ngrok registrations are not current endpoint evidence. Current placement screenshots, permission settings, deployment mapping and two-role launch results: [Fred to confirm].
 
 ## History
 
 | Date | Change to this runbook | Why |
 | --- | --- | --- |
 | 2026-10-25 | Draft registration exchange, placement and validation checks | APPROVAL-05 rev 2, Lane R, WI-06. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [quota incident](../../archive/bugs/blackboard-rest-quota-exhaustion.md)

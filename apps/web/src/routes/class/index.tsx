@@ -147,7 +147,7 @@ function ClassDashboard() {
         </Tabs>
 
         {/* HITL skill proposals: nothing proposed reaches learners until a
-            human approves here (docs/SKILL_PIPELINE.md). Auto-opens the
+            human approves here (docs/features/skills/README.md#skill-req-004-persist-human-review-and-retire-rejected-skill-bank-items). Auto-opens the
             first time this page learns there's something pending, so a
             real review queue is never hidden behind a click; stays exactly
             where a teacher leaves it after that. */}

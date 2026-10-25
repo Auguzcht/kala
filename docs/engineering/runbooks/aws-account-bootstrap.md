@@ -45,10 +45,16 @@ Revoke only newly granted setup access after owner review. Preserve state/backup
 
 ## Sources and evidence gaps
 
-[Terraform README](../../../infra/terraform/README.md), linked Terraform files and [recap evidence](../../work/handover-2026/evidence/recap-knowledge.md) establish source declarations, not deployed account controls.
+[Terraform README](../../../infra/terraform/README.md), linked Terraform files and recap evidence establish source declarations, not deployed account controls.
 
 ## History
 
 | Date | Change to this runbook | Why |
 | --- | --- | --- |
 | 2026-10-25 | Draft access, state, budget and quota gates | APPROVAL-05 rev 2, Lane R, WI-07. |
+
+## Historical sources
+
+These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
+
+- [recap evidence](../../work/handover-2026/evidence/recap-knowledge.md)

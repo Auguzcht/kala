@@ -1,6 +1,6 @@
 """Embedding backfill: fill any content_items row with embedding is null.
 
-This is the documented failure mode in docs/UI_AND_MODULES.md section 4 —
+This is the documented failure mode in docs/features/lms-ingest/README.md#ingest-req-004-preserve-sanitized-chunks-and-recover-missing-embeddings —
 ingest_course() already treats a failed embedding call as best-effort (a
 flaky free-tier endpoint or a single timeout shouldn't 502 the whole
 ingest run), which is the right call for the request path, but it means a

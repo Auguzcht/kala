@@ -62,7 +62,7 @@ Follow [0037-apply.md](../../../runbooks/0037-apply.md), preserving the unchange
 
 ```text
 Task / brief ID: Fred's model-state review and0037 pre-check request
-Branch and worktree: main; /Users/fred/Documents/Repository/kala
+Branch and worktree: main; .
 Base revision:25c91418ead3cf6cc6ceb5bdad679b9a0a994ae8
 Files changed: this evidence and acceptance/integration evidence only
 REQ / WI IDs touched: AI-REQ-002; TUTOR-REQ-001/003; WI-01/21; FG-1/FG-3

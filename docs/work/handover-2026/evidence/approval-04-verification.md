@@ -2,7 +2,7 @@
 
 Date: 2026-10-25 (Asia/Manila).
 Task / brief ID: [APPROVAL-04](../approval-04.md), resolving the recorded APPROVAL-03 test-body gate.
-Branch/worktree: `main`, `/Users/fred/Documents/Repository/kala`.
+Branch/worktree: `main`, `.`.
 Base revision: `c41fbe0d0563753751ba6c99850dee34b9008b01`.
 Tested revision: `a5002366e0d364e29797855a0c035f2b0f4bd181`.
 Disposition: all requested checks passed; stop without pushing or deploying.
@@ -47,7 +47,7 @@ Supplemental checks: Ruff on the edited test file passed; exact-patch/all-assert
 ## Evidence and delivery
 
 All raw logs and value-free result records are retained at:
-`/Users/fred/.codex/visualizations/2026/10/24/01a16e30-fcb8-7b50-91d8-4f38c908acd5/kala-approval04-integration/`.
+`/Users/fred/.codex/visualizations/2026/10/24/01a16e30-fcb8-7b50-91d8-4f38c908acd5/kala-approval04-integration/`. (local only, not retained)
 
 Files: `focused-1.log` through `focused-20.log`, `focused-results.csv`, `main-api-1.log`, `main-api-2.log`, `main-api-results.json`, `fresh-clone-api.log`, `fresh-clone-result.json`, `worker.log` and `worker-result.json`.
 

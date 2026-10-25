@@ -57,7 +57,7 @@ def _roster_role(course_role: str | None) -> str:
 
 def _seed_course_skills(*, institution_id: str, course_id: str, course_ref: str,
                         connector: BlackboardConnector) -> dict:
-    """Seed the skill graph from AI proposals (docs/SKILL_PIPELINE.md). Same
+    """Seed the skill graph from AI proposals (docs/features/lti-auth/README.md#requirements). Same
     non-blocking contract as roster sync: any failure logs and is skipped,
     never blocks the 302. Incremental by module (see ai/skill_proposer.py):
     the proposer itself tracks which modules already have skills and only

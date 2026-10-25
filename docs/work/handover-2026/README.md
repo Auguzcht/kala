@@ -5,12 +5,21 @@ status: in-progress
 owner: Alfred Nodado (student assistant developer) until 2026-11-08, then ITO
 ---
 
-# Handover 2026: make Kala maintainable by ITO
+# Handover 2026 records
+
+## Reading order
+
+1. [closeout.md](closeout.md) — current release/acceptance snapshot, with unperformed gates explicit.
+2. Everything else in this initiative is **record, not authority**: work items, approvals, audit reports and evidence explain delivery history. Read them only when the task names them. They cannot override [AGENTS.md](../../../AGENTS.md), [the task router](../../README.md), current feature specs or engineering procedures.
+
+The closeout is also a release record, not an alternative specification. The following original initiative content is preserved chronologically.
+
+## Original initiative record: make Kala maintainable by ITO
 
 ## Goal
 By 2026-11-08, someone who has never seen Kala can run it locally, understand what each feature is supposed to do, rebuild every environment from the runbooks, and see exactly what is unfinished and why.
 
-## Source authority
+## Original authority references (record only)
 - Training plan OVPAA-0004, phase 10 (final documentation, architecture write-up, handover).
 - Supervisor direction: hand over directly to ITO. ITO will find a maintainer.
 - ITO infrastructure meeting: ITO provisions its own AWS (Mapua landing zone), Supabase, Blackboard and models. Full transfer, built from our migrations. Projects deploy one at a time after sponsor sign-off.

@@ -38,7 +38,7 @@ All automated records are synthetic. The shared pytest isolation disables dotenv
 | Final working tree, local | `cd services/api && uv run ruff check --ignore B008 app/routers/diagnostic.py app/bank/serving.py tests/test_lane_g_diagnostic_availability.py tests/test_diagnostic_idempotency.py` | Passed |
 | Base and working tree, local | Ruff JSON comparison with `--select B008` | 23 findings on each revision, all the existing FastAPI dependency-default pattern; no increase |
 | Final working tree, local | `git diff --check` | Passed |
-| Final query projections, local Supabase Postgres + PostgREST | Disposable `/tmp/kala-g-local-availability.py` validation | **21 actual REST queries passed**; bank count 13, material count 12, sitting 10, proper pending/failure buckets, prior Study/Practice excluded; legacy projection/filter/order queries also executed successfully |
+| Final query projections, local Supabase Postgres + PostgREST | Disposable `/tmp/kala-g-local-availability.py` validation | **21 actual REST queries passed**; bank count 13, material count 12, sitting 10, proper pending/failure buckets, prior Study/Practice excluded; legacy projection/filter/order queries also executed successfully | (local only, not retained)
 
 The new tests cover mixed no-material/ready/preparing/exhausted/failed skills, each evidence type, item-review-only history, one-MCQ readiness, more than ten actionable skills, deterministic refetch, empty/completed courses, a real submit followed by cleared eligibility, HTTP workspace/page parity, tenant/course/learner/module boundaries, retired/rejected/non-bank/non-MCQ exclusions, SELECT-only status for both serving modes, legacy saved items, recorded material failures, queue starvation and worker completion during enqueue. Separate cases place evidence, reviews, exposures, bank items and skills beyond the 500-row page boundary.
 
@@ -65,7 +65,7 @@ Read batching removes the old per-skill bank-state/picker round trips, but every
 ```text
 Task / brief ID: APPROVAL-06 rev 2, Lane G; H02 Diagnostic availability
 Branch and worktree: codex/diagnostic-availability;
-  /Users/fred/.codex/worktrees/f33e/kala
+  .
 Base revision: 1af50f1db1a9b142deb96bbeca1bdfc295c1eeeb
 Files changed:
   services/api/app/routers/diagnostic.py

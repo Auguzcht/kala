@@ -2,7 +2,7 @@
 
 Date: 2026-10-25 (Asia/Manila).
 Task: Fred reported completing the backend redeployment and explicitly requested image review followed by a scoped push to main. This direct request releases APPROVAL-03/04's no-push gate after Fred's backend deployment. Agents remain prohibited from deploying or changing hosted data.
-Branch/worktree: `main`, `/Users/fred/Documents/Repository/kala`.
+Branch/worktree: `main`, `.`.
 Origin base at review: `e9de105d7f3074ec39f54e32b1f2b5e2bda669ed`.
 Reviewed source revision: `cab26defc93964c92ab52c2dfa657db00434a3d7`.
 
@@ -42,3 +42,11 @@ Scope verification with rename folding disabled found **zero migration-file chan
 Health, alias and image/source checks do not confirm authenticated Blackboard LTI flows, tutor behavior with live providers/persistence, or Study interactions in the deployed browser. Fred's agreed live observation/CloudWatch checks remain outstanding; INC-002 still has live recovery unverified. Warm-Lambda abandoned-call and partial sanitizer limitations remain documented. Lane DB remains gated on the hosted Postgres major.
 
 No deployment, Lambda update/publish/alias mutation, hosted migration, key rotation, hosted data write or new server was performed by the coordinator. Existing development sessions and other worktrees were preserved. Temporary local image-review resources were removed. Only read-only AWS metadata, health and local source review were performed before the authorized Git publication. Secrets printed: none.
+
+## Release-state correction — 2026-10-25
+
+Fred confirms API alias `live` v7 was deployed at **00:04 UTC (08:04 Asia/Manila)**, after the paid-fallback secret change at **00:01 UTC (08:01 Asia/Manila)**. The backend runtime refresh is complete. This is Fred's deployment confirmation, not a new AWS image inspection by the documentation lane. It supersedes earlier pending-runtime statements; the original observation timeline remains above.
+
+The I, G and U close-out backend code is included in v7. Their frontend changes become live only after Fred's authorized Git publication and a Ready Vercel deployment. Saving the fallback and refreshing Lambda do not establish successful model responses: real Study Hint, Explain and dock success remain **FG-5 pending**, along with the other live role/feature acceptance checks. No additional backend deploy is required for the docs/tour changes.
+
+WI-24 (historical identity repair), WI-25 (full-history paging) and WI-26 (instructor course authorization/recommendation visibility) remain open, owner **ITO**, unless Fred changes that assignment. No repair or security completion is claimed.

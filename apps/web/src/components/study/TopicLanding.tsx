@@ -17,7 +17,7 @@ import type { TwinSkill } from "@/features/twin";
 import type { BankStatus } from "@/features/bank/schema/bank-status.schema";
 
 // The shared topic-choice landing — extracted from routes/course/lessons.tsx
-// (Stage 3 of the AI overhaul, docs/AI_OVERHAUL_TODO.md): Practice and
+// (docs/features/study/README.md#learning-surface-boundaries): Practice and
 // Flashcards each get their own version of exactly this page now, choosing
 // what to work on is a session-scoped decision, not something you switch
 // mid-session (that's what the Sheet+Command picker got wrong, and why

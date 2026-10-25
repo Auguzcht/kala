@@ -9,7 +9,7 @@ target design ("Explain like I'm 5", "More detail") by adjusting the framing
 of the SAME grounded answer, so a chip is a cheap re-render, not a new
 retrieval contract.
 
-AI overhaul Stage 2 (docs/AI_OVERHAUL_TODO.md): the tutor gained real
+Conversation storage (docs/features/tutor/README.md#data): the tutor has real
 conversation persistence. Previously /ask was fully stateless — no
 conversation_id, nothing stored, each question independent, gone on
 refresh. Conversations now live in tutor_conversations/tutor_messages

@@ -1,6 +1,6 @@
 # AGENTS.md: Kala repository instructions
 
-This file is the entry point for every coding agent (Codex, Claude) and every new maintainer. It is a router. It says what Kala is, the rules that never bend, and where the authority for each kind of question lives. `CLAUDE.md` contains one line pointing here. Current handover authority: [APPROVAL-01, including section 5](docs/work/handover-2026/approval-01.md), [APPROVAL-02's review and integration gates](docs/work/handover-2026/approval-02.md), [APPROVAL-03's tutor acceptance and no-push gate](docs/work/handover-2026/approval-03.md), [APPROVAL-04's test-only correction and repeated verification](docs/work/handover-2026/approval-04.md), [APPROVAL-05 rev 2 plus confirmed coordinator amendments](docs/work/handover-2026/approval-05.md), and [APPROVAL-06 rev 2 same-day close-out and Fred gates](docs/work/handover-2026/approval-06.md).
+This file is the entry point for every coding agent (Codex, Claude) and every new maintainer. It is a router. It says what Kala is, the rules that never bend, and where the authority for each kind of question lives. `CLAUDE.md` contains one line pointing here. Current operational authority is this router, [the documentation guide](docs/README.md), the selected current feature spec, and the applicable engineering runbook. Initiative approvals and evidence are records; durable constraints are stated here and in those current documents.
 
 ## 1. Start here
 
@@ -11,6 +11,8 @@ AGENTS.md
   -> the selected work item in docs/work/<initiative>/
   -> source and tests
 ```
+
+Do not read docs/archive/** or docs/work/**/evidence/** unless the task explicitly names them.
 
 Do not pick requirements or next steps from file dates, search ranking, old session recaps or chat history. If the task does not name a feature or work item and more than one fits, stop and ask.
 
@@ -58,6 +60,7 @@ Agents never deploy, apply migrations, rotate keys or write to hosted data. They
 
 - One task per worktree, one branch per worktree, prefix `codex/`.
 - Each task owns a disjoint set of paths, named in its brief. Do not edit outside them.
+- Narrow shared-file exception: one lane may make a comment-only edit while another makes an attribute-only or comment-only edit on non-overlapping lines. Merge in sequence; the second lane rebases, proves both edits survive and verifies the executable diff contains only the approved attribute (or no executable change when both edits are comments). Rerun its relevant tests and web checks after the rebase. Any other shared-file change stops for planner resolution.
 - Smoke test from the worktree that changed. Only one dev server on port 5173 at a time (the API CORS allows only that origin).
 - Never `git pull --rebase` when `main` has merge commits. Fetch, confirm `origin/main` has not moved, push fast-forward.
 
@@ -102,3 +105,13 @@ pnpm --filter web lint && pnpm --filter web typecheck && pnpm --filter web build
 cd services/api && uv run pytest
 cd services/worker && uv run pytest
 ```
+
+## 12. Documentation checks
+
+Use Python 3.10 or newer. Run `python3 scripts/docs_check.py` and `python3 -m unittest discover -s scripts -p 'test_docs_check.py'` for documentation changes. The checker covers tracked and non-ignored new text files under docs/ plus this router. Links from current truth documents into archive/evidence belong only under Historical sources or Verified by headings, or in an explicit Verified by requirement field. Fenced examples are not live links. Machine-local paths must become repo-relative references or carry the exact marker “local only, not retained” on their line. Ignored local originals are audited separately and never silently promoted.
+
+For comment-only edits, compare executable AST/token streams before and after. Applied migrations remain byte-for-byte immutable, including comments; preserve a current pointer at their retained documentation target instead. Stop at the audit report before merge or push.
+
+## Historical sources
+
+The accepted handover decisions were recorded in [APPROVAL-01](docs/work/handover-2026/approval-01.md), [02](docs/work/handover-2026/approval-02.md), [03](docs/work/handover-2026/approval-03.md), [04](docs/work/handover-2026/approval-04.md), [05](docs/work/handover-2026/approval-05.md) and [06](docs/work/handover-2026/approval-06.md). Read them only when a task names the record; do not derive new requirements or release status from them. Documentation hygiene is the user-approved docs-only freeze exception.
