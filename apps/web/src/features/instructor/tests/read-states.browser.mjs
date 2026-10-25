@@ -35,7 +35,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
       if(typeof state.mode==='number')return route.fulfill({status:state.mode,json:{detail:'synthetic failure'}});
     }
     if(path.endsWith('/evidence'))return reply({courseId:'course',evidence:[],nextCursor:null});
-    if(path.endsWith('/roster'))return reply({courseId:'course',students:[]});
+    if(path.endsWith('/roster'))return reply({courseId:'course',students:surface==='sheet'?[{userId:'learner',displayName:'Synthetic sheet learner',pseudonym:'Synthetic learner',initials:'SL',readiness:null,band:'no-evidence',attempts:0,evidenceCount:0,accuracy:null,lastActiveAt:null,daysInactive:null,weakestSkillName:null,skillsWithEvidence:0,skillsTotal:0,status:'not-started'}]:[]});
     if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:null,skills:[],students:[],cells:[]});
     if(path.endsWith('/stats'))return reply({courseId:'course',learners:0,activeLearners:0,startedLearners:0,notStartedLearners:0,cohortReadiness:null,medianReadiness:null,accuracy:null,evidenceCount:0,medianLatencyMs:null,hintsUsed:0,skillsTracked:0,skillsCovered:0,bandDistribution:[],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
     if(path.endsWith('/proposed'))return reply({courseId:'course',proposed:[]});
@@ -51,7 +51,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
     if(path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:0.55,band:'proficient',cohortReadiness:0.5,percentile:0.5,accuracy:0.6,momentum:null,attempts:20,evidenceCount:200,hintsUsed:0,lastActiveAt:'2026-10-24T12:00:00Z',daysInactive:0,status:'developing',skills,activityByType:[],activitySeries:[],readinessTrend:[],evidence:makeEvents(200)});
     return reply({});
   });
-  await page.goto(`http://localhost:5173/${mode==='components'?'__twin_presentation':surface==='class'?'class':'class/student/learner'}`);
+  await page.goto(`http://localhost:5173/${mode==='components'?'__twin_presentation':surface==='class'||surface==='sheet'?'class':'class/student/learner'}`);
   return {page,context,errors,state};
 }
 
@@ -114,6 +114,19 @@ try {
     check(await page.locator('[aria-busy=true]').count()===0,'failed refetch is not permanent loading');
     if(surface==='learner')check(await page.getByText('Demo learner',{exact:true}).count()===0,'cached learner hidden after failed refetch');
     check(f.errors.length===0&&state.mutations===0,'refetch failure causes no crash or write');
+    await f.context.close();
+  }
+  for(const width of [375,1440]) for(const failure of [403,404]) {
+    const f=await fixture(width,{surface:'sheet',failure}),{page,state}=f;
+    const row=page.locator('#tour-roster-first-row');await row.waitFor();await row.focus();await row.press('Enter');
+    const sheet=page.getByRole('dialog');await sheet.waitFor();
+    await sheet.getByRole('heading',{name:'Learner unavailable',exact:true}).waitFor();
+    check(await sheet.getByText('Check your connection and try again.',{exact:true}).count()===0,'roster-sheet denial does not claim a connection error');
+    check(await sheet.getByRole('link',{name:'Back to class',exact:true}).getAttribute('href')==='/class','roster-sheet unavailable state retains class navigation');
+    check(await sheet.locator('[aria-busy=true]').count()===0,'roster-sheet denial settles its loading state');
+    check(state.mutations===0&&f.errors.length===0,'denied roster sheet never mutates or crashes');
+    await page.keyboard.press('Escape');await sheet.waitFor({state:'hidden'});
+    check(await row.isVisible(),'keyboard close returns to the actual roster');
     await f.context.close();
   }
   console.log(`INSTR-REQ-011 browser checks: ${assertions} assertions passed`);

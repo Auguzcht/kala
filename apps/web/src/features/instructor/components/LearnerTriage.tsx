@@ -1,11 +1,10 @@
+import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState } from "react";
 import { useAtRisk, useLearnerRecord } from "@/features/instructor";
 import { DecisionCenter } from "@/features/instructor/components/DecisionCenter";
 import { LearnerStanding } from "@/features/instructor/components/LearnerStanding";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/shared/EmptyState";
 
 // The triage surface — what the roster sheet shows, deliberately NOT the
 // full LearnerRecord.
@@ -44,17 +43,7 @@ export function LearnerTriage({
   }
 
   if (record.isError || !record.data) {
-    return (
-      <EmptyState
-        title="We could not load this learner's record"
-        description="Check your connection and try again."
-        action={
-          <Button variant="outline" onClick={() => record.refetch()}>
-            Retry
-          </Button>
-        }
-      />
-    );
+    return <InstructorReadFailure error={record.error} retry={record.refetch} learner />;
   }
 
   const r = record.data;

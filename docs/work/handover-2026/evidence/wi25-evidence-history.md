@@ -75,3 +75,9 @@ Static review after Amendment 6 confirms `apps/web/src/features/instructor/hooks
 H's new history key explicitly includes caller/institution/role/target/course and cursor page identity; its scope suite is written to verify that independent feed only. This does **not** fix or verify actor isolation in the legacy bounded Twin/record fallback arrays or every instructor query. Hook-wide cache changes and shared session/client invalidation remain outside the current component-only Amendment 6 grant. No such files were edited. The new component error branches hide cached data once their request fails; they cannot force an unscoped cached query to reauthorize on session replacement.
 
 The final follow-up production build completed successfully with the existing large-chunk warning. Browser execution and router-phase gates remain pending; no server action was taken.
+
+## LearnerTriage scope clarification
+
+Coordinator clarified that the roster sheet's `LearnerTriage.tsx` is included in Amendment 6's learner-record callers. It now reuses the same feature-local unavailable/transient failure primitive as the full record; decision rendering and mutation semantics are untouched. This supersedes the earlier report's statement that Triage remained unchanged.
+
+The dedicated instructor read-state suite now includes the actual roster → keyboard-open LearnerSheet → LearnerTriage path with synthetic 403 and 404 at 375/1440. Written assertions cover unavailable copy, class link, no stuck loading, no mutation/crash and Escape returning to the roster. Browser execution remains pending server handover, not claimed passed. No LearnerSheet, route, hook-wide cache or shared-client change was required.
