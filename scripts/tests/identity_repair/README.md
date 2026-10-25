@@ -1,14 +1,18 @@
-# WI-24 local inventory and stop-condition proof
+# WI-24 synthetic local proof
 
-Run from repository root:
+Use Python 3.10+; the verified repo uv runtime is Python 3.13.14. From repository root:
 
 ```sh
-python3 scripts/tests/identity_repair/replay.py
+uv run --directory services/api --no-sync python ../../scripts/tests/identity_repair/replay.py
+uv run --directory services/api --no-sync python ../../scripts/tests/identity_repair/test_local.py
 ```
 
-Requires Docker with cached `public.ecr.aws/supabase/postgres:17.6.1.158`.
-Creates a randomly named dedicated container and template0 database with no published port; removes only that container in finally. It does not use application imports, service environments, dotenv or hosted credentials. Docker CLI needs access to the configured local engine. No Python dependencies are required.
+Requires Docker with cached `public.ecr.aws/supabase/postgres:17.6.1.158`, and PostgreSQL 17 client `psql`, `pg_dump`, `pg_restore` on PATH. No additional Python dependencies. Neither runner imports app configuration or reads dotenv. They do not require service Python packages.
 
-The committed catalog contains schema metadata only. `migrations.sha256` covers unchanged 0001–0037. The runner checks the full catalog after a fresh replay. Bootstrap auth/storage interfaces are synthetic scaffolding, not a complete Supabase service stack. Fixture data is generated entirely inside a rolled-back SQL transaction.
+`replay.py` creates a dedicated random container with no published port, replays 0001–0037 and verifies the full metadata catalog and migration checksums. `test_local.py` creates its own random container with a random **loopback-only** port and three named fresh databases. Synthetic trust auth exists only in that isolated test container. Minimal auth/storage interfaces satisfy migration dependencies; this is not a complete Supabase service or RLS acceptance test. Each runner removes only its own container. Private input/copies/dumps/manifests live under gitignored tmp and are removed in finally.
 
-This proves actual unique-key/session collision failure, the alias/exact-user disagreement rejected by the current resolver's predicate, narrow-trigger DDL/data rollback after an injected failure and unchanged source counts. It does not call the application resolver, implement the repair, merge supported pairs, test worker jobs, test concurrent writers or prove backup/restore. The runbook remains blocked until those capabilities are approved and implemented. No repair script is deliberately supplied while its design has unresolved stop conditions.
+The public CLI is exercised for read-only dry run, supported one-sided/two-sided merges, safe SRS winners/ties, overlapping attempt numbers, no-op rerun, blocked source keys/sessions and other guards, injected transaction failures, post-worker capture, later-activity refusal and exact restore. Files are private, output has only fixed labels/counts/reasons, and source payload/timestamp invariants are checked by the actual apply SQL. Restore includes schedule losers, original attempt numbers, original derived state and canonical readiness history. New merge/capture/rollback audit records remain; historical audit/launch/decision references remain unchanged.
+
+`application_adapters.py` compiles the unchanged resolver and worker function bodies from their real source files, binding only synthetic local SQL transport and fake worker settings. Resolver profile/alias refresh side effects are stubbed so the test isolates mapping decisions; unexpected identity creation fails. Worker jobs execute their real replay/write logic. This avoids application import/config/network side effects; it is not hosted HTTP or deployment acceptance. Public capture independently rejects wrong estimates even with matching counters/timestamps and requires the confirmed pre-apply worker K. Ambiguous mixed-outcome timestamp ties refuse before apply.
+
+The hidden local failure-test option forces a validated local source endpoint. It cannot inject failure against a hosted source. The ordinary maintainer CLI accepts an explicit source service after coordinator review/Fred gates; it needs no code edit or bypass flag. These tests never supply a hosted service.

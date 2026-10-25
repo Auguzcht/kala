@@ -8,7 +8,7 @@ Read [database policy](../engineering/database.md), [AUTH contract](../features/
 
 Coordinator decisions authorize collision-free source merges and explicit SRS/attempt collision rules locally. Any blocked pair refuses the entire apply transaction before writes. Refuse source idempotency/session collisions, unequal dual profiles, legacy consents/DSRs/attachments, multiple unfinished attempts, ambiguous roles/aliases, foreign tenant relations and stale canonical mastery keys absent combined evidence. Never rewrite source keys, outcomes, counted flags, XP or timestamps; never deduplicate distinct source rows.
 
-Proposed marker: `wi24-retired:<legacy-users.id>`. Preserve the original LMS ID in private backup and the new in-DB merge audit. Keep legacy users.id, role and historical metadata. Redirect aliases only after coordinator commits the AUTH manual-repair exception; implementation of this part waits for that commit. Refuse any existing tombstone/third-user identifier conflict. Application resolver simulations must prove canonical exact UUID/sub resolution before/after and retired legacy alias resolution afterward.
+Checked marker: `wi24-retired:<legacy-users.id>`. Preserve the original LMS ID in private backup and the new in-DB merge audit. Keep legacy users.id, role and historical metadata. The coordinator committed the AUTH manual-repair exception at `bf750f7` before alias-changing implementation. Refuse any existing tombstone/third-user identifier conflict. Application resolver simulations must prove canonical exact UUID/sub resolution before/after and retired legacy alias resolution afterward.
 
 Keep all historical audit actor/row/JSON, skills.reviewed_by, recommendations.decided_by, researcher_grants.granted_by and lti_launches references unchanged. The shell has no active aliases/enrollments/learner ownership; historical actor references and identity profiles may remain. Old audit rows are never updated. Legacy attachments block; canonical attachments remain unchanged. No storage bytes, paths or RLS changes.
 
@@ -20,16 +20,16 @@ The complete catalog of **all** public primary/unique/FK constraints, unique ind
 
 | Table / columns | Keys, dependencies and rule |
 | --- | --- |
-| users.id, lms_user_id | PK id; UNIQUE institution/LMS ID; institution FK. Keep both user anchors; canonical chosen only from exact UUID/sub mapping. Legacy LMS key uses the proposed reserved marker only after the AUTH exception commit. |
-| lms_identity_aliases.user_id | PK institution/LMS ID; user and institution FKs. Redirect only aliases already belonging to the listed legacy user; third-user alias/exact-user conflicts stop. Preserve source/timestamps. |
+| users.id, lms_user_id | PK id; UNIQUE institution/LMS ID; institution FK. Keep both user anchors; canonical chosen only from exact UUID/sub mapping. Legacy LMS key uses the checked reserved marker under the committed AUTH manual exception. |
+| lms_identity_aliases.user_id | PK institution/LMS ID; user and institution FKs. Redirect aliases already belonging to the listed legacy user; create the original legacy LMS-key alias if missing; third-user alias/exact-user conflicts stop. Preserve source/timestamps. |
 | user_profiles.user_id | PK/FK user. Source PII, not derived. Keep profiles as identity metadata; refuse unequal dual profiles. Never use profile values to prove identity. |
 | enrollments.user_id | PK user/course; user/course/institution FKs. Same-role collision: retain canonical enrollment, remove duplicate enrollment; different role stops. Move unique enrollments; legacy ends unenrolled. Audit trigger remains active. |
 | evidence_events.user_id | UUID PK; user/course/skill/institution FKs. Change only user_id for exact preselected legacy row IDs; preserve all payload/time/IDs. Under APPROVAL-07 Amendment 1, snapshot `(id,created_at)` for every selected row before mutation and require exact timestamp equality for every moved ID afterward; never replace created_at or introduce occurred_at. Cursor order is `(created_at DESC,id DESC)`. Suspend only t_immutable around that statement under exclusive table lock. |
 | mastery_state.user_id | PK user/skill; user/course/skill/institution FKs. Delete legacy rows only; block canonical stale keys absent combined evidence. Worker upserts canonical state; no numerical merge. |
 | readiness_snapshots.user_id | UUID PK; user/course/institution FKs. Delete legacy derived snapshots only; preserve canonical historical snapshots. Back up exact preimages. Existing job appends a current snapshot; it cannot recreate historical time-series values. |
 | srs_state.user_id | PK user/item; user/course/item/skill/institution FKs. One schedule per card. Select entire row with greatest last_reviewed_at NULLS LAST, then created_at, then canonical side on ties; retain losing row in exact private backup. Do not sum box/reps/lapses. Move noncolliding rows. Card memory extensions 0026/0029/0030 are part of the selected whole row. |
-| quiz_set_attempts.user_id | UUID PK; UNIQUE user/set/attempt_number after 0034; user/course/set/institution FKs. Keep canonical numbering; order legacy rows by old attempt_number, id, allocate sequentially after canonical max, then move. Refuse smallint overflow, malformed relations or multiple unfinished attempts in a set (no safe active-attempt rule). Keep IDs, counters, completion and timestamps. |
-| practice_answer_results.user_id | UUID PK; UNIQUE user/idempotency key and attempt/item; attempt FK ON DELETE CASCADE, item FK. Do not delete attempts. Preserve attempt_id links, immutable answers, XP and keys. Reattribute only collision-free rows; stop for decision 1 otherwise. Trigger practice_answer_results_immutable needs narrowly scoped suspension, never all triggers. |
+| quiz_set_attempts.user_id | UUID PK; UNIQUE user/set/attempt_number after 0034; user/course/set/institution FKs. Keep canonical numbering; order legacy rows by old attempt_number, id, allocate sequentially after canonical max, then move. Refuse smallint overflow, nonpositive numbering, malformed relations, multiple unfinished attempts or a lifecycle that would hide an existing active attempt (no safe active-attempt rule). Keep IDs, counters, completion and timestamps. |
+| practice_answer_results.user_id | UUID PK; UNIQUE user/idempotency key and attempt/item; attempt FK ON DELETE CASCADE, item FK. Do not delete attempts. Preserve attempt_id links, immutable answers, XP and keys. Reattribute only collision-free rows; refuse the whole transaction on source-key collision otherwise. Trigger practice_answer_results_immutable needs narrowly scoped suspension, never all triggers. |
 | item_reviews.user_id | UUID PK; UNIQUE user/key and partial user/item/session; item FK; user/institution/course/skill IDs have no FK. Validate manually. Preserve counted/outcome/session/key/time. Collisions stop; trigger t_immutable requires narrow suspension. |
 | item_exposures.user_id | PK user/item; user/course/skill/item/institution FKs. Independent max studied/tested/answered timestamps; last_correct follows latest answered row (tie canonical); times_tested sum only when both sides equal their own saved set-answer counts, proving disjoint attempt sources; otherwise stop. Preserve earliest created_at and latest updated_at; retain both preimages. |
 | tutor_conversations.user_id | UUID PK; user/course/institution FKs. Move ownership only, preserve IDs, title, created/updated/pinned timestamps. |
@@ -48,19 +48,20 @@ Course/content/generated-item/lesson/quiz-set/bank/ingest/generation/worker-stat
 
 ## Input, identity proof and output contract
 
-Fred creates a mode-0600 local JSON file under gitignored `tmp/` containing explicit institution, canonical user, legacy user, validated LMS UUID/sub proof, actor reference and approved course scope for each pair. Check `git check-ignore` before reading it. Reject symlinks, overlapping pairs, same user twice, unknown IDs, cross-tenant users/relations and ambiguous alias mappings. Never select by name or email; never echo input, SQL parameters, connection strings, database errors with DETAIL, row data or paths with embedded identifiers. Use libpq service/passfile configuration maintained locally by Fred, no credentials in arguments or .env. The agent uses only its own Docker database.
+Fred creates a mode-0600 local JSON file under gitignored `tmp/` containing explicit institution, canonical user, legacy user, validated LMS UUID/sub proof and approved course scope for each pair. Check `git check-ignore` before reading it. Reject symlinks, overlapping pairs, same user twice, unknown IDs, cross-tenant users/relations and ambiguous alias mappings. Never select by name or email; never echo input, SQL parameters, connection strings, database errors with DETAIL, row data or paths with embedded identifiers. Use libpq service/passfile configuration maintained locally by Fred, no credentials in arguments or .env. The agent uses only its own Docker database.
 
 Canonical resolution must match the exact current resolver: UUID equals validated launch subject; alias target and exact users row, if both present, agree. An alias source label or email match is not proof. Check listed course and institution scope on every row and every related entity, including tables lacking FK constraints. Third-user or cross-scope links stop. Schema catalog must match the reviewed replay except explicitly reviewed 0038 policy/0039 index additions.
 
 Dry run defaults to a read-only transaction and prints only pair labels, static table/rule names, counts, boolean convergence/blocked status and fixed reason codes. Example format (illustrative, not observed):
 
 ```text
-pair 1 evidence_events move=40 collisions=0 rule=reattribute
-pair 1 srs_state move=2 collisions=1 rule=latest_review
-pair 1 converged=false blocked=true reason=POLICY_REQUIRED
+pair 1 evidence_events move=40 delete=0 retained_metadata=0 collisions=0 rule=reattribute
+pair 1 srs_state move=2 delete=1 retained_metadata=0 collisions=1 rule=latest_whole_state
+pair 1 converged=false
+blocked=true reason=BLOCKED_PAIR
 ```
 
-Apply requires BOTH `--apply --confirm`; a single flag fails without connecting. It also requires a verified backup manifest. Dry run cannot print an apply-ready claim while any decision above is unresolved. No apply command is released by this design.
+Apply requires BOTH `--apply --confirm`; a single flag fails without connecting. It creates and verifies a private exact backup before its first source write. Dry run reports blocked counts for any refused pair. Commands below are reviewable maintainer procedures, unreleased until coordinator review; preparing them grants no hosted authorization.
 
 ## Transaction and concurrency design
 
@@ -72,7 +73,7 @@ Post-check exact event/review/result ID sets and hashes excluding user_id, per-I
 
 ## Exact local backup and rollback design
 
-No hosted staging schema. Use a second, typed **local-only** staging database, reached through a libpq service. Validate its server address is loopback/Unix socket and it differs from source. Create only local `wi24_backup` tables with source column types, no copied FKs/defaults/triggers. The backup must include both users' complete affected learner rows, original users/aliases, collision losers, original attempt numbers, and derived preimages. Scope is exact row selections, not whole hosted tables. Protect backup directory/files mode 0700/0600 and refuse symlinks or tracked input/output paths.
+No hosted staging schema. Use a second, typed **local-only** staging database, reached through a libpq service. Validate the effective libpq service specifies only a literal loopback endpoint, reject option/environment indirection, and compare the actual server address/database against source before staging writes. Require equal server major and encoding for typed binary copies; normalize session timezone/date formatting and hash order. Create only local `wi24_backup` tables with source column types, no copied FKs/defaults/triggers. The backup must include both users' complete affected learner rows, original users/aliases, collision losers, original attempt numbers, and derived preimages. Scope is exact row selections, not whole hosted tables. Protect backup directory/files mode 0700/0600 and refuse symlinks or tracked input/output paths.
 
 Before apply, lock source tables in alphabetical order with bounded timeouts; materialize pair inputs into temporary tables; validate all scope/collision rules. Use binary COPY-to-local while the source locks remain held; load those exact files into typed local tables; pg_dump only this local schema to a private custom archive. Include migration/catalog/preimage digests and counts in a private manifest. Recheck source snapshot digests against the manifest before the first source write. If local backup/dump fails, rollback without source changes. Credentials stay in libpq service/passfiles, never argv or output. No .env use.
 
@@ -90,7 +91,7 @@ After approved apply Fred can invoke the existing worker handler with institutio
 
 ## Local proof and release checklist
 
-A dedicated Docker Supabase Postgres container/database with no published port replays all 0001–0037 migrations; synthetic auth/storage SQL scaffolding is identified explicitly and is not a complete Supabase service/RLS proof. Record actual server/image versions. Capture the full constraint/unique-index/trigger catalog and migration hashes.
+Dedicated Docker Supabase Postgres fixtures replay all 0001–0037 migrations; the initial catalog proof publishes no port, and the full CLI proof uses a random loopback-only port; synthetic auth/storage SQL scaffolding is identified explicitly and is not a complete Supabase service/RLS proof. Record actual server/image versions. Capture the full constraint/unique-index/trigger catalog and migration hashes.
 
 Local fixtures must exercise one-sided history, two-sided history with schedule/attempt collisions, source-key collisions (safe stop), conflicting aliases/profiles/roles, cross-tenant rows including unconstrained tables, append-only launches/reviews/results, attachments, source payload conservation and rewards. Prove dry-run immutability, apply, post-checks, no-op rerun, rollback of injected mid-transaction failure, trigger restoration, concurrent writer blocking, backup/restore including collision losers/renumbered attempts/derived recompute. No tests are evidence of unexecuted behavior.
 
@@ -113,3 +114,55 @@ The local backup service permits only explicit loopback host, numeric port, simp
 Before apply Fred confirms the deployed worker revision and effective tracer_k. Apply requires explicit `--worker-tracer-k` and `--confirm-worker-config`, records that numeric parameter privately before source writes, and capture requires the same confirmed value. The verifier executes the existing worker `_replay` function body from the reviewed repository source in an isolated namespace, reads complete grouped correctness sequences internally, rounds exactly as the job does, and compares every stored estimate. It writes no derived values and emits only verified-pair/mismatch counts. Record the worker source digest in the manifest/audit. Attempts/last_seen/readiness checks alone do not establish a rebuild.
 
 Refuse a pair before apply if evidence for a combined skill has equal created_at with differing Boolean targets (NULL is treated as false, matching the worker). The worker orders only by created_at; never apply the history endpoint's ID tiebreak to replay. Equal timestamps with the same target are order independent. Capture independently enforces this ambiguity check and refuses wrong estimates even when attempts/last_seen already match.
+
+## Reviewable maintainer procedure — no hosted release yet
+
+Python 3.10+ is required. Local proof uses repo uv Python 3.13.14, PostgreSQL clients 17.10 and Supabase Postgres 17.6. No Python dependency changes. Run the commands below from repository root; uv changes into services/api, so paths passed to Python use the corresponding ../../ prefix. The CLI accepts the reviewed source service directly; Fred must not edit code or supply a bypass flag. Agents never execute hosted services.
+
+1. Coordinator reviews this source, local proof, counts format and rollback, then supplies the final SHA and exact FG-7a/7b steps. Fred confirms the deployed worker revision/effective tracer_k, source PostgreSQL major/encoding and compatible local clients/staging. Confirm backups have disk space and all learner writes/jobs are quiesced in the approved maintenance procedure. No schema/infrastructure changes are authorized here.
+2. Fred creates gitignored `tmp/wi24-pairs.json`, mode 0600, containing a list of objects with exactly `institution_id`, `canonical_id`, `legacy_id`, `lms_uuid`, `lti_sub`, `course_ids`. UUID/sub equality must come from independently validated LMS mapping; never infer it from profiles. No real values enter chat/commits. Both identity profiles stay unchanged, including a legacy-only profile; they are retained metadata, not active learner ownership.
+Input template (replace placeholders privately; no extra actor/profile fields):
+
+```json
+[
+  {
+    "institution_id": "<institution UUID>",
+    "canonical_id": "<canonical users UUID>",
+    "legacy_id": "<legacy users UUID>",
+    "lms_uuid": "<proved LMS UUID>",
+    "lti_sub": "<same validated launch subject>",
+    "course_ids": ["<approved course UUID>"]
+  }
+]
+```
+
+The input is limited to one institution per batch. Fred's human attribution belongs in the gate record, alongside the in-DB session_user attribution.
+
+3. Fred privately configures source, local backup and fresh local restore libpq services/passfiles. Service/passfiles must not be printed. Backup service permits host 127.0.0.1 or ::1, explicit numeric port, simple dbname, and the minimal option whitelist in the script. Local staging/restore databases must differ from source and be empty of wi24_* schemas. Inherited PG settings are discarded except service/passfile locations. Audit records the database session principal as who; Fred's named gate record supplies the human operator attribution.
+4. FG-7a: run dry run into a fresh ignored private directory; paste only its counts/reason output. Any blocked pair stops the entire apply; no partial repair or key rewriting. Coordinator reviews actual counts before FG-7b.
+
+```sh
+uv run --directory services/api --no-sync python ../../scripts/repair_identity_split.py --input ../../tmp/wi24-pairs.json --source-service wi24_source --private-directory ../../tmp/wi24-dry # local only, not retained
+```
+
+5. FG-7b after explicit review: use a new directory. The K below is an illustrative argument placeholder; Fred supplies the **confirmed deployed value**, in supported range 0 < K <= 1, never a guessed default. Binary copies, typed staging and affected.dump finish before source mutations. All source mutations/audits are one transaction. If the command fails, source rolls back; retain private artifacts and stop for review. Do not manually rerun SQL fragments.
+
+```sh
+uv run --directory services/api --no-sync python ../../scripts/repair_identity_split.py --input ../../tmp/wi24-pairs.json --source-service wi24_source --backup-service wi24_backup --private-directory ../../tmp/wi24-preapply --apply --confirm --worker-tracer-k CONFIRMED_K --confirm-worker-config # local only, not retained
+```
+
+6. Review counts: timestamp_mismatches=0, legacy_learner_rows=0, triggers_restored=true. affected.dump, all binary copies and manifest remain private 0600 under a 0700 directory. Audit contains both IDs, original LMS key, database actor/time/counts and backup digest. Retain unchanged original affected.dump. A no-op rerun uses a fresh private directory; it performs no source writes and adds no merge audit.
+7. Fred triggers the existing reconcile_mastery then readiness_snapshot jobs using the coordinator's separately reviewed hosted procedure, once while writes remain quiesced. Do not call review/grading functions or run a numerical merge. Then capture exact post-worker rows using the same K, same input, original private directory and local staging service. Capture verifies complete evidence counts/keys, exact replay estimates, old readiness preservation and one new eligible readiness row per course; it rejects truncation or additional worker runs. Only mastery/readiness are allowed to differ from the immediate post-apply image.
+
+```sh
+uv run --directory services/api --no-sync python ../../scripts/repair_identity_split.py --input ../../tmp/wi24-pairs.json --source-service wi24_source --backup-service wi24_backup --private-directory ../../tmp/wi24-preapply --apply --confirm --capture-recompute --worker-tracer-k CONFIRMED_K --confirm-worker-config # local only, not retained
+```
+
+8. Counts must report recompute_captured=true, estimate_mismatches=0 and k_confirmed=true, plus verified skill-pair/mastery/readiness counts. The additional recompute.dump stores exact current derived PKs/preimages; both archive hashes are recorded privately and in DB. No raw payload, identifier or archive is pasted. A failed capture makes rollback unverified until its exact reason is resolved; do not resume learner writes or claim FG-7b passed.
+9. If rollback is required, use the original input/backup directory and a fresh local restore database service. The script verifies both archives, exact captured postimage and in-DB audit linkage, restores only exact PK deltas, preserves old/merge audits and appends rollback audit. It never deletes attempts/source/user anchors or cascades. Before recompute it restores directly from the immediate postimage; after recompute capture is mandatory. Later activity refuses restore. On any rollback failure source rolls back; retain artifacts and stop. Retrying uses a fresh **local** restore database; never reset source.
+
+```sh
+uv run --directory services/api --no-sync python ../../scripts/repair_identity_split.py --input ../../tmp/wi24-pairs.json --source-service wi24_source --backup-service wi24_restore --private-directory ../../tmp/wi24-preapply --apply --confirm --restore # local only, not retained
+```
+
+10. Keep maintenance quiescence until post-check/capture or rollback completes. Coordinator releases views and runs the separate FG-9 acceptance; WI-24 stays open until FG-7b plus FG-9. Later use deliberately invalidates exact rollback. No automatic rollback after later learner activity is claimed.
