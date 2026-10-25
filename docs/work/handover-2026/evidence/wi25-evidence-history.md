@@ -141,3 +141,11 @@ Retained frontend/tour unit run with `KALA_TOUR_REQUIRE_DOCS=1`: **31 passed, 1 
 Proposed coordinator-approved correction: retain the historical attribute-only comparison for untouched tour paths; replace TwinBody's obsolete whole-file assertion with a focused before/after inventory of its approved tour anchors after WI-25's behavior change. Do not remove mutation assertions or skip the failure. Until this comparator change is authorized and verified, H does not claim all retained unit checks green.
 
 Post-browser final checks: web lint/typecheck/build pass (18 existing lint warnings and existing build warnings); docs checker and all 18 checker unit tests pass; whitespace checks pass. No product code changed during browser fixture repair. The sole unresolved local check is the retained historical TwinBody attribute-only comparator described above.
+
+## Superseding retained unit verification: green
+
+Coordinator corrected the historical comparator in its own main commit, retaining the accepted historical tour executable comparison and adding exact current TwinBody anchor inventory equality. No tests were removed or skipped. H rebased cleanly onto main `dc144544596e9aa32e89e2495a21b1c9a6d290ac` and did not edit the coordinator-owned comparator.
+
+Rerun of the full retained frontend/tour unit command with `KALA_TOUR_REQUIRE_DOCS=1`, Node strip-types and VM modules: **33 passed, 0 failed, 0 skipped**. This includes both historical/current TwinBody invariants, the other six unchanged current attribute-only comparisons, and the explicitly enabled PracticePanel documentation-preservation check. Separate retained Study renderer run: **4 passed, 0 failed, 0 skipped**. These results supersede the earlier 31-pass/1-fail record; no unresolved retained unit mismatch remains.
+
+The unchanged browser suites were not repeated for this unit-only correction, as directed by the coordinator; the 1,474 passing assertions above remain the actual H browser proof. Final integrated browser/contract generation remains coordinator-owned after backend integration. U listener **85666** remains running on 5173 with verified U worktree cwd; this follow-up did not stop or restart it. H is ready for coordinator integration review, with hosted FG-6/FG-8/FG-9 still pending their named human gates.
