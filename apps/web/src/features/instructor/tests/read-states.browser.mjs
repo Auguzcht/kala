@@ -23,7 +23,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
       ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));</script></body></html>`});
     if(url.pathname.endsWith('/src/app/providers.tsx')){const response=await route.fetch();const body=await response.text();return route.fulfill({response,body:body+'\nwindow.__readStateClient=queryClient;'});}
     if(url.pathname.endsWith('/src/lib/auth/AuthProvider.tsx'))return route.fulfill({contentType:'application/javascript',body:`export const AuthProvider=({children})=>children;export const useSession=()=>({userId:'demo',institutionId:'inst',role:'${mode==='instructor'?'instructor':'student'}',courseId:'course',displayName:'Demo learner'});export const useSetSession=()=>()=>{};`});
-    if(url.pathname.endsWith('/src/lib/api/client.ts'))return route.fulfill({contentType:'application/javascript',body:`export async function api(path,init){const r=await fetch('/__twin_api'+path,init);if(!r.ok)throw new Error('API '+r.status);return r.json();}`});
+    if(url.pathname.endsWith('/src/lib/api/client.ts'))return route.fulfill({contentType:'application/javascript',body:`export async function api(path,init){const r=await fetch('/__twin_api'+path,init);if(!r.ok)throw new Error('API '+r.status+': synthetic failure');return r.json();}`});
     if(!url.pathname.startsWith('/__twin_api'))return route.continue();
     const path=url.pathname.slice('/__twin_api'.length);const reply=json=>route.fulfill({json});
     if(route.request().method()!=='GET'){state.mutations++;return route.abort();}
@@ -48,7 +48,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
     if(path.endsWith('/diagnostic'))return reply({courseId:'course',status:'ready',readyCount:1,questions:[{id:'q',skillId:'storage',bloomLevel:'understand',prompt:'Which storage fits?',choices:[{id:'a',label:'Object storage'},{id:'b',label:'Temporary disk'}]}],pendingSkillIds:[],failedSkillIds:[],skippedSkillCount:0});
     if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:[]});
     if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:[]});
-    if(path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:0.55,band:'proficient',cohortReadiness:0.5,percentile:0.5,accuracy:0.6,momentum:null,attempts:20,evidenceCount:200,hintsUsed:0,lastActiveAt:'2026-10-24T12:00:00Z',daysInactive:0,status:'developing',skills,activityByType:[],activitySeries:[],readinessTrend:[],evidence:makeEvents(200)});
+    if(path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:null,band:'no-evidence',cohortReadiness:null,percentile:null,accuracy:null,momentum:null,attempts:0,evidenceCount:0,hintsUsed:0,lastActiveAt:null,daysInactive:null,status:'not-started',skills:[],activityByType:[],activitySeries:[],readinessTrend:[],evidence:[]});
     return reply({});
   });
   await page.goto(`http://localhost:5173/${mode==='components'?'__twin_presentation':surface==='class'||surface==='sheet'?'class':'class/student/learner'}`);
@@ -68,6 +68,17 @@ try {
       const title=denied?(surface==='class'?"This class isn't available to you":'Learner unavailable')
         :(surface==='class'?"Couldn't load the class, try again":"Couldn't load the learner, try again");
       await page.getByRole('heading',{name:title,exact:true}).first().waitFor();
+      if(surface==='class'){
+        for(const [label,region] of [['roster','#roster-panel'],['at-risk','#at-risk-list'],['charts','#cohort-analytics']]){
+          await page.locator(region).getByRole('heading',{name:title,exact:true}).waitFor();
+          check(await page.locator(region).getByRole('alert').isVisible(),`${label} independently exposes its expected settled error`);
+        }
+        // The statistics strip precedes those three regions in the actual dashboard.
+        const stats=page.getByRole('alert').first();
+        check(await stats.getByRole('heading',{name:title,exact:true}).isVisible(),'cohort statistics independently exposes its expected error');
+        check(await page.getByRole('alert').count()===4,'all four class panels expose errors, not just the first completed request');
+      }
+
       check(await page.getByText('No students enrolled yet',{exact:true}).count()===0,'failure does not claim an empty roster');
       check(await page.getByText('No one needs support right now. Check back after the next activity.',{exact:true}).count()===0,'failure does not claim no support needed');
       check(await page.locator('#tour-cohort-kpis').count()===0,'failure does not show zero statistics');
@@ -94,6 +105,10 @@ try {
       }else{
         await page.getByText('Demo learner',{exact:true}).first().waitFor();
         check(await page.getByRole('alert').count()===0,'learner retry recovers');
+        await page.getByRole('tab',{name:'Activity',exact:true}).click();
+        await page.getByText("Showing 0 of this learner's activity",{exact:true}).waitFor();
+        await page.getByText(/No evidence yet\. Your recent answers/).waitFor();
+        check(await page.getByRole('list',{name:'Evidence ledger',exact:true}).count()===0,'successful learner with zero attempts/evidence has a genuine empty ledger');
       }
     }
     if(surface==='class'&&denied){

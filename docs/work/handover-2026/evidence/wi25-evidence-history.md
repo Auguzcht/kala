@@ -81,3 +81,9 @@ The final follow-up production build completed successfully with the existing la
 Coordinator clarified that the roster sheet's `LearnerTriage.tsx` is included in Amendment 6's learner-record callers. It now reuses the same feature-local unavailable/transient failure primitive as the full record; decision rendering and mutation semantics are untouched. This supersedes the earlier report's statement that Triage remained unchanged.
 
 The dedicated instructor read-state suite now includes the actual roster → keyboard-open LearnerSheet → LearnerTriage path with synthetic 403 and 404 at 375/1440. Written assertions cover unavailable copy, class link, no stuck loading, no mutation/crash and Escape returning to the roster. Browser execution remains pending server handover, not claimed passed. No LearnerSheet, route, hook-wide cache or shared-client change was required.
+
+## Pre-browser fixture review corrections
+
+Before browser execution, coordinator review found the copied synthetic API client lacked the production error prefix's colon. Both the read-state and older-history suites now throw `API <status>: synthetic failure`; production parsing is unchanged. The read-state learner fixture now returns a genuinely successful zero-attempt, zero-evidence, empty-skill record with absent readiness/activity, rather than the inherited populated example. Its Activity-tab assertions require a loaded count of zero and the empty ledger state.
+
+Class failure cases now wait for and independently check roster, at-risk, charts and the statistics strip, including an exact four-panel error count. These corrections improve written coverage; they remain unexecuted until server handover. Node syntax and whitespace checks pass. No product behavior changed in this correction.
