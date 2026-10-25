@@ -108,3 +108,36 @@ After the SEC rebase, web lint passes with 18 existing warnings; typecheck and p
 The dedicated local Postgres fixture now also executes the route's exact own-enrollment admission predicate with allowed/other-user synthetic cases. Admission and keyset/index checks passed and rolled back all fixtures. All 37 historical migration files remain byte-identical against integrated main; SEC's 0038 was not changed by H. H adds only index migration 0039.
 
 Current H file manifest: twin/dashboard routers (new endpoints/imports only); `app/twin/evidence_history.py`; two dedicated Python history test files and their local SQL fixture; twin history API/schema/hook/wrapper/public export and TwinBody; shared evidence ledger; instructor roster/at-risk/stats/charts/heatmap/learner record/drill-down/triage and feature-local failure helper; three dedicated browser suites; 0039 index/runbook; this evidence record. No shared specs, generated types, infrastructure, dependency manifests, shared DB/config/client/auth files, retained UI/tour fixtures, or class routes were edited.
+
+## Authorized browser handover and results
+
+Fred authorized the temporary 5173 handover. H first rebased cleanly onto coordinator docs commit `105727e`; its difference from the earlier SEC integration base is documentation only. Tests ran against H's own Vite server, with installed Chrome and bundled Playwright 1.62.1 in isolated headless contexts. Synthetic fixture interception blocked non-local requests. No hosted/provider requests or dependency changes were needed.
+
+The full switch/test/restore sequence used an independent Python `try/finally` cleanup process with a restoration signal and deadline. Original U listener **39396**, launcher **39390**, was verified as Vite with command `pnpm --filter web exec vite --port 5173 --strictPort` and cwd in U worktree `2e93` under `apps/web` before stopping only that listener. H launcher **83494**, listener **83515**, was verified in H worktree `7d35/apps/web` with HTTP **200**. After tests, H's process group stopped and U restarted with the same equivalent command. Restored U launcher **85651**, listener **85666**; cwd verified as U `2e93/apps/web`, HTTP **200**. A separate final lsof/cwd/HTTP check confirmed restoration. U source files were never edited.
+
+Passing browser suites:
+
+| Suite | Assertions | Coverage |
+| --- | ---: | --- |
+| New evidence-history | 80 | Student/instructor older loading through earliest event, retry, invalid cursor reload, ten-row pages, 40px controls, keyboard, reduced/normal motion, 375/1440, no writes |
+| New evidence-history-scope | 16 | Actor/role/course/target changes, page reset, unauthorized enablement, 403/404 cached-row hiding, overlapping-page ID deduplication |
+| New instructor read-states | 222 | Per-panel 403/404/500/network/slow/empty, genuine empty learner, transient recovery, cached-success refetch failure, actual roster-sheet denials, no writes/crashes |
+| Retained Tutor UI overhaul | 219 | Existing synthetic Tutor UI coverage |
+| Retained Twin presentation | 148 | Existing readiness/ledger layout, motion and interaction coverage |
+| Retained instructor review feedback | 63 | Existing pending/decision feedback behavior |
+| Retained diagnostic frontend closeout | 110 | Existing frontend closeout coverage, with active instructor history fixture |
+| Retained tour browser | 616 | Both roles/widths, conditional/empty paths and exit behavior; zero mutations |
+
+Total passing browser assertions: **1,474**. Student mobile and instructor desktop history screenshots were visually inspected; the ledger/count/control layout fits and bounded statistics retain their original wording. Screenshots remain temporary local artifacts, not retained evidence assets.
+
+Initial browser fixture failures were investigated and corrected: the scope harness mixed a manually imported query module with Vite's versioned module and used a named hook import from React's CommonJS facade. It now resolves the exact served query-module URL and uses the React default facade. The cached-learner assertion initially matched the persistent session name in shell chrome; it now asserts the actual `tour-standing` region is hidden. No production changes were needed for these fixture failures. A first tour run failed with a missing fixture global while fixture files were changing; the stable rerun passed all 616 assertions.
+
+Coordinator explicitly extended retained fixture ownership to `apps/web/src/features/twin/tests/presentation.browser.mjs` and `apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs`: new synthetic history responses and matching active-feed labels only. Their other responses/assertions remain unchanged. The first unadapted runs failed because instructor history received an invalid/missing response; the adapted retained suites pass. No retained Tutor/review/tour browser source was edited.
+
+## Remaining retained unit-test mismatch
+
+Retained frontend/tour unit run with `KALA_TOUR_REQUIRE_DOCS=1`: **31 passed, 1 failed, 0 skipped** (32 total). Separate retained Study renderer tests: **4 passed**. The sole failure is `apps/web/src/components/shell/tests/tour-anchors.test.mjs:14–17`, “attribute-only executable change: features/twin/components/TwinBody.tsx”. It compares all executable TwinBody source to historical `3a6a0aa`, allowing only one tour attribute. WI-25 now intentionally adds the approved history wrapper/prop, so that historical invariant is obsolete. Other six attribute-only checks and the docs-preservation check pass. This test was not edited: the latest retained-fixture grant permits new history responses/label expectations, not changes to that historical AST comparator.
+
+Proposed coordinator-approved correction: retain the historical attribute-only comparison for untouched tour paths; replace TwinBody's obsolete whole-file assertion with a focused before/after inventory of its approved tour anchors after WI-25's behavior change. Do not remove mutation assertions or skip the failure. Until this comparator change is authorized and verified, H does not claim all retained unit checks green.
+
+Post-browser final checks: web lint/typecheck/build pass (18 existing lint warnings and existing build warnings); docs checker and all 18 checker unit tests pass; whitespace checks pass. No product code changed during browser fixture repair. The sole unresolved local check is the retained historical TwinBody attribute-only comparator described above.

@@ -26,6 +26,7 @@ async function fixture(width,{mode='components',reduced='reduce'}={}){
     if(!url.pathname.startsWith('/__twin_api'))return route.continue();
     const path=url.pathname.slice('/__twin_api'.length);const reply=json=>route.fulfill({json});
     if(route.request().method()!=='GET')throw new Error('Unexpected mutation in presentation test');
+    if(path.endsWith('/evidence'))return reply({courseId:'course',evidence:makeEvents(mode==='student'?20:25),nextCursor:null});
     if(path==='/courses/course')return reply({id:'course',title:'AWS101'});
     if(path.endsWith('/twin'))return reply({courseId:'course',readiness:0.55,skills,evidence:makeEvents(20)});
     if(path.endsWith('/next-up'))return reply({courseId:'course',next:null});
@@ -97,7 +98,7 @@ try{
     }
     check((await rowNames(page)).length===10,'TWIN-REQ-003 integrated student/instructor view pages shared ledger');
     await page.getByRole('link',{name:'Go to next page'}).click();
-    await page.getByText(`11–20 of ${mode==='student'?20:200} recent events`,{exact:true}).waitFor();
+    await page.getByText(`11–20 of ${mode==='student'?20:25} loaded events`,{exact:true}).waitFor();
     check((await rowNames(page))[0].includes('Event 011'),'TWIN-REQ-003 integrated ledger navigation works');
     if(mode==='instructor')await page.screenshot({path:resolve(out,'instructor-ledger-1440.png'),animations:'disabled'});
     check(f.errors.length===0,'integrated presentation has no runtime errors');await f.context.close();

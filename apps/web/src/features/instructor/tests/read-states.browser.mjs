@@ -103,7 +103,7 @@ try {
         await page.locator('#tour-cohort-kpis').waitFor();
         check(await page.getByRole('alert').count()===0,'successful empty class recovers without error states');
       }else{
-        await page.getByText('Demo learner',{exact:true}).first().waitFor();
+        await page.locator('#tour-standing').getByRole('heading',{name:'Demo learner',exact:true}).waitFor();
         check(await page.getByRole('alert').count()===0,'learner retry recovers');
         await page.getByRole('tab',{name:'Activity',exact:true}).click();
         await page.getByText("Showing 0 of this learner's activity",{exact:true}).waitFor();
@@ -121,13 +121,14 @@ try {
   }
   for(const width of [375,1440]) for(const surface of ['class','learner']) {
     const f=await fixture(width,{surface,failure:'empty'}),{page,state}=f;
-    await page.getByText(surface==='class'?'No students enrolled yet':'Demo learner',{exact:true}).first().waitFor();
+    if(surface==='class')await page.getByText('No students enrolled yet',{exact:true}).waitFor();
+    else await page.locator('#tour-standing').getByRole('heading',{name:'Demo learner',exact:true}).waitFor();
     state.mode=500;await page.evaluate(()=>window.__readStateClient.invalidateQueries());
     await page.getByRole('heading',{name:surface==='class'?"Couldn't load the class, try again":"Couldn't load the learner, try again",exact:true}).first().waitFor();
     check(await page.getByText('No students enrolled yet',{exact:true}).count()===0,'cached success does not mask a failed refetch as empty');
     check(await page.locator('#tour-cohort-kpis').count()===0,'cached statistics hidden after refetch failure');
     check(await page.locator('[aria-busy=true]').count()===0,'failed refetch is not permanent loading');
-    if(surface==='learner')check(await page.getByText('Demo learner',{exact:true}).count()===0,'cached learner hidden after failed refetch');
+    if(surface==='learner')check(await page.locator('#tour-standing').count()===0,'cached learner standing hidden after failed refetch');
     check(f.errors.length===0&&state.mutations===0,'refetch failure causes no crash or write');
     await f.context.close();
   }
