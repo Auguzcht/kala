@@ -67,3 +67,7 @@ SHA-256 of original bytes at the published baseline. All 37 current files match 
 | `0035_fix_submit_practice_ambiguity.sql` | `8eb3dad5f15ba590b25cf632a0c5b5f2ec3f868b46864ab085df141defb1d448` |
 | `0036_bank_lesson_embeddings.sql` | `8de747c633647e732c7181aca35c24cd6e57e70055c8b502b9d6a24e67d20ac9` |
 | `0037_tutor_conversation_pin.sql` | `82c9297ea08b4c16c3ba03bb2cc64eb222e67dd4276e9b4f7a8db22efe873450` |
+
+## Frontend denial-state finding for H/U
+
+Static review under Amendment 2: `RosterTable.tsx` only consumes data/isLoading and defaults missing students to an empty array; `AtRiskList.tsx` similarly defaults absent flags to an empty list. A failed 404 can therefore look like an empty class or no support concerns. `CohortStats.tsx` keeps its skeleton when data is absent even after an error. `LearnerRecord.tsx`, `StudentDrillDown.tsx` and Heatmap show an error state rather than crash, but their generic “Check your connection” copy does not distinguish a non-disclosing 404. These are source findings, not a fresh browser reproduction. Recorded for H/U as requested; no API denial or frontend behavior is changed by this note. H owns history callers, not a general dashboard redesign. Live URL refusal remains an FG-9 case, and no UI completion is claimed.
