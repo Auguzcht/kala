@@ -6,7 +6,7 @@
 
 | Lane | Branch | Initial phase | Serialized / forbidden paths |
 | --- | --- | --- | --- |
-| SEC / WI-26 | `codex/wi26-course-authorization` | Full route/direct-read/RLS inventory, then guard-only fixes and local policy proof under INSTR-REQ-009 / TWIN-REQ-009 | Router guards first; diagnostic only three explicitly amended routes. Never change helper/defaults, preview or queue logic. Hand router ownership to H only after SEC merge. |
+| SEC / WI-26 | `codex/wi26-course-authorization` | Full route/direct-read/RLS inventory, then admission fixes and local policy proof under INSTR-REQ-009 / TWIN-REQ-009 | Amendments 4–5 expand diagnostic staff guards and permit scoped recommendation lookup/bound update. Never change helpers/defaults, student content reads or queue logic. Hand router ownership to H only after SEC merge. |
 | H / WI-25 | `codex/wi25-evidence-history` | Query, shared-ledger frontend and optional index after TWIN-REQ-010 / INSTR-REQ-010 commit | No dashboard/twin router edits until SEC merges and coordinator releases route phase; no shared spec/generated type edits. |
 | M / WI-24 | `codex/wi24-identity-repair` | All-reference/constraint/trigger inventory, own runbook design before script, local synthetic proof | Script/tests/fixtures/repair runbook/WI-24 only; no application code or hosted connection. Stop before FG-7a. |
 
@@ -71,6 +71,12 @@ SHA-256 of original bytes at the published baseline. All 37 current files match 
 ## Frontend denial-state finding for H/U
 
 Static review under Amendment 2: `RosterTable.tsx` only consumes data/isLoading and defaults missing students to an empty array; `AtRiskList.tsx` similarly defaults absent flags to an empty list. A failed 404 can therefore look like an empty class or no support concerns. `CohortStats.tsx` keeps its skeleton when data is absent even after an error. `LearnerRecord.tsx`, `StudentDrillDown.tsx` and Heatmap show an error state rather than crash, but their generic “Check your connection” copy does not distinguish a non-disclosing 404. These are source findings, not a fresh browser reproduction. Recorded for H/U as requested; no API denial or frontend behavior is changed by this note. H owns history callers, not a general dashboard redesign. Live URL refusal remains an FG-9 case, and no UI completion is claimed.
+
+Amendment 6 subsequently authorizes H to correct those specific instructor error/loading/empty states. INSTR-REQ-011 was committed before implementation at `0a2be12`; H's shared router phase still waits for SEC integration. Coordinator review also found that the history query cache omitted validated role and treated 403 differently from 404. TWIN-REQ-010 explicitly includes role in cache identity and hides loaded/fallback rows on admission denial. This finding has been sent to H; no fix is claimed until tested.
+
+## Amendments 4–6 release
+
+Fred approved all diagnostic staff-branch guard calls, staff-only roster, the recommendation-ID scoped lookup plus learner guard and bound write, and H's limited instructor error states. The record was committed at `9203871`; INGEST-REQ-008, SKILL-REQ-006, INSTR-REQ-009/011 and TWIN-REQ-010 changes followed at `0a2be12`, before lane implementation. Both lanes were instructed to rebase and finish the expanded route/actor/side-effect and browser matrices. Student content-read branches remain unchanged; missing enrollment gates there must be reported as findings. No hosted action or merge is represented by this local release.
 
 ## M local-only bounded design review
 
