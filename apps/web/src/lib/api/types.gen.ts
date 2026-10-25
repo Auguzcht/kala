@@ -813,6 +813,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/twin/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own Evidence History
+         * @description TWIN-REQ-010: own enrolled-course history; UUID shape is not admission.
+         */
+        get: operations["own_evidence_history_courses__course_id__twin_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/next-up": {
         parameters: {
             query?: never;
@@ -1215,6 +1235,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboard/{course_id}/students/{user_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Learner Evidence History
+         * @description INSTR-REQ-010: repeat SEC admission before each page's protected read.
+         */
+        get: operations["learner_evidence_history_dashboard__course_id__students__user_id__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/gamification/{course_id}/summary": {
         parameters: {
             query?: never;
@@ -1323,6 +1363,15 @@ export interface components {
             /** Skill Id */
             skill_id?: string | null;
         };
+        /** EvidenceHistoryPage */
+        EvidenceHistoryPage: {
+            /** Courseid */
+            courseId: string;
+            /** Evidence */
+            evidence: components["schemas"]["HistoryEvent"][];
+            /** Nextcursor */
+            nextCursor?: string | null;
+        };
         /** FromItemsBody */
         FromItemsBody: {
             /** Item Ids */
@@ -1339,6 +1388,21 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HistoryEvent */
+        HistoryEvent: {
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+            /** Correct */
+            correct: boolean | null;
+            /** Latencyms */
+            latencyMs?: number | null;
+            /** Skillname */
+            skillName: string;
+            /** Createdat */
+            createdAt?: string | null;
         };
         /**
          * InterventionCreate
@@ -2891,6 +2955,42 @@ export interface operations {
             };
         };
     };
+    own_evidence_history_courses__course_id__twin_evidence_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceHistoryPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     next_up_courses__course_id__next_up_get: {
         parameters: {
             query?: never;
@@ -3462,6 +3562,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    learner_evidence_history_dashboard__course_id__students__user_id__evidence_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                course_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceHistoryPage"];
                 };
             };
             /** @description Validation Error */
