@@ -63,6 +63,12 @@ Course authorization is incomplete for several review routes; see the finding be
 - Status: implemented
 - Verified by: `services/worker/tests/test_tag_recompute.py`; static `app/tagging.py`, `worker/app/jobs/tag_recompute.py`, migration `0022_embedding_tags.sql`. Old `test_tag_content.py` tests the retained legacy model tagger, not this active embedding path. Real local SQL execution is outside this doc lane's evidence.
 
+### SKILL-REQ-006: Authorize skill review and refresh before privileged work
+- Rule: Every staff skill proposal/review/detach/reject/retag action requires validated instructor/admin role, current instructor enrollment in the exact course for instructors, and token-institution course ownership for admins. Reuse existing admission guards; wrong role is 403 and untaught/unavailable/foreign-institution course is 404. Refresh admission precedes queue/debounce/model/worker work, without changing that work's semantics or response fields.
+- Acceptance: Wrong-role student, outside-course instructor and foreign instructor/admin are denied before protected operations; correct teacher and same-institution admin retain behavior. Denied refresh queues nothing and kicks no worker. Shared student content-read branches remain unchanged; no new gate/helper policy is introduced.
+- Status: planned
+- Verified by: pending SEC guard/denial matrix and local proof; course authorization is not marked implemented by this spec commit.
+
 ## API contract
 
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -119,3 +125,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | --- | --- | --- | --- |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | SKILL-REQ-001 through SKILL-REQ-005 |
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | SKILL requirements above |
+
+| 2026-10-25 | Specify staff admission for proposal/review/refresh/retag while retaining processing behavior | APPROVAL-07 Amendments 2–4; coordinator | SKILL-REQ-006 |

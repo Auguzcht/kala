@@ -26,7 +26,7 @@ Bring Blackboard course material into a tenant-scoped, chunked and embedded corp
 
 | Actor (app_role) | Can | Cannot |
 | --- | --- | --- |
-| student | Use student learning routes; current ingest/status endpoints accept a session | Read assessments or write grades through these routes |
+| student | Use student learning routes; existing student content-read branches retain session access; roster is staff-only under INGEST-REQ-008 | Read assessments or write grades through these routes |
 | instructor | Read assessments and write grades for courses they teach | Access another course's gradebook |
 | admin | Access gradebooks within their institution using the existing institution-wide staff gate | Resolve a course outside their institution |
 
@@ -83,6 +83,13 @@ Bring Blackboard course material into a tenant-scoped, chunked and embedded corp
 - Acceptance: a slow dependency cannot overrun the full API budget while a phase timer appears healthy; unfinished work has an explicit recovery path.
 - Status: planned
 - Verified by: not-run; [WI-15](../../work/handover-2026/work-items/WI-15-content-upload-budget.md) and [WI-16](../../work/handover-2026/work-items/WI-16-lms-request-deadlines.md). No such whole-request budget is claimed in current source.
+
+### INGEST-REQ-008: Admit staff course operations before work and keep roster staff-only
+- Rule: All inventoried staff branches in diagnostic routes reuse validated role, existing course-teaching guard and institution-scoped course resolution before protected work: roster, content preview, ingest/status, modules, upload/retag, gradebook and skill refresh. Roster is staff-only; a student receives 403. Staff-only operations use require_role; wrong role is 403, untaught/unavailable or foreign-institution course is 404. Denied ingest/upload/retag/refresh stores/enqueues nothing and wakes no worker.
+- Rule: Preserve the existing helper, processing/queue/debounce/kick logic, response fields and legitimate student branches on course-content reads. Staff branches on shared reads gain admission guards without changing student behavior. Any student read lacking course enrollment is a recorded follow-up finding, not silently tightened in this lane.
+- Acceptance: Inventory every diagnostic route and prove only the authorized admission changes by AST/diff. Per fixed staff route cover student denial where staff-only, outside-course instructor, foreign instructor/admin, correct teacher and same-institution admin. Source payloads, worker behavior and allowed student content reads remain unchanged. Update the earlier course-data regression so student roster is 403 while student content preview retains its existing response.
+- Status: planned
+- Verified by: pending SEC expanded route matrix and AST scope proof; not a hosted or full student-enrollment enforcement claim.
 
 ## API contract
 
@@ -155,3 +162,5 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 | 2026-10-25 | Revalidate source contracts on integrated main; retain historical test limits | Coordinator-approved Lane P reconciliation; APPROVAL-06 | INGEST requirements above |
 
 | 2026-10-25 | Preserve helper 404 for untaught/foreign course gradebook denials; wrong role stays 403 | APPROVAL-07 Amendment 2; coordinator commits before SEC changes and Lane S test updates | INGEST-REQ-001 |
+
+| 2026-10-25 | Extend staff admission across diagnostic staff branches; roster becomes staff-only, student content reads retained | APPROVAL-07 Amendment 4; coordinator before SEC implementation | INGEST-REQ-001, INGEST-REQ-008 |
