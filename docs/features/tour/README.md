@@ -102,15 +102,16 @@ Documentation validation for this reconciliation passed: YAML and referenced cod
 
 ## TOUR-REFRESH implementation verification
 
-Base: `3a6a0aa`. The current tour-only continuation supersedes the static-only tour acceptance limitation above for the synthetic cases listed here. It does not upgrade historical backend test runs or claim deployed/live acceptance.
+Initial base: `3a6a0aa`; post-DOCS-HYGIENE rebase base: `1d980e33a848559e01b229bd23408fd81fedc10f`. The current tour-only continuation supersedes the static-only tour acceptance limitation above for the synthetic cases listed here. All checks listed below were freshly rerun after that rebase; historical backend test runs are not upgraded and deployed/live acceptance is not claimed.
 
 - `tour.browser.mjs`: **616 assertions passed**, student and instructor at 1440px/375px. Includes Back, Skip/Escape, concrete learner routes, visible targets, completed Diagnostic, missing material, empty roster/recommendations, editable empty-draft prefill and existing-draft preservation. Global network spy observed zero mutating requests and no file chooser was opened.
-- `node --test .../tour-route.test.mjs .../tour-anchors.test.mjs`: **10 passed, 1 intentionally skipped** before the approved DOCS-HYGIENE merge. Segment/wildcard boundaries and the UI click allowlist pass; TypeScript AST comparison proves exactly one added data-tour attribute and no other executable change in each of the seven anchor-only feature files against `3a6a0aa`.
+- `KALA_TOUR_REQUIRE_DOCS=1 node --test .../tour-route.test.mjs .../tour-anchors.test.mjs`: **11 passed, zero skipped**. Segment/wildcard boundaries and the UI click allowlist pass; TypeScript AST comparison proves exactly one added data-tour attribute and no other executable change in each of the seven anchor-only feature files against `3a6a0aa`. PracticePanel also retains the current Study citation from DOCS-HYGIENE.
 - Retained Tutor/Diagnostic browser suite: **219 assertions passed**; frontend closeout suite: **110 assertions passed**; retained frontend Node checks: **21 passed**; Study renderer: **4 passed**.
-- Web lint, typecheck and build passed. Existing warnings remain: 18 Fast Refresh warnings, route-generator circular dependency notice and build chunk-size warning. Screenshot inspection covered desktop Diagnostic and mobile Tutor history/instructor overview; artifacts are under `/tmp/kala-tour-refresh`.
+- Web lint, typecheck and build passed. Existing warnings remain: 18 Fast Refresh warnings, route-generator circular dependency notice and build chunk-size warning. Screenshot inspection covered desktop Diagnostic and mobile Tutor history/instructor overview; artifacts are under `/tmp/kala-tour-refresh` (local only, not retained).
 - Full matrix, exact commands and scope proof: `apps/web/src/components/shell/tests/TOUR-REFRESH-audit.md`.
+- Documentation checker reports zero violations; its 18 tests pass. Configuration inventory check passes. A first concurrent retained closeout browser run timed out on keyboard Twin pagination; the unchanged standalone rerun passed all 110 assertions. The cause is not established and the original failure is retained in the audit.
 
-The coordinator's approved DOCS-HYGIENE merge has not been released to this lane. Rebase, PracticePanel comment/attribute coexistence proof with `KALA_TOUR_REQUIRE_DOCS=1`, and fresh tour browser/lint/typecheck/build checks remain a separate pending integration gate. No push, merge, deploy, hosted data repair or migration occurred here.
+The coordinator released the approved DOCS-HYGIENE merge; the rebase completed without conflicts, coexistence proof and fresh verification passed. Coordinator integration/review and live acceptance remain separate gates. No push, merge, deploy, hosted data repair or migration occurred here.
 
 ## Change log
 
