@@ -1,7 +1,7 @@
 import { useSession } from "@/lib/auth/AuthProvider";
 import { readReviewProgress, writeReviewProgress } from "@/features/flashcards/lib/review-progress";
 import { SessionState } from "@/components/study/SessionState";
-import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { BrainIcon } from "@/components/ui/brain";
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import {
   useFlashcardDeck,
   useFlashcardMembership,
+  useGetNewFlashcards,
   useReviewFlashcard,
 } from "@/features/flashcards/hooks/use-flashcards";
 import { usePracticeSetResults } from "@/features/practice";
@@ -64,16 +65,6 @@ import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 
 type Phase = "front" | "back";
 type FollowUpTurn = { question: string; answer: string };
-type ReviewIconHandle = { startAnimation: () => void; stopAnimation: () => void };
-
-const ReviewSpinnerIcon = forwardRef<ReviewIconHandle, { size?: number }>(function ReviewSpinnerIcon(
-  { size = 16 },
-  ref,
-) {
-  useImperativeHandle(ref, () => ({ startAnimation: () => undefined, stopAnimation: () => undefined }), []);
-  return <Spinner aria-label="Saving review" style={{ width: size, height: size }} />;
-});
-
 function StateBadge({ state }: { state: FlashcardCard["state"] }) {
   const presentation = state === "due" ? null : cardStatePresentation(state);
   return (
@@ -89,7 +80,7 @@ function StateBadge({ state }: { state: FlashcardCard["state"] }) {
   );
 }
 
-export function FlashcardDeck({
+function FlashcardSession({
   courseId,
   skillId,
   mode = "review",
@@ -160,7 +151,15 @@ export function FlashcardDeck({
       hasMore: false,
     };
   }, [practiceSetId, practiceCards, courseId, reviewSessionId]);
-  const data = practiceSetId ? practiceDeck : deckQuery.data;
+  const queryData = practiceSetId ? practiceDeck : deckQuery.data;
+  // A refetch cannot replace a mounted session or its completion panel.
+  const [sessionDeck, setSessionDeck] = useState<FlashcardDeckData | null>(null);
+  const data = sessionDeck ?? queryData;
+  const getNewFlashcards = useGetNewFlashcards(courseId, skillId);
+  const [checkingNewCards, setCheckingNewCards] = useState(false);
+  const [newCardsNotice, setNewCardsNotice] = useState<string | null>(null);
+  const checkingNewCardsRef = useRef(false);
+  const reviewDatesRef = useRef(new Map<string, string>());
   const isLoading = practiceSetId ? practiceResults.isLoading : deckQuery.isLoading;
   const isError = practiceSetId ? practiceResults.isError : deckQuery.isError;
   const isFetching = practiceSetId ? practiceResults.isFetching : deckQuery.isFetching;
@@ -186,8 +185,6 @@ export function FlashcardDeck({
   const [deckDone, setDeckDone] = useState(false);
   const [isReplay, setIsReplay] = useState(false);
   const [ratingsByItemId, setRatingsByItemId] = useState<Record<string, boolean>>({});
-  const [showReviewSpinner, setShowReviewSpinner] = useState(false);
-  const [pendingRemembered, setPendingRemembered] = useState<boolean | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
   const [explainText, setExplainText] = useState<string | null>(null);
   const [hintAnimationKey, setHintAnimationKey] = useState<string | undefined>();
@@ -211,28 +208,21 @@ export function FlashcardDeck({
     : null);
 
   useEffect(() => {
-    if (!data || responseSessionKey === initializedSessionRef.current) return;
+    if (!data || data.cards.length === 0 || sessionDeck || responseSessionKey === initializedSessionRef.current) return;
+    const firstSession = initializedSessionRef.current === null;
+    setSessionDeck(data);
     initializedSessionRef.current = responseSessionKey;
     const cardsById = new Map(data.cards.map((card) => [card.itemId, card]));
-    const saved = restoredProgress;
+    const saved = firstSession ? restoredProgress : null;
     const valid = saved && saved.queue.every((id) => cardsById.has(id));
     setSessionCards(valid ? saved.queue.map((id) => cardsById.get(id)!) : data.cards);
     setIndex(valid ? saved.index : 0);
     setDeckDone(false);
     setIsReplay(false);
-    postedRatingIdsRef.current = new Set(valid ? saved.posted : []);
+    if (firstSession) postedRatingIdsRef.current = new Set(valid ? saved.posted : []);
     reviewIdempotencyRef.current = valid ? saved.pending : null;
     setRatingsByItemId(valid ? saved.ratings : {});
-  }, [data, responseSessionKey, restoredProgress]);
-
-  useEffect(() => {
-    if (!review.isPending) {
-      setShowReviewSpinner(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setShowReviewSpinner(true), 200);
-    return () => window.clearTimeout(timer);
-  }, [review.isPending]);
+  }, [data, responseSessionKey, restoredProgress, sessionDeck]);
 
   useEffect(() => {
     contentEpochRef.current += 1;
@@ -289,9 +279,9 @@ export function FlashcardDeck({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeItemId, deckDone, phase, review.isPending]);
 
-  if (isLoading)
+  if (isLoading && !sessionDeck)
     return (<SessionState title="Study" onExit={onExit}>{<LoadingPanel label="Loading your cards…" lines={4} />}</SessionState>);
-  if (isError)
+  if (isError && !deckDone)
     return (<SessionState title="Study" onExit={onExit}>{(
       <EmptyState
         title="We could not load flashcards"
@@ -324,7 +314,7 @@ export function FlashcardDeck({
   const remainingToday = data?.newRemainingToday ?? data?.newCardsRemainingToday;
   const dailyNewCapReached = mode === "review" && remainingToday === 0 &&
     (membership.data?.counts.new ?? 0) > 0;
-  if (!data || data.cards.length === 0) {
+  if (!deckDone && (!data || data.cards.length === 0)) {
     const visibleSkills = bank.data?.skills.filter((entry) => !skillId || entry.skillId === skillId) ?? [];
     const selectedSkill = skillId
       ? visibleSkills[0]
@@ -344,10 +334,10 @@ export function FlashcardDeck({
     if (noMaterial) {
       return (<SessionState title="Study" onExit={onExit}>{(
         <EmptyState
-          title="No course material yet"
+          title="No cards yet"
           description={skillId
-            ? "Your course team has not added material for this skill yet."
-            : "Your course team has not added material for this course yet."}
+            ? "No cards are available for this skill right now."
+            : "No cards are available for this course right now."}
         />
       )}</SessionState>);
     }
@@ -441,8 +431,8 @@ export function FlashcardDeck({
         dock={
           <ComposeDock
             tourId="tour-study-dock"
-            primary={{ label: "Go through these again", onClick: replayDeck, disabled: review.isPending, icon: RotateCCWIcon }}
-            secondary={{ label: "Check for more cards", onClick: reloadDeck, disabled: review.isPending || isFetching, pending: isFetching, icon: ArrowRightIcon }}
+            primary={{ label: "Go through these again", onClick: replayDeck, disabled: review.isPending || checkingNewCards, icon: RotateCCWIcon }}
+            secondary={{ label: "Get new cards", onClick: () => void reloadDeck(), disabled: review.isPending || checkingNewCards, pending: checkingNewCards, icon: ArrowRightIcon }}
           />
         }
       >
@@ -464,12 +454,14 @@ export function FlashcardDeck({
                 ? "This practice round did not change your review schedule."
                 : "You marked every card Got it in this session. Your next review follows your schedule."}
             </p>
-            {mode === "all" && data.hasMore ? (
+            {newCardsNotice ? <p role="status" className="mt-3 text-sm text-muted-foreground">{newCardsNotice}</p> : null}
+            {mode === "all" && data?.hasMore ? (
               <div className="mt-4">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={continueNextGroup}
+                  disabled={isFetching || checkingNewCards}
                   aria-busy={isFetching || undefined}
                 >
                   {isFetching ? <Spinner aria-hidden /> : null}
@@ -531,7 +523,6 @@ export function FlashcardDeck({
     }
 
     reviewInFlightRef.current = true;
-    setPendingRemembered(remembered);
     if (
       reviewIdempotencyRef.current?.itemId !== card.itemId ||
       reviewIdempotencyRef.current.remembered !== remembered
@@ -561,9 +552,9 @@ export function FlashcardDeck({
         idempotencyKey: reviewIdempotencyRef.current.key,
       },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          if (result?.dueAt && Number.isFinite(Date.parse(result.dueAt))) reviewDatesRef.current.set(card.itemId, result.dueAt);
           reviewInFlightRef.current = false;
-          setPendingRemembered(null);
           postedRatingIdsRef.current.add(card.itemId);
           reviewIdempotencyRef.current = null;
           persistAdvanced();
@@ -574,7 +565,6 @@ export function FlashcardDeck({
         },
         onError: () => {
           reviewInFlightRef.current = false;
-          setPendingRemembered(null);
           setSessionCards(queueBeforeRating);
           setIndex(ratingIndex);
           setDeckDone(false);
@@ -609,26 +599,56 @@ export function FlashcardDeck({
     }
   }
 
-  function reloadDeck() {
-    celebrationRoundRef.current += 1;
-    setIsReplay(false);
-    // A one-card deck already sits at index 0, so changing only the index
-    // would not rerun the reset effect. Clear the terminal state explicitly.
-    setDeckDone(false);
-    setIndex(0);
-    setPhase("front");
-    setHintText(null);
-    setExplainText(null);
-    setFollowUpTurns([]);
-    setPendingFollowUp(null);
-    setRatingsByItemId({});
-    setSessionCards(data?.cards ?? []);
-    postedRatingIdsRef.current.clear();
-    refetch();
+  async function reloadDeck() {
+    if (review.isPending || reviewInFlightRef.current || checkingNewCardsRef.current) return;
+    checkingNewCardsRef.current = true;
+    setCheckingNewCards(true);
+    setNewCardsNotice(null);
+    try {
+      const refreshed = await getNewFlashcards();
+      const rated = postedRatingIdsRef.current;
+      const cards = refreshed.cards.filter((item) => !rated.has(item.itemId));
+      if (cards.length === 0) {
+        const schedule = new Map((membership.data?.cards ?? [])
+          .filter((item) => item.state !== "new")
+          .map((item) => [item.itemId, item.dueAt]));
+        for (const [itemId, dueAt] of reviewDatesRef.current) schedule.set(itemId, dueAt);
+        const dates = [...schedule.values()]
+          .filter((date): date is string => Boolean(date) && Number.isFinite(Date.parse(date!)))
+          .sort((a, b) => Date.parse(a) - Date.parse(b));
+        if (!dates.length) {
+          setNewCardsNotice("We could not read your next review date. Try again.");
+          return;
+        }
+        const date = new Intl.DateTimeFormat(undefined, {
+          year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+        }).format(new Date(dates[0]));
+        setNewCardsNotice(`No new cards right now. Your next review is ${date}.`);
+        return;
+      }
+      celebrationRoundRef.current += 1;
+      setSessionDeck({ ...refreshed, cards });
+      setSessionCards(cards);
+      setRatingsByItemId({});
+      setIsReplay(false);
+      setDeckDone(false);
+      setIndex(0);
+      setPhase("front");
+      setHintText(null);
+      setExplainText(null);
+      setFollowUpTurns([]);
+      setPendingFollowUp(null);
+    } catch {
+      setNewCardsNotice("We could not check for new cards. Try again.");
+    } finally {
+      checkingNewCardsRef.current = false;
+      setCheckingNewCards(false);
+    }
   }
 
   function replayDeck() {
-    if (review.isPending || reviewInFlightRef.current) return;
+    if (review.isPending || reviewInFlightRef.current || checkingNewCardsRef.current) return;
+    setNewCardsNotice(null);
     // Replay only the original session cards, in order, with no refetch.
     // Retain postedRatingIdsRef: every rating in this practice round stays
     // local, including any cards requeued after "Still learning".
@@ -649,6 +669,9 @@ export function FlashcardDeck({
   }
 
   function continueNextGroup() {
+    if (checkingNewCardsRef.current || isFetching) return;
+    setSessionDeck(null);
+    setNewCardsNotice(null);
     setIsReplay(false);
     setDeckDone(false);
     setIndex(0);
@@ -721,14 +744,14 @@ export function FlashcardDeck({
         label: "Got it",
         onClick: () => mark(true),
         disabled: review.isPending,
-        icon: showReviewSpinner && pendingRemembered === true ? ReviewSpinnerIcon : CheckIcon,
+        icon: CheckIcon,
       };
   const dockSecondary: ComposeDockPrimary | undefined = phase === "back"
     ? {
         label: "Still learning",
         onClick: () => mark(false),
         disabled: review.isPending,
-        icon: showReviewSpinner && pendingRemembered === false ? ReviewSpinnerIcon : RotateCCWIcon,
+        icon: RotateCCWIcon,
       }
     : undefined;
 
@@ -890,8 +913,8 @@ export function FlashcardDeck({
               disabled={hint.isPending}
               className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {hint.isPending ? <Spinner className="size-3.5" aria-hidden /> : <BrainIcon size={14} aria-hidden />}
-              {hint.isPending ? "Thinking…" : "Give me a hint"}
+              <BrainIcon size={14} aria-hidden />
+              Give me a hint
             </button>
           ) : null}
           {phase === "back" ? (
@@ -901,8 +924,8 @@ export function FlashcardDeck({
               disabled={explain.isPending}
               className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {explain.isPending ? <Spinner className="size-3.5" aria-hidden /> : <SparklesIcon size={14} aria-hidden />}
-              {explain.isPending ? "Thinking…" : "Explain more"}
+              <SparklesIcon size={14} aria-hidden />
+              Explain more
             </button>
           ) : null}
         </div>
@@ -951,4 +974,14 @@ export function FlashcardDeck({
       </StudyStream>
     </StudySurface>
   );
+}
+
+/** The session snapshot lasts only within this explicit learning scope. */
+export function FlashcardDeck(props: Parameters<typeof FlashcardSession>[0]) {
+  const scopeKey = JSON.stringify([
+    props.courseId, props.skillId ?? null, props.mode ?? "review",
+    props.practiceSetId ?? null, props.practiceAttemptId ?? null,
+    [...(props.missedItemIds ?? [])].sort(),
+  ]);
+  return <FlashcardSession key={scopeKey} {...props} />;
 }

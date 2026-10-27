@@ -95,6 +95,7 @@ export const flashcardReviewResultSchema = z.object({
   remembered: z.boolean(),
   graduated: z.boolean(),
   dueInHours: z.number(),
+  dueAt: z.string().nullable().optional(),
   box: z.number(),
   reward: rewardSchema,
 });

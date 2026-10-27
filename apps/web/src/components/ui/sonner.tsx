@@ -7,7 +7,6 @@ import {
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { cn } from "@/lib/utils"
-import { Spinner } from "@/components/ui/spinner"
 
 const Toaster = ({ className, ...props }: ToasterProps) => {
   const { forcedTheme, resolvedTheme } = useTheme()
@@ -21,7 +20,7 @@ const Toaster = ({ className, ...props }: ToasterProps) => {
         info: <InfoIcon className="size-4" />,
         warning: <TriangleAlertIcon className="size-4" />,
         error: <OctagonXIcon className="size-4" />,
-        loading: <Spinner aria-hidden />,
+        loading: <InfoIcon className="size-4" aria-hidden />,
       }}
       style={
         {

@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { Spinner } from "@/components/ui/spinner";
 
 // Hornbill + skeleton blocks for first-load / generation waits. DESIGN.md
 // signature element #7: "The hornbill as guide... loading moments." The
@@ -21,7 +20,7 @@ export function LoadingPanel({
       role="status"
       aria-live="polite"
       className={cn(
-        "flex flex-col items-center gap-5 rounded-md border bg-card px-6 py-10",
+        "flex w-full flex-col items-center gap-5 rounded-md border bg-card px-6 py-10",
         className
       )}
     >
@@ -31,7 +30,6 @@ export function LoadingPanel({
         className="size-12 object-contain opacity-80"
       />
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Spinner aria-hidden />
         <p>{label ?? "Loading…"}</p>
       </div>
       <div className="w-full max-w-md space-y-2.5">
@@ -39,7 +37,7 @@ export function LoadingPanel({
           <div
             key={i}
             className={cn(
-              "h-3 animate-pulse rounded-sm bg-muted motion-reduce:animate-none",
+              "h-3 rounded-sm bg-muted",
               i === 0 ? "w-2/3" : i === lines - 1 ? "w-1/3" : "w-full"
             )}
           />

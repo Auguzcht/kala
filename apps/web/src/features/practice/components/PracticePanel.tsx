@@ -404,8 +404,8 @@ export function PracticePanel({
   if (!usingSaved && bankNoMaterial)
     return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
-        title="No course material yet"
-        description="This skill doesn&apos;t have course material yet."
+        title="No questions yet"
+        description="No questions are available for this skill right now. Check back later."
       />
     )}</SessionState>);
   if (!usingSaved && bankBuilding)
@@ -447,8 +447,8 @@ export function PracticePanel({
   if (data?.status === "no_material")
     return (<SessionState title="Test" onExit={onExit}>{(
       <EmptyState
-        title="No course material yet"
-        description="This skill doesn&apos;t have course material yet."
+        title="No questions yet"
+        description="No questions are available for this skill right now. Check back later."
       />
     )}</SessionState>);
   if (data && (("available" in data && data.available === false) || data.status === "unavailable"))

@@ -44,8 +44,8 @@ export function StudyStream({
       )}
     >
       <Conversation>
-        <ConversationContent className="gap-5 pt-6 pb-24">
-          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5">
+        <ConversationContent className="gap-5 px-0 pt-6 pb-24">
+          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5 px-4 sm:px-6">
             {children}
           </div>
         </ConversationContent>

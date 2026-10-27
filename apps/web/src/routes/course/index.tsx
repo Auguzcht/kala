@@ -86,7 +86,7 @@ function WorkspaceHome() {
           </Button>
         </div>
       ) : null}
-      {waitingForMaterial > 0 ? (
+      {session?.role !== "student" && waitingForMaterial > 0 ? (
         <p className="text-xs text-muted-foreground">
           {waitingForMaterial} {waitingForMaterial === 1 ? "topic is" : "topics are"} waiting for course material
         </p>

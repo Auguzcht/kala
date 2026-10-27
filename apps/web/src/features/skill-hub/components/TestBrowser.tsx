@@ -215,7 +215,7 @@ function SetList({
         <div className="border border-dashed bg-card px-5 py-4">
           <p className="text-sm font-semibold text-foreground">No saved tests yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Select New set below to prepare questions for this topic.
+            Select New practice set below to prepare questions for this topic.
             Saved sets land here so you can retake them later.
           </p>
         </div>
@@ -228,7 +228,7 @@ function SetList({
       ) : null}
       {isNoMaterial ? (
         <p className="border-l-2 border-border px-3 py-2 text-sm text-muted-foreground">
-          This skill doesn&apos;t have course material yet.
+          No questions are available for this skill right now. Check back later.
         </p>
       ) : null}
       {bank.isError ? (
@@ -313,7 +313,7 @@ function SetList({
         {/* New set — SAME footprint as a real set card so it sits in the grid
             as a peer, but a dashed border and centered icon keep it visually
             distinct: it is an action, not a saved set you might have taken.
-            While generating it shows a shimmer + spinner instead of sitting
+            While requesting a set it shows control feedback instead of sitting
             inert, and its height matches a real card so the grid does not jump
             when the new set lands. */}
         <button
@@ -329,25 +329,13 @@ function SetList({
           )}
         >
           <div className="grid size-9 place-items-center rounded-sm border border-dashed border-muted-foreground/40">
-            {generate.isPending || isPreparing || bank.isLoading ? (
+            {generate.isPending ? (
               <Spinner className="size-4 text-brand-orange" />
             ) : (
               <PlusIcon size={18} className="text-muted-foreground" />
             )}
           </div>
-          {isNoMaterial ? (
-            <p className="text-sm font-semibold text-muted-foreground">No course material yet</p>
-          ) : isPreparing ? (
-            <p className="text-sm font-semibold text-foreground">
-              Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0})
-            </p>
-          ) : !bank.data ? (
-            <p className="text-sm font-semibold text-muted-foreground">Checking question availability</p>
-          ) : generate.isPending ? (
-            <span className="text-sm font-semibold text-foreground">Loading your questions…</span>
-          ) : (
-            <p className="text-sm font-semibold text-foreground">New set</p>
-          )}
+          <p className="text-sm font-semibold text-foreground">New practice set</p>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Fresh questions. Choose 5, 10, or 20 at a time.
           </p>
@@ -461,9 +449,7 @@ function SetDetail({
             className="shrink-0"
           >
             {startLabel}
-            {data.status === "generating"
-              ? <Spinner aria-hidden />
-              : canStart ? <ArrowRightIcon size={16} /> : null}
+            {canStart ? <ArrowRightIcon size={16} /> : null}
           </Button>
         </div>
       </div>

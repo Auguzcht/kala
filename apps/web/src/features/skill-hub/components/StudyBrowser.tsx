@@ -7,7 +7,6 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { useFlashcardMembership } from "@/features/flashcards/hooks/use-flashcards";
 import type { FlashcardMembershipCard } from "@/features/flashcards/schema/flashcards.schema";
@@ -75,8 +74,8 @@ export function StudyBrowser({
     if (isNoMaterial) {
       return (
         <EmptyState
-          title="No course material yet"
-          description="This skill doesn&apos;t have course material yet."
+          title="No cards yet"
+          description="No cards are available for this skill right now."
         />
       );
     }
@@ -220,7 +219,6 @@ export function StudyBrowser({
       ["waiting_content", "building", "error"].includes(bankSkill?.status ?? "waiting_content") &&
       !bankSkill?.usable ? (
         <p className="flex items-center gap-2 border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-          {bankSkill?.status === "building" ? <Spinner aria-hidden /> : null}
           Preparing questions ({bankSkill?.mcqReady ?? 0} of {bankSkill?.mcqTarget ?? 0}).
         </p>
       ) : null}

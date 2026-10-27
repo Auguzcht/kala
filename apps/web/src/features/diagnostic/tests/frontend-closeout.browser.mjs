@@ -111,11 +111,11 @@ try{
    if(due){await a.page.getByRole('button',{name:'Take diagnostic',exact:true}).waitFor();await a.page.getByText(label,{exact:true}).waitFor();}
    else {await a.page.getByText('AWS101',{exact:true}).first().waitFor();await a.page.waitForTimeout(150);check(await a.page.getByRole('button',{name:'Take diagnostic',exact:true}).count()===0,'non-actionable status hides workspace action');}
    check((await a.page.locator('#nav-diagnostic').getAttribute('aria-label')).includes('new baseline due')===due,'rail and workspace agree on actionable status');
-   if(waiting)await a.page.getByText(`${waiting} ${waiting===1?'topic is':'topics are'} waiting for course material`,{exact:true}).waitFor();else check(await a.page.getByText(/topics? (is|are) waiting for course material/).count()===0,'absent or zero waiting count has no line');
+   check(await a.page.getByText(/topics? (is|are) waiting for course material/).count()===0,'student waiting counts never show material copy');
   }
   const parse=await a.page.evaluate(async()=>{const {diagnosticStatusSchema,diagnosticSchema}=await import('/src/features/diagnostic/schema/diagnostic.schema.ts');return [diagnosticStatusSchema.safeParse({courseId:'course',due:true}).success,diagnosticStatusSchema.safeParse({courseId:'course',due:false,waitingForMaterialCount:-1}).success,diagnosticSchema.safeParse({courseId:'course',status:'ready',questions:[],readyCount:0,pendingSkillIds:[],failedSkillIds:[],skippedSkillCount:0,waitingForMaterialCount:2}).success];});check(JSON.stringify(parse)==='[true,false,true]','legacy status and optional question fields validate; negative waiting rejects');
   for(const [response,label] of [
-   [{questions:[],readyCount:0,waitingForMaterialCount:2},'Waiting for course material'],
+   [{questions:[],readyCount:0,waitingForMaterialCount:2},"Your baseline check isn't ready yet."],
    [{questions:[],readyCount:0,status:'failed',waitingForMaterialCount:2},'Your baseline is not ready yet'],
    [{questions:[],readyCount:0,status:'generating',pendingSkillIds:['pending'],waitingForMaterialCount:2},'Waiting for baseline questions. 0 questions are ready.'],
    [{waitingForMaterialCount:2},'Submit diagnostic'],

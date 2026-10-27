@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -1250,9 +1249,7 @@ export const PromptInputSubmit = ({
 
   let Icon = <CornerDownLeftIcon className="size-4" />;
 
-  if (status === "submitted") {
-    Icon = <Spinner />;
-  } else if (status === "streaming") {
+  if (status === "streaming") {
     Icon = <SquareIcon className="size-4" />;
   } else if (status === "error") {
     Icon = <XIcon className="size-4" />;
@@ -1272,7 +1269,7 @@ export const PromptInputSubmit = ({
 
   return (
     <InputGroupButton
-      aria-label={isGenerating ? "Stop" : "Submit"}
+      aria-label={isGenerating && onStop ? "Stop" : "Submit"}
       className={cn(className)}
       onClick={handleClick}
       size={size}
