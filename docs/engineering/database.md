@@ -4,11 +4,11 @@ This is the current policy and source map, checked for DOCS-HYGIENE on 2026-10-2
 
 ## Migration ownership
 
-The repository has 39 numeric SQL migrations in [packages/db/migrations](../../packages/db/migrations/): the immutable 0001–0037 baseline and locally reviewed 0038/0039 deltas awaiting named-maintainer application. A fresh recreation uses the complete operator-approved sequence, never only the initial three files; the two new deltas are not inferred to be hosted-applied. Existing hosted databases need a reviewed forward delta. Applied migrations are immutable byte for byte, including comments; historical references inside them keep their old paths. Never rename, reformat or amend an applied file. A named maintainer applies hosted SQL and records results; agents may prepare and locally verify SQL only.
+The repository has 39 numeric SQL migrations in [packages/db/migrations](../../packages/db/migrations/): the immutable 0001–0037 baseline and0038/0039 forward deltas applied by Fred to dev-hosted, with FG-6 accepted on2026-10-27 and the grant-drift finding assigned to Lane DB / WI-04, owner ITO. A fresh recreation uses the complete operator-approved sequence, never only the initial three files; the two new deltas are not inferred to be hosted-applied. Existing hosted databases need a reviewed forward delta. Applied migrations are immutable byte for byte, including comments; historical references inside them keep their old paths. Never rename, reformat or amend an applied file. A named maintainer applies hosted SQL and records results; agents may prepare and locally verify SQL only.
 
 0037 adds nullable `tutor_conversations.pinned_at` without a default. Fred reported application and read-only post-checks passed on 2026-10-25. Do not reapply it. SQL-editor delivery and CLI migration history are separate: the incomplete hosted history remains a database-stream reconciliation item and does not block this approved backend deployment. Neither an empty-schema replay nor a service-role request proves tenant/owner RLS.
 
-0038 tightens 22 existing policies for staff course/learner admission and assigned recommendation visibility; 0039 adds the ordered evidence-history index. Neither changes learning rows. Their local proofs and runbooks do not establish hosted grants, exposure, performance or acceptance. Existing policy/grant drift is checked by the named maintainer before application. A successful policy change stays in place during application rollback; any legitimate access regression needs a reviewed forward correction rather than restoring overbroad access.
+0038 tightens 22 existing policies for staff course/learner admission and assigned recommendation visibility; 0039 adds the ordered evidence-history index. Neither changes learning rows. Fred's accepted hosted post-checks match all22 changed policies on20 tables, all36 public policies and20 application functions; all36 inspected ordinary public tables have RLS and no anon/public policies.0039 has its exact valid/ready index. These metadata checks do not establish hosted performance or live role acceptance, which belongs to FG-9. Existing policy/grant drift is checked by the named maintainer before application. A successful policy change stays in place during application rollback; any legitimate access regression needs a reviewed forward correction rather than restoring overbroad access.
 
 The [one-time dev identity-repair procedure](../runbooks/identity-repair.md) is separate from schema recreation. It defaults to a read-only plan, requires private exact backups before apply, and never changes governance records or research policies. Governance ambiguity is a valid refusal outcome with pair-label/counts-only output. No real repair is inferred from local proof; maintainer dry-run review, apply/restore review and live acceptance remain separate gates.
 
@@ -44,3 +44,12 @@ Check Data API exposure/grants separately from RLS; exercise own-student, course
 - 2026-10-25 — DOCS-HYGIENE: make the confirmed local-only policy and current missing tooling explicit; consolidate setup limits without changing SQL or commands.
 
 - 2026-10-25 — APPROVAL-07 integration: register reviewed 0038/0039 and the bounded dev-repair procedure; preserve all human execution gates and existing local-tooling limits.
+
+
+## Accepted grant-drift finding
+
+Fred accepted FG-6 on2026-10-27 with pre-existing SELECT-grant differences on14 tables versus the local replay, including authenticated SELECT on ingest_jobs. At least one difference predates0038, which contains policy changes only. Manual0001–0036 application plus Supabase default grants is the likely cause, not a complete attribution. No grants change now. Lane DB / WI-04, owner ITO, retains this drift-check finding under the existing maintainer-supplied inspection and human-change rules. It does not authorize agents to inspect hosted data or change grants. Hosted authenticated-role checks remain FG-9.
+
+## Historical sources
+
+- [Fred's FG-6 acceptance and scoped finding](../work/handover-2026/evidence/fg6-fg8-acceptance-2026-10-27.md)

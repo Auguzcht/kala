@@ -72,7 +72,7 @@ APPROVAL-03 authorizes the shared committed test isolation, planned frontend-run
 | WI-01 | Find and fix unreachable live endpoints (starting with `POST /tutor/ask` 502) and the Study "Reload deck" vs "All caught up" mix-up | none | planned |
 | WI-02 | Inventory every Markdown file in the repo and classify it (authority, merge into spec, runbook source, archive, delete) | none | confirmed-done (audit accepted 2026-10-24, APPROVAL-01) |
 | WI-03 | Install the documentation framework (AGENTS.md, docs/README.md, contract, templates) and move archived docs with pointer headers | WI-02 | confirmed-done (framework scope accepted 2026-10-24, APPROVAL-02; merged locally, not pushed) |
-| WI-04 | Local throwaway Supabase stack: move to `supabase/migrations`, replay from zero, seed, generated `schema.sql` and types, one drift check against dev-hosted (see [database.md](../../engineering/database.md)) | none | planned |
+| [WI-04](work-items/WI-04-local-database-workflow.md) | Local throwaway Supabase stack: move to `supabase/migrations`, replay from zero, seed, generated `schema.sql` and types, one drift check against dev-hosted (see [database.md](../../engineering/database.md)) | none | planned |
 | WI-05 | Secrets inventory generated from config files, `.env.example` files complete, exposure log, rotation plan | none | in-progress (inventory accepted and merged locally under APPROVAL-02; rotation at cutover remains open) |
 | WI-06 | Runbooks 03, 04, 08 (Blackboard instance, Developer Portal app, LTI registration) | none (needs the developer's memory) | planned |
 | WI-07 | Runbooks 01, 02, 05, 06, 07, 09 to 13 | WI-05 | planned |
@@ -148,3 +148,10 @@ Additional source-audit follow-up: [WI-26 instructor course authorization and re
 ## APPROVAL-08 reviewed local continuation
 
 T2 merged3375647, then rebased U2 mergedad7a9ac. Amendment7a minimal student-tour disable mergedeb3e739 after its instructor read-only source audit and646 synthetic assertions (old616). The full TOUR-2 branch/audit remain preserved/unmerged. WI-27/28/33 await human confirmation; WI-29 editing and WI-32 side-effect-free reads stay planned for ITO, WI-30 is blocked, WI-31 tracks the FG-L privacy stop. No local result completes FG-6→FG-8→FG-7a/b→FG-9, publishes application code or finalizes closeout.
+
+
+## 2026-10-27 — accepted FG-6, backend verified, frontend delegated
+
+Fred accepts FG-6 with the pre-existing SELECT-grant finding on14 tables assigned to Lane DB / WI-04, owner ITO.0038's22 policy changes/all36 public policies,20 application functions, RLS and0039's exact valid/ready index pass. No grants change; hosted role checks belong to FG-9. Backend source616dfc66 is live as API8 without weights; worker Active/Successful, image/source match and health200 verified.
+
+One docs-only main commit and fast-forward publication are delegated to Codex, with read-only production status checks. Required attribution on success: **pushed by Codex, delegated by Fred**. Publication/Ready are pending at this pre-push record; actual pushed SHA/state/host are returned after execution. FG-7a is prepared only; no repair/backup/apply runs. WI-24/25/26 stay open with ITO; FG-7b/9 and closeout remain pending. The local receipt is local only, not retained.

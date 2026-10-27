@@ -30,3 +30,14 @@ Thirteen student mutation methods remain outside Amendment7 and unchanged: Diagn
 
 - [SEC inventory, proof and full report](../evidence/wi26-course-authorization.md)
 - [0038 apply runbook](../../../runbooks/0038-apply.md)
+
+
+## Fred's FG-6 acceptance — 2026-10-27
+
+Fred applied0038/0039 and accepts FG-6 with the pre-existing SELECT-grant finding assigned to Lane DB / WI-04, owner ITO.0038's22 changed policies on20 tables, all36 public policies and20 application functions match; all inspected public tables have RLS with no anon/public policies.0039 has the exact valid/ready history index. No grants are changed. This acceptance supersedes earlier pending-hosted-migration statements; it does not claim hosted authenticated-role acceptance, which is explicitly FG-9.
+
+The backend is deployed from616dfc66: API live8 without weights, worker Active/Successful, deployed image/source mapping and health200 verified. One docs-only frontend push/status check is delegated to Codex; its actual result is in the final coordinator response. WI status remains in-progress and owner ITO pending FG-9; no confirmed-done upgrade.
+
+## Verified by — FG-6
+
+- [Fred's acceptance, grant finding and backend checks](../evidence/fg6-fg8-acceptance-2026-10-27.md)

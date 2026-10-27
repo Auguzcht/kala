@@ -34,3 +34,12 @@ No real pair has been supplied or run by this lane. For each future Fred-proved 
 | `refused: governance ambiguity` | Valid FG-7 safe refusal; record consent_count/dsr_count and pair label only. Entire transaction has no source writes; pair is not described as repaired. Preserve records/policies and record the exact unresolved remainder | No real pair assumed |
 
 Records on either anchor conservatively refuse non-converged repair, including mismatched or apparently matching state. Never alter consent, research policies or views to enable merging. Already-converged no-op remains allowed. An expected refusal is recorded rather than treated as authorization to weaken the guard.
+
+
+## FG-7a preparation — 2026-10-27
+
+Fred's FG-6 acceptance and verified backend precede the narrowly delegated frontend push/status check. Coordinator prepares the existing exact dry-run command, names-only environment requirements, counts/refusal shape and pre-write backup requirement. No dry run, backup, data repair, worker invocation or hosted SQL is delegated to Codex. Fred runs FG-7a and returns real counts/reasons for planner review before any apply. A governance refusal is valid and leaves the affected history unrepaired. Owner stays ITO and status in-progress.
+
+## Verified by — preparation only
+
+- [FG-7a command and bounded preparation](../evidence/fg6-fg8-acceptance-2026-10-27.md#fg-7a-prepared-for-fred--not-executed)
