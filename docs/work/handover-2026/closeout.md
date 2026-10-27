@@ -33,6 +33,8 @@ Fred reported 0037 applied to dev-hosted; read-only post-checks passed on 2026-1
 
 ## Retained limitations
 
+- APPROVAL-09 Amendment1: Fred classifies the Hello Clyde finding as course material: one embedded AWS101 chunk matches; prior history, own attachments/display name/memory and attachment ownership mismatches are zero. No cross-user data was reported. Names in course material can reach the model because the sanitizer covers only emails and explicit name: patterns. Per-request retrieval results are not retained, so this is the only source found, not causal proof. A separate prompt-only TUTOR-REQ-019 fix is authorized; sanitizer changes are not.
+
 - WI-26 —open, in-progress, owner ITO: API staff guards, student read admission and0038 hosted policy metadata are verified; Fred accepts FG-6 with the Lane DB grant finding. Frontend publication and FG-9 acceptance remain separate. Thirteen student mutation methods are unchanged and remain a follow-up finding.
 - WI-24 —open, in-progress, owner ITO: guarded repair implementation and 14 local proof groups pass. Actual legacy history remains separate until the human gates. `refused: governance ambiguity` is a valid safe outcome, never permission to change governance records or research policies.
 - WI-25 —open, in-progress, owner ITO: independent paging and0039 hosted index metadata are verified; Fred accepts FG-6. Frontend publication and live acceptance remain separate. Legacy summary/statistics limits remain 20/25/200/2,000 as documented. No lifetime aggregate claim.

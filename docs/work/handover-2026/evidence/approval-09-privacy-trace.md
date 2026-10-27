@@ -4,7 +4,7 @@ Source boundary: eb9409a8dc5617f01f9dc20d888775009894ec78. Fred reports that a T
 
 ## Result and classification boundary
 
-**Origin not yet classified.** Source inspection does not establish which input contained the name for this request. No cross-user leak has been demonstrated, and this is not a claim that one is ruled out. Fred must run the scoped count query privately and return counts only. A cross-user leak finding stops all APPROVAL-09 work immediately. No name match alone proves identity leakage or the exact retrieved model input.
+**Classified by Fred as course material under APPROVAL-09 Amendment1.** Fred reports one embedded AWS101 chunk containing the name; prior history, attachments, own display name and memory tables have zero matches, and attachment ownership mismatches are zero. Fred reports no cross-user data. Codex did not run the query or retrieve any rows. Retrieval results are not retained per request: this is the only matching source found, not proof that the chunk entered that particular model call. A later cross-user finding still stops all work.
 
 The current code has no Clyde literal in production application source. Ordinary proper names survive the sanitizer. Course material, this user's prior turns/current question, and owned attachment filenames/text can therefore supply the name. A generated name with no matching retained input is also possible; do not force an unsupported classification into one of the three requested outcomes.
 
@@ -43,4 +43,17 @@ The offending answer is excluded from the prior-history window, avoiding the cir
 - Any ownership mismatch or evidence of foreign private context means **cross-user leak investigation / immediate stop and report**. A count of zero outside a valid target is not proof of safety. Do not expand the search to other users' content.
 - If all candidate counts are zero, or more than one input could explain the name, classification remains unresolved. Fred/planner review is required before any fix or further access.
 
-The prepared source audit is complete; incident classification is pending Fred's counts and planner review. No fix, hosted action or repair was performed.
+The source audit and Fred-provided classification are complete. The earlier unresolved hypotheses above retain their diagnostic limits. Amendment1 now authorizes a separate _SYSTEM-only no-name-greeting branch with E1 AST proof, extended existing tests and full API/enrollment checks. No sanitizer fix, hosted action or repair is authorized. It merges with the frontend work only after all checks; Fred deploys the backend and separately delegates publication.
+
+## Fred-provided counts —2026-10-27
+
+| Candidate | Reported count |
+| --- | --- |
+| Embedded AWS101 chunks containing the name |1 |
+| Prior history matches |0 |
+| Own attachment matches |0 |
+| Own display-name matches |0 |
+| Memory tables/matches |0 |
+| Attachment ownership mismatches |0 |
+
+No identifiers, raw content or other users' data are retained. Classification: course material, the only matching source found. It is not a request-level retrieval trace or proof of causal attribution.

@@ -44,3 +44,10 @@ After Fred says his edits are finished, Codex checks the complete diff against t
 
 - [Read-only privacy trace](evidence/approval-09-privacy-trace.md)
 - [Counts-only SQL prepared for Fred, not run](evidence/approval-09-clyde-counts.sql)
+
+
+## Amendment1 — Fred classifies Hello Clyde and authorizes a prompt-only fix
+
+Finding: course material. Fred reports1 embedded AWS101 chunk containing the name; prior history, own attachments/display name/memory and ownership mismatch counts0, with no cross-user data. The source is the only match found; no per-request retrieval trace proves attribution. Record names from course material can reach the model under the existing email/name:-pattern sanitizer.
+
+Named exception to the backend-change stop: branch codex/no-name-greeting from main. Coordinator first specifies TUTOR-REQ-019, then changes only the existing _SYSTEM literal to prohibit addressing the student by name and treat names in material as people in that material. Extend only the existing small-talk prompt test. E1 whole-module proof plus all19 identical guarded functions, full API and enrollment matrix required. No other backend/config/migration/sanitizer change. Merge with Fred's frontend only after all its checks. Fred runs make deploy and separately delegates the frontend push; Codex performs no deploy, push or hosted action.
