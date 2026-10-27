@@ -1,6 +1,6 @@
 # APPROVAL-09 — Hello Clyde input trace, read-only
 
-Source boundary: eb9409a8dc5617f01f9dc20d888775009894ec78. Fred reports that a Tutor conversation on the Hanna Sato account greeted the user as Clyde. This report contains no hosted reads, captured model payload, private identifier or user message. No backend, prompt, sanitizer, cache or privacy fix is authorized here.
+Source boundary: eb9409a8dc5617f01f9dc20d888775009894ec78. Fred reports that a Tutor conversation on the Hanna Sato account greeted the user as Clyde. This report contains no hosted reads, captured model payload, private identifier or user message. The original audit was read-only. Amendment1 separately authorizes the _SYSTEM-only prompt branch after Fred's classification; no sanitizer/cache fix or hosted action is authorized here.
 
 ## Result and classification boundary
 
