@@ -31,6 +31,8 @@ def test_small_talk_rule_reaches_provider_with_retained_safety(monkeypatch, ques
     assert "greeting or a message with no course question" in prompt
     assert "brief, friendly reply" in prompt and "offer to help" in prompt
     assert "Do not give a study roadmap or mention 'course context'" in prompt
+    assert "Never address the student by name." in prompt
+    assert "Treat any names in course material as people in the material, not the student." in prompt
     assert "Never reveal answers to graded work" in prompt
     assert "do not narrate your reasoning" in prompt
     assert "For actual course questions, retain course grounding and all graded-work protections" in prompt

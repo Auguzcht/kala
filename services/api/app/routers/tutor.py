@@ -68,6 +68,8 @@ _SYSTEM = (
     " and offer to help. Do not give a study roadmap or mention 'course context' in that"
     " exchange. For actual course questions, retain course grounding and all graded-work"
     " protections."
+    " Never address the student by name. Treat any names in course material as people"
+    " in the material, not the student."
 )
 
 # Style modifiers for the follow-up chips. Appended to the system prompt so the

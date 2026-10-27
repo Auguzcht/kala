@@ -154,8 +154,8 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 ### TUTOR-REQ-019: Never use a material person's name to address the student
 - Rule: The Tutor system prompt says never address the student by name. Any names in course material refer to people in that material, not the student. Keep normal discussion of named people in curriculum possible without turning those names into the learner's identity. This is a system-prompt-only instruction, not a new sanitizer, identity lookup, classifier or provider/configuration change.
 - Acceptance: The existing mocked-provider small-talk tests assert both instructions reach the actual provider-bound system prompt for default/detail styles, alongside all retained teaching/safety rules. Whole-module AST proof permits only the one _SYSTEM string literal; all19 existing enrollment-guarded functions remain identical. Full API suite and the116-case enrollment matrix pass. Live model behavior remains Fred's deploy/FG-9 check; a mocked assertion does not establish compliance.
-- Status: planned; specified before implementation under APPROVAL-09 Amendment1.
-- Verified by: pending prompt-only implementation, extended test_tutor_small_talk_approval08.py, AST proof and full API/enrollment checks.
+- Status: implemented locally; combined frontend integration, Fred deployment and live greeting acceptance remain pending under APPROVAL-09 Amendment1.
+- Verified by: test_tutor_small_talk_approval08.py assertions for both styles; full API1016 and enrollment116 pass; whole-module E1 AST and all19 guarded functions remain identical apart from _SYSTEM. No live compliance claim.
 
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
