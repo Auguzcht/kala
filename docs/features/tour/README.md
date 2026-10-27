@@ -32,23 +32,25 @@ Orient students and instructors within the real workspace using guided highlight
 - Status: implemented
 - Verified by: `apps/web/src/components/shell/tests/tour.browser.mjs`, local completion/dismissal, Back, Skip and Escape checks at 1440px/375px; synthetic APIs only. No hosted acceptance claim.
 
-### TOUR-REQ-002: Choose a prepared topic and reuse saved test context
-- Rule: before student navigation, fetch bank status and saved sets; in bank mode choose usable non-no_material skill with >=5 MCQs. Legacy mode requires cached ready lesson or module-associated saved set >=5. Rank cached lesson, current topic and existing sets; pin lesson/study/test steps to that one skill. Prefer an unfinished saved set; completed-only context must not automatically retake/create a set.
-- Acceptance: no eligible topic leaves the user in place with availability message; cancelling confirmation invalidates pending selection; test creation/start/retake remain explicit student actions.
-- Status: implemented
-- Verified by: static `CourseShell.tsx::startTour` and `student-tour.ts::createStudentTour`. No real-course availability acceptance is claimed.
+### TOUR-REQ-002: Build a fixed read-only plan before the first step
+- Rule: Before step1, build the full role-specific plan using read-only GETs/counts-only reads and existing local state. Student outline is TOUR-REQ-007's twelve steps. Instructor outline order remains unchanged. Freeze N and step order for the run; x of N never jumps. Each step has target and fallback versions chosen without performing learning work. The Start tour control follows DESIGN.md C1: one pending indicator in that activated disabled control only.
+- Rule: No bank-status wake, lesson generation/assignment, item claims/exposures or other write-capable read is allowed merely to plan or demonstrate the tour. Page navigation must not silently bypass this boundary through ordinary feature GET side effects. If a step cannot be demonstrated within owned paths without a write, stop and report; synthetic interception is not proof of production read-only behavior.
+- Acceptance: Happy, empty and mixed course states have a complete fixed plan before step1. Existing counts-only reads create no learning/action writes. No step count/order change while walking, no submit/start/rating/Continue click, and zero mutating HTTP requests. Any unknown plan data leads to a same-page fallback, never fabrication or automatic content creation.
+- Status: planned; APPROVAL-08 TOUR-2 supersedes the former prepared-topic/bank-status plan.
+- Verified by: pending TOUR-2 source audit and desktop/mobile browser matrix.
 
 ### TOUR-REQ-003: Observe learning actions without performing them
-- Rule: copy follows the current header, answering and results surfaces; Tutor covers history groups, rename/pin and file attach; Study explains end-of-deck replay versus checking for more cards; Test explains saved results; Twin explains the recent evidence ledger. Optional screens are skipped rather than created. Click steps are UI-only. StudentAction steps observe completion selectors and provide Skip, skipping dependent steps. Prefill only writes to an empty textarea; never submits or overwrites a draft. Student must choose test creation/start, answer checks/questions, rate recall and send tutor text. Instructor tour highlights decision buttons without clicking them.
+- Rule: copy follows the current header, answering and results surfaces; Tutor covers history groups, rename/pin and file attach; Study explains end-of-deck replay versus Get new cards; Test explains saved results; Twin explains the independently paged evidence ledger and Load older activity, without implying lifetime statistics. Missing screens use their fixed-plan fallback rather than being created or silently skipped. Click steps are UI-only. StudentAction steps observe completion selectors and provide Skip, skipping dependent steps. Prefill only writes to an empty textarea; never submits or overwrites a draft. Student must choose test creation/start, answer checks/questions, rate recall and send tutor text. Instructor tour highlights decision buttons without clicking them.
 - Acceptance: Next/Skip never makes an answer, rating, retake, recommendation decision or tutor send request. Draft examples remain editable. Learner actions taken manually during the tour are normal real actions.
 - Status: implemented
 - Verified by: tour browser network spy plus route/config allowlist tests. Real components receive synthetic read responses; Next/Back/Skip/Escape and draft prefill issue zero mutating HTTP requests. Normal destination GETs can still write content/queue state (finding below).
 
-### TOUR-REQ-004: Wait for real targets and skip unavailable steps predictably
-- Rule: bind route/search before driving; support instructor student-ID paths and hub wildcard matching. Wait up to 8 seconds for a normal visible target; explicitly optional targets wait at most 1.2 seconds. Data wait states and real student-action waits are bounded to 120 seconds. Unavailable targets skip to the next available step with one short message per run; action timeout skips its dependent sequence. Each step checks its own visible target, including conditional Diagnostic/results, roster and recommendation states; cleanup destroys obsolete instances. Back restores earlier available steps without repeating a UI click. Learner routes reuse an actual visited ID or follow a UI-only record link; never navigate to a literal placeholder. Missing learner context skips the record sequence instead of inventing a learner.
-- Acceptance: no highlight anchors to a missing skeleton target; route transitions resume once matched; completed Diagnostic, no material, empty roster and empty recommendations continue cleanly. Next, Skip, Back and Escape work on desktop and at 375px.
-- Status: implemented
-- Verified by: `tour.browser.mjs` normal/conditional student and instructor walks, completed Diagnostic, no-material and empty roster/recommendations; `tour-route.test.mjs` concrete-ID/segment checks. Back and every highlight are revalidated independently.
+### TOUR-REQ-004: Keep every step visible through a bounded fallback
+- Rule: Every planned step has a target version and a centered no-highlight fallback on the same page, each with short copy. Wait until page loading ends, with a bounded wait; on timeout or absent target use fallback. No silent skips or toasts. An unexpected missing target emits only a dev-only console warning. Back works across pages without repeating a persistence action; x of N remains fixed.
+- Rule: Highlight exactly the intended element with fixed padding, not an overbroad ancestor row/container. A step explicitly about a card or row targets that named card/row; button steps target only the button. The popover never obscures its own target and flips placement as needed. Each version uses at most two short sentences, no semicolons or material-availability wording. Keep keyboard and reduced motion.
+- Acceptance: At375px/1440px in happy/empty/mixed seeded states, all12 student steps run in order, each has highlight or fallback, no toast/mutation, constant total and a highlight within the target's specified padding. Instructor audit applies the same rules without restructuring its outline. A truly removed target stops for coordinator definition/spec resolution, never deletion/rename of an anchor to silence the test.
+- Status: planned; APPROVAL-08 TOUR-2 replaces silent-skip behavior.
+- Verified by: pending TOUR-2 complete matrix; no partial merge if cutoff is missed.
 
 ### TOUR-REQ-005: Honor reduced motion and accessible orientation
 - Rule: use Driver.js progress/close controls; scroll targets into view before positioning; disable smooth scrolling under prefers-reduced-motion. Copy describes topics/actions plainly and uses supportive instructor language.
@@ -62,6 +64,13 @@ Orient students and instructors within the real workspace using guided highlight
 - Acceptance: Keep all seven comparisons, no skip/only/todo or deleted anchors. Cover every current tour target, not just the original seven. Run old verifier before E3, new verifier before lanes and after merges; full desktop/mobile tour suite after integration must pass with zero mutating requests, reporting its new assertion count beside historical616. A disappeared target stops for explicit tour-definition/spec resolution.
 - Status: planned
 - Verified by: pending APPROVAL-08 E3 coordinator proof and integrated tour rerun.
+
+### TOUR-REQ-007: Follow the twelve-step student outline
+- Rule: Before starting, build these twelve steps in this order. Each has target/fallback copy and stable progress: (1) workspace Next up card, fallback “Kala suggests your next step here.”; (2) workspace Your twin at a glance; (3) Diagnostic start, fallback on Diagnostic “Your baseline check opens when its questions are ready. Until then, practice in Skills.”; (4) Skills first row, fallback “Skills appear here once your course is set up.”; (5) Lesson content and Continue, explain only and never click; (6) Lesson chat dock button; (7) Study Start studying button only and due count; (8) centered completion explanation, never start a deck: Go through these again replays this session and Get new cards checks new/due cards; (9) saved Test sets or New practice set card; (10) Tutor composer; (11) Tutor history/menu covering rename/pin/delete without performing them; (12) Twin evidence/Load older activity, fallback “Your learning evidence will show here as you practice.” Steps expected always present still retain an unexpected-absence fallback under TOUR-REQ-004.
+- Rule: TOUR-2 submits required anchor locations first. U2/T2 add only owned attribute edits, coordinator merges those anchors before TOUR-2 rebases. A required anchor in a07-protected path stops for a named resolution. TOUR-2 owns tour shell/definitions and matching tour browser tests, never E3. U2 does not edit those tour paths. Instructor changes repair only violations of the shared rules, no outline restructure.
+- Acceptance: Complete happy/empty/mixed student runs at375px/1440px, fixed twelve steps, exactly one target or centered fallback per step, no toasts or mutating requests, bounded loading wait, correct padding/placement and cross-page Back. Preserve E3 and current PracticePanel comment. All three states must pass before integration cutoff or no partial merge.
+- Status: planned
+- Verified by: pending APPROVAL-08 TOUR-2 anchor proposal, source no-write proof and complete browser matrix.
 
 ## API contract
 
@@ -79,6 +88,9 @@ Tour-specific persistence is only localStorage dismissal per user/role; ephemera
 No direct model call from the runner or sample-text generation. Examples are deterministic strings; sending them remains the student's action. Navigating to a lesson with no cached ready content can still invoke normal first-open generation, and availability checks can wake bank work.
 
 ## Edge cases and known limits
+
+The earlier skip/GET-side-effect notes below describe the pre-TOUR-2 implementation. APPROVAL-08 requires fixed fallbacks and strictly read-only demonstration; those notes do not waive TOUR-REQ-002/004/007. Source integration remains pending.
+
 - Missing/removed or hidden anchors are skipped; an empty class still walks through its available overview targets and omits learner-dependent steps.
 - Optional results/Study-completion steps never create a session, submit answers or rate cards to reach their targets. The normal flow may skip them; the browse-step copy also explains the eventual end controls.
 - Legacy availability can accept a cached ready lesson without five prepared questions, despite the unavailable message referring to five questions.
@@ -124,6 +136,7 @@ The coordinator released the approved DOCS-HYGIENE merge; the rebase completed w
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Define fixed read-only twelve-step student plan, centered fallbacks, bounded wait, no toasts and target geometry; instructor rules audit without restructure | APPROVAL-08 Amendment4, TOUR-2 | TOUR-REQ-002/003/004/007 |
 | 2026-10-27 | Separate pinned historical AST scope attestation from exhaustive current tour-target checks before approved UI changes | APPROVAL-08 Amendment3, coordinator-only E3 | TOUR-REQ-006 |
 | 2026-10-25 | Refresh current UI anchors/copy; skip unavailable conditional steps; add Back and synthetic zero-mutation acceptance | User-authorized TOUR-REFRESH | TOUR-REQ-001, TOUR-REQ-003, TOUR-REQ-004, TOUR-REQ-005 |
 | 2026-10-25 | Specify per-step visible-target checks, bounded optional skips and remembered concrete learner routes before runner changes | TOUR-REFRESH continuation in the existing UI worktree | TOUR-REQ-001, TOUR-REQ-003, TOUR-REQ-004, TOUR-REQ-005 |
