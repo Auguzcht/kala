@@ -185,6 +185,10 @@ None added. Reviewing an existing proposal or recommendation does not introduce 
 ### Backend usage
 `ai/prescriber.py::_model_context` allow-lists pseudonym, aggregate numbers and skill name/Bloom/estimate/attempts; no display name/email/LMS ID/raw event row is included. Shared router uses the configured default model; malformed/unavailable output falls back to deterministic heuristic suggestions with source=heuristic. Cleanup bounds title/rationale/evidence counts and numeric confidence/gain. This schema boundary is narrower than raw-record serialization, but skill text still relies on limited shared de-identification. No accuracy guarantee is implied by numeric confidence.
 
+The recommendation proposer calls the router's default role, not the Tutor chat role. Configuration names are OPENROUTER_MODEL_DEFAULT when AI_PROVIDER selects OpenRouter, or BEDROCK_MODEL_DEFAULT for Bedrock. The OpenRouter fallback setting is OPENROUTER_MODEL_FALLBACK. These are setting names only. Fred privately confirmed on 2026-10-27 that the hosted proposer uses a paid :floor model, not :free, and closed drawer finding 4 with no configuration change. The complete current hosted model ID was not supplied to this investigation and is not inferred from repository defaults.
+
+Recommendation source is stored when the proposal is generated and rendered from that saved row. The displayed minimax/minimax-m3:free is historical proposal-time source metadata, not a read of current configuration. Minor ITO finding under INSTR-REQ-006: prescriber.recommend returns get_model_for("default") after the router answers, so a provider fallback answer is still labelled with the configured primary model rather than the actual responding model. Preserve that finding for the provider/provenance lane. This frontend round changes neither routing nor configuration nor stored recommendations.
+
 ## Edge cases and known limits
 
 Network errors, fast responses, slow responses, keyboard activation, reduced motion and repeated clicks are covered. This local implementation does not deploy changes to the separate hosted instructor site. Duplicate enrolled/LTI identities require a separately reviewed human-run repair; never merge by display name in the UI.
@@ -243,6 +247,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Record Fred's paid hosted proposer confirmation, historical saved source label and minor fallback provenance finding, with no config change | Fred closes drawer item 4, WI-34 | INSTR-REQ-006 |
 | 2026-10-27 | Define course rank, explicit evidence windows, neutral zero and counts-only identity gate before learner standing edits | Fred's instructor learner drawer findings and WI-24 identity constraint, WI-34 | INSTR-REQ-012, INSTR-REQ-003/005 retained |
 | 2026-10-27 | Record local unified Next implementation and the final sequential browser checks while retaining human/hosted gates | Fred's APPROVAL-09 unified-pager request, WI-34 | INSTR-REQ-010, TWIN-REQ-011 |
 | 2026-10-27 | Route assigned Tutor Start to an editable fresh-chat topic draft without changing plan decisions or other destinations | Fred's APPROVAL-09 assigned Tutor Start request, WI-34 | INSTR-REQ-007, TUTOR-REQ-018 |
