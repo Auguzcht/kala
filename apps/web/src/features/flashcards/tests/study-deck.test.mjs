@@ -87,8 +87,9 @@ async function mountDeck({ cards = [card('first'), card('second')], tracked = ca
   });
   await module.evaluate();
   let renderer;
+  let componentProps = { courseId: 'course', onExit() {}, mode };
   await act(async () => { renderer = create(React.createElement(module.namespace.FlashcardDeck,
-    { courseId: 'course', onExit() {}, mode })); });
+    componentProps)); });
   function button(label) { return renderer.root.findAllByType('button').find((node) => node.children.join('') === label); }
   async function click(label) {
     const node = button(label);
@@ -98,10 +99,16 @@ async function mountDeck({ cards = [card('first'), card('second')], tracked = ca
   }
   return { calls, button, click, finishRating: async () => act(async () => {
       reviewHook.isPending = false; pendingRating.onSuccess({ dueAt });
-      renderer.update(React.createElement(module.namespace.FlashcardDeck, { courseId: 'course', onExit() {}, mode }));
+      renderer.update(React.createElement(module.namespace.FlashcardDeck, componentProps));
     }), replaceServerDeck: async (next) => act(async () => {
       deckHook.data = { ...data, ...next };
-      renderer.update(React.createElement(module.namespace.FlashcardDeck, { courseId: 'course', onExit() {}, mode }));
+      deckHook.isLoading = false;
+      renderer.update(React.createElement(module.namespace.FlashcardDeck, componentProps));
+    }), changeScope: async (nextProps, nextData) => act(async () => {
+      componentProps = { ...componentProps, ...nextProps };
+      deckHook.data = nextData ? { ...data, ...nextData } : undefined;
+      deckHook.isLoading = nextData === null;
+      renderer.update(React.createElement(module.namespace.FlashcardDeck, componentProps));
     }), finishNew: async () => act(async () => { resolveNew(); }), text: () => JSON.stringify(renderer.toJSON()),
     unmount: async () => act(async () => renderer.unmount()) };
 }
@@ -297,5 +304,33 @@ test('STUDY-REQ-006 repeated activation before rerender issues one due/new fetch
  await deck.finishNew();
  assert.match(deck.text(),/No new cards right now/);
  assert.equal(deck.calls.reviews.length,1);
+ await deck.unmount();
+});
+
+for (const scope of [{courseId:'next-course'}, {skillId:'next-skill'}, {mode:'all'}]) {
+ test(`STUDY-REQ-006 changed scope starts a new session: ${JSON.stringify(scope)}`, async () => {
+  const deck=await mountDeck({cards:[card('shared')]}); await recall(deck);
+  assert.match(deck.text(), /Study complete/);
+  await deck.changeScope(scope, {courseId:scope.courseId??'course',mode:scope.mode??'review',sessionId:'next-scope-session',cards:[{...card('shared'),skillId:scope.skillId??'skill',prompt:'New scope card'}]});
+  assert.match(deck.text(), /New scope card/);
+  assert.doesNotMatch(deck.text(), /Study complete|Prompt shared/);
+  await recall(deck);
+  assert.equal(deck.calls.reviews.length, 2, 'old posted-rating guard must not survive a genuine scope change');
+  assert.equal(deck.calls.reviews[1].sessionId, 'next-scope-session');
+  assert.notEqual(deck.calls.reviews[0].idempotencyKey,deck.calls.reviews[1].idempotencyKey);
+  await deck.unmount();
+ });
+}
+
+test('STUDY-REQ-006 changed scope clears the old session while its query is loading', async () => {
+ const deck=await mountDeck({cards:[card('old-course')]}); await recall(deck);
+ await deck.changeScope({courseId:'next-course'},null);
+ assert.doesNotMatch(deck.text(),/Study complete|Prompt old-course/);
+ assert.equal(deck.button('Show answer'),undefined);
+ await deck.replaceServerDeck({courseId:'next-course',sessionId:'new-query',cards:[card('new-course')]});
+ assert.match(deck.text(),/Prompt new-course/);
+ assert.doesNotMatch(deck.text(),/Study complete|Prompt old-course/);
+ await recall(deck);
+ assert.deepEqual(deck.calls.reviews.map(args=>args.itemId),['old-course','new-course']);
  await deck.unmount();
 });

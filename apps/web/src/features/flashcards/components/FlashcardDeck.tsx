@@ -80,7 +80,7 @@ function StateBadge({ state }: { state: FlashcardCard["state"] }) {
   );
 }
 
-export function FlashcardDeck({
+function FlashcardSession({
   courseId,
   skillId,
   mode = "review",
@@ -974,4 +974,14 @@ export function FlashcardDeck({
       </StudyStream>
     </StudySurface>
   );
+}
+
+/** The session snapshot lasts only within this explicit learning scope. */
+export function FlashcardDeck(props: Parameters<typeof FlashcardSession>[0]) {
+  const scopeKey = JSON.stringify([
+    props.courseId, props.skillId ?? null, props.mode ?? "review",
+    props.practiceSetId ?? null, props.practiceAttemptId ?? null,
+    [...(props.missedItemIds ?? [])].sort(),
+  ]);
+  return <FlashcardSession key={scopeKey} {...props} />;
 }
