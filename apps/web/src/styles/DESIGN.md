@@ -32,6 +32,18 @@ Rules:
 - **Never encode state by color alone.** Pair color with an icon, shape, or label. The heatmap encodes value plus a secondary cue (value label or fill pattern).
 - Charts use the brand ramp via `--chart-1..6` (ink, slate, orange, gold, green — red last, at-risk axis only).
 
+### DESIGN-REQ-001: Text-selection colors
+
+Approved APPROVAL-09,2026-10-27. Define semantic selection tokens in globals.css: `--selection-background` is `#BCD3F4`; `--selection-foreground` uses the existing ink token. Apply them to text selection, including input/textarea selection, without changing the primary brand token to recolor other controls. Preserve text contrast and native selection behavior. The new blue is scoped to text-selection feedback, not a new decorative brand palette.
+
+At the approved base there is no authored global ::selection rule in globals.css. Input.tsx's selection:bg-primary / selection:text-primary-foreground utilities are the explicit dark-selection source found in code. Fred implements the token/global rule and reconciles local overrides; do not claim an unobserved global rule caused every selection. Verify selected body and editable text in both themes and at375px/1440px.
+
+### DESIGN-REQ-002: Shared content and dock column edges
+
+Approved APPROVAL-09,2026-10-27. Study and Tutor message/content columns and their corresponding dock containers share the same left/right column edges at every viewport. Use one consistent max-width/gutter contract; do not independently combine outer footer padding, inner column padding and dock padding so one becomes narrower or shifts sideways. Textarea internal padding is distinct from the outer dock edge. Preserve scroll ownership, bottom clearance, action state, empty/attachment layouts, reduced motion and the scoped dock shape exceptions.
+
+The U2 StudyStream padding move is a starting finding, not a frozen pixel requirement. Compare actual content-card/message-container and dock bounding rectangles at375px/1440px, including Tutor empty and conversation states, and Study action/compose modes. Fred owns the implementation; no source UI change is made by the coordinator.
+
 ## Radius and shape
 
 - Base `--radius` is `0.25rem`. Interactive elements 2–4px, data surfaces 0. Not the default pill or blob.
@@ -116,3 +128,10 @@ Responsive to mobile, visible keyboard focus (the orange ring), reduced motion r
 - Do not round everything into pills. Boxy 2–4px radius; pills were the previous system's mistake.
 - Do not let the chevron become decoration; the previous chevron mark and the old hornbill are superseded by the current Kala logo (`public/Kala-Logo.png`).
 - Do not import Aceternity / Tailark / Magic UI flourishes into the daily-use app surfaces. Marketing components stay in `src/components/marketing/`.
+
+
+## Change log
+
+| Date | Change | Authority / IDs |
+| --- | --- | --- |
+| 2026-10-27 | Define selection background token and common content/dock edges before Fred's direct polish | APPROVAL-09; DESIGN-REQ-001/002 |

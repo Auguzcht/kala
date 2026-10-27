@@ -151,6 +151,20 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Status: blocked after delegated read-only FG-L stopped on actual field user_id_prefix; raw data is local only, not retained.
 - Verified by: T2 executed the allowed discovery/query and stopped before aggregation under Fred's privacy condition. Metrics and primary/fallback attribution are unavailable, not zero; configuration stays unchanged. WI-31 plans the separate diagnostics follow-up. No raw values retained.
 
+### TUTOR-REQ-017: Copy a displayed message without a server action
+- Rule: Tutor user messages and completed Kala replies expose an accessible Copy control using the browser clipboard API. Copy only that message's text, without initials, status/control text, other turns or HTML execution. Show “Copied” only after the clipboard promise succeeds; report denied/unavailable clipboard access without false success. Cover saved and locally returned/unsaved messages. Pending answer placeholders have nothing to copy. Controls remain keyboard/touch accessible and use existing tokens.
+- Rule: This is frontend-only. Copy never sends, uploads, edits, deletes or makes an API request. Sent-message editing remains deferred under TUTOR-REQ-015 / WI-29; no edit control or edit-message work is authorized. Shared Study components must keep their current default behavior outside Tutor.
+- Acceptance: Exact selected-message content, both roles, saved/local messages, clipboard success/failure/unavailability, repeated activation, keyboard/touch and375px/1440px. No mutating request and no edit affordance.
+- Status: planned; Fred implements under APPROVAL-09 after this specification.
+- Verified by: pending Fred's edits and final affected Tutor browser checks; no implementation or live acceptance claim.
+
+### TUTOR-REQ-018: Start an assigned Tutor item with an unsent skill draft
+- Rule: “From your instructor” Start for a Tutor plan item opens the new-chat Tutor surface in the same validated course, with an editable draft about the assigned skill. Do not reopen the previously selected conversation or send automatically. Reuse the existing frontend prefill behavior: populate an empty draft without submission or overwriting another draft. No profile name, private history or implicit instructor-note payload is added.
+- Rule: Preserve lazy conversation creation on actual Send. Start alone does not create a persisted conversation, call ask, upload, complete a recommendation or change its decision/state. Use frontend state only; no backend/API/contract change or tour enablement is authorized.
+- Acceptance: Tutor Start reaches a new-chat surface, has the right skill context and nonempty unsent draft, makes zero mutating requests, allows editing, and asks only after an explicit Send. Other plan item actions and roles stay unchanged. Preserve existing draft/attachment recovery behavior.
+- Status: planned; the baseline only has tour textarea prefilling, not a reusable plan-to-Tutor navigation handoff. Fred must wire the frontend handoff without changing the backend or enabling the hidden tour.
+- Verified by: source audit of InstructorPlan.tsx, course/tutor.tsx, TutorComposer.tsx and TourRunner.tsx; implementation and workspace/Tutor browser checks pending.
+
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
@@ -174,6 +188,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Specify frontend-only message copy and new-chat unsent skill prefill before Fred edits; keep sent-message edit deferred | APPROVAL-09 | TUTOR-REQ-017/018; TUTOR-REQ-015 retained |
 | 2026-10-27 | Specify rename dialog, single waiting indicator, prompt-only small talk, planned images, conditional last-prompt editing and delegated read-only timing before implementation | APPROVAL-08, coordinator C1/C2 | TUTOR-REQ-005/010/012–016; DIAG-REQ-008 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |

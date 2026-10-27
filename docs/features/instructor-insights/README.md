@@ -107,10 +107,12 @@ This focused amendment defines visible feedback for instructor skill reviews and
 
 ### INSTR-REQ-010: Browse authorized learner evidence history
 - Rule: `GET /dashboard/{course_id}/students/{user_id}/evidence` uses TWIN-REQ-010's response, cursor and stable `(created_at DESC, id DESC)` paging contract. Enforce SEC's INSTR-REQ-009 staff/course/institution gate and target-student membership before evidence access. Correct instructors and same-institution admins are allowed; wrong role is 403, untaught/unavailable or foreign-institution course/learner is 404. Identity/presentation never grants new access.
-- Presentation: The shared ledger and instructor learner views keep ten-row pages and add “Load older activity” only with a next cursor. A successful active full-history request says “Showing N of this learner's activity”, where N is loaded rows. Preserve existing bounded statistics and legacy labels wherever full paging is inactive. Apply TWIN-REQ-010 cache/scope/reset/deduplication/failure/retry and keyboard/reduced-motion rules.
+- Presentation: The shared ledger and instructor learner views keep ten-row pages and add “Next on the last loaded page (TWIN-REQ-011)” only with a next cursor. A successful active full-history request says “Showing N of this learner's activity”, where N is loaded rows. Preserve existing bounded statistics and legacy labels wherever full paging is inactive. Apply TWIN-REQ-010 cache/scope/reset/deduplication/failure/retry and keyboard/reduced-motion rules.
 - Acceptance: Correct teacher and same-institution admin succeed; student, outside-course instructor, foreign-institution instructor/admin and unenrolled target are refused before data access. Cover TWIN-REQ-010 paging/cursor/limit scenarios, browser loading at 375px/1440px and zero evidence/XP writes from views.
 - Status: done-awaiting-confirmation; local integration verified, hosted acceptance pending.
 - Verified by: `services/api/tests/test_evidence_history.py`, `test_evidence_history_routes.py`, the local index/keyset fixture and Twin history/scope browser suites; no hosted acceptance claim.
+
+- APPROVAL-09 presentation amendment: the shared ledger removes its separate older-batch button. Next fetches older activity at the last loaded page under TWIN-REQ-011, for learner record and Twin drill-down alike. Keep all authorization, keyset, identity cache, error/unavailable/Retry states and instructor summary limits unchanged. Fred implements and final affected browser checks remain pending.
 
 ### INSTR-REQ-011: Distinguish loading, unavailable, failed and empty instructor views
 - Rule: Roster, at-risk, cohort stats/charts, heatmap and learner record/drill-down callers use existing UI primitives and tokens. Loading uses the current skeleton only while loading. Any failed request, including a refetch after cached success, is not an empty class, zero statistics or a stuck skeleton. For 403/404 show “This class isn't available to you”; for other failures show “Couldn't load the class, try again”, with Retry where meaningful. Successful empty data keeps the actual empty state.
@@ -222,6 +224,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Apply the shared single-pager control to instructor learner/Twin views while preserving H errors, keysets and guards | APPROVAL-09 | INSTR-REQ-010; TWIN-REQ-011 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | INSTR-REQ-008–011 |
 | 2026-10-25 | Define a minimum visible review interval and confirmed recommendation transition before implementation | Fred's direct instructor feedback request in WI-22; supersedes the old optimistic transition | INSTR-REQ-001, INSTR-REQ-002 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | INSTR-REQ-003 through INSTR-REQ-008 |
