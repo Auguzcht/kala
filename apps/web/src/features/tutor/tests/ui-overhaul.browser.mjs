@@ -1273,7 +1273,7 @@ try {
   await primitive.context.route("**/__lane_u_prompt_fixture", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: `<!doctype html><html><head><link rel="stylesheet" href="/src/styles/globals.css"></head><body><div id="root"></div><script type="module">
+      body: `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles/globals.css"></head><body><div id="root"></div><script type="module">
     import RefreshRuntime from '/@react-refresh';
     RefreshRuntime.injectIntoGlobalHook(window);
     window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
@@ -1298,8 +1298,8 @@ try {
       React.createElement('div',{id:'default-outer'},React.createElement(PromptInput,{id:'default-prompt',onSubmit:m=>{window.fixtureResult.submitted=m.files.length}},React.createElement(Probe),React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),
       React.createElement('div',{id:'opt-in-outer',ref:target},React.createElement(PromptInput,{id:'opt-in-prompt',dropTarget:target,onFilesSelected:files=>{window.fixtureResult.external+=files.length},onSubmit:()=>{}},React.createElement(PromptInputTextarea),React.createElement(PromptInputSubmit))),React.createElement(FloatingStudy),
       React.createElement('section',{id:'loading-fixtures'},busy?React.createElement(React.Fragment,null,
-        React.createElement(LoadingRegion,{label:'Loading roster',className:'grid grid-cols-2 gap-3'},React.createElement(Skeleton,{className:'h-16'}),React.createElement(Skeleton,{className:'h-16'})),
-        React.createElement(LoadingPanel,{label:'Preparing baseline…',lines:2}),React.createElement(AssistantBlock,{pending:true,pendingLabel:'Thinking…'})):React.createElement('p',null,'Ready')))}
+        React.createElement('div',{id:'loading-region-fixture'},React.createElement(LoadingRegion,{label:'Loading roster',className:'grid grid-cols-2 gap-3'},React.createElement(Skeleton,{className:'h-16'}),React.createElement(Skeleton,{className:'h-16'}))),
+        React.createElement('div',{id:'loading-panel-fixture'},React.createElement(LoadingPanel,{label:'Preparing baseline…',lines:2})),React.createElement('div',{id:'loading-assistant-fixture'},React.createElement(AssistantBlock,{pending:true,pendingLabel:'Thinking…'}))):React.createElement('p',null,'Ready')))}
     ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
     </script></body></html>`,
     }),
@@ -1357,12 +1357,34 @@ try {
       }),
       `WI-22 leading circular attachment at ${width}`,
     );
+    check(await primitive.page.locator('#loading-fixtures svg.animate-spin').count()===0
+      && await primitive.page.locator('#loading-fixtures [role=status]').count()===3,
+      `DIAG-REQ-008 three accessible waiting regions with zero loading spinners at ${width}`);
+    check(await primitive.page.locator('#loading-region-fixture [role=status]').getAttribute('aria-label')==='Loading roster'
+      && await primitive.page.locator('#loading-region-fixture [role=status]').getAttribute('aria-busy')==='true'
+      && await primitive.page.locator('#loading-region-fixture [data-slot=skeleton]').count()===2,
+      `DIAG-REQ-008 skeleton region preserves its accessible label and two blocks at ${width}`);
+    check(await primitive.page.locator('#loading-panel-fixture img').count()===1
+      && await primitive.page.locator('#loading-panel-fixture img').getAttribute('src')==='/Kala-Logo.png'
+      && await primitive.page.locator('#loading-panel-fixture p').count()===1
+      && await primitive.page.locator('#loading-panel-fixture p').textContent()==='Preparing baseline…'
+      && await primitive.page.locator('#loading-panel-fixture .bg-muted').count()===2,
+      `DIAG-REQ-008 loading card has one Kala mascot, one line and two skeleton blocks at ${width}`);
+    check(await primitive.page.locator('#loading-assistant-fixture [role=status]').count()===1
+      && await primitive.page.locator('#loading-assistant-fixture [role=status] p').count()===1
+      && await primitive.page.locator('#loading-assistant-fixture [role=status]').textContent()==='Thinking…',
+      `TUTOR-REQ-010 shared assistant has exactly one model waiting line at ${width}`);
+    check(await primitive.page.locator('#loading-panel-fixture img, #loading-panel-fixture .bg-muted, #loading-assistant-fixture [role=status] p').evaluateAll(elements=>
+      elements.length===4 && elements.every(el=>getComputedStyle(el).animationName==='none'
+        && getComputedStyle(el).transform==='none')),
+      `DIAG-REQ-008 loading mascot and skeletons stay static and model line honors reduced motion at ${width}`);
   }
-  check((await primitive.page.locator('#loading-fixtures svg.animate-spin').count())===3,
-    'DIAG-REQ-008 one shared spinner per skeleton, loading panel and assistant region');
-  check(await primitive.page.locator('#loading-fixtures svg.animate-spin').evaluateAll(elements=>
-    elements.every(el=>getComputedStyle(el).animationName==='none')),
-    'DIAG-REQ-008 waiting spinners honor reduced motion');
+  await primitive.page.emulateMedia({reducedMotion:'no-preference'});
+  check(await primitive.page.locator('#loading-panel-fixture img, #loading-panel-fixture .bg-muted').evaluateAll(elements=>
+    elements.length===3 && elements.every(el=>getComputedStyle(el).animationName==='none'
+      && getComputedStyle(el).transform==='none')),
+    'DIAG-REQ-008 loading mascot and card skeletons stay static with motion enabled');
+  await primitive.page.emulateMedia({reducedMotion:'reduce'});
   await primitive.page.evaluate(()=>window.setLoadingFixture(false));
   await primitive.page.locator('#loading-fixtures').getByText('Ready',{exact:true}).waitFor();
   check((await primitive.page.locator('#loading-fixtures svg').count())===0,
@@ -1735,10 +1757,11 @@ try {
     document.querySelector('button[aria-label="Attaching files"]'),
   );
   check(await cancelled.page.getByRole('button',{name:'Attaching files'}).isDisabled()
-    && await cancelled.page.getByRole('button',{name:'Attaching files'}).locator('svg.animate-spin').count()===1
-    && await cancelled.page.locator('svg.animate-spin').count()===1
+    && await cancelled.page.getByRole('button',{name:'Attaching files'}).getAttribute('aria-busy')==='true'
+    && await cancelled.page.getByRole('button',{name:'Attaching files'}).locator('svg').count()===1
+    && await cancelled.page.locator('svg.animate-spin').count()===0
     && await cancelled.page.locator('[data-tutor-file-card] svg.animate-spin').count()===0,
-    'TUTOR-REQ-009 upload spinner only in activated disabled Send, never file status');
+    'TUTOR-REQ-009 upload keeps one stable icon in disabled busy Send and no spinners');
   await cancelled.page
     .getByRole("button", { name: "New chat", exact: true })
     .filter({ has: cancelled.page.locator("svg") })
