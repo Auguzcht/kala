@@ -151,7 +151,6 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Status: blocked after delegated read-only FG-L stopped on actual field user_id_prefix; raw data is local only, not retained.
 - Verified by: T2 executed the allowed discovery/query and stopped before aggregation under Fred's privacy condition. Metrics and primary/fallback attribution are unavailable, not zero; configuration stays unchanged. WI-31 plans the separate diagnostics follow-up. No raw values retained.
 
-<<<<<<< HEAD
 ### TUTOR-REQ-017: Copy a displayed message without a server action
 - Rule: Tutor user messages and completed Kala replies expose an accessible Copy control using the browser clipboard API. Copy only that message's text, without initials, status/control text, other turns or HTML execution. Show “Copied” only after the clipboard promise succeeds; report denied/unavailable clipboard access without false success. Cover saved and locally returned/unsaved messages. Pending answer placeholders have nothing to copy. Controls remain keyboard/touch accessible and use existing tokens.
 - Presentation: On hover-capable devices, reveal a small rounded icon-only Copy button only within the corresponding message hover/focus region. Keyboard focus reveals it, and touch/no-hover devices keep it discoverable with a 44px target. Use the shared root-sidebar Tooltip primitive above the icon. Keep truthful Copied feedback in the tooltip and accessible status, preserve clipboard failure direction and avoid layout shifts.
@@ -167,6 +166,12 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Acceptance: Tutor Start reaches a new-chat surface, has the right skill context and nonempty unsent draft, makes zero mutating requests, allows editing, and asks only after an explicit Send. Other plan item actions and roles stay unchanged. Preserve existing draft/attachment recovery behavior.
 - Status: implemented locally for Fred's direct APPROVAL-09 assigned-start request, WI-34. The hidden tour remains untouched and human confirmation is pending.
 - Verified by: assigned-draft.test.mjs and ui-overhaul.browser.mjs, 339 assertions including assigned topic/title fallback, focused editable draft, staging, New chat, Enter/Send and zero automatic mutations at both widths. Final cumulative frontend regression run is recorded in WI-34.
+
+### TUTOR-REQ-019: Never use a material person's name to address the student
+- Rule: The Tutor system prompt says never address the student by name. Any names in course material refer to people in that material, not the student. Keep normal discussion of named people in curriculum possible without turning those names into the learner's identity. This is a system-prompt-only instruction, not a new sanitizer, identity lookup, classifier or provider/configuration change.
+- Acceptance: The existing mocked-provider small-talk tests assert both instructions reach the actual provider-bound system prompt for default/detail styles, alongside all retained teaching/safety rules. Whole-module AST proof permits only the one _SYSTEM string literal; all19 existing enrollment-guarded functions remain identical. Full API suite and the116-case enrollment matrix pass. Live model behavior remains Fred's deploy/FG-9 check; a mocked assertion does not establish compliance.
+- Status: implemented locally; combined frontend integration, Fred deployment and live greeting acceptance remain pending under APPROVAL-09 Amendment1.
+- Verified by: test_tutor_small_talk_approval08.py assertions for both styles; full API1016 and enrollment116 pass; whole-module E1 AST and all19 guarded functions remain identical apart from _SYSTEM. No live compliance claim.
 
 ### TUTOR-REQ-020: Load saved conversations and chat history with skeletons
 
@@ -192,13 +197,6 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Acceptance: Test empty/draft restoration, older/newer bounds, edited recall, current-chat scope, local unsaved prompts, reset after send/new chat/change, multiline boundaries, modifier/selection/IME handling and zero requests from arrow navigation. Verify Enter sends exactly the chosen prompt and no extra calls at 375px/1440px.
 - Status: done-awaiting-confirmation. Implemented locally under Fred's final APPROVAL-09 input-gesture request, WI-34.
 - Verified by: prompt-history.test.ts passes four units. prompt-history.browser.mjs passes 62 assertions at 375px/1440px for traversal, draft/caret restoration, native editing boundaries, chat/submit resets and zero service writes. ui-overhaul.browser.mjs passes 383 assertions, including saved, failed and returned-unsaved user prompts. Live keyboard acceptance remains pending.
-=======
-### TUTOR-REQ-019: Never use a material person's name to address the student
-- Rule: The Tutor system prompt says never address the student by name. Any names in course material refer to people in that material, not the student. Keep normal discussion of named people in curriculum possible without turning those names into the learner's identity. This is a system-prompt-only instruction, not a new sanitizer, identity lookup, classifier or provider/configuration change.
-- Acceptance: The existing mocked-provider small-talk tests assert both instructions reach the actual provider-bound system prompt for default/detail styles, alongside all retained teaching/safety rules. Whole-module AST proof permits only the one _SYSTEM string literal; all19 existing enrollment-guarded functions remain identical. Full API suite and the116-case enrollment matrix pass. Live model behavior remains Fred's deploy/FG-9 check; a mocked assertion does not establish compliance.
-- Status: implemented locally; combined frontend integration, Fred deployment and live greeting acceptance remain pending under APPROVAL-09 Amendment1.
-- Verified by: test_tutor_small_talk_approval08.py assertions for both styles; full API1016 and enrollment116 pass; whole-module E1 AST and all19 guarded functions remain identical apart from _SYSTEM. No live compliance claim.
->>>>>>> 65e539ab177c632b0b51de6857021a7c1cb42793
 
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -223,16 +221,13 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
-<<<<<<< HEAD
 | 2026-10-27 | Define validated navigation-state handoff, fresh-chat resume suppression, editable focused skill draft and explicit-submit-only behavior before implementation | Fred's APPROVAL-09 assigned Tutor Start request, WI-34 | TUTOR-REQ-018 |
 | 2026-10-27 | Specify explicit last-answer follow-up requests and truthful user turns for explanation chips before frontend implementation | Fred's APPROVAL-09 follow-up request, WI-34 | TUTOR-REQ-021 |
 | 2026-10-27 | Specify skeleton-only saved-chat and history loading with accessible status names and reduced-motion support | Fred's APPROVAL-09 loading-copy request, WI-34 | TUTOR-REQ-020 |
 | 2026-10-28 | Specify hover/focus copy icons with upward tooltip, emoji/contextual explanation chips and current-chat arrow-key prompt history before final freeze edits | Fred’s final Tutor polish and keyboard gesture requests, WI-34 | TUTOR-REQ-017/021/022 |
 | 2026-10-28 | Resume the remaining clipboard-only message-copy item found during the open-item audit, preserving no-send/no-edit and shared Study defaults | Fred’s APPROVAL-09 completion audit, WI-34 | TUTOR-REQ-017 |
 | 2026-10-27 | Specify frontend-only message copy and new-chat unsent skill prefill before Fred edits; keep sent-message edit deferred | APPROVAL-09 | TUTOR-REQ-017/018; TUTOR-REQ-015 retained |
-=======
 | 2026-10-27 | Require no name-based address and distinguish people in course material from the student; one _SYSTEM literal only | APPROVAL-09 Amendment1, Fred's course-material classification | TUTOR-REQ-019 |
->>>>>>> 65e539ab177c632b0b51de6857021a7c1cb42793
 | 2026-10-27 | Specify rename dialog, single waiting indicator, prompt-only small talk, planned images, conditional last-prompt editing and delegated read-only timing before implementation | APPROVAL-08, coordinator C1/C2 | TUTOR-REQ-005/010/012–016; DIAG-REQ-008 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
