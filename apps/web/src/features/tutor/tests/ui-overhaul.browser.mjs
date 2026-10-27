@@ -76,6 +76,8 @@ async function fixture(
     creates: 0,
     asks: 0,
     askRequests: [],
+    mutations: [],
+    plan: [],
     rejectAsk: false,
     uploads: 0,
     attachmentDeletes: 0,
@@ -124,6 +126,7 @@ async function fixture(
     if (!url.pathname.startsWith("/__lane_u_api__")) return route.continue();
     const path = url.pathname.slice("/__lane_u_api__".length),
       method = route.request().method();
+    if (method !== "GET") state.mutations.push({ path, method });
     const reply = (json, status = 200) => route.fulfill({ status, json });
     if (path === "/courses/synthetic-course")
       return reply({ id: "synthetic-course", title: "AWS101" });
@@ -324,7 +327,7 @@ async function fixture(
         sessionId: "synthetic-session",
         hasMore: false,
       });
-    if (path.endsWith("/plan")) return reply({ plan: [] });
+    if (path.endsWith("/plan")) return reply({ courseId: 'synthetic-course', plan: state.plan });
     return reply({});
   });
   return { context, page, state, errors };
@@ -341,6 +344,61 @@ const edgesOf = (locator) => locator.evaluate((el) => {
 });
 const matchingEdges = (a, b) => Math.abs(a.left - b.left) <= 1 && Math.abs(a.right - b.right) <= 1;
 try {
+  for (const width of [375, 1440]) {
+    const assigned = await fixture(width);
+    const title = 'Reinforce cloud cost comparison';
+    const topic = 'Compare cloud and traditional IT infrastructure';
+    assigned.state.messages = [{ id: 'old-answer', role: 'assistant', content: 'Existing saved chat content', style: 'default', createdAt: '2026-10-27T10:00:00Z' }];
+    assigned.state.plan = [
+      { id: 'assigned-tutor', title, kind: 'tutor', priority: 'high', status: 'approved', skillId: 'storage', skillName: topic, instructorNote: 'Instructor note is displayed but not automatically sent', assignedAt: null },
+      { id: 'assigned-practice', title: 'Assigned practice', kind: 'practice', priority: 'medium', status: 'approved', skillId: 'storage', skillName: topic, instructorNote: null, assignedAt: null },
+      { id: 'assigned-outreach', title: 'Talk with your instructor', kind: 'outreach', priority: 'low', status: 'approved', skillId: null, skillName: null, instructorNote: null, assignedAt: null },
+    ];
+    const start = async () => {
+      await assigned.page.goto('http://localhost:5173/course');
+      const row = assigned.page.getByText(title, { exact: true }).locator('../..');
+      await row.getByRole('button', { name: 'Start', exact: true }).click();
+      await assigned.page.waitForURL('http://localhost:5173/course/tutor');
+      await assigned.page.getByPlaceholder('Ask Kala…').waitFor();
+    };
+    await start();
+    const input = assigned.page.getByPlaceholder('Ask Kala…');
+    const initialText = await input.inputValue();
+    check(initialText.includes(topic) && /key ideas.*example/.test(initialText), `TUTOR-REQ-018 assigned Start seeds relevant topic at ${width}`);
+    check(await input.evaluate(el => el === document.activeElement) && await assigned.page.getByText('Existing saved chat content', { exact: true }).count() === 0, `TUTOR-REQ-018 fresh draft is focused without resuming saved chat at ${width}`);
+    check(assigned.state.mutations.length === 0 && !assigned.page.url().includes(topic) && !assigned.page.url().includes('conversation='), `TUTOR-REQ-018 Start has no mutations or prompt in URL at ${width}`);
+    check(!initialText.includes('Instructor note') && !initialText.includes('Demo learner'), `TUTOR-REQ-018 draft excludes note and profile at ${width}`);
+    const edited = initialText + ' Focus on running costs.';
+    await input.fill(edited);
+    await assigned.page.locator('input[type=file]').setInputFiles({ name: 'draft.txt', mimeType: 'text/plain', buffer: Buffer.from('Local staged attachment') });
+    await assigned.page.getByRole('button', { name: 'Remove draft.txt', exact: true }).waitFor();
+    check(await input.inputValue() === edited && assigned.state.mutations.length === 0, `TUTOR-REQ-018 rerender and staging preserve edits without upload at ${width}`);
+    await assigned.page.getByRole('button', { name: 'Remove draft.txt', exact: true }).click();
+    if (width < 1024) await assigned.page.getByRole('button', { name: 'Open chat history' }).click();
+    await assigned.page.getByRole('button', { name: 'New chat', exact: true }).filter({ has: assigned.page.locator('svg') }).click();
+    await assigned.page.waitForFunction(() => document.querySelector('#tour-tutor-input textarea')?.value === '');
+    check(await input.inputValue() === '' && assigned.state.mutations.length === 0, `TUTOR-REQ-018 New chat clears handoff without reapplying it at ${width}`);
+    assigned.state.plan[0].skillName = null;
+    await start();
+    const fallbackText = await input.inputValue();
+    check(fallbackText.includes(title), `TUTOR-REQ-018 missing skill uses assignment title at ${width}`);
+    await input.fill(fallbackText + ' Give me a concrete example.');
+    assigned.state.messages = [];
+    if (width === 375) await input.press('Enter');
+    else await assigned.page.getByRole('button', { name: 'Send message', exact: true }).click();
+    await assigned.page.waitForURL('**/course/tutor?conversation=created');
+    await assigned.page.locator('#tour-tutor-response').waitFor();
+    check(assigned.state.creates === 1 && assigned.state.asks === 1 && assigned.state.askRequests[0].question === fallbackText + ' Give me a concrete example.', `TUTOR-REQ-018 explicit Enter/Send creates new chat and asks edited draft once at ${width}`);
+    check(assigned.state.askRequests[0].conversation_id === 'created' && assigned.state.mutations.length === 2 && assigned.state.uploads === 0 && assigned.state.patches === 0, `TUTOR-REQ-018 submission uses fresh conversation without plan mutation at ${width}`);
+    await screenshot(assigned.page, 'assigned-tutor-submitted', width);
+    await assigned.page.goto('http://localhost:5173/course');
+    const outreach = assigned.page.getByText('Talk with your instructor', { exact: true }).locator('../..');
+    check(await outreach.getByRole('button').count() === 0, `INSTR-REQ-007 outreach keeps no invented CTA at ${width}`);
+    await assigned.page.getByText('Assigned practice', { exact: true }).locator('../..').getByRole('button', { name: 'Start', exact: true }).click();
+    await assigned.page.waitForURL('http://localhost:5173/course/skills');
+    check(assigned.errors.length === 0, `INSTR-REQ-007 other Start destination remains unchanged at ${width}`);
+    await assigned.context.close();
+  }
   for (const width of [375, 1440]) {
     const follow = await fixture(width);
     const original = 'What is object storage?';

@@ -85,6 +85,7 @@ This focused amendment defines visible feedback for instructor skill reviews and
 
 ### INSTR-REQ-007: Let instructors author direct actions and learners see only assigned work
 - Rule: direct intervention is source=instructor/status=approved immediately; supported kinds are practice, lesson, flashcards, tutor, diagnostic, outreach. Learner plan contains only approved/modified/completed, newest decided first, at most 20; omit model confidence, rationale and raw evidence. Outreach has no invented action link. No endpoint currently marks an action completed.
+- Presentation: Tutor Start opens a fresh Tutor draft under TUTOR-REQ-018 using the assigned skill name or title. It makes no create/ask/completion request until the student explicitly submits. Other item destinations and outreach's lack of a CTA remain unchanged.
 - Acceptance: assigned text/note appears on From your instructor; empty plan hides the card; completed history can display if present. Invalid intervention kind returns 400.
 - Status: partial
 - Verified by: static `dashboard.py::create_intervention`, `twin.py::learning_plan`, `features/plan/components/InstructorPlan.tsx`. No full workflow/browser test or automatic completion behavior is claimed.
@@ -224,6 +225,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Route assigned Tutor Start to an editable fresh-chat topic draft without changing plan decisions or other destinations | Fred's APPROVAL-09 assigned Tutor Start request, WI-34 | INSTR-REQ-007, TUTOR-REQ-018 |
 | 2026-10-27 | Apply the shared single-pager control to instructor learner/Twin views while preserving H errors, keysets and guards | APPROVAL-09 | INSTR-REQ-010; TWIN-REQ-011 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | INSTR-REQ-008–011 |
 | 2026-10-25 | Define a minimum visible review interval and confirmed recommendation transition before implementation | Fred's direct instructor feedback request in WI-22; supersedes the old optimistic transition | INSTR-REQ-001, INSTR-REQ-002 |

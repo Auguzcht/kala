@@ -159,11 +159,12 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Verified by: pending Fred's edits and final affected Tutor browser checks; no implementation or live acceptance claim.
 
 ### TUTOR-REQ-018: Start an assigned Tutor item with an unsent skill draft
-- Rule: “From your instructor” Start for a Tutor plan item opens the new-chat Tutor surface in the same validated course, with an editable draft about the assigned skill. Do not reopen the previously selected conversation or send automatically. Reuse the existing frontend prefill behavior: populate an empty draft without submission or overwriting another draft. No profile name, private history or implicit instructor-note payload is added.
+- Rule: “From your instructor” Start for a Tutor plan item opens the new-chat Tutor surface in the same validated course, with an editable draft about the assigned skill. Use the displayed skill name, falling back to the assignment title, to ask Kala to explain the key ideas and work through an example. Do not reopen the previously selected conversation or send automatically. No profile name, private history or implicit instructor-note payload is added.
+- Handoff: Use browser navigation state carrying a unique draft ID, course ID and text, validated with Zod and matched to the current session course. Remove the conversation search parameter and suppress automatic history resume for this fresh entry. Keep draft text out of URLs and persistent storage. Seed the new composer's draft once and focus it so Enter or Send submits. Ordinary re-renders preserve user edits and staged attachments. Selecting New chat or a saved conversation clears the handoff's composer session rather than reapplying its text.
 - Rule: Preserve lazy conversation creation on actual Send. Start alone does not create a persisted conversation, call ask, upload, complete a recommendation or change its decision/state. Use frontend state only; no backend/API/contract change or tour enablement is authorized.
 - Acceptance: Tutor Start reaches a new-chat surface, has the right skill context and nonempty unsent draft, makes zero mutating requests, allows editing, and asks only after an explicit Send. Other plan item actions and roles stay unchanged. Preserve existing draft/attachment recovery behavior.
-- Status: planned; the baseline only has tour textarea prefilling, not a reusable plan-to-Tutor navigation handoff. Fred must wire the frontend handoff without changing the backend or enabling the hidden tour.
-- Verified by: source audit of InstructorPlan.tsx, course/tutor.tsx, TutorComposer.tsx and TourRunner.tsx; implementation and workspace/Tutor browser checks pending.
+- Status: implemented locally for Fred's direct APPROVAL-09 assigned-start request, WI-34. The hidden tour remains untouched and human confirmation is pending.
+- Verified by: assigned-draft.test.mjs and ui-overhaul.browser.mjs, 339 assertions including assigned topic/title fallback, focused editable draft, staging, New chat, Enter/Send and zero automatic mutations at both widths. Final cumulative frontend regression run is recorded in WI-34.
 
 ### TUTOR-REQ-020: Load saved conversations and chat history with skeletons
 
@@ -203,6 +204,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Define validated navigation-state handoff, fresh-chat resume suppression, editable focused skill draft and explicit-submit-only behavior before implementation | Fred's APPROVAL-09 assigned Tutor Start request, WI-34 | TUTOR-REQ-018 |
 | 2026-10-27 | Specify explicit last-answer follow-up requests and truthful user turns for explanation chips before frontend implementation | Fred's APPROVAL-09 follow-up request, WI-34 | TUTOR-REQ-021 |
 | 2026-10-27 | Specify skeleton-only saved-chat and history loading with accessible status names and reduced-motion support | Fred's APPROVAL-09 loading-copy request, WI-34 | TUTOR-REQ-020 |
 | 2026-10-27 | Specify frontend-only message copy and new-chat unsent skill prefill before Fred edits; keep sent-message edit deferred | APPROVAL-09 | TUTOR-REQ-017/018; TUTOR-REQ-015 retained |

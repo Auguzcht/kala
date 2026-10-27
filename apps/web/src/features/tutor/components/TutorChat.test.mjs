@@ -13,6 +13,7 @@ import ts from "typescript";
 import * as presentation from "../lib/presentation.ts";
 import { dockLayout } from "../../../components/ai-elements/dock-layout.ts";
 import { apiErrorReason } from "../../../lib/api-error.ts";
+import * as assignedDraft from "../lib/assigned-draft.ts";
 
 const require = createRequire(import.meta.url);
 const source = readFileSync(new URL("./TutorChat.tsx", import.meta.url), "utf8");
@@ -93,9 +94,10 @@ function mount({ messages = [], error, refetch } = {}) {
         };
       },
     },
-    "@tanstack/react-router": { useNavigate: () => () => {}, useSearch: () => search },
+    "@tanstack/react-router": { useNavigate: () => () => {}, useSearch: () => search, useLocation: ({ select }) => select({ state: {} }) },
     sonner: { toast: { error: (...args) => toasts.push(args) } },
     "@/features/tutor/lib/presentation": presentation,
+    "@/features/tutor/lib/assigned-draft": assignedDraft,
     "@/components/ai-elements/dock-layout": { dockLayout },
     "@/features/tutor/components/TutorComposer": uiModule("TutorComposer"),
     "@/features/tutor/components/TutorWelcome": uiModule("TutorWelcome"),

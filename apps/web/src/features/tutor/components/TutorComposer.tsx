@@ -17,6 +17,7 @@ import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import { cn } from "@/lib/utils";
 import type { TutorAttachment } from "@/features/tutor/schema/tutor.schema";
 import { validateTutorFile } from "@/features/tutor/lib/presentation";
+import type { AssignedTutorDraft } from "@/features/tutor/lib/assigned-draft";
 import {
   type StagedTutorFile,
   type TutorFileUploadResult,
@@ -61,6 +62,7 @@ export function TutorComposer({
   onTyping,
   pending,
   uploading,
+  initialDraft,
 }: {
   dropTarget: RefObject<HTMLDivElement | null>;
   onDragChange: (active: boolean) => void;
@@ -72,8 +74,9 @@ export function TutorComposer({
   onTyping: () => void;
   pending: boolean;
   uploading: boolean;
+  initialDraft?: AssignedTutorDraft;
 }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => initialDraft?.text ?? "");
   const [staged, setStaged] = useState<StagedTutorFile[]>([]);
   const [localFiles, setLocalFiles] = useState<Map<string, File>>(
     () => new Map(),
@@ -268,6 +271,7 @@ export function TutorComposer({
             <PromptInputTextarea
               rows={1}
               placeholder="Ask Kala…"
+              autoFocus={Boolean(initialDraft)}
               value={draft}
               onChange={(event) => {
                 setDraft(event.target.value);

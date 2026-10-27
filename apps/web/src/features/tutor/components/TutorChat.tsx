@@ -7,7 +7,8 @@ import { dockLayout } from "@/components/ai-elements/dock-layout";
 import { useCourse } from "@/features/courses";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { readAssignedTutorDraft } from "@/features/tutor/lib/assigned-draft";
 import { toast } from "sonner";
 import { StudyStream } from "@/components/study/StudyStream";
 import { StudyColumn } from "@/components/study/StudyColumn";
@@ -62,6 +63,9 @@ export function TutorChat({ courseId }: { courseId: string }) {
     typeof search === "object" && search !== null && "conversation" in search
       ? (search as { conversation?: string }).conversation
       : undefined;
+  const navigationState = useLocation({ select: (location) => location.state });
+  const assignedDraft = activeId ? null : readAssignedTutorDraft(navigationState, courseId);
+  const assignedDraftId = assignedDraft?.id;
   const active = useTutorConversation(activeId ?? null);
   // The in-flight turn, held until the server's message list actually
   // contains it — gating on `isPending` instead meant it vanished the
@@ -85,11 +89,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const uploadsInFlight = useRef(0);
-  const [hasTyped, setHasTyped] = useState(false);
+  const [hasTyped, setHasTyped] = useState(Boolean(assignedDraft));
   const [greetingDate] = useState(() => new Date());
   const course = useCourse(courseId);
   const resolveConversation = useRef(createConversationResolver());
   const epoch = useRef(0);
+  const [composerSession, setComposerSession] = useState(0);
   const [waitingLong, setWaitingLong] = useState(false);
   const askingSince = useRef(0);
   const uploadAttachment = useUploadTutorAttachment();
@@ -110,18 +115,23 @@ export function TutorChat({ courseId }: { courseId: string }) {
       return;
     }
     epoch.current += 1;
+    setComposerSession((current) => current + 1);
     resolveConversation.current = createConversationResolver();
-    setHasTyped(false);
+    setHasTyped(Boolean(assignedDraftId));
     uploadsInFlight.current = 0;
     setUploading(false);
     setPendingTurn(null);
     setUnconfirmedTurns([]);
-  }, [activeId]);
+  }, [activeId, assignedDraftId]);
 
   // Resume once on entry; a later explicit New chat must stay empty.
   const conversations = useTutorConversations(courseId);
   const autoResumedRef = useRef(false);
   useEffect(() => {
+    if (assignedDraft) {
+      autoResumedRef.current = true;
+      return;
+    }
     if (autoResumedRef.current || conversations.isLoading) return;
     autoResumedRef.current = true;
     if (activeId) return;
@@ -134,7 +144,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
         replace: true,
       });
     }
-  }, [activeId, conversations.data, conversations.isLoading, navigate]);
+  }, [activeId, assignedDraft, conversations.data, conversations.isLoading, navigate]);
 
   async function ensureConversation() {
     return resolveConversation.current(activeId, async () => {
@@ -371,7 +381,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
       </StudyStream>}
       <div className={cn("shrink-0", !empty && dockLayout.footer)}>
         <div className={cn("w-full", dockLayout.content)}>
-          <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} onDragChange={setDragging}
+          <TutorComposer key={`${courseId}:${composerSession}`} dropTarget={dropTarget} onDragChange={setDragging}
+            initialDraft={assignedDraft ?? undefined}
             attachments={active.data?.attachments ?? []} onFiles={handleFiles}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
             onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />

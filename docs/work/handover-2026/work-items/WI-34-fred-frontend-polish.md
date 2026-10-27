@@ -139,4 +139,14 @@ Verification at base 74e5f92 plus these working-tree paths, local environment:
 
 No backend, API schema, migration, configuration, hosted data or sent-message editing change. No merge, push or deployment. Secrets printed: none.
 
+## Assigned Tutor Start: Fresh editable topic draft
+
+2026-10-27. Fred requests that dashboard From your instructor / Start open a new Tutor chat with the relevant topic already in the composer, waiting for Enter or Send. Base: 44599f0. TUTOR-REQ-018 and INSTR-REQ-007 presentation are updated first with change-log entries. Status: in-progress, owner Codex. This item stays frontend-only and receives one local commit.
+
+WI-34-T08 covers assigned skill/title fallback, editable focused draft, no automatic resume or mutations, repeated/reopened navigation, New chat and saved-chat selection, invalid/other-course handoff rejection, unchanged non-Tutor destinations, and first explicit Enter/Send creating only the new conversation and one ask. Fred also requests final lint/typecheck/build, frontend units, E3, every browser suite sequentially against the one existing 5173 server, then documentation checks and a cumulative report.
+
+Implementation: InstructorPlan uses Tutor's public draft factory, then passes a single fresh handoff through browser history state and clears conversation search state. The handoff schema rejects malformed/other-course state. TutorChat suppresses auto-resume for this entry and owns an explicit composer-session key so query re-renders do not remount an edited draft. TutorComposer seeds local text once and autofocuses it. Existing lazy creation and explicit Send/Enter remain the only mutation trigger. No URL prompt, note/profile payload, local-storage draft, recommendation completion or tour change.
+
+Files: InstructorPlan.tsx, Tutor's public index, lib/assigned-draft.ts, TutorChat.tsx, TutorComposer.tsx, TutorChat.test.mjs, tests/assigned-draft.test.mjs, ui-overhaul.browser.mjs, Tutor/Instructor specifications and this work item. Scoped verification: Tutor browser 339 assertions passed, focused Tutor/draft units 13 passed, lint/typecheck passed with the same existing warnings. The first extra practice-destination assertion expected the legacy intermediate URL. It was corrected to the existing practice route's Skills redirect, then passed. Final combined regression gate remains pending until the separately requested ledger item is complete.
+
 Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. No frontend application edits were made by Codex.

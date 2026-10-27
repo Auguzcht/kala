@@ -12,6 +12,7 @@ import { ZapIcon } from "@/components/ui/zap";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { createAssignedTutorDraft } from "@/features/tutor";
 
 // "From your instructor" — the visible proof that a human is in this loop.
 //
@@ -107,7 +108,18 @@ export function InstructorPlan({ courseId }: { courseId: string }) {
                   variant="outline"
                   size="sm"
                   className="shrink-0"
-                  onClick={() => navigate({ to: meta.to })}
+                  onClick={() => {
+                    if (item.kind !== "tutor") return navigate({ to: meta.to });
+                    const draft = createAssignedTutorDraft(courseId, item.skillName?.trim() || item.title);
+                    return navigate({
+                      to: "/course/tutor",
+                      search: {},
+                      state: (previous) => ({
+                        ...previous,
+                        assignedTutorDraft: draft,
+                      }),
+                    });
+                  }}
                 >
                   Start <ArrowRightIcon size={14} />
                 </Button>
