@@ -51,3 +51,12 @@ After Fred says his edits are finished, Codex checks the complete diff against t
 Finding: course material. Fred reports1 embedded AWS101 chunk containing the name; prior history, own attachments/display name/memory and ownership mismatch counts0, with no cross-user data. The source is the only match found; no per-request retrieval trace proves attribution. Record names from course material can reach the model under the existing email/name:-pattern sanitizer.
 
 Named exception to the backend-change stop: branch codex/no-name-greeting from main. Coordinator first specifies TUTOR-REQ-019, then changes only the existing _SYSTEM literal to prohibit addressing the student by name and treat names in material as people in that material. Extend only the existing small-talk prompt test. E1 whole-module proof plus all19 identical guarded functions, full API and enrollment matrix required. No other backend/config/migration/sanitizer change. Merge with Fred's frontend only after all its checks. Fred runs make deploy and separately delegates the frontend push; Codex performs no deploy, push or hosted action.
+
+
+## Preparation checkpoint —2026-10-27
+
+Frontend specifications were committed before application edits at223aa36. Source base remains eb9409a8dc5617f01f9dc20d888775009894ec78. Web PID40695 serves the Fred worktree on5173, HTTP200 verified; the private web env uses the deployed API, so no8000 API was started. Existing dependency links/private env are local only, not retained. Codex has made no frontend application change.
+
+Prompt branch candidate65e539ab177c632b0b51de6857021a7c1cb42793 is prepared separately from main. Spec-first e784d01, API1016/enrollment116, E1 single-literal AST and all19 unchanged guarded functions pass; seven other routers are byte-identical. Both branches' documentation checks have zero violations and18 unit tests pass. The backend implementation report is on that branch at docs/work/handover-2026/evidence/approval-09-no-name-greeting.md. It has not been merged, deployed or pushed.
+
+Fred's frontend implementation/end-of-edit gate remains pending. After completion, review actual UI paths and matching tests, then run all required web/browser/E3/docs checks before combining branches. No sent-message edit, sanitizer/config change or hosted operation is authorized. The root coordinator retains sole ownership of shared specifications during that integration.
