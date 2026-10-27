@@ -75,6 +75,8 @@ async function fixture(
     patches: 0,
     creates: 0,
     asks: 0,
+    askRequests: [],
+    rejectAsk: false,
     uploads: 0,
     attachmentDeletes: 0,
     rejectUploads: true,
@@ -212,8 +214,11 @@ async function fixture(
     }
     if (path === "/tutor/ask") {
       state.asks++;
+      const body = route.request().postDataJSON();
+      state.askRequests.push(body);
       if (state.holdAsk) await state.holdAsk;
-      const { question } = route.request().postDataJSON();
+      if (state.rejectAsk) return reply({ detail: 'Synthetic retryable answer failure.' }, 503);
+      const { question } = body;
       state.messages.push(
         {
           id: `u-${state.asks}`,
@@ -227,7 +232,7 @@ async function fixture(
           role: "assistant",
           content:
             "Object storage keeps durable copies of your data. Access policies control who can read and update each object.",
-          style: "default",
+          style: body.style,
           createdAt: "2026-10-25T11:00:01Z",
         },
       );
@@ -336,6 +341,44 @@ const edgesOf = (locator) => locator.evaluate((el) => {
 });
 const matchingEdges = (a, b) => Math.abs(a.left - b.left) <= 1 && Math.abs(a.right - b.right) <= 1;
 try {
+  for (const width of [375, 1440]) {
+    const follow = await fixture(width);
+    const original = 'What is object storage?';
+    follow.state.messages = [
+      { id: 'original-user', role: 'user', content: original, style: null, createdAt: '2026-10-27T10:00:00Z' },
+      { id: 'original-answer', role: 'assistant', content: 'Object storage keeps data as durable objects.', style: 'default', createdAt: '2026-10-27T10:00:01Z' },
+    ];
+    await follow.page.goto('http://localhost:5173/course/tutor?conversation=existing');
+    await follow.page.getByRole('button', { name: "Explain like I'm 5", exact: true }).waitFor();
+    for (const [label, style, intent] of [["Explain like I'm 5", 'eli5', "Explain your last answer like I'm 5"], ['More detail', 'detail', 'Explain your last answer in more detail']]) {
+      let release;
+      follow.state.holdAsk = new Promise(done => { release = done; });
+      await follow.page.getByRole('button', { name: label, exact: true }).click();
+      const pendingUser = follow.page.locator('#tour-tutor-user-turn');
+      await pendingUser.waitFor();
+      check((await pendingUser.innerText()).startsWith(intent), `TUTOR-REQ-021 ${style} immediately renders explicit user instruction at ${width}`);
+      await follow.page.locator('#tour-tutor-thinking').waitFor();
+      const request = follow.state.askRequests.at(-1);
+      check(request.question.startsWith(intent) && request.question !== original && request.style === style && request.conversation_id === 'existing', `TUTOR-REQ-021 ${style} request keeps intent/style/conversation at ${width}`);
+      check(await follow.page.locator('svg.animate-spin').count() === 0 && await follow.page.locator('#tour-tutor-thinking [role=status]').count() === 1, `TUTOR-REQ-021 ${style} one pending indicator at ${width}`);
+      release(); follow.state.holdAsk = null;
+      await pendingUser.waitFor({ state: 'detached' });
+      await follow.page.getByRole('button', { name: 'More detail', exact: true }).waitFor();
+      check(await follow.page.getByText(original, { exact: true }).count() === 1, `TUTOR-REQ-021 ${style} never copies original input at ${width}`);
+    }
+    follow.state.rejectAsk = true;
+    await follow.page.getByRole('button', { name: "Explain like I'm 5", exact: true }).click();
+    await follow.page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
+    const failedRequest = follow.state.askRequests.at(-1);
+    follow.state.rejectAsk = false;
+    await follow.page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await follow.page.locator('#tour-tutor-user-turn').waitFor({ state: 'detached' });
+    check(JSON.stringify(follow.state.askRequests.at(-1)) === JSON.stringify(failedRequest), `TUTOR-REQ-021 retry preserves exact follow-up request at ${width}`);
+    check(follow.state.creates === 0 && follow.state.uploads === 0 && follow.state.patches === 0 && follow.state.deletes === 0, `TUTOR-REQ-021 explanation chips make only the existing ask at ${width}`);
+    check(follow.errors.length === 0, `TUTOR-REQ-021 no runtime errors at ${width}`);
+    await screenshot(follow.page, 'tutor-explicit-followups', width);
+    await follow.context.close();
+  }
   for (const width of [375, 1440]) {
     const scrolling = await fixture(width);
     scrolling.state.messages = Array.from({ length: 60 }, (_, i) => ({ id: `long-answer-${i}`, role: 'assistant', content: `Synthetic paragraph ${i} with enough text to overflow the reading surface.`, style: 'default', createdAt: '2026-10-27T10:00:00Z' }));

@@ -63,7 +63,6 @@ export function TutorChat({ courseId }: { courseId: string }) {
       ? (search as { conversation?: string }).conversation
       : undefined;
   const active = useTutorConversation(activeId ?? null);
-  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   // The in-flight turn, held until the server's message list actually
   // contains it — gating on `isPending` instead meant it vanished the
   // instant the request resolved, before the invalidated query had
@@ -117,7 +116,6 @@ export function TutorChat({ courseId }: { courseId: string }) {
     setUploading(false);
     setPendingTurn(null);
     setUnconfirmedTurns([]);
-    setLastQuestion(null);
   }, [activeId]);
 
   // Resume once on entry; a later explicit New chat must stay empty.
@@ -161,7 +159,6 @@ export function TutorChat({ courseId }: { courseId: string }) {
     },
     onSuccess: async (data, variables) => {
       if (variables.origin !== epoch.current) return;
-      setLastQuestion(variables.question);
       // Preserve the normal saved-response handoff. A failed/missing save
       // must not discard an answer already returned by the tutor.
       let saved = false;
@@ -358,9 +355,17 @@ export function TutorChat({ courseId }: { courseId: string }) {
           </>
         ) : null}
 
-        {!send.isPending && lastQuestion ? (
+        {!send.isPending && !active.isError && (localTurns.length > 0 || lastMessage?.role === "assistant") ? (
           <div className="mr-auto w-full">
-            <FollowUpChips onPick={(style) => askQuestion(lastQuestion, style)} />
+            <FollowUpChips onPick={(style) => {
+              const instruction = style === "eli5"
+                ? "Explain your last answer like I'm 5, using simple words and an everyday example."
+                : "Explain your last answer in more detail, including the reasoning and a concrete example.";
+              const unsavedAnswer = localTurns.at(-1)?.answer;
+              askQuestion(unsavedAnswer
+                ? `${instruction}\n\nThe answer to explain:\n${unsavedAnswer}`
+                : instruction, style);
+            }} />
           </div>
         ) : null}
       </StudyStream>}

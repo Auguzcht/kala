@@ -42,7 +42,7 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (path.endsWith('/diagnostic/submit')) { await new Promise(r => { state.releaseSubmit = r; }); return reply({correctCount:2,total:2,results:[],masteryDelta:[]}); }
   if (path.endsWith('/review')) { state.reviews.push(req.postDataJSON()); return reply({ remembered: true, graduated: false, dueInHours: 1, dueAt: '2099-11-02T08:30:00Z', box: 1, reward }); }
   if (path.endsWith('/skills/propose')) { if (state.holdModel) await new Promise(r => { state.releaseModel = r; }); return reply({status:'queued'}); }
-  if (path.endsWith('/ask')) { if (state.holdAsk) await new Promise(r => { state.releaseAsk = r; }); return reply({ answer: 'Synthetic hint answer.' }); }
+  if (path.endsWith('/ask')) { if (state.holdAsk) await new Promise(r => { state.releaseAsk = r; }); return state.failAsk ? reply({ detail: 'Synthetic retryable answer failure.' }, 503) : reply({ answer: 'Synthetic hint answer.' }); }
   if (path.endsWith('/deck')) {
    if (url.searchParams.get('limit') === '0') return reply({ courseId: 'course', cards: [], stats: { tracked: 1, due: 0, learning: 1, mastered: 0 }, mode: 'review', sessionId: null, hasMore: false });
    state.deckCalls.push(Object.fromEntries(url.searchParams));
@@ -235,6 +235,68 @@ try {
    await f.page.getByRole('button', { name: 'Go through these again', exact: true }).click(); await recall(f.page); check(f.state.reviews.length === 2, 'local replay preserves posted guard');
    check(f.state.reviews.every(r => r.mode === 'flashcard' && r.idempotency_key && r.session_id), 'review request semantics retained'); check(f.errors.length === 0, `Study runtime clean: ${f.errors}`); await f.context.close();
   }
+  const help = await fixture(width, { reduced: true });
+  help.state.initialCards = [card('first'), card('second')];
+  const asks = () => help.state.posts.filter(post => post.path.endsWith('/ask'));
+  await help.page.goto('http://localhost:5173/__u2');
+  help.state.holdAsk = true;
+  await help.page.getByRole('button', { name: 'Give me a hint', exact: true }).click();
+  const hintTurn = help.page.locator('[data-study-help-turn=hint]').first();
+  await hintTurn.getByText('Kala is preparing a hint…', { exact: true }).waitFor();
+  check(await hintTurn.locator('.ml-auto').innerText() === 'Give me a hint', `STUDY-REQ-008 pending hint has student bubble at ${width}`);
+  check(asks().length === 1 && asks()[0].body.style === 'eli5' && asks()[0].body.question.includes('Recall first') && !asks()[0].body.question.includes('Answer first') && !asks()[0].body.conversation_id, `STUDY-REQ-008 front hint protects back and stays stateless at ${width}`);
+  check(await help.page.locator('svg.animate-spin').count() === 0 && await help.page.getByRole('button', { name: 'Give me a hint', exact: true }).isDisabled(), `STUDY-REQ-008 hint has one shimmer with stable disabled action at ${width}`);
+  help.state.holdAsk = false; help.state.releaseAsk();
+  await hintTurn.getByText('Synthetic hint answer.', { exact: true }).waitFor();
+  await help.page.getByRole('button', { name: 'Show answer', exact: true }).click();
+  help.state.holdAsk = true;
+  await help.page.getByRole('button', { name: 'Explain more', exact: true }).click();
+  const explanation = help.page.locator('[data-study-help-turn=explain]').first();
+  await explanation.getByText('Kala is preparing an explanation…', { exact: true }).waitFor();
+  check(await explanation.locator('.ml-auto').innerText() === 'Explain more', `STUDY-REQ-008 pending explanation has student bubble at ${width}`);
+  check(asks()[1].body.style === 'detail' && asks()[1].body.question.includes('Recall first') && asks()[1].body.question.includes('Answer first') && asks()[1].body.question.includes('Synthetic explanation'), `STUDY-REQ-008 explanation includes the flipped card context at ${width}`);
+  help.state.holdAsk = false; help.state.releaseAsk();
+  await explanation.getByText('Synthetic hint answer.', { exact: true }).waitFor();
+  await help.page.getByRole('button', { name: 'Explain more', exact: true }).evaluate(el => { el.click(); el.click(); });
+  await help.page.locator('[data-study-help-turn=explain]').nth(1).getByText('Synthetic hint answer.', { exact: true }).waitFor();
+  check(asks().length === 3 && await help.page.locator('[data-study-help-turn]').count() === 3, `STUDY-REQ-008 repeated explanation appends one new pair and guards double activation at ${width}`);
+  help.state.failAsk = true;
+  await help.page.getByRole('button', { name: 'Explain more', exact: true }).click();
+  const failedTurn = help.page.locator('[data-study-help-turn]').last();
+  await failedTurn.getByRole('button', { name: 'Retry', exact: true }).waitFor();
+  check(await failedTurn.locator('.ml-auto').innerText() === 'Explain more', `STUDY-REQ-008 failed explanation retains its student turn at ${width}`);
+  const failedBody = asks().at(-1).body;
+  help.state.failAsk = false;
+  await failedTurn.getByRole('button', { name: 'Retry', exact: true }).click();
+  await failedTurn.getByText('Synthetic hint answer.', { exact: true }).waitFor();
+  check(JSON.stringify(asks().at(-1).body) === JSON.stringify(failedBody) && await help.page.locator('[data-study-help-turn]').count() === 4, `STUDY-REQ-008 retry reuses request without duplicating user turn at ${width}`);
+  await help.page.getByRole('button', { name: 'Ask a follow-up', exact: true }).click();
+  await help.page.getByPlaceholder('Ask Kala about this card…').fill('How can I use this?');
+  await help.page.getByPlaceholder('Ask Kala about this card…').press('Enter');
+  await help.page.locator('#tour-study-reply').getByText('Synthetic hint answer.', { exact: true }).waitFor();
+  check(await help.page.locator('[data-study-help-turn=followup] .ml-auto').innerText() === 'How can I use this?' && asks().at(-1).body.style === 'default' && asks().at(-1).body.question.includes('Side shown: back.'), `STUDY-REQ-008 typed question joins same ordered card thread at ${width}`);
+  check((await help.page.locator('[data-study-help-turn]').evaluateAll(nodes => nodes.map(el => el.dataset.studyHelpTurn))).join(',') === 'hint,explain,explain,explain,followup', `STUDY-REQ-008 keeps click order across all help types at ${width}`);
+  check(await help.page.locator('[data-study-help-turn]').evaluateAll(nodes => nodes.every(el => Boolean(el.querySelector('.ml-auto').compareDocumentPosition(el.querySelector('.mr-auto')) & Node.DOCUMENT_POSITION_FOLLOWING))), `STUDY-REQ-008 every complete pair puts student before Kala at ${width}`);
+  check(help.state.reviews.length === 0 && help.state.posts.every(post => post.path.endsWith('/ask')), `STUDY-REQ-008 help makes only existing stateless asks at ${width}`);
+  await help.page.locator('#tour-study-reply').evaluate(el => {
+   const scroller = el.closest('[role=log]').firstElementChild;
+   scroller.scrollTop = scroller.scrollHeight;
+  });
+  await help.page.waitForFunction(() => document.querySelector('#tour-study-reply').getBoundingClientRect().bottom <= document.querySelector('#tour-study-dock [data-slot=input-group]').getBoundingClientRect().top + 1);
+  check(await help.page.locator('#tour-study-reply').isVisible(), `STUDY-REQ-008 latest answer remains reachable above the dock at ${width}`);
+  await capture(help.page, 'study-action-user-turns', width);
+  await help.page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  help.state.holdAsk = true;
+  await help.page.getByRole('button', { name: 'Explain more', exact: true }).click();
+  await help.page.getByText('Kala is preparing an explanation…', { exact: true }).waitFor();
+  await help.page.getByRole('button', { name: 'Got it', exact: true }).click();
+  await help.page.getByText('Recall second', { exact: true }).first().waitFor();
+  const lateResponse = help.page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/ask'));
+  help.state.holdAsk = false; help.state.releaseAsk(); await lateResponse;
+  await help.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  check(await help.page.locator('[data-study-help-turn]').count() === 0 && help.state.reviews.length === 1, `STUDY-REQ-008 card switch ignores late assistance and keeps one explicit review at ${width}`);
+  check(help.errors.length === 0, `STUDY-REQ-008 no runtime errors at ${width}`);
+  await help.context.close();
  }
  console.log(`U2 final UI passed: ${assertions} assertions; screenshots: ${out}`);
 } finally { await browser.close(); }

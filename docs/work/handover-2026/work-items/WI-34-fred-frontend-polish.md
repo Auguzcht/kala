@@ -105,4 +105,38 @@ Web lint/typecheck/build passed with the same 18 existing lint warnings and rout
 
 Fred asks whether the extra button has value. Current EvidenceLedger pagination slices only the loaded rows into groups of ten. EvidenceHistoryLedger's separate button fetches another server batch through useEvidenceHistory, normally 25 rows under TWIN-REQ-010. Thus three local pages of 25 loaded events do not include all server history. TWIN-REQ-011 already specifies removing the separate button and fetching the next batch through Next on the final loaded page, preserving keysets, permissions, errors and scope. This behavior remains planned and is not implemented by the three fixes above. This request was a documentation/source check, with no ledger edit made.
 
+## Follow-up actions: Explicit Tutor requests and Study user turns
+
+2026-10-27. Fred requests explanation chips that ask for the chosen treatment of the previous answer and visible student turns for flashcard hint/explain actions. Base 74e5f92. TUTOR-REQ-021 and STUDY-REQ-008 are specified first with change-log entries. This is one follow-up interaction item, kept in one local commit. Frontend only. Scope: TutorChat, FlashcardDeck, their matching tests and the owning specs/work item. No API, provider, migration, configuration or hosted change. Status: in-progress, owner Codex.
+
+WI-34-T06 covers Tutor chip request text/style/conversation, immediate user bubble, saved/reopened/returned-unsaved answers, retry and scope changes. WI-34-T07 covers ordered Study hint/explain/freeform turns, pending/error/retry, front-side answer protection, repeated actions and late replies after card changes. Existing browser loading/geometry/anchors, Study review/idempotency and Tutor recovery remain required checks.
+
+Implementation complete, status: done-awaiting-confirmation for this item only. Tutor chips now submit explicit instructions about the last answer with the existing eli5/detail styles and active conversation ID. They also work after reopening a saved chat. Returned-unsaved answer text is included in the next request when needed, with the user bubble showing exactly the submitted question. No original question is silently resent. Study keeps one ordered local assistance thread for hint, explain and typed actions. A student bubble appears before each pending answer, repeated actions retain their own turns, a failure retains its request with Retry, and captured request text/style are reused without duplicating that user turn. Card/session changes clear the thread and reject stale callbacks. Front-side hint requests exclude the back, while explanations include the revealed card context. Existing stateless/persisted ask contracts are reused.
+
+Files changed:
+
+```text
+docs/features/tutor/README.md
+docs/features/study/README.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+apps/web/src/features/tutor/components/TutorChat.tsx
+apps/web/src/features/tutor/components/TutorChat.test.mjs
+apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+apps/web/src/features/flashcards/components/FlashcardDeck.tsx
+apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs
+```
+
+Verification at base 74e5f92 plus these working-tree paths, local environment:
+
+- `ui-overhaul.browser.mjs`: 317 assertions passed at 375px/1440px. New explicit follow-up requests/styles/conversation IDs, immediate student turns, no copied original question, one pending indicator and exact retry payload pass. Existing loading, sidebar, attachment, recovery and scrollbar assertions remain.
+- `final-ui-pass.browser.mjs`: 216 assertions passed at 375px/1440px. New hint/explain/freeform turn order, styles/context, pending/error/retry, repeated/double activation, last-answer clearance and late-response/card-reset cases pass. Original review/idempotency, loading-width and geometry assertions remain.
+- `node --experimental-vm-modules --test` for TutorChat.test.mjs, tutor.schema.test.ts, api-error.test.ts and presentation.test.mjs: 23 passed. Added reopened saved-chat and returned-unsaved follow-up tests pass, alongside existing answer-recovery tests.
+- `study-deck.test.mjs` with the documented external renderer fixture: 21 passed. Existing review/replay/scope/idempotency cases are unchanged.
+- `node --test apps/web/src/components/shell/tests/tour-anchors.test.mjs`: 53 passed, including seven untouched historical E3 proofs.
+- Web lint/typecheck/build passed. Lint retains 18 existing warnings. Route-generator circular-dependency and bundle-size warnings remain.
+- Documentation checker, 18 documentation unit tests and `git diff --check` passed.
+- Screenshots: `/tmp/kala-approval09-followups-tutor` and `/tmp/kala-approval09-followups-study`, local only, not retained. Browser fixtures block external traffic and intercept synthetic auth/API requests. No hosted or real provider request was run. Live explanation quality and human click-through remain unverified.
+
+No backend, API schema, migration, configuration, hosted data or sent-message editing change. No merge, push or deployment. Secrets printed: none.
+
 Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. No frontend application edits were made by Codex.

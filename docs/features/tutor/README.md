@@ -172,6 +172,14 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Status: implemented locally under Fred's APPROVAL-09 loading-copy request, WI-34. Human confirmation remains pending.
 - Verified by: ui-overhaul.browser.mjs passes 295 assertions, including WI-34-T05 at 375px/1440px for saved-chat/history skeletons, accessible busy states, reduced motion and unchanged mutation counts. No hosted acceptance claim.
 
+### TUTOR-REQ-021: Make explanation chips explicit follow-up requests
+
+- Rule: Explain like I'm 5 and More detail create a new student turn requesting that treatment of Kala's last answer in the active owned conversation. Send an explicit instruction and the existing eli5/detail style, rather than resending the original student question. The optimistic, saved and returned-unsaved user bubble must show the question actually submitted. Reuse conversation history through the existing ask contract, including after reopening a saved chat. If the latest visible answer is returned-unsaved, include that answer as quoted context in the new question so the request does not silently target older saved history.
+- Rule: Preserve pending/error/retry and saved/unsaved-answer recovery. Only one ask runs at a time, with the existing single shimmer and stable disabled Send. Changing conversations discards the old scope's local turns and follow-up context. Add no backend field, provider change or sent-message edit.
+- Acceptance: At 375px/1440px, both chips show a new explicit user bubble before the pending answer, submit the correct style and same conversation ID, and do not resubmit the original question. Repeated chips target the latest answer. Reopened conversations, returned-unsaved answers, failures/retry and conversation switches retain correct scope and request text. Synthetic requests prove intent and wiring, not live model quality.
+- Status: implemented locally under Fred's APPROVAL-09 follow-up request, WI-34. Human confirmation remains pending.
+- Verified by: TutorChat.test.mjs covers saved/reopened and returned-unsaved follow-up context. ui-overhaul.browser.mjs passes 317 assertions including explicit instructions, styles, conversation scope and retry at both widths. Synthetic wiring checks do not establish live answer quality.
+
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
@@ -195,6 +203,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Specify explicit last-answer follow-up requests and truthful user turns for explanation chips before frontend implementation | Fred's APPROVAL-09 follow-up request, WI-34 | TUTOR-REQ-021 |
 | 2026-10-27 | Specify skeleton-only saved-chat and history loading with accessible status names and reduced-motion support | Fred's APPROVAL-09 loading-copy request, WI-34 | TUTOR-REQ-020 |
 | 2026-10-27 | Specify frontend-only message copy and new-chat unsent skill prefill before Fred edits; keep sent-message edit deferred | APPROVAL-09 | TUTOR-REQ-017/018; TUTOR-REQ-015 retained |
 | 2026-10-27 | Specify rename dialog, single waiting indicator, prompt-only small talk, planned images, conditional last-prompt editing and delegated read-only timing before implementation | APPROVAL-08, coordinator C1/C2 | TUTOR-REQ-005/010/012–016; DIAG-REQ-008 |
