@@ -183,7 +183,7 @@ export function ComposeDock({
                 <PromptInputSubmit
                   className={dockLayout.control}
                   disabled={askDisabled || askPending}
-                  status={askPending ? "submitted" : undefined}
+                  aria-busy={askPending || undefined}
                 />
               </div>
             </PromptInput>

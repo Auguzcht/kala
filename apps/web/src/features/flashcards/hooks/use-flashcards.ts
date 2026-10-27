@@ -23,6 +23,16 @@ export function useFlashcardDeck(
   });
 }
 
+/** Explicit completion refresh keeps due/new selection even after Study all. */
+export function useGetNewFlashcards(courseId: string, skillId?: string) {
+  const queryClient = useQueryClient();
+  return () => queryClient.fetchQuery({
+    queryKey: ["flashcards", courseId, 20, skillId ?? "auto", "review", 0],
+    queryFn: () => fetchFlashcardDeck(courseId, 20, skillId, "review", 0),
+    staleTime: 0,
+  });
+}
+
 export function useFlashcardMembership(courseId: string, skillId: string) {
   return useQuery({
     queryKey: ["flashcards", courseId, "membership", skillId],

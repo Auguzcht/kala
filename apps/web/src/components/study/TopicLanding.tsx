@@ -10,7 +10,6 @@ import {
 import { MasteryBand } from "@/components/kala";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { groupByModule } from "@/features/twin";
 import type { TwinSkill } from "@/features/twin";
@@ -79,7 +78,7 @@ export function TopicLanding({
     return (
       <EmptyState
         title="No skills mapped yet"
-        description="Your course team has not made any skills available yet. Check back after they add course material and approve the skills."
+        description="No skills are available yet. Check back later."
       />
     );
   }
@@ -169,11 +168,10 @@ function TopicBankState({
   if (entry.status === "ready") return null;
   if (entry.status === "building" && entry.usable) return null;
   if (entry.status === "no_material") {
-    return <p className="mt-2 text-xs text-muted-foreground">This skill doesn&apos;t have course material yet.</p>;
+    return <p className="mt-2 text-xs text-muted-foreground">This topic is not ready yet. Check back later.</p>;
   }
   return (
     <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-      {entry.status === "building" ? <Spinner className="size-3.5" aria-hidden /> : null}
       Preparing questions ({entry.mcqReady} of {entry.mcqTarget}).
     </p>
   );

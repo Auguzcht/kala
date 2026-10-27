@@ -4,6 +4,7 @@ import { useProposeSkills, useProposedSkills, useReviewProposedSkill, type Propo
 import { CornerBrackets } from "@/components/kala";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TriangleAlertIcon } from "lucide-react";
 import { CheckIcon, type CheckIconHandle } from "@/components/ui/check";
@@ -60,7 +61,7 @@ function RefreshStatus({
 }) {
   const waiting = (
     <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-      <Spinner className="size-3.5" aria-hidden /> Refreshing proposals. This can take a few minutes.
+      <Shimmer className="text-xs">Kala is refreshing proposals. This can take a few minutes.</Shimmer>
     </p>
   );
   if (isPending) {
@@ -237,15 +238,7 @@ export function SkillReviewPanel({ courseId }: { courseId: string }) {
           onMouseLeave={() => refreshRef.current?.stopAnimation()}
           className="h-8 px-3 text-[12.5px] [&_svg]:size-3.5"
         >
-          {propose.isPending || polling ? (
-            <>
-              <Spinner className="size-3.5" /> Refreshing…
-            </>
-          ) : (
-            <>
-              <SparklesIcon ref={refreshRef} size={13} /> Refresh skills
-            </>
-          )}
+          <SparklesIcon ref={refreshRef} size={13} /> Refresh skills
         </Button>
       </div>
 

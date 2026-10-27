@@ -18,7 +18,6 @@ import { UserBlock } from "@/components/study/UserBlock";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingPanel } from "@/components/shared/LoadingPanel";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { useLesson, useSubmitStepCheck } from "@/features/lessons/hooks/use-lessons";
 import { apiErrorReason } from "@/lib/api-error";
 import type { LessonCheckResult } from "@/features/lessons/schema/lessons.schema";
@@ -455,7 +454,7 @@ export function LessonChat({
                     onClick={() => openCheckThread("hint")}
                     disabled={checkAsk.isPending || answeredKinds.has("hint")}
                   >
-                    {checkAsk.isPending ? <Spinner className="size-3.5" aria-hidden /> : <BrainIcon size={15} className="text-muted-foreground" aria-hidden />}
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
                     Give me a hint
                   </button>
                 ) : (
@@ -465,7 +464,7 @@ export function LessonChat({
                     onClick={() => openCheckThread("explain")}
                     disabled={checkAsk.isPending || answeredKinds.has("explain")}
                   >
-                    {checkAsk.isPending ? <Spinner className="size-3.5" aria-hidden /> : <BrainIcon size={15} className="text-muted-foreground" aria-hidden />}
+                    <BrainIcon size={15} className="text-muted-foreground" aria-hidden />
                     Explain more
                   </button>
                 )}

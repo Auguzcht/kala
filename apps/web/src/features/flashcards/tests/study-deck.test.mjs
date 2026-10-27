@@ -23,8 +23,9 @@ const ts = requireWeb('typescript');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.window = { addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout };
 
-async function mountDeck({ cards = [card('first'), card('second')], tracked = cards.length, deferRating = false, hasMore = false, mode = 'review' } = {}) {
-  const calls = { reviews: [], refetches: 0 };
+async function mountDeck({ cards = [card('first'), card('second')], tracked = cards.length, deferRating = false, hasMore = false, mode = 'review', nextCards, deferNew = false, nextError = false, dueAt = '2099-11-02T08:30:00Z', failFirstRating = false } = {}) {
+  const calls = { reviews: [], refetches: 0, newFetches: 0 };
+  let resolveNew;
   const data = { courseId: 'course', cards, stats: { tracked, due: cards.length, learning: 0, mastered: 0 },
     mode, sessionId: 'session', hasMore };
   const deckHook = { data, isLoading: false, isError: false, isFetching: false,
@@ -32,8 +33,9 @@ async function mountDeck({ cards = [card('first'), card('second')], tracked = ca
   let pendingRating;
   const reviewHook = { isPending: false, mutate(args, options) {
     calls.reviews.push(args);
-    if (deferRating) { reviewHook.isPending = true; pendingRating = options; }
-    else options.onSuccess();
+    if (failFirstRating && calls.reviews.length === 1) options.onError();
+    else if (deferRating) { reviewHook.isPending = true; pendingRating = options; }
+    else options.onSuccess({ dueAt });
   } };
   function shell(props) { return React.createElement('section', null, props.bar, props.children, props.dock); }
   function dock({ primary, secondary }) {
@@ -42,6 +44,12 @@ async function mountDeck({ cards = [card('first'), card('second')], tracked = ca
   }
   const values = {
     useSession: () => ({ userId: 'student' }), readReviewProgress: () => null, writeReviewProgress() {},
+    useGetNewFlashcards: () => async () => {
+      calls.newFetches++;
+      if (deferNew) await new Promise(resolve => { resolveNew = resolve; });
+      if (nextError) throw new Error('Synthetic unavailable');
+      return { ...data, mode: 'review', sessionId: `next-${calls.newFetches}`, cards: nextCards ?? cards };
+    },
     useFlashcardDeck: () => deckHook, useFlashcardMembership: () => ({ data: { counts: { new: 0 } } }),
     useReviewFlashcard: () => reviewHook, usePracticeSetResults: () => ({}),
     useBankStatus: () => ({ data: { bankServing: true, skills: [{ skillId: 'skill', usable: true, status: 'ready' }] } }),
@@ -89,8 +97,12 @@ async function mountDeck({ cards = [card('first'), card('second')], tracked = ca
     await act(async () => node.props.onClick());
   }
   return { calls, button, click, finishRating: async () => act(async () => {
-      reviewHook.isPending = false; pendingRating.onSuccess();
-    }), text: () => JSON.stringify(renderer.toJSON()),
+      reviewHook.isPending = false; pendingRating.onSuccess({ dueAt });
+      renderer.update(React.createElement(module.namespace.FlashcardDeck, { courseId: 'course', onExit() {}, mode }));
+    }), replaceServerDeck: async (next) => act(async () => {
+      deckHook.data = { ...data, ...next };
+      renderer.update(React.createElement(module.namespace.FlashcardDeck, { courseId: 'course', onExit() {}, mode }));
+    }), finishNew: async () => act(async () => { resolveNew(); }), text: () => JSON.stringify(renderer.toJSON()),
     unmount: async () => act(async () => renderer.unmount()) };
 }
 function card(id) { return { itemId: id, skillId: 'skill', skillName: 'Skill', prompt: `Prompt ${id}`,
@@ -103,7 +115,7 @@ test('STUDY-REQ-003 replay starts at card 1 and sends zero additional review POS
   await recall(deck);
   assert.deepEqual(deck.calls.reviews.map((args) => args.itemId), ['first', 'second']);
   assert.ok(deck.button('Go through these again'));
-  assert.ok(deck.button('Check for more cards'));
+  assert.ok(deck.button('Get new cards'));
   await deck.click('Go through these again');
   assert.match(deck.text(), /Practice round · Your review schedule will not change/);
   assert.match(deck.text(), /Prompt first/);
@@ -117,8 +129,10 @@ test('STUDY-REQ-003 replay starts at card 1 and sends zero additional review POS
   await recall(deck);
   await recall(deck);
   assert.equal(deck.calls.reviews.length, 2);
-  await deck.click('Check for more cards');
-  assert.equal(deck.calls.refetches, 1);
+  await deck.click('Get new cards');
+  assert.equal(deck.calls.newFetches, 1);
+  assert.match(deck.text(), /No new cards right now/);
+  assert.equal(deck.calls.reviews.length, 2);
   await deck.unmount();
 });
 
@@ -138,7 +152,7 @@ test('STUDY-REQ-003 replay waits for the final rating to finish saving', async (
   const deck = await mountDeck({ cards: [card('only')], deferRating: true });
   await recall(deck);
   assert.equal(deck.button('Go through these again').props.disabled, true);
-  assert.equal(deck.button('Check for more cards').props.disabled, true);
+  assert.equal(deck.button('Get new cards').props.disabled, true);
   await deck.finishRating();
   assert.equal(Boolean(deck.button('Go through these again').props.disabled), false);
   await deck.click('Go through these again');
@@ -156,4 +170,119 @@ test('STUDY-REQ-005 empty ready course distinguishes caught up from no cards', a
   assert.match(empty.text(), /No cards yet/);
   assert.doesNotMatch(empty.text(), /All caught up/);
   await empty.unmount();
+});
+
+for (const mode of ['review', 'all']) {
+  for (const nextCards of [[], [card('only')]]) {
+    test(`STUDY-REQ-006 ${mode} empty or duplicate-only refresh keeps completion and rating guard`, async () => {
+      const deck = await mountDeck({ cards: [card('only')], mode, nextCards });
+      await recall(deck);
+      await deck.click('Get new cards');
+      assert.match(deck.text(), /Study complete/);
+      assert.match(deck.text(), /No new cards right now. Your next review is/);
+      assert.match(deck.text(), /2099/);
+      assert.doesNotMatch(deck.text(), /Prompt only/);
+      assert.equal(deck.calls.reviews.length, 1);
+      await deck.click('Get new cards');
+      assert.equal(deck.calls.newFetches, 2);
+      assert.equal(deck.calls.reviews.length, 1);
+      await deck.click('Go through these again');
+      await recall(deck);
+      assert.equal(deck.calls.reviews.length, 1);
+      await deck.click('Get new cards');
+      assert.match(deck.text(), /No new cards right now/);
+      assert.equal(deck.calls.reviews.length, 1);
+      await deck.unmount();
+    });
+  }
+}
+
+test('STUDY-REQ-006 delayed mixed refresh stays complete then serves only unseen cards', async () => {
+  const deck = await mountDeck({ cards: [card('first'), card('second')],
+    nextCards: [card('first'), card('third'), card('second')], deferNew: true });
+  await recall(deck); await recall(deck);
+  await deck.click('Get new cards');
+  assert.match(deck.text(), /Study complete/);
+  assert.equal(deck.button('Get new cards').props.disabled, true);
+  assert.equal(deck.button('Go through these again').props.disabled, true);
+  assert.equal(deck.calls.newFetches, 1);
+  await deck.finishNew();
+  assert.match(deck.text(), /Prompt third/);
+  assert.doesNotMatch(deck.text(), /Prompt first|Prompt second/);
+  await recall(deck);
+  assert.deepEqual(deck.calls.reviews.map(args => args.itemId), ['first', 'second', 'third']);
+  assert.equal(new Set(deck.calls.reviews.map(args => args.idempotencyKey)).size, 3);
+  assert.ok(deck.calls.reviews.every(args => args.sessionId && args.latencyMs >= 0));
+  await deck.click('Go through these again');
+  await recall(deck);
+  assert.equal(deck.calls.reviews.length, 3);
+  await deck.unmount();
+});
+
+test('STUDY-REQ-006 a genuinely new one-card deck can be rated once after completion', async () => {
+  const deck = await mountDeck({ cards: [card('first')], nextCards: [card('next')] });
+  await recall(deck); await deck.click('Get new cards');
+  assert.match(deck.text(), /Prompt next/);
+  await recall(deck);
+  assert.deepEqual(deck.calls.reviews.map(args => args.itemId), ['first', 'next']);
+  await deck.click('Get new cards');
+  assert.match(deck.text(), /Study complete/);
+  assert.match(deck.text(), /No new cards right now/);
+  assert.equal(deck.calls.reviews.length, 2);
+  await deck.unmount();
+});
+
+test('STUDY-REQ-006 refresh failure keeps completion and permits retry', async () => {
+  const deck = await mountDeck({ cards: [card('only')], nextError: true });
+  await recall(deck); await deck.click('Get new cards');
+  assert.match(deck.text(), /Study complete/);
+  assert.match(deck.text(), /We could not check for new cards. Try again./);
+  assert.equal(Boolean(deck.button('Get new cards').props.disabled), false);
+  assert.equal(deck.calls.reviews.length, 1);
+  await deck.unmount();
+});
+
+for (const dueAt of [undefined, 'invalid']) {
+  test(`STUDY-REQ-006 missing or invalid scheduling date is never fabricated: ${dueAt}`, async () => {
+    const deck = await mountDeck({ cards: [card('only')], nextCards: [], dueAt: dueAt ?? null });
+    await recall(deck); await deck.click('Get new cards');
+    assert.match(deck.text(), /Study complete/);
+    assert.match(deck.text(), /We could not read your next review date/);
+    assert.doesNotMatch(deck.text(), /Your next review is/);
+    await deck.unmount();
+  });
+}
+
+test('STUDY-REQ-003 failed review retries with the same first-rating idempotency key', async () => {
+ const deck = await mountDeck({cards:[card('only')], failFirstRating:true});
+ await recall(deck);
+ assert.match(deck.text(),/Prompt only/);
+ await deck.click('Got it');
+ assert.equal(deck.calls.reviews.length,2);
+ assert.equal(deck.calls.reviews[0].idempotencyKey,deck.calls.reviews[1].idempotencyKey);
+ assert.equal(deck.calls.reviews[0].sessionId,deck.calls.reviews[1].sessionId);
+ await deck.click('Go through these again'); await recall(deck);
+ assert.equal(deck.calls.reviews.length,2);
+ await deck.unmount();
+});
+
+test('STUDY-REQ-006 background query replacement cannot replay completed cards', async () => {
+ const deck = await mountDeck({ cards: [card('only')] });
+ await recall(deck);
+ await deck.replaceServerDeck({sessionId:'background',cards:[card('only')]});
+ assert.match(deck.text(), /Study complete/);
+ assert.doesNotMatch(deck.text(), /Prompt only/);
+ await deck.click('Go through these again'); await recall(deck);
+ assert.equal(deck.calls.reviews.length,1);
+ await deck.unmount();
+});
+
+test('STUDY-REQ-005 an initially empty deck can recover into available cards', async () => {
+ const deck = await mountDeck({cards:[],tracked:0});
+ assert.match(deck.text(),/No cards yet/);
+ await deck.replaceServerDeck({sessionId:'available',cards:[card('ready')]});
+ assert.match(deck.text(),/Prompt ready/);
+ await recall(deck);
+ assert.equal(deck.calls.reviews.length,1);
+ await deck.unmount();
 });

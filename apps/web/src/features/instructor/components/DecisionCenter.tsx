@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { SparklesIcon, type SparklesIconHandle } from "@/components/ui/sparkles";
 import { CheckIcon, type CheckIconHandle } from "@/components/ui/check";
 import { XIcon, type XIconHandle } from "@/components/ui/x";
@@ -136,19 +137,12 @@ export function DecisionCenter({
           onMouseLeave={() => sparklesRef.current?.stopAnimation()}
           className="shrink-0"
         >
-          {generate.isPending ? (
-            <>
-              <Spinner className="size-3.5" /> Analysing
-            </>
-          ) : (
-            <>
-              <SparklesIcon ref={sparklesRef} size={14} />{" "}
-              {all.length === 0 ? "Run analysis" : "Re-run analysis"}
-            </>
-          )}
+          <SparklesIcon ref={sparklesRef} size={14} />{" "}
+          {all.length === 0 ? "Run analysis" : "Re-run analysis"}
         </Button>
       </div>
 
+      {generate.isPending ? <div role="status" className="mb-3"><Shimmer className="text-sm">Kala is preparing recommendations…</Shimmer></div> : null}
       {isLoading ? (
         <LoadingRegion className="space-y-3">
           <Skeleton className="h-40 w-full" />

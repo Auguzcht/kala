@@ -108,7 +108,8 @@ export function TutorSidebar({
             role="status"
             className="flex items-center gap-2 p-3 text-xs text-muted-foreground"
           >
-            <Spinner className="size-3.5" /> Loading chats…
+            <span className="h-3 w-full rounded-sm bg-muted" aria-hidden />
+            Loading chats…
           </p>
         ) : conversations.isError ? (
           <div className="space-y-2 p-3 text-xs text-muted-foreground">

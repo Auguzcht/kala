@@ -1,7 +1,6 @@
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { MarkdownText } from "@/components/study/MarkdownText";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Spinner } from "@/components/ui/spinner";
 
 // A plain-text (well, markdown) assistant reply — Tutor's freeform answers,
 // unlike TeachingBlock's structured lesson-step shape (summary/bullets/
@@ -49,7 +48,6 @@ export function AssistantBlock({
         <MessageContent className="min-w-0 w-full px-1 text-sm leading-relaxed text-foreground">
           {showPending ? (
             <div role="status" className="flex items-center gap-2">
-              <Spinner aria-hidden />
               <Shimmer className="text-sm">{pendingLabel}</Shimmer>
             </div>
           ) : (

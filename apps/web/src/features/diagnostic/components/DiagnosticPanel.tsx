@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSession } from "@/lib/auth/AuthProvider";
 import {
   useDiagnostic,
   useSubmitDiagnostic,
@@ -31,6 +32,7 @@ import type { Answer } from "@/features/diagnostic/schema/diagnostic.schema";
 export function DiagnosticPanel({ courseId }: { courseId: string }) {
   const { data, isLoading, isError, refetch } = useDiagnostic(courseId);
   const bank = useBankStatus(courseId);
+  const isStudent = useSession()?.role === "student";
   const submit = useSubmitDiagnostic(courseId);
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [startedAt] = useState(() => Date.now());
@@ -70,7 +72,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
     return <DiagnosticResults rows={masteryDeltaRows} total={submit.data?.total ?? 0} celebrationKey={`diagnostic:${courseId}:${submit.submittedAt}`} />;
 
   if (isLoading)
-    return <LoadingPanel label="Checking your baseline…" lines={4} />;
+    return <div className="mx-auto w-full max-w-[800px] px-4 py-6 sm:px-6"><LoadingPanel label="Checking your baseline…" lines={4} /></div>;
   if (isError && !data?.questions.length)
     return (
       <EmptyState
@@ -81,10 +83,10 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
     );
   if (data?.status === "generating" && data.questions.length === 0)
     return (
-      <LoadingPanel
+      <div className="mx-auto w-full max-w-[800px] px-4 py-6 sm:px-6"><LoadingPanel
         label={`Waiting for baseline questions. ${data.readyCount} question${data.readyCount === 1 ? " is" : "s are"} ready.`}
         lines={4}
-      />
+      /></div>
     );
   if (
     data?.status === "failed" &&
@@ -92,19 +94,19 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
     data.failedSkillIds.length > 0 &&
     bank.isLoading
   )
-    return <LoadingPanel label="Checking course material…" lines={4} />;
+    return <div className="mx-auto w-full max-w-[800px] px-4 py-6 sm:px-6"><LoadingPanel label={isStudent ? "Checking question availability…" : "Checking course material…"} lines={4} /></div>;
   if (allFailedSkillsHaveNoMaterial)
     return (
       <EmptyState
-        title="No course material yet"
-        description="These skills don’t have course material yet."
+        title={isStudent ? "Your baseline check isn't ready yet." : "No course material yet"}
+        description={isStudent ? "Check back later." : "These skills don’t have course material yet."}
       />
     );
   if (data?.status === "failed" && data.questions.length === 0)
     return (
       <EmptyState
         title="Your baseline is not ready yet"
-        description="Kala could not create a question for any of the topics currently due. Your course team can reopen the failed topic after adding material."
+        description={isStudent ? "Kala could not prepare your baseline questions. Check back later." : "Kala could not create a question for any of the topics currently due. Your course team can reopen the failed topic after adding material."}
       />
     );
   // Nothing due is the common, GOOD state here, not a missing-content
@@ -122,8 +124,8 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
   if (data?.questions.length === 0 && (data.waitingForMaterialCount ?? 0) > 0)
     return (
       <EmptyState
-        title="Waiting for course material"
-        description={`${data.waitingForMaterialCount} ${data.waitingForMaterialCount === 1 ? "topic is" : "topics are"} waiting for course material. Your course team can make these topics available after adding material.`}
+        title={isStudent ? "Your baseline check isn't ready yet." : "Waiting for course material"}
+        description={isStudent ? "Check back later." : `${data.waitingForMaterialCount} ${data.waitingForMaterialCount === 1 ? "topic is" : "topics are"} waiting for course material. Your course team can make these topics available after adding material.`}
       />
     );
   if (!data || data.questions.length === 0)
@@ -160,7 +162,6 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
         <div id="tour-diagnostic-card" className="mx-auto flex w-full max-w-[800px] flex-col gap-6 px-4 py-6 sm:px-6">
           {data.pendingSkillIds.length > 0 ? (
             <p role="status" className="flex items-center gap-2 border-l-2 border-brand-orange/60 px-3 py-2 text-sm text-muted-foreground">
-              <Spinner aria-hidden />
               <span>Waiting for questions for {data.pendingSkillIds.length} more {data.pendingSkillIds.length === 1 ? "topic" : "topics"}. Ready questions are below.</span>
             </p>
           ) : null}
