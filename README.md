@@ -54,5 +54,5 @@ To be determined by Mapúa Malayan Colleges of Mindanao (OAICI).
 ---
 
 <div align="center">
-  <p><strong>Built with ❤️ for Mapúa Malayan Colleges of Mindanao’s OAICI.</strong></p>
+  <p><strong>Built with ❤️ for Mapúa Malayan Colleges of Mindanao.</strong></p>
 </div>
