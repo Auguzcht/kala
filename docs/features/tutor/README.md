@@ -157,7 +157,7 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Rule: This is frontend-only. Copy never sends, uploads, edits, deletes or makes an API request. Sent-message editing remains deferred under TUTOR-REQ-015 / WI-29; no edit control or edit-message work is authorized. Shared Study components must keep their current default behavior outside Tutor.
 - Acceptance: Exact selected-message content, both roles, saved/local messages, clipboard success/failure/unavailability, repeated activation, keyboard/touch and375px/1440px. No mutating request and no edit affordance.
 - Status: done-awaiting-confirmation. The remaining APPROVAL-09 clipboard-only item is implemented locally during Fred’s 2026-10-28 open-item audit, WI-34.
-- Verified by: message-copy.browser.mjs passes 52 assertions at 375px/1440px. Integrated Tutor browser checks pass 359 assertions, including saved/local/optimistic user copying, completed saved/local replies and no copying of pending answers. Focused Tutor/draft units pass 13. Shared Study blocks are unedited. No live clipboard acceptance claim.
+- Verified by: message-copy.browser.mjs passes 97 assertions at 375px/1440px, including hover/focus visibility, icon-only shared top tooltip and touch targets. Integrated Tutor browser checks pass 383 assertions, including saved/local/optimistic user copying, completed saved/local replies and no copying of pending answers. Focused Tutor/draft units pass 13. Shared Study blocks are unedited. No live clipboard acceptance claim.
 
 ### TUTOR-REQ-018: Start an assigned Tutor item with an unsent skill draft
 - Rule: “From your instructor” Start for a Tutor plan item opens the new-chat Tutor surface in the same validated course, with an editable draft about the assigned skill. Use the displayed skill name, falling back to the assignment title, to ask Kala to explain the key ideas and work through an example. Do not reopen the previously selected conversation or send automatically. No profile name, private history or implicit instructor-note payload is added.
@@ -181,7 +181,7 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Rule: Preserve pending/error/retry and saved/unsaved-answer recovery. Only one ask runs at a time, with the existing single shimmer and stable disabled Send. Changing conversations discards the old scope's local turns and follow-up context. Add no backend field, provider change or sent-message edit.
 - Acceptance: At 375px/1440px, both chips show a new explicit user bubble before the pending answer, submit the correct style and same conversation ID, and do not resubmit the original question. Repeated chips target the latest answer. Reopened conversations, returned-unsaved answers, failures/retry and conversation switches retain correct scope and request text. Synthetic requests prove intent and wiring, not live model quality.
 - Status: implemented locally under Fred's APPROVAL-09 follow-up request, WI-34. Human confirmation remains pending.
-- Verified by: TutorChat.test.mjs covers saved/reopened and returned-unsaved follow-up context. ui-overhaul.browser.mjs passes 317 assertions including explicit instructions, styles, conversation scope and retry at both widths. Synthetic wiring checks do not establish live answer quality.
+- Verified by: TutorChat.test.mjs covers saved/reopened and returned-unsaved follow-up context. presentation.test.mjs passes 10 units. ui-overhaul.browser.mjs passes 383 assertions including explicit instructions, static emoji, latest saved/local casual-turn filtering, styles, conversation scope and retry at both widths. Synthetic wiring checks do not establish live answer quality.
 
 ### TUTOR-REQ-022: Browse the current chat's own prompts with arrow keys
 
@@ -190,7 +190,7 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Keyboard boundary: Preserve selection, IME composition and modified Up/Down. In multiline text, retain native movement except Up at the first logical line and Down at the last logical line. ArrowDown outside history does nothing beyond native editing. Clamp at the oldest entry and restore the original draft/caret when leaving the newest entry. Attachment readiness and submit locks remain unchanged.
 - Acceptance: Test empty/draft restoration, older/newer bounds, edited recall, current-chat scope, local unsaved prompts, reset after send/new chat/change, multiline boundaries, modifier/selection/IME handling and zero requests from arrow navigation. Verify Enter sends exactly the chosen prompt and no extra calls at 375px/1440px.
 - Status: done-awaiting-confirmation. Implemented locally under Fred's final APPROVAL-09 input-gesture request, WI-34.
-- Verified by: pending implementation and keyboard interaction checks.
+- Verified by: prompt-history.test.ts passes four units. prompt-history.browser.mjs passes 62 assertions at 375px/1440px for traversal, draft/caret restoration, native editing boundaries, chat/submit resets and zero service writes. ui-overhaul.browser.mjs passes 383 assertions, including saved, failed and returned-unsaved user prompts. Live keyboard acceptance remains pending.
 
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |

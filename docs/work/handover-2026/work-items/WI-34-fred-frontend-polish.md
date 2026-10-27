@@ -1,6 +1,6 @@
 ---
 id: WI-34
-status: in-progress
+status: done-awaiting-confirmation
 owner: Fred; coordinator for specs/privacy audit/final checks
 ---
 
@@ -513,3 +513,73 @@ WI-34-T18 implementation: done-awaiting-confirmation. Current-chat user prompts,
 2026-10-28. Fred’s screenshot shows the reinforcement question’s scrollbar along the centered card edge. Read-only source inspection finds the normal teaching stream already uses StudyStream’s full-bleed scroll region, but check takeover gives its motion wrapper overflow-y-auto inside StudyColumn. LESSON-REQ-006 and DESIGN-REQ-002 are amended first. WI-34-T19 covers overflowing teaching, ungraded questions and graded feedback at 375px/1440px, matching dock/card edges, persistent scrollbars, fixed session bar/dock, no horizontal overflow and no layout-triggered requests. Change only takeover layout and its browser coverage. Preserve check grading/requests, all tour anchors and student-tour visibility. Status: in-progress.
 
 WI-34-T19 implementation: done-awaiting-confirmation. Check takeover now cancels/restores only the inherited column inset, with a full-surface native scroll region and shared card/dock gutters. LESSON-REQ-006 logic, grading requests, anchors and shared components are unchanged. final-ui-pass passes 238 assertions, including long teaching, check and graded feedback at both widths. Scroller bounds: 0–375px and 0–1440px. Card/dock bounds: 16–359px (343px) and 344–1096px (752px). Persistent scrollbar tests preserve those edges, fixed dock and no document/horizontal scroll. Only the explicitly chosen answer produces one synthetic grading request. Screenshot inspection confirms mobile feedback clears the dock. Full sequential verification follows.
+
+
+## Final frontend freeze and planner handoff
+
+2026-10-28. Source eaad954 plus this documentation-only record. Status: done-awaiting-confirmation. Fred's requested frontend round is frozen for manual review. Original branch base remains eb9409a8, final polish began from 84ec8eb, branch codex/fred-polish. No merge, push, deployment, configuration, migration or backend implementation is included. One original Vite server on 5173 remains running. All browser verification used synthetic intercepted requests, not hosted application writes.
+
+### Completed behavior
+
+- Study and Tutor use matching shared-column content/reply/dock edges, with full-surface scrollbars at the viewport's right edge. U2 full-viewport loading/content widths remain 343px/752px. In the actual app-shell fixtures, Study is 72–359px at 375px and 372–1124px at 1440px. Tutor messages/composer are 72–359px and 532–1284px with its desktop history sidebar. All corresponding edges match within 1px.
+- Lesson teaching/check/feedback follows the same rule. The reinforcement takeover scrollbar correction is eaad954. Full-viewport Lesson fixtures measure card/dock 16–359px and 344–1096px, with scrollers ending at 375px/1440px. Persistent scrollbar, fixed dock and long feedback are covered.
+- Text selection uses #BCD3F4. Tutor conversation/history reads use skeletons without visible loading copy or read spinners.
+- Tutor explanation chips submit explicit follow-up user messages, with the chosen style and current answer context. Study hint/explain actions produce user bubbles before Kala replies. Assigned Tutor Start opens a fresh, focused, editable topic draft and waits for Enter/Send.
+- Evidence history uses one pager. Next fetches older batches at the loaded boundary, so the separate Load older activity control is removed while preserving access to older events, errors/retry and scoped history.
+- The instructor tour has 27 Next/Done-driven steps with missing-target fallbacks and no required write/control completion. It selects a learner with recorded progress rather than an empty roster row. The empty transition is removed. Readiness donut/number, mastery radar, intervention, readiness trend, practice/activity and ledger have individual explanations. The hidden student tour and Amendment 7a flag are untouched.
+- Learner class standing ranks measured course peers and labels that denominator. Drawer accuracy names its last-200 window. Rounded zero momentum is neutral. Skills covered says With evidence rather than implying complete hint counts.
+- Final Tutor copy is icon-only on message hover or keyboard focus, with the shared tooltip above. Touch keeps a discoverable 44px action. Clipboard failures remain truthful. Commit 777b6f4.
+- Explanation chips use static 🧸/🔎 emoji and hide for recognised casual latest exchanges and pending/failed newer turns. This is a local common-phrase heuristic, not a general semantic classifier. Commit 953869c.
+- Up/Down browses only current-chat user prompts, restores the original draft/caret or empty, and never sends. Editing, accepted submit and chat/course remount reset browsing. Multiline, selections, modifier keys, IME and upload/submit locks remain. Commit f4793b1.
+
+### Final checks
+
+All 20 stages pass in one sequential verification run. Commands: pnpm --filter web lint, typecheck and build, node --experimental-vm-modules --test for all frontend unit files, node --test for E3, each browser script individually in sequence, python3 scripts/docs_check.py, documentation unittest discovery and git diff --check. Frontend units: 62. E3: 56, retaining all seven historical proofs. Documentation units: 18. Lint: zero errors and 18 existing warnings. Existing route-generator circular-dependency and bundle-size warnings remain. Documentation checker: 188 files and zero violations.
+
+| Browser suite | Assertions |
+| --- | --- |
+| tour | 3386 |
+| frontend-closeout | 114 |
+| final-ui-pass | 238 |
+| read-states | 326 |
+| review-feedback | 63 |
+| message-copy | 97 |
+| prompt-history | 62 |
+| text-selection | 40 |
+| ui-overhaul | 383 |
+| evidence-history-scope | 16 |
+| evidence-history | 118 |
+| presentation | 148 |
+| Total | 4991 |
+
+All literal tour anchors in final changed components are retained. CourseShell and student-tour are byte-identical to the original eb9409a8 branch base. Final source changes since 84ec8eb are the paths below, with the requirement/evidence updates included:
+
+```text
+apps/web/src/components/study/FollowUpChips.tsx
+apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs
+apps/web/src/features/lessons/components/LessonChat.tsx
+apps/web/src/features/tutor/components/TutorChat.tsx
+apps/web/src/features/tutor/components/TutorComposer.tsx
+apps/web/src/features/tutor/components/TutorMessage.tsx
+apps/web/src/features/tutor/lib/presentation.ts
+apps/web/src/features/tutor/lib/prompt-history.ts
+apps/web/src/features/tutor/tests/message-copy.browser.mjs
+apps/web/src/features/tutor/tests/presentation.test.mjs
+apps/web/src/features/tutor/tests/prompt-history.browser.mjs
+apps/web/src/features/tutor/tests/prompt-history.test.ts
+apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+apps/web/src/styles/DESIGN.md
+docs/features/lessons/README.md
+docs/features/tutor/README.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+```
+
+Final run artifacts: `/tmp/kala-tutor-freeze-final/results.json` and its per-stage logs/screenshots, local only, not retained. Focused Lesson screenshots were inspected at both layout widths through automated geometry and mobile image inspection. The earlier focused history caret-race failure is recorded above and resolved. The final cumulative run has no failed stage or retry.
+
+### Review and remaining boundaries
+
+Fred reviews the 27-step live flow and the final Tutor/Lesson UI. Automated fixtures establish local interaction and geometry, not live model quality, clipboard permission acceptance or hosted deployment. No unimplemented frontend item from this requested round remains after the Lesson correction. This does not close the broader backlog.
+
+The earlier remaining-items table remains authoritative for separate work: complete Skill hub hint telemetry, server percentile arithmetic, actual fallback-model provenance, WI-24 historical identity repair, prepared greeting-candidate integration, deferred sent-message editing and human integration/release gates. Counts found no Alfred-owned evidence in the checked current Hanna windows, but do not certify unresolved historical aliases. Roster/record accuracy uses different bounded windows. The 14-to-15 skill denominator has approval-timing metadata support. Fred's paid :floor hosted proposer confirmation stays closed. The historical minimax:free label is saved proposal-time metadata and does not identify the current hosted model. No exact current hosted model ID was supplied, and none is inferred.
+
+Secrets printed: none.
