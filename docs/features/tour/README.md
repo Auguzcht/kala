@@ -78,6 +78,15 @@ The instructor walkthrough orients staff within the real workspace using guided 
 - Status: implemented locally; deployed acceptance remains pending
 - Verified by: apps/web/src/components/shell/tests/tour.browser.mjs:646 assertions (historical616) at375px/1440px. Student entry absent; instructor destination source audit permits keeping its flow unchanged, all27 steps covered. E3 53/routes3 pass. Human FG-9 remains pending.
 
+### TOUR-REQ-009: Keep all 27 instructor steps informational and Next-driven
+
+- Rule: Preserve the instructor tour's 27-step order and targets. Every step offers Next, or Done at the end. Next may perform only the existing allow-listed local UI navigation, such as opening the roster sheet, changing tabs or opening a learner record. No step clicks a write/model control or waits for a write to complete. Instructor targets cannot be activated directly through the tour overlay. Reject any instructor studentAction or waitState configuration in tests.
+- Rule: Step 15, the skill-review Approve/Reject explanation at #tour-skill-approve, explains both outcomes and advances with Next without making a decision. Step 22, the learner recommendation decision controls, follows the same rule. Mark write-adjacent explanations at steps 15, 20, 21, 22 and 25 informational so an absent control never triggers a target wait or analysis/decision/assignment work.
+- Rule: An absent or differently rendered instructor target shows a centered, same-step fallback popover rather than silently skipping or waiting for a write. Other read-only targets may have a bounded 1.2-second render wait before their fallback. If there is no concrete learner route, explain that step's fallback on the current page instead of navigating to a placeholder or inventing a learner. Preserve Back, Skip/Escape, fixed progress and local dismissal. The new fallback/Next behavior applies to the retained instructor flow only and does not unblock the student rework.
+- Acceptance: At 375px/1440px, complete all 27 steps with Next in populated and empty classes and when step 15's target is absent or differently rendered. Each step has its configured highlight or an explicit centered fallback, never a decision-completion wait. Read/model/write controls are never activated and mutating HTTP count stays zero. Audit all 27 configuration entries, keep E3's seven historical proofs unchanged and leave Amendment7a's student-tour flag untouched. Real live-DOM causation and Fred's live walkthrough remain distinct from synthetic verification.
+- Status: implemented locally under Fred's direct APPROVAL-09 instructor-tour correction, WI-34. Fred's live 27-step revisit remains pending.
+- Verified by: tour.browser.mjs 1982 assertions at 375px/1440px, covering all 27 steps in populated/empty and absent/alternate step-15 layouts with zero mutating requests or write-control clicks. E3 remains unchanged with 53 passing tests. Full frontend units pass 50 cases. Lint/typecheck/build pass after the documented strict-null correction. CourseShell/student definitions are byte-identical to 5f17777.
+
 ## API contract
 
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -98,7 +107,7 @@ No direct model call from the runner or sample-text generation. Examples are det
 APPROVAL-08 Amendment7a keeps the full twelve-step/no-write rework blocked and the student tour hidden. Existing instructor behavior is retained only after its read-only destination audit. The future stricter no-write invariant must be measured by database changes or a request-side-effect log, not inferred from HTTP methods. [WI-32](../../work/handover-2026/work-items/WI-32-side-effect-free-reads.md) tracks the dependency for tours and future prefetching.
 
 
-The earlier student skip/GET-side-effect notes below describe the preserved, hidden implementation. The twelve-step/fixed-fallback student rework remains blocked and unmerged. Amendment7a retains the instructor flow unchanged after its read-only destination audit; it does not impose the blocked restructure on that flow.
+The earlier student skip/GET-side-effect notes below describe the preserved, hidden implementation. The twelve-step/fixed-fallback student rework remains blocked and unmerged. Amendment7a retained the instructor flow after its read-only destination audit. TOUR-REQ-009 now authorizes the narrow instructor-only Next/fallback correction without changing that student flag or the instructor outline.
 
 - Missing/removed or hidden anchors are skipped; an empty class still walks through its available overview targets and omits learner-dependent steps.
 - Optional results/Study-completion steps never create a session, submit answers or rate cards to reach their targets. The normal flow may skip them; the browse-step copy also explains the eventual end controls.
@@ -145,6 +154,7 @@ The coordinator released the approved DOCS-HYGIENE merge; the rebase completed w
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Specify all-27 instructor Next/fallback behavior, immediate informational decision steps and zero-write audit before shell/definition edits | Fred's direct APPROVAL-09 instructor-tour request, WI-34 | TOUR-REQ-009, TOUR-REQ-003/004/005/006 retained |
 | 2026-10-27 | Tour hidden for students as of APPROVAL-08; block the full no-write/twelve-step rework on side-effect-free destination reads, preserve anchors/definitions | APPROVAL-08 Amendment7a | TOUR-REQ-001/002/003/004/007/008 |
 | 2026-10-27 | Define fixed read-only twelve-step student plan, centered fallbacks, bounded wait, no toasts and target geometry; instructor rules audit without restructure | APPROVAL-08 Amendment4, TOUR-2 | TOUR-REQ-002/003/004/007 |
 | 2026-10-27 | Separate pinned historical AST scope attestation from exhaustive current tour-target checks before approved UI changes | APPROVAL-08 Amendment3, coordinator-only E3 | TOUR-REQ-006 |

@@ -15,9 +15,9 @@
 // description, and never verdict language. "Needs support", not "failing";
 // "your decision", not "approval workflow".
 
-import type { TourStepConfig } from "@/components/shell/student-tour";
+import type { TourPresentationStep } from "@/components/shell/TourRunner";
 
-export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
+export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   // ---- Class overview: the six numbers first ---------------------------
   {
     route: "/class",
@@ -141,10 +141,12 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class",
     selector: "#tour-skill-approve",
+    explainOnly: true,
+    fallbackDescription: "When proposals are available, Approve makes a skill live and Reject leaves it out. Select Next to continue without changing anything.",
     optional: true,
     title: "Skill mapping and review",
     description:
-      "Approve makes the skill live for learners to practice against; reject sends it back. Nothing proposed here reaches anyone until you decide — the same gate as the learner recommendations.",
+      "Approve makes a proposed skill available, while Reject leaves it out. Select Next to continue without making a decision.",
   },
   // ---- Cross to one learner's record via a needs-support flag ----------
   {
@@ -187,6 +189,8 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-run-analysis",
+    explainOnly: true,
+    fallbackDescription: "Run analysis prepares recommendations only when you choose it outside the tour. Select Next to continue without running it.",
     title: "Decide",
     description:
       "Run analysis prepares recommendations from the learner’s current evidence only when you choose it. The tour never runs an analysis.",
@@ -194,19 +198,22 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-rec-card",
+    explainOnly: true,
+    fallbackDescription: "Recommendations appear here when available. The tour does not run analysis to create them.",
     optional: true,
     title: "Decide",
     description:
       "Every recommendation shows the evidence it was derived from — you are asked to exercise judgement, not rubber-stamp a score.",
-    waitFor: "#tour-rec-card",
   },
   {
     route: "/class/student/$uid",
     selector: "#tour-decision-buttons",
+    explainOnly: true,
+    fallbackDescription: "When recommendations are available, Approve assigns one and Decline rejects it. Select Next to continue without recording a decision.",
     optional: true,
     title: "Decide",
     description:
-      "Three real outcomes: approve, modify if the activity is wrong, or decline with a reason that stays in the audit trail.",
+      "Approve assigns a recommendation, Modify changes it and Decline rejects it. Select Next to continue without recording a decision.",
   },
   {
     route: "/class/student/$uid",
@@ -226,6 +233,8 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourStepConfig[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-record-intervene",
+    explainOnly: true,
+    fallbackDescription: "Suggested interventions appear here when available. Select Next to continue without assigning work.",
     title: "Mastery",
     description: "Weakest first — the intervention list that decides what to assign.",
   },

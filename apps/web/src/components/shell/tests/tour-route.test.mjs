@@ -26,3 +26,19 @@ test('student tour keeps one prepared skill and no automatic sessions',()=>{
  assert.ok(TOUR_STEPS.some(s=>s.selector.includes('tutor-history')));
  assert.ok(TOUR_STEPS.some(s=>s.selector.includes('tutor-attach')));
 });
+test('TOUR-REQ-009 all 27 instructor steps avoid write clicks and write-completion waits',()=>{
+ assert.equal(INSTRUCTOR_TOUR_STEPS.length,27);
+ const readWaits=new Set(['#tour-standing','#heatmap-panel','#tour-skill-review-panel','#tour-decide-center','#tour-record-radar','#tour-record-ledger']);
+ for(const [index,step] of INSTRUCTOR_TOUR_STEPS.entries()){
+  assert.ok(!step.studentAction&&!step.waitState,`step ${index+1} must not require a recorded action`);
+  if(step.click)assert.ok(isTourUiClick(step.clickSelector??step.selector),`step ${index+1} clicks only permitted UI`);
+  if(step.waitFor)assert.ok(readWaits.has(step.waitFor),`step ${index+1} waits only for read-only UI`);
+  assert.ok(!step.description.includes(';'),`step ${index+1} copy has no semicolon`);
+ }
+ for(const number of [15,20,21,22,25]){
+  const step=INSTRUCTOR_TOUR_STEPS[number-1];
+  assert.ok(step.explainOnly&&!step.click&&!step.waitFor,`step ${number} explains without waiting for a write control`);
+  assert.ok(step.fallbackDescription);
+ }
+ assert.match(INSTRUCTOR_TOUR_STEPS[14].description,/Approve.*Reject.*Next/);
+});

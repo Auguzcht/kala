@@ -12,13 +12,22 @@ let assertions=0;const check=(condition,label)=>{assert.ok(condition,label);asse
 const skill={skillId:'storage',name:'Cloud storage',moduleRef:'Cloud basics',bloomLevel:'understand',estimate:0.5,attempts:2,band:'proficient'};
 const ident={userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL'};
 const evidence=Array.from({length:20},(_,i)=>({id:'event-'+i,type:'practice',correct:true,latencyMs:1000,skillName:'Cloud storage',createdAt:'2026-10-25T00:00:00Z'}));
-async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null}={}){
+async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal'}={}){
  const context=await browser.newContext({viewport:{width,height:950},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(15000);
  if(dismissal!==null)await context.addInitScript(({role,dismissal})=>localStorage.setItem(`kala.${role}.tour.demo`,dismissal),{role,dismissal});
+ await context.addInitScript(()=>{
+  window.__tourWriteClicks=[];
+  document.addEventListener('click',event=>{
+   if(event.target instanceof Element&&event.target.closest('#tour-skill-approve,#live-skill-approval,#tour-run-analysis,#tour-decision-buttons button,#tour-record-intervene button'))window.__tourWriteClicks.push(event.target.textContent);
+  },true);
+ });
  const errors=[],state={mutations:[],gets:[],skipped:[],visited:[],choosers:0};page.on('pageerror',e=>errors.push(e.message));page.on('filechooser',()=>state.choosers++);
  page.on('request',request=>{if(!['GET','HEAD','OPTIONS'].includes(request.method()))state.mutations.push({path:new URL(request.url()).pathname,method:request.method()});});
  await context.route('**/*',async route=>{
   const url=new URL(route.request().url());if(url.hostname!=='localhost'||url.port!=='5173')return route.abort();
+  if(step15Layout==='alternate'&&url.pathname.endsWith('/src/features/instructor/components/SkillReviewPanel.tsx')){
+   const response=await route.fetch();return route.fulfill({response,body:(await response.text()).replaceAll('tour-skill-approve','live-skill-approval')});
+  }
   if(url.pathname.endsWith('/src/lib/auth/AuthProvider.tsx'))return route.fulfill({contentType:'application/javascript',body:`export const AuthProvider=({children})=>children;export const useSession=()=>(${JSON.stringify({userId:'demo',institutionId:'inst',role,courseId:'course',displayName:'Demo learner'})});export const useSetSession=()=>()=>{};`});
   if(url.pathname.endsWith('/src/lib/api/client.ts'))return route.fulfill({contentType:'application/javascript',body:`export async function api(path,init){const r=await fetch('/__tour_api'+path,init);if(!r.ok)throw new Error('Synthetic API failure');return r.json();}`});
   if(!url.pathname.startsWith('/__tour_api'))return route.continue();
@@ -38,7 +47,7 @@ async function fixture(width,{role='student',completed=false,empty=false,noMater
   if(path.startsWith('/flashcards/'))return reply({courseId:'course',cards:[],stats:{tracked:0,due:0,learning:0,mastered:0},mode:'review',sessionId:'session',hasMore:false});
   if(path==='/tutor/conversations')return reply({conversations:[{id:'chat',courseId:'course',skillId:null,title:'Cloud storage',createdAt:'2026-10-25T00:00:00Z',updatedAt:'2026-10-25T00:00:00Z',pinnedAt:null}]});
   if(path.endsWith('/plan'))return reply({plan:[]});
-  if(path.endsWith('/skills/proposed'))return reply({courseId:'course',proposed:empty?[]:[{id:'proposal',name:'Explain cloud storage',bloom_level:'understand',blueprint_weight:1,proposed_source:'Course material'}]});
+  if(path.endsWith('/skills/proposed'))return reply({courseId:'course',proposed:empty||step15Layout==='absent'?[]:[{id:'proposal',name:'Explain cloud storage',bloom_level:'understand',blueprint_weight:1,proposed_source:'Course material'}]});
   if(path.endsWith('/skills/auto-matched'))return reply({courseId:'course',autoMatched:[]});
   if(path.endsWith('/roster'))return reply({courseId:'course',students:empty?[]:[{...ident,readiness:0.5,band:'proficient',attempts:20,evidenceCount:20,accuracy:0.5,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,weakestSkillName:'Cloud storage',skillsWithEvidence:1,skillsTotal:1,status:'needs-support'}]});
   if(path.endsWith('/stats'))return reply({courseId:'course',learners:empty?0:1,activeLearners:0,startedLearners:empty?0:1,notStartedLearners:0,cohortReadiness:0.5,medianReadiness:0.5,accuracy:0.5,evidenceCount:20,medianLatencyMs:1000,hintsUsed:0,skillsTracked:1,skillsCovered:1,bandDistribution:[{band:'proficient',count:1}],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
@@ -59,21 +68,26 @@ async function start(f,{direct=false,blocked=false}={}){
  if(!blocked)await f.page.waitForFunction(()=>window.__tourStore.getState().tourStep!==null);
 }
 async function walk(f,{back=false,width,role}={}){
- const {page,state}=f;let didBack=false;
+ const {page,state}=f;let didBack=false;const totalSteps=await page.evaluate(()=>window.__tourSteps.length);
  for(let turns=0;turns<70;turns++){
   const ready=await page.waitForFunction(()=>{const index=window.__tourStore.getState().tourStep;if(index===null)return {done:true};const el=document.querySelector(`.driver-popover[data-tour-step="${index}"]`);if(el&&el.getBoundingClientRect().height>0&&getComputedStyle(el).visibility!=='hidden')return {index};return false;});
   const stateAtReady=await ready.jsonValue();if(stateAtReady.done)break;const index=stateAtReady.index;
   const popover=page.locator(`.driver-popover[data-tour-step="${index}"]`);await popover.waitFor();
-  const title=await popover.locator('.driver-popover-title').innerText();state.visited.push({index,title,path:new URL(page.url()).pathname});
-  check(await page.evaluate(index=>[...document.querySelectorAll('.driver-active-element')].some(el=>el.matches(window.__tourSteps[index].selector)),index),'step '+index+' highlights its actual configured target');
+  const title=await popover.locator('.driver-popover-title').innerText();const fallback=await popover.getAttribute('data-tour-fallback')==='true';state.visited.push({index,title,fallback,path:new URL(page.url()).pathname});
+  if(fallback){
+   check(await popover.evaluate(el=>{const b=el.getBoundingClientRect();return Math.abs(b.left+b.width/2-innerWidth/2)<=2&&Math.abs(b.top+b.height/2-innerHeight/2)<=2;}),'TOUR-REQ-009 step '+index+' has a centered fallback');
+  }else check(await page.evaluate(index=>[...document.querySelectorAll('.driver-active-element')].some(el=>el.matches(window.__tourSteps[index].selector)),index),'step '+index+' highlights its actual configured target');
+  check(await popover.getByText(`${index+1} of ${totalSteps}`,{exact:true}).count()===1,'TOUR-REQ-009 progress stays fixed at step '+index);
+  check(await popover.locator('.driver-popover-next-btn').innerText()===(index===totalSteps-1?'Done':'Next'),'TOUR-REQ-009 every instructor step advances with Next or final Done');
   check(await popover.evaluate(el=>{const b=el.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1&&b.top>=0&&b.bottom<=innerHeight+1;}),'popover fits viewport '+width);
   check(state.mutations.length===0,'tour has sent zero mutating requests at step '+index);
+  check(await page.evaluate(()=>window.__tourWriteClicks.length===0),'TOUR-REQ-009 no write/model control click at step '+index);
   check(!page.url().includes('$uid'),'never navigates to a literal learner placeholder');
   const previous=popover.getByRole('button',{name:'Back',exact:true});
   if(back&&!didBack&&await previous.isEnabled()){
    didBack=true;if(width===375){await previous.focus();await previous.press('Enter');}else await previous.click();await page.waitForFunction(previousIndex=>window.__tourStore.getState().tourStep<previousIndex,index);continue;
   }
-  if(state.visited.length===1||title==='Keep track of your chats')await page.screenshot({path:resolve(out,`${role}-${width}-${index}.png`),animations:'disabled'});
+  if(state.visited.length===1||index===14||title==='Keep track of your chats')await page.screenshot({path:resolve(out,`${role}-${width}-${index}-${fallback?'fallback':'target'}.png`),animations:'disabled'});
   await popover.locator('.driver-popover-next-btn').click();
   await page.waitForFunction(previousIndex=>window.__tourStore.getState().tourStep!==previousIndex,index).catch(async e=>{throw new Error(`Stuck after ${role} step ${index} ${title}; path=${new URL(page.url()).pathname}; errors=${f.errors.join('; ')}; ${e.message}`);});
  }
@@ -135,6 +149,7 @@ try {
    await start(f);
    check(await walk(f,{width,role:'instructor',back:true}),'retained instructor Back works '+width);
    const visited = new Set(f.state.visited.map(step=>step.index));
+   check(visited.size===27,'TOUR-REQ-009 instructor visits all 27 steps including fallbacks '+width);
    if(empty)check(!f.state.visited.some(step=>step.path.startsWith('/class/student/')),'empty instructor roster invents no learner');
    else {
     check(visited.size===27,'instructor visits all 27 retained steps '+width);
@@ -142,8 +157,18 @@ try {
    }
    check(f.state.gets.every(path=>instructorReads.has(path)),'instructor GETs match source-audited read chains '+width);
    check(f.state.mutations.length===0,'instructor sends no mutating request '+width);
+   await f.page.getByText('First time here?',{exact:true}).waitFor({state:'detached'});
    check(await f.page.getByRole('button',{name:'Take the tour',exact:true}).count()===1,'instructor completion retains manual restart '+width);
    console.log(`instructor ${width} empty=${empty}: ${visited.size} distinct steps; mutations=${f.state.mutations.length}`);
+   await f.context.close();
+  }
+  for(const step15Layout of ['absent','alternate']){
+   const f=await fixture(width,{role:'instructor',step15Layout});await start(f);
+   await walk(f,{width,role:'instructor',back:true});
+   check(new Set(f.state.visited.map(step=>step.index)).size===27,'TOUR-REQ-009 live-like '+step15Layout+' visits all 27 steps '+width);
+   check(f.state.visited.some(step=>step.index===14&&step.fallback),'TOUR-REQ-009 step 15 has fallback for '+step15Layout+' target '+width);
+   check(f.state.gets.every(path=>instructorReads.has(path)),'TOUR-REQ-009 live-like '+step15Layout+' stays on audited read chains '+width);
+   check(f.state.mutations.length===0&&await f.page.evaluate(()=>window.__tourWriteClicks.length===0),'TOUR-REQ-009 live-like '+step15Layout+' has zero mutations or write-control clicks '+width);
    await f.context.close();
   }
   for (const exit of ['Escape','Skip']) {

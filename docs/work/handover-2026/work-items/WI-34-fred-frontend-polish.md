@@ -239,3 +239,53 @@ docs/features/tutor/README.md
 docs/features/twin/README.md
 docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
 ```
+
+## Instructor tour: Step 15 and the all-27 read-only audit
+
+2026-10-27. Fred adds this before integration and will revisit the live flow after the change. Base: unified-pager commit 5f17777. TOUR-REQ-009 and its change log are specified first. Scope: instructor definitions, tour shell/runner, matching tests, TOUR spec and this report only. No feature decision controls, API, student definitions or Amendment7a flag change. Status: in-progress, owner Codex. No merge is authorized.
+
+Read-only finding before edits: displayed step 15 is array index 14, the skill Approve/Reject explanation at `#tour-skill-approve`. It has optional=true, no click, no explicit waitFor, no studentAction and no completion condition. The runner implicitly polls its selector for 1.2 seconds, then automatically skips and shows a toast instead of a fallback. Step 22 is the separate recommendation decision-button explanation. No current instructor definition requires an Approve/Reject click. The decision controls can be absent when the skill/recommendation list is empty, loading or differently rendered. Synthetic populated fixtures always supply a pending skill proposal and an expanded recommendation, so those anchors exist. Live DOM and deployed source were not inspected, so this is a source-supported conditional-target explanation, not proven live causation.
+
+The audit found zero click-on-write configurations, zero studentAction conditions and zero waitState conditions across all 27 entries. Existing automatic clicks are eight allow-listed local UI/navigation operations. Explicit waitFor entries below observe UI containers rather than a recorded decision. Step 21's conditional recommendation wait is removed from the corrected definitions so analysis is never needed to reach it.
+
+| Step | Target | Existing click/wait | Write action required |
+| --- | --- | --- | --- |
+| 1 | #tour-cohort-kpis | none | no |
+| 2 | #roster-panel | none | no |
+| 3 | #tour-roster-search | none | no |
+| 4 | #tour-roster-filter | none | no |
+| 5 | #tour-roster-first-row | click opens sheet | no |
+| 6 | #tour-standing | wait for standing UI | no |
+| 7 | #tour-decide-center | none | no |
+| 8 | #tour-standing | click sheet-close | no |
+| 9 | #at-risk-list | none | no |
+| 10 | #cohort-analytics | none | no |
+| 11 | #tour-tab-heatmap | click tab | no |
+| 12 | #heatmap-panel | wait for heatmap UI | no |
+| 13 | #tour-skill-review-trigger | click only if closed | no |
+| 14 | #tour-skill-review-panel | wait for review panel | no |
+| 15 | #tour-skill-approve | implicit optional target wait only | no |
+| 16 | #tour-at-risk-first-flag | click opens record | no |
+| 17 | #tour-standing | none | no |
+| 18 | #tour-tab-decide | click tab | no |
+| 19 | #tour-decide-center | wait for decide UI | no |
+| 20 | #tour-run-analysis | implicit target wait only | no |
+| 21 | #tour-rec-card | wait for optional recommendation card | no |
+| 22 | #tour-decision-buttons | implicit optional target wait only | no |
+| 23 | #tour-tab-mastery | click tab | no |
+| 24 | #tour-record-radar | wait for radar UI | no |
+| 25 | #tour-record-intervene | implicit target wait only | no |
+| 26 | #tour-tab-activity | click tab | no |
+| 27 | #tour-record-ledger | wait for ledger UI | no |
+
+WI-34-T10 will cover every step with Next in populated/empty and live-like absent/alternate step-15 layouts at both widths, constant 27-step progress, visible highlight/fallback, zero mutating requests, no write/model wait, Back/Skip/Escape and unchanged hidden student entry. E3 remains unedited.
+
+Implementation and verification: the 27-step order and selectors remain. Steps 15, 20, 21, 22 and 25 are immediate informational explanations, with specific fallback copy. Step 21 no longer waits for a recommendation to be created. Instructor Next may activate only the unchanged UI-only allowlist, and active targets cannot be clicked directly through the overlay. Missing targets, including unresolved learner routes in an empty class, show centered same-step fallbacks without invented learners or silent skips. Student behavior/flag is unchanged.
+
+The current tour suite passes 1982 assertions, versus historical TOUR-REFRESH 616 and the earlier retained 646. All 27 steps complete through Next/Done in populated, empty, absent-step-15 and alternate-rendered-step-15 fixtures at both widths. Every step checks progress, highlight/fallback and zero mutations/write-control clicks. Back, dismissal, restart, Skip/Escape and the hidden student entry remain covered. No other click-on-write or write-completion condition was found.
+
+The full sequential regression run after this tour refactor passed all ten browser suites (3258 assertions total), frontend units (50), E3 (53), lint and documentation checks, but production tsc -b found five nullable captured tourStep errors that the separate typecheck command had not reported. Explicit null guards were then added at the two hoisted presentation/action functions. Lint/typecheck/build, E3 plus tour-route units (57 total) and tour.browser (1982) were rerun successfully. No unrelated browser behavior changed in that correction. The earlier build failure is retained at the local result manifest and is resolved, not counted as an original all-green run.
+
+Exploratory tour fixture corrections: after empty-class completion the test now waits for the shell dismissal effect before asserting the first-use banner is gone. A test-local page reference was corrected. Existing dismissal, permission and mutation assertions remain. CourseShell.tsx, student-tour.ts and tour-anchors.test.mjs were compared to parent 5f17777 and are byte-identical. Amendment7a's STUDENT_TOUR_ENABLED=false is untouched.
+
+Evidence logs/screenshots: `/tmp/kala-approval09-final-tour` for the complete sequential pass and its initial build failure, and `/tmp/kala-approval09-tour-final` plus the tour build/unit logs for the corrected checks, local only, not retained. The user will revisit live flow. No live DOM cause was proved, no hosted action was run, and there is no merge/push/deployment. Status: done-awaiting-confirmation for this tour item.
