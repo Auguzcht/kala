@@ -1,5 +1,7 @@
 # Runbooks: standing Kala up from zero
 
+Approved operational preparation: [FG-1b chat-model swap](fg1b-chat-model-swap.md), executed only by Fred before his APPROVAL-09 deployment. Preparation is not execution or live acceptance.
+
 All 13 procedures now have **unverified drafts** under WI-06/WI-07. Resolve their blocking `[Fred to confirm]` items and record named human execution before using them to provision an environment. The structure follows [the runbook template](../documentation/templates/runbook.md); `last_verified` distinguishes source review from execution. Agents never perform the hosted actions described here.
 
 | # | Runbook file | Produces | Needs from earlier steps | Source material to reconcile |
