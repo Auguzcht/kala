@@ -68,9 +68,10 @@ Lesson-retrieval GET follows [AUTH-REQ-007](../lti-auth/README.md#auth-req-007-r
 
 ### LESSON-REQ-006: Keep step interaction local and card-scoped
 - Rule: the UI renders one explanation/check slot, opens checks from Continue, requires result.advance before advancing a checked step, and allows a teaching-only step to continue when no check exists. Retry clears prior answer/explanation state. Follow-ups use the text-only ComposeDock and stateless tutor asks; they do not create saved conversations or attachments.
+- Presentation: Teaching, reinforcement checks and graded feedback use the shared content/dock column in DESIGN-REQ-002. Their scroll region spans the full available page surface so its native scrollbar stays at the browser’s right edge, outside the centered card column. Apply inherited gutters once, preserve fixed session bar/dock, bottom clearance, check/thread state and all tour anchors. Verify overflowing teaching, question and graded feedback at 375px/1440px, including persistent scrollbars, with no layout-triggered write.
 - Acceptance: missing check does not trap the learner; a miss offers Try again; question context names the current step/check. Reopening does not claim durable per-student lesson progression.
 - Status: implemented
-- Verified by: static `LessonChat.tsx::openCheck`, `advanceStep`, `retry` and its dock wiring; `use-lessons.ts` polls every 2 seconds only while status=generating and invalidates twin/next-up/gamification after checks. No browser interaction test in this lane.
+- Verified by: static `LessonChat.tsx::openCheck`, `advanceStep`, `retry` and its dock wiring; `use-lessons.ts` polls every 2 seconds only while status=generating and invalidates twin/next-up/gamification after checks. No browser interaction test in the original lane. APPROVAL-09 scrollbar correction: final-ui-pass.browser.mjs passes 238 assertions, including overflowing teaching/check/feedback and persistent page-edge scrollbars at 375px/1440px. Card/dock edges are 16–359px and 344–1096px respectively, matching within 1px. Layout causes zero writes, with one explicit synthetic grading request from choosing an answer. Live acceptance remains pending.
 
 ### LESSON-REQ-007: Bound first-open generation within an explicit request deadline
 - Rule: planned whole-request budget must include RAG, outline, step generation, persistence and response shaping.
@@ -131,6 +132,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-28 | Extend the outer-scroll/shared-column rule explicitly to Lesson teaching, reinforcement checks and feedback before the scrollbar correction | Fred’s APPROVAL-09 screenshot and direct request, WI-34 | LESSON-REQ-006; DESIGN-REQ-002 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | LESSON-REQ-001 through LESSON-REQ-007 |

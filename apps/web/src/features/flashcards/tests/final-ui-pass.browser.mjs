@@ -38,7 +38,8 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (!url.pathname.startsWith('/__u2_api')) return route.continue();
   const path = url.pathname.slice('/__u2_api'.length), reply = (json, status = 200) => route.fulfill({ json, status });
   if (req.method() !== 'GET') state.posts.push({ path, method: req.method(), body: req.postDataJSON() });
-  if (path === '/lessons/course/skill/skill') return reply({ lessonId: 'lesson', skillId: 'skill', moduleRef: null, title: 'Cloud lesson', status: 'ready', steps: [{ id: 'step', position: 0, summary: 'Synthetic lesson summary', detailPoints: ['Synthetic detail'], misconception: null, keyTakeaway: 'Synthetic takeaway', bloomLevel: 'understand', check: { itemId: question.id, prompt: question.prompt, choices: question.choices } }] });
+  if (path === '/lessons/course/skill/skill') return reply({ lessonId: 'lesson', skillId: 'skill', moduleRef: null, title: 'Cloud lesson', status: 'ready', steps: [{ id: 'step', position: 0, summary: 'Synthetic lesson summary', detailPoints: state.longLesson ? Array.from({length:35},(_,i)=>`Teaching paragraph ${i}: `+'A long explanation keeps the teaching surface scrollable. '.repeat(8)) : ['Synthetic detail'], misconception: null, keyTakeaway: 'Synthetic takeaway', bloomLevel: 'understand', check: { itemId: question.id, prompt: state.longLesson ? 'Compare the infrastructure trade-offs. '.repeat(20) : question.prompt, choices: state.longLesson ? question.choices.map(choice=>({...choice,label:choice.label+' '+ 'A detailed trade-off includes costs, flexibility and control. '.repeat(20)})) : question.choices } }] });
+  if (path === '/lessons/course/steps/step/check') return reply({correct:true,explanation:'Graded feedback. '+ 'Cloud infrastructure trades capital investment for operational expense. '.repeat(80),advance:true,mastery:.74,reward});
   if (path.endsWith('/diagnostic/submit')) { await new Promise(r => { state.releaseSubmit = r; }); return reply({correctCount:2,total:2,results:[],masteryDelta:[]}); }
   if (path.endsWith('/review')) { state.reviews.push(req.postDataJSON()); return reply({ remembered: true, graduated: false, dueInHours: 1, dueAt: '2099-11-02T08:30:00Z', box: 1, reward }); }
   if (path.endsWith('/skills/propose')) { if (state.holdModel) await new Promise(r => { state.releaseModel = r; }); return reply({status:'queued'}); }
@@ -110,6 +111,33 @@ try {
   check(matchingEdges(teachingEdges, await edgesOf(lessonCheck)), `DESIGN-REQ-002 Lesson check inherits shared gutters once at ${width}`);
   check(lesson.state.posts.length === 0 && lesson.errors.length === 0, 'Lesson layout transition has no writes or runtime errors');
   await lesson.context.close();
+  const longLesson = await fixture(width, {view:'lesson',reduced:true});longLesson.state.longLesson=true;
+  await longLesson.page.goto('http://localhost:5173/__u2');
+  const longTeaching=longLesson.page.locator('#tour-lesson-explain');await longTeaching.waitFor();
+  const longTeachingEdges=await edgesOf(longTeaching);
+  const teachingScroll=longLesson.page.locator('[role=log] > div');
+  check(await teachingScroll.evaluate(el=>el.scrollHeight>el.clientHeight),`LESSON-REQ-006 teaching fixture overflows at ${width}`);
+  check(Math.abs((await edgesOf(teachingScroll)).right-width)<=1,`LESSON-REQ-006 teaching scrollbar stays at page edge at ${width}`);
+  await longLesson.page.getByRole('button',{name:'Continue',exact:true}).click();
+  const longCheck=longLesson.page.locator('#tour-lesson-check');await longCheck.waitFor();
+  const checkScroll=longCheck.locator('../..');
+  check(await checkScroll.evaluate(el=>el.scrollHeight>el.clientHeight&&getComputedStyle(el).overflowY==='auto'),`LESSON-REQ-006 question fixture really scrolls at ${width}`);
+  check(Math.abs((await edgesOf(checkScroll)).right-width)<=1,`LESSON-REQ-006 reinforcement scrollbar stays at page edge at ${width}`);
+  check(matchingEdges(longTeachingEdges,await edgesOf(longCheck)),`LESSON-REQ-006 teaching/check retain column edges at ${width}`);
+  check(longLesson.state.posts.length===0,`LESSON-REQ-006 scrolling/layout has not graded or asked at ${width}`);
+  await longCheck.getByRole('button').first().click();
+  await longLesson.page.getByRole('button',{name:'Finish lesson',exact:true}).waitFor();
+  const longDock=longLesson.page.locator('#tour-lesson-dock > div');
+  const dockBox=await longDock.boundingBox();
+  check(matchingEdges(await edgesOf(longCheck),await edgesOf(longDock)),`LESSON-REQ-006 graded card/dock share edges at ${width}`);
+  check(dockBox.y+dockBox.height<=950&&dockBox.y>800,`LESSON-REQ-006 dock stays fixed at viewport bottom at ${width}`);
+  await longLesson.page.addStyleTag({content:'*::-webkit-scrollbar { width: 17px; }'});
+  await checkScroll.evaluate(el=>{el.style.overflowY='scroll';el.scrollTop=el.scrollHeight;});
+  check(Math.abs((await edgesOf(checkScroll)).right-width)<=1&&matchingEdges(await edgesOf(longCheck),await edgesOf(longDock)),`LESSON-REQ-006 persistent feedback scrollbar preserves page/card/dock edges at ${width}`);
+  check(await longLesson.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&window.scrollY===0),`LESSON-REQ-006 no horizontal overflow or document scroll at ${width}`);
+  check(longLesson.state.posts.length===1&&longLesson.state.posts[0].path==='/lessons/course/steps/step/check'&&longLesson.errors.length===0,`LESSON-REQ-006 only explicit choice grades once with no runtime errors at ${width}`);
+  console.log(`WI-34 Lesson feedback edges at ${width}: ${JSON.stringify({scroller:await edgesOf(checkScroll),card:await edgesOf(longCheck),dock:await edgesOf(longDock)})}`);
+  await capture(longLesson.page,'lesson-reinforcement-scrollbar',width);await longLesson.context.close();
   console.log(`U2 measured card widths at ${width}: ${JSON.stringify(measurements)}`);
   check(Math.abs(measurements.test - measurements.diagnostic) < 1, `Diagnostic/Test same column ${width}`);
   const shellStudy = await fixture(width, { hold: true, reduced: true });
