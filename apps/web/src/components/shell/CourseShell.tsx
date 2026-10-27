@@ -51,6 +51,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useUI } from "@/stores/ui-store";
 
+// TOUR-REQ-008 / WI-33: keep student entry hidden until reads are side-effect-free.
+const STUDENT_TOUR_ENABLED = false;
+
 // App shell for the course-scoped (LTI) surface. 56px icon side rail +
 // 48px top bar, per the mockups ("App Side Rail", "App Top Bar"):
 // hairline slate borders, white chrome, orange active accent.
@@ -253,7 +256,7 @@ export function CourseShell({
 
   return (
     <div className="min-h-dvh bg-background">
-      <TourStepRunner />
+      {STUDENT_TOUR_ENABLED ? <TourStepRunner /> : null}
 
       {/* Side rail */}
       <nav
@@ -355,7 +358,7 @@ export function CourseShell({
                   banner is the loud CTA when it is up; off-workspace there
                   is no banner, so the icon carries it — never a text
                   button that fights the icon language of the rail. */}
-              <Tooltip>
+              {STUDENT_TOUR_ENABLED ? <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
@@ -369,7 +372,7 @@ export function CourseShell({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Take the tour</TooltipContent>
-              </Tooltip>
+              </Tooltip> : null}
               <span className="font-mono text-xs text-muted-foreground">
                 {initials(displayName) || section}
               </span>
@@ -378,7 +381,7 @@ export function CourseShell({
           />
         </div>
 
-        {bannerVisible ? (
+        {STUDENT_TOUR_ENABLED && bannerVisible ? (
           <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-brand-orange/20 bg-brand-orange/8 px-6 py-2.5">
             <span className="text-xs font-semibold text-brand-orange-foreground">
               First time here?
@@ -416,7 +419,7 @@ export function CourseShell({
       </div>
 
       {/* Pre-tour confirmation */}
-      <Dialog open={confirmOpen} onOpenChange={(open) => open ? setConfirmOpen(true) : closeTourConfirmation()}>
+      {STUDENT_TOUR_ENABLED ? <Dialog open={confirmOpen} onOpenChange={(open) => open ? setConfirmOpen(true) : closeTourConfirmation()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Take the tour?</DialogTitle>
@@ -445,7 +448,7 @@ export function CourseShell({
             </button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> : null}
     </div>
   );
 }

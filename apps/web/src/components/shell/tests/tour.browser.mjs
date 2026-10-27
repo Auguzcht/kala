@@ -1,4 +1,5 @@
-/** TOUR-REFRESH: real app/router/Driver.js, isolated synthetic APIs only. */
+/** WI-33 / Amendment7a: hidden student entry and retained instructor walkthrough.
+ * Real app/router/Driver.js, isolated synthetic APIs only. */
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {mkdir} from 'node:fs/promises';
@@ -6,14 +7,14 @@ import {resolve} from 'node:path';
 const requireBrowser=createRequire(resolve(process.env.KALA_BROWSER_TEST_DEPS??'apps/web','package.json'));
 const {chromium}=requireBrowser('playwright');
 const browser=await chromium.launch({headless:true,...(process.env.KALA_BROWSER_EXECUTABLE?{executablePath:process.env.KALA_BROWSER_EXECUTABLE}:{})});
-const out=resolve(process.env.KALA_UI_SCREENSHOTS??'/tmp/kala-tour-refresh');await mkdir(out,{recursive:true});
+const out=resolve(process.env.KALA_UI_SCREENSHOTS??'/tmp/kala-disable-student-tour');await mkdir(out,{recursive:true});
 let assertions=0;const check=(condition,label)=>{assert.ok(condition,label);assertions++;};
-const onlyExit=process.env.KALA_TOUR_ONLY_EXIT==='1';
 const skill={skillId:'storage',name:'Cloud storage',moduleRef:'Cloud basics',bloomLevel:'understand',estimate:0.5,attempts:2,band:'proficient'};
 const ident={userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL'};
 const evidence=Array.from({length:20},(_,i)=>({id:'event-'+i,type:'practice',correct:true,latencyMs:1000,skillName:'Cloud storage',createdAt:'2026-10-25T00:00:00Z'}));
-async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce'}={}){
+async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null}={}){
  const context=await browser.newContext({viewport:{width,height:950},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(15000);
+ if(dismissal!==null)await context.addInitScript(({role,dismissal})=>localStorage.setItem(`kala.${role}.tour.demo`,dismissal),{role,dismissal});
  const errors=[],state={mutations:[],gets:[],skipped:[],visited:[],choosers:0};page.on('pageerror',e=>errors.push(e.message));page.on('filechooser',()=>state.choosers++);
  page.on('request',request=>{if(!['GET','HEAD','OPTIONS'].includes(request.method()))state.mutations.push({path:new URL(request.url()).pathname,method:request.method()});});
  await context.route('**/*',async route=>{
@@ -44,7 +45,8 @@ async function fixture(width,{role='student',completed=false,empty=false,noMater
   if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:0.5,skills:[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',cohortBand:'proficient',cohortEstimate:0.5}],students:empty?[]:[ident],cells:empty?[]:[{userId:'learner',skillId:'storage',estimate:0.5,attempts:20,band:'proficient'}]});
   if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:empty?[]:[{...ident,reason:'Practice can reinforce storage concepts.',daysInactive:0,evidenceCount:20,weakestSkillNames:['Cloud storage']}]});
   if(path.endsWith('/record'))return reply({courseId:'course',...ident,readiness:0.5,band:'proficient',cohortReadiness:0.5,percentile:50,accuracy:0.5,momentum:null,attempts:20,evidenceCount:20,hintsUsed:0,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,status:'developing',skills:[skill],activityByType:[],activitySeries:[],readinessTrend:[],evidence});
-  if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:[]});
+  if(path.endsWith('/evidence'))return reply({courseId:'course',evidence,nextCursor:null});
+  if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:empty?[]:[{id:'recommendation',userId:'learner',courseId:'course',skillId:'storage',skillName:'Cloud storage',title:'Review cloud storage',kind:'practice',priority:'medium',rationale:'Review reinforces this concept.',evidence:[{label:'Practice',detail:'Two recent checks show room to improve.'}],status:'suggested',confidence:0.5,expectedGain:null,source:'heuristic',decidedBy:null,decidedAt:null,decisionNote:null,instructorNote:null,createdAt:'2026-10-25T00:00:00Z'}]});
   return reply({});
  });
  await page.goto('http://localhost:5173/'+(role==='student'?'course':'class'));
@@ -82,32 +84,80 @@ async function walk(f,{back=false,width,role}={}){
  check(state.choosers===0,'attachment highlight never opens a file chooser');
  return didBack;
 }
-try{
- if(!onlyExit)for(const width of [1440,375])for(const role of ['student','instructor']){
-  const f=await fixture(width,{role});await start(f);check(await walk(f,{width,role,back:true}),'Back returns to an earlier available step');
-  if(role==='student')check(f.state.visited.some(s=>s.title==='Attach course material')&&f.state.visited.some(s=>s.title==='Read the evidence'),'student reaches attachment and ledger steps');
-  else check(f.state.visited.some(s=>s.path==='/class/student/learner'),'instructor reaches a concrete learner record');
-  check(await f.page.evaluate(role=>localStorage.getItem(`kala.${role}.tour.demo`)==='dismissed',role),'completion persists per-user role dismissal');
-  console.log(`${role} ${width}: ${f.state.visited.length} highlighted steps; mutations=${f.state.mutations.length}`);await f.context.close();
- }
- for(const width of [1440,375]){
-  if(!onlyExit){
-   const blocked=await fixture(width,{completed:true,noMaterial:true});await start(blocked,{blocked:true});await blocked.page.getByText('The tour needs a topic with at least five prepared questions. Open a ready topic and try again.',{exact:true}).waitFor();check(await blocked.page.evaluate(()=>window.__tourStore.getState().tourStep)===null&&new URL(blocked.page.url()).pathname==='/course'&&blocked.state.mutations.length===0,'no-material entry stays in place without creating content');await blocked.context.close();
-   for(const draft of ['', 'Keep my own question']){
-    const f=await fixture(width);await f.page.goto('http://localhost:5173/course/tutor');const input=f.page.locator('#tour-tutor-input textarea');await input.waitFor();if(draft)await input.fill(draft);
-    await f.page.evaluate(async()=>{window.__tourStore=(await import('/src/stores/ui-store.ts')).useUI;const {createStudentTour}=await import('/src/components/shell/student-tour.ts');window.__tourStore.getState().setTourContext({skillId:'storage'});window.__tourStore.getState().setTourStep(createStudentTour({skillId:'storage'}).findIndex(s=>s.key==='tutor'));});
-    await f.page.locator('.driver-popover').waitFor();check(await input.inputValue()===(draft||'Can you explain one key idea from this course with an example?'),'sample prefills only an empty draft');check(f.state.mutations.length===0&&f.state.choosers===0,'draft tour never sends or attaches');await f.page.getByRole('button',{name:'Skip tour',exact:true}).click();await f.context.close();
+const instructorReads = new Set([
+ '/courses/course', '/dashboard/course/skills/proposed',
+ '/dashboard/course/skills/auto-matched', '/dashboard/course/roster',
+ '/dashboard/course/stats', '/dashboard/course/heatmap', '/dashboard/course/at-risk',
+ '/dashboard/course/students/learner/record',
+ '/dashboard/course/students/learner/recommendations',
+ '/dashboard/course/students/learner/evidence',
+]);
+async function studentEntryAbsent(f, label) {
+ const {page} = f;
+ check(await page.getByRole('button', {name:'Take the tour', exact:true}).count() === 0, label+' has no manual or banner tour button');
+ check(await page.getByText('First time here?', {exact:true}).count() === 0, label+' has no auto-offer');
+ check(await page.getByRole('dialog', {name:'Take the tour?', exact:true}).count() === 0, label+' has no confirmation');
+ check(await page.getByRole('button', {name:'Start tour', exact:true}).count() === 0, label+' has no start control');
+ check(await page.locator('.driver-popover').count() === 0, label+' has no student runner overlay');
+}
+try {
+ for (const width of [1440,375]) {
+  for (const dismissal of [null,'dismissed','started']) {
+   const f = await fixture(width, {dismissal});
+   const label = `student ${width} ${dismissal??'fresh'}`;
+   await f.page.getByRole('heading', {name:'Welcome back, Demo', exact:true}).waitFor();
+   await studentEntryAbsent(f, label);
+   check(!f.state.gets.some(path=>path.endsWith('/bank/status')||path.includes('/practice/')), label+' entry does not plan a tour');
+   check(await f.page.evaluate(()=>localStorage.getItem('kala.student.tour.demo')) === dismissal, label+' preserves prior local dismissal');
+   // A stale ephemeral step must not mount a disabled student runner either.
+   await f.page.evaluate(()=>{
+    window.__tourStore.getState().setTourContext({skillId:'storage'});
+    window.__tourStore.getState().setTourStep(0);
+   });
+   await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   await studentEntryAbsent(f, label+' stale step');
+   check(new URL(f.page.url()).pathname==='/course', label+' stale step cannot navigate');
+   await f.page.evaluate(()=>window.__tourStore.getState().setTourStep(null));
+   if(dismissal===null)await f.page.screenshot({path:resolve(out,`student-hidden-${width}.png`),animations:'disabled'});
+   for (const [id,path] of [['skills','/course/skills'],['tutor','/course/tutor'],['twin','/course/twin'],['diagnostic','/course/diagnostic'],['workspace','/course']]) {
+    await f.page.locator('#nav-'+id).click();
+    await f.page.waitForURL(url=>url.pathname===path);
+    check(new URL(f.page.url()).pathname===path, label+' ordinary '+id+' navigation works');
+    await studentEntryAbsent(f, label+' '+id);
    }
+   check(f.state.mutations.length===0 && f.errors.length===0, label+' no mutation or runtime error');
+   await f.context.close();
   }
-  if(!onlyExit)for(const variant of ['completed','no-material','empty-roster']){
-   const role=variant==='empty-roster'?'instructor':'student';const f=await fixture(width,{role,completed:variant!=='empty-roster',noMaterial:variant==='no-material',empty:variant==='empty-roster'});
-   await start(f,{direct:variant==='no-material'});await walk(f,{width,role});check(f.state.mutations.length===0,'conditional '+variant+' remains observational');if(role==='student')check(!f.state.visited.some(s=>s.index<3)&&f.state.visited.some(s=>s.title==='Read the evidence'),'unavailable Diagnostic skips to the rest of the walkthrough');else check(!f.state.visited.some(s=>s.path.startsWith('/class/student/')),'empty roster never invents a learner record');await f.context.close();
+  for (const empty of [false,true]) {
+   const f = await fixture(width, {role:'instructor',empty});
+   await f.page.getByRole('button',{name:'Take the tour',exact:true}).first().waitFor();
+   check(await f.page.getByRole('button',{name:'Take the tour',exact:true}).count()===2,'instructor retains manual entry and fresh offer '+width);
+   await start(f);
+   check(await walk(f,{width,role:'instructor',back:true}),'retained instructor Back works '+width);
+   const visited = new Set(f.state.visited.map(step=>step.index));
+   if(empty)check(!f.state.visited.some(step=>step.path.startsWith('/class/student/')),'empty instructor roster invents no learner');
+   else {
+    check(visited.size===27,'instructor visits all 27 retained steps '+width);
+    check(f.state.visited.some(step=>step.path==='/class/student/learner'),'instructor reaches actual learner route '+width);
+   }
+   check(f.state.gets.every(path=>instructorReads.has(path)),'instructor GETs match source-audited read chains '+width);
+   check(f.state.mutations.length===0,'instructor sends no mutating request '+width);
+   check(await f.page.getByRole('button',{name:'Take the tour',exact:true}).count()===1,'instructor completion retains manual restart '+width);
+   console.log(`instructor ${width} empty=${empty}: ${visited.size} distinct steps; mutations=${f.state.mutations.length}`);
+   await f.context.close();
   }
-  for(const exit of ['Escape','Skip']){
-   const f=await fixture(width,{reduced:'no-preference'});await start(f);await f.page.locator('.driver-popover').waitFor();
-   if(exit==='Escape')await f.page.keyboard.press('Escape');else await f.page.getByRole('button',{name:'Skip tour',exact:true}).click();
-   await f.page.waitForFunction(()=>window.__tourStore.getState().tourStep===null).catch(e=>{throw new Error(`${exit} at ${width} failed: ${e.message}`);});check(f.state.mutations.length===0&&f.errors.length===0,exit+' exits without persistence actions');await f.context.close();
+  for (const exit of ['Escape','Skip']) {
+   const f = await fixture(width,{role:'instructor',reduced:'no-preference',dismissal:'dismissed'});
+   await f.page.getByRole('button',{name:'Take the tour',exact:true}).waitFor();
+   check(await f.page.getByRole('button',{name:'Take the tour',exact:true}).count()===1,'dismissed instructor keeps manual entry '+width);
+   await start(f);
+   await f.page.locator('.driver-popover').waitFor();
+   if(exit==='Escape')await f.page.keyboard.press('Escape');
+   else await f.page.getByRole('button',{name:'Skip tour',exact:true}).click();
+   await f.page.waitForFunction(()=>window.__tourStore.getState().tourStep===null);
+   check(f.state.mutations.length===0 && f.errors.length===0,'instructor '+exit+' exits without mutation '+width);
+   await f.context.close();
   }
  }
- console.log(`TOUR-REFRESH passed: ${assertions} assertions; screenshots: ${out}`);
-}finally{await browser.close();}
+ console.log(`WI-33 passed: ${assertions} assertions; historical TOUR-REFRESH: 616 assertions; screenshots: ${out}`);
+} finally { await browser.close(); }
