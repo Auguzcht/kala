@@ -37,6 +37,7 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (!url.pathname.startsWith('/__u2_api')) return route.continue();
   const path = url.pathname.slice('/__u2_api'.length), reply = (json, status = 200) => route.fulfill({ json, status });
   if (req.method() !== 'GET') state.posts.push({ path, method: req.method(), body: req.postDataJSON() });
+  if (path.endsWith('/diagnostic/submit')) { await new Promise(r => { state.releaseSubmit = r; }); return reply({correctCount:2,total:2,results:[],masteryDelta:[]}); }
   if (path.endsWith('/review')) { state.reviews.push(req.postDataJSON()); return reply({ remembered: true, graduated: false, dueInHours: 1, dueAt: '2099-11-02T08:30:00Z', box: 1, reward }); }
   if (path.endsWith('/skills/propose')) { if (state.holdModel) await new Promise(r => { state.releaseModel = r; }); return reply({status:'queued'}); }
   if (path.endsWith('/ask')) { if (state.holdAsk) await new Promise(r => { state.releaseAsk = r; }); return reply({ answer: 'Synthetic hint answer.' }); }
@@ -112,6 +113,16 @@ try {
   d.state.failDiagnostic = true; await d.page.reload(); await d.page.getByText('We could not load the diagnostic', { exact: true }).waitFor();
   check(await d.page.getByRole('button', { name: 'Retry', exact: true }).isVisible(), 'fetch failure retains Retry');
   d.state.failDiagnostic = false; await d.page.getByRole('button', { name: 'Retry', exact: true }).click(); await d.page.getByText("You're all caught up", { exact: true }).waitFor(); check(d.state.posts.length === 0, 'Diagnostic read recovery never submits'); await d.context.close();
+  const submission = await fixture(width, { view: 'diagnostic' }); submission.state.diagnostic = {questions:[question,{...question,id:'second-question',prompt:'Choose a second storage option.'}],readyCount:2};
+  await submission.page.goto('http://localhost:5173/course/diagnostic');
+  const choices = submission.page.getByRole('button', {name:'Object storage',exact:true}); await choices.nth(0).click(); await choices.nth(1).click();
+  await submission.page.locator('#tour-diagnostic-submit').click(); await submission.page.waitForTimeout(260);
+  check(await submission.page.locator('#tour-diagnostic-submit').isDisabled(), 'Diagnostic activated submit remains disabled');
+  check(await submission.page.locator('svg.animate-spin').count() === 1, 'Diagnostic bulk submission has exactly one spinner in its submit control');
+  check(await submission.page.locator('#tour-diagnostic-card svg.animate-spin').count() === 0 && await submission.page.locator('#tour-diagnostic-card button').evaluateAll(buttons => buttons.every(button => button.disabled)), 'Diagnostic choices stay locked without grading spinners');
+  check(submission.state.posts.length === 1 && submission.state.posts[0].body.answers.length === 2 && submission.state.posts[0].body.answers.every(answer => Object.keys(answer).sort().join(',') === 'choice_id,item_id,latency_ms'), 'Diagnostic submission request stays single and unchanged');
+  await capture(submission.page, 'diagnostic-pending', width); submission.state.releaseSubmit();
+  await submission.page.getByText('Diagnostic complete', {exact:true}).waitFor(); check(submission.errors.length === 0, 'Diagnostic pending feedback resolves into completion'); await submission.context.close();
   const i = await fixture(width, { view: 'diagnostic', role: 'instructor' }); i.state.diagnostic = { questions: [], readyCount: 0, waitingForMaterialCount: 2 }; await i.page.goto('http://localhost:5173/__u2'); await i.page.getByText('Waiting for course material', { exact: true }).waitFor(); check(true, 'instructor Diagnostic retains material copy'); await i.context.close();
   const p = await fixture(width, { view: 'proposals', role: 'instructor' }); await p.page.goto('http://localhost:5173/__u2'); await p.page.getByText('Thin material', { exact: true }).waitFor(); check(true, 'instructor skill review retains truthful material concern'); await p.context.close();
   const b = await fixture(width, { view: 'browse', noMaterial: true }); await b.page.goto('http://localhost:5173/__u2');

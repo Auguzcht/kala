@@ -36,6 +36,7 @@ export function AnswerableCard({
   onSelect,
   result,
   isPending = false,
+  pendingFeedback = true,
   actions,
   meta,
   framed = true,
@@ -51,6 +52,8 @@ export function AnswerableCard({
   onSelect: (choiceId: string) => void;
   result?: AnswerableResult;
   isPending?: boolean;
+  /** Bulk submission locks choices but shows feedback in its submit control. */
+  pendingFeedback?: boolean;
   actions?: ReactNode;
   meta?: ReactNode;
   /** Render the shared instrument-panel frame around this question. */
@@ -92,13 +95,13 @@ export function AnswerableCard({
   // way — that's what actually prevents a double-submit, not the spinner.
   const [showSpinner, setShowSpinner] = useState(false);
   useEffect(() => {
-    if (!isPending) {
+    if (!isPending || !pendingFeedback) {
       setShowSpinner(false);
       return;
     }
     const timer = setTimeout(() => setShowSpinner(true), 200);
     return () => clearTimeout(timer);
-  }, [isPending]);
+  }, [isPending, pendingFeedback]);
 
   return (
     <div

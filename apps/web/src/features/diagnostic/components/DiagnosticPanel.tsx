@@ -174,6 +174,7 @@ export function DiagnosticPanel({ courseId }: { courseId: string }) {
               onSelect={(choiceId) => setSelections((s) => ({ ...s, [q.id]: choiceId }))}
               result={null}
               isPending={submit.isPending}
+              pendingFeedback={false}
               choicesAnchorId={qi === 0 ? "tour-diagnostic-choices" : undefined}
               firstChoiceId={null}
             />
