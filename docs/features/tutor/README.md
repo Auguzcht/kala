@@ -148,8 +148,8 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Rule: FG-L is delegated by Fred, read-only, solely for T2-5. Use only AWS sts get-caller-identity (print Account only), logs describe-log-groups with prefix /aws/lambda/, logs start-query, logs get-query-results and logs filter-log-events. Discover the API group; ambiguous candidates stop. Query only the last 48 hours, descending tutor_timing/provider lines, limit50. Parse in memory; no raw output or files.
 - Rule: Report stage median/max for retrieval/embedding, primary, fallback and total, fallback-request count and primary429/other errors by model/status. Distinguish insufficient timing coverage/correlation from measured absence. Recommend keep settings, a Fred-gated primary/fallback swap, or streaming as an ITO follow-up; never apply one. Missing/expired credentials, need for another AWS command, or a body/personal-data field stops this step; report only the offending field name for a privacy finding.
 - Acceptance: Output/evidence contains only aggregate numbers, stage/model/status names; account ID is the sole identity output allowed. Raw data is local only, not retained. No raw log lines, user/institution identifiers, bodies, emails, tokens, secrets or provider/config changes. This delegate does not release other Fred gates.
-- Status: planned
-- Verified by: pending T2 FG-L aggregate report, marked delegated by Fred, read-only.
+- Status: blocked after delegated read-only FG-L stopped on actual field user_id_prefix; raw data is local only, not retained.
+- Verified by: T2 executed the allowed discovery/query and stopped before aggregation under Fred's privacy condition. Metrics and primary/fallback attribution are unavailable, not zero; configuration stays unchanged. WI-31 plans the separate diagnostics follow-up. No raw values retained.
 
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |

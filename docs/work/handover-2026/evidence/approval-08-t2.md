@@ -37,6 +37,23 @@ Amendment2B is planned/deferred to ITO in TUTOR-REQ-015/WI-29, not partly built.
 
 Server: lane Vite PID3878, correct worktree and HTTP200, stopped after tests. Coordinator observed no listener before releasing5173 to U2. Screenshots are synthetic local-only artifacts, not live acceptance; raw user/provider data is absent. The mixed browser fixture still asserts old shared loading spinners in its non-Tutor cases; T2 must author a strict test-only C1 update after U2, then rerun it. No conditional acceptance of wrong/right behavior or skipped assertions is permitted.
 
+## Complete Tutor spinner sweep
+
+Baseline locations are atbeccf59; new location at4da2304. Grep covers Spinner, Loader2 and animate-spin throughout features/tutor, separating imports from rendered sites. No direct Loader2/animate-spin use exists in production Tutor files.
+
+| Baseline rendered site | Disposition / reason |
+| --- | --- |
+| components/TutorChat.tsx:300 | Remove conversation-load spinner and loading shimmer; skeletons plus one text line |
+| components/TutorConversationRow.tsx:96 | Keep only for user-activated Save, relocated to TutorRenameDialog.tsx:69 with disabled/pending lock |
+| components/TutorConversationRow.tsx:159 | Remove menu pin shared-pending spinner, not a second status indicator |
+| components/TutorConversationRow.tsx:185 | Remove row pin shared-pending spinner; retain pending disable/aria state |
+| components/TutorFileCard.tsx:57 | Remove attachment uploading/processing status spinner; truthful text retained |
+| components/TutorFilePreview.tsx:124 | Remove preview-load spinner; skeleton/text instead |
+| Composer inherited submitted control | Stable disabled Send during model wait, no second indicator; user-initiated upload phase can use control feedback only |
+| Shared AssistantBlock pending indicator | Tutor uses one local Shimmer while U2 removes the shared status spinner; no duplicate model-wait indicator |
+
+The four obsolete Spinner imports are removed. Final production Tutor grep has only TutorRenameDialog.tsx:9 import and:69 Save render. Every direct original rendered site is covered above; imports are not additional UI indicators. Shared components remain U2-owned.
+
 ## Complete Amendment7 guard reconciliation
 
 All retain one unchanged student admission call in their respective function:
