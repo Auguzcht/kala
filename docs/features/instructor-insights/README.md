@@ -120,7 +120,7 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Rule: An inaccessible learner URL uses “Learner unavailable”, non-disclosing course/learner copy and Back to class linking `/class`; transient learner failures retain retry. No API change or additional query retry loop. Never expose raw error bodies or resource existence.
 - Acceptance: Synthetic browser cases at 375px/1440px for 404, 403, 500, network failure, slow response and genuine empty class across roster, at-risk, cohort stats and learner record. No false empty roster/zero stats on error, no permanent skeleton, and successful transient Retry recovery. Existing charts/stats/learning behavior and accessible controls remain intact.
 - Status: done-awaiting-confirmation; synthetic verification complete, live acceptance pending.
-- Verified by: `apps/web/src/features/instructor/tests/read-states.browser.mjs` (314 assertions at 375px/1440px, including denied, failed, slow, empty and retry cases).
+- Verified by: `apps/web/src/features/instructor/tests/read-states.browser.mjs` (326 assertions at 375px/1440px, including denied, failed, slow, empty and retry cases).
 
 ### INSTR-REQ-012: Make learner standing and measurement windows explicit
 
@@ -175,8 +175,8 @@ Final integrated checks after the learner presentation changes: lint passes with
 - Source finding: Cohort stats sums hints_used across up to 2,000 course evidence events. Learner record sums it across up to 200 learner events. Lesson check hints increment a frontend ref and reach the existing lesson check submission. Flashcard Give hint uses a stateless Tutor ask with course/question/style, and its rating contract has no hint count. Consequently zero stored hints is not proof that no hint was requested. This is incomplete telemetry, not a coverage calculation bug.
 - Boundary: Correct the frontend wording now. Do not invent counts from local storage, infer them from model response text, repurpose lesson evidence or change review/Tutor APIs, mastery, migrations or stored history. Complete flashcard/Skill hub hint-request tracking needs a separately approved backend contract and event semantics. That item stays open.
 - Acceptance: At 375px/1440px, Skills covered retains its actual numerator/denominator and coverage caption with zero or nonzero hintsUsed inputs. No broad hints-used caption remains. Learner accuracy explicitly labels recorded hints inside its bounded evidence window. Loading/error/empty states and zero-write view tests remain unchanged.
-- Status: in-progress, owner Codex for frontend presentation. Complete hint telemetry is deferred pending backend scope.
-- Verified by: Static source trace of cohort.py, LessonChat.tsx, lessons.py CheckBody, flashcards.py ReviewBody and tutor.py Ask. Browser verification follows implementation.
+- Status: done-awaiting-confirmation for frontend presentation. Complete hint telemetry is deferred pending backend scope.
+- Verified by: Static source trace of cohort.py, LessonChat.tsx, lessons.py CheckBody, flashcards.py ReviewBody and tutor.py Ask. read-states.browser.mjs passes 326 assertions at 375px/1440px, covering coverage captions with zero and nonzero stored hint inputs, both learner surfaces and existing failure-state checks. Full frontend units pass 55, unchanged E3 passes 53, and review-feedback/presentation retain 63/148 passing assertions.
 
 ## API contract
 

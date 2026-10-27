@@ -154,6 +154,7 @@ try {
     const f=await fixture(width,{surface,metrics:true}),{page,state}=f;
     if(surface==='sheet'){
       const coverage=page.locator('#tour-cohort-kpis').getByText('Skills covered',{exact:true}).locator('..');
+      await coverage.getByText('11/15',{exact:true}).waitFor();
       check(await coverage.getByText('11/15',{exact:true}).isVisible(),'INSTR-REQ-013 coverage retains actual approved-skill counts');
       check(await coverage.getByText('With evidence',{exact:true}).isVisible()&&await coverage.getByText(/hints used/).count()===0,'INSTR-REQ-013 nonzero hint input is not presented as coverage');
       await page.getByRole('textbox',{name:'Search the roster',exact:true}).fill('Demo learner');await page.getByRole('row').filter({hasText:'Demo learner'}).click();

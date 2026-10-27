@@ -398,3 +398,64 @@ Progress-selection verification: tour-route plus unchanged E3 pass 58 tests, and
 
 
 Message copy implementation uses a Tutor-only wrapper, passing the exact stored/local question or reply string to navigator.clipboard.writeText. Shared Study blocks remain unedited. Controls expose busy/disabled while the promise is pending, confirm Copied only on success, and provide manual-copy/retry direction on denied/unavailable access. Pending Kala placeholders expose no copy action. Copy never submits a form, invokes an API or edits a message. Focused verification passes: clipboard 52 assertions, integrated Tutor 359, Tutor/draft units 13 and production build/lint/typecheck. Final combined checks follow all follow-up edits.
+
+
+## Follow-up final verification and remaining open items
+
+2026-10-28. Frontend follow-ups WI-34-T12/T13/T14 are done-awaiting-confirmation. Current HEAD before this verification record is 038e9db. Product changes use separate commits: 66080bd progress learner selection, f1baed3 truthful coverage/hints wording and 038e9db message copy. No merge, push or deployment.
+
+The full sequential gate uses the original one-server 5173 worktree setup. Lint has zero errors and 18 existing warnings. Typecheck/build pass, frontend units pass 55 and E3 passes 53. All eleven browser suites pass after two recorded reruns, 4716 assertions total:
+
+| Suite | Assertions |
+| --- | --- |
+| evidence-history-scope | 16 |
+| evidence-history | 118 |
+| final-ui-pass | 216 |
+| frontend-closeout | 114 |
+| message-copy | 52 |
+| presentation | 148 |
+| read-states | 326 |
+| review-feedback | 63 |
+| text-selection | 40 |
+| tour | 3264 |
+| ui-overhaul | 359 |
+
+The new coverage assertion initially ran before the card's asynchronous render and failed. It now waits for the actual 11/15 card before checking its unchanged expected value. The full 326-assertion read-states rerun passes. An existing Rename chat Save interaction timed out once during the integrated Tutor run. The entire Tutor suite then passes 359 assertions unchanged at that interaction. Its exact transient cause is not proved, and the original failure remains recorded. No product patch or forced click was used to hide it. The previous 52-assertion clipboard-only suite and 359-assertion focused Tutor run also passed. The final no-progress tour guard passes in the integrated 3264-assertion tour run.
+
+Artifacts: `/tmp/kala-approval09-followups-final` retains the sequential run including its two initial failures. `/tmp/kala-followup-read-states.log`, `/tmp/kala-followup-tutor.log` and `/tmp/kala-followup-completed-checks.json` retain corrected complete results. All are local only, not retained.
+
+Literal tour/data-tour anchors are preserved. CourseShell.tsx, student-tour.ts, tour-anchors.test.mjs and shared UserBlock/AssistantBlock are byte-identical to 6e09bce. No services, packages, configuration, migration or infrastructure diff from that base. No hosted operation ran in this follow-up.
+
+| Remaining item | State and boundary |
+| --- | --- |
+| Live 27-step and UI acceptance | Fred restarts from step 1 to verify the progress learner in the actual course. Synthetic success is not live acceptance. |
+| Complete Skill hub hint telemetry | Open backend contract/event-semantics work under INSTR-REQ-013. The misleading coverage caption is fixed, but no missing historical count is invented or backfilled. |
+| Server percentile arithmetic | Recorded backend finding under INSTR-REQ-012. The frontend class rank is fixed and no longer consumes that invalid percentile. |
+| Actual fallback model provenance | Minor ITO finding under INSTR-REQ-006. Stored source still identifies the configured primary when a fallback answered. Fred's paid :floor config confirmation remains closed, with no configuration change. |
+| Historical identity repair | WI-24 remains unresolved. No legacy pair/history has been merged or certified by this frontend round. |
+| Backend greeting integration and release | Prepared candidate 65e539ab177c632b0b51de6857021a7c1cb42793 exists locally and is not an ancestor of this frontend branch. Combining/releasing it remains the separate planner/Fred gate. No hosted deployment state is inferred. |
+| Sent-message editing | Explicitly deferred under TUTOR-REQ-015 / WI-29. Copy is complete and adds no editing. |
+| Final integration, push and deploy | Pending separate human authorization and review, not performed here. |
+
+No other unimplemented frontend item from the original APPROVAL-09 catalogue was found in this audit. This does not close the broader project backlog. Follow-up files since 6e09bce (18 paths):
+
+```text
+apps/web/src/components/shell/TourRunner.tsx
+apps/web/src/components/shell/instructor-tour.ts
+apps/web/src/components/shell/tests/tour-route.test.mjs
+apps/web/src/components/shell/tests/tour.browser.mjs
+apps/web/src/components/shell/tour-learner.ts
+apps/web/src/components/shell/tour-route.ts
+apps/web/src/features/instructor/components/CohortStats.tsx
+apps/web/src/features/instructor/components/LearnerStanding.tsx
+apps/web/src/features/instructor/tests/read-states.browser.mjs
+apps/web/src/features/tutor/components/TutorChat.test.mjs
+apps/web/src/features/tutor/components/TutorChat.tsx
+apps/web/src/features/tutor/components/TutorMessage.tsx
+apps/web/src/features/tutor/tests/message-copy.browser.mjs
+apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+docs/features/instructor-insights/README.md
+docs/features/tour/README.md
+docs/features/tutor/README.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+```
