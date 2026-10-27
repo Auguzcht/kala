@@ -122,6 +122,24 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Status: done-awaiting-confirmation; synthetic verification complete, live acceptance pending.
 - Verified by: `apps/web/src/features/instructor/tests/read-states.browser.mjs` (222 assertions at 375px/1440px, including denied, failed, slow, empty and retry cases).
 
+### INSTR-REQ-012: Make learner standing and measurement windows explicit
+
+- Rule: Class standing is a course rank among learners with measured readiness from the existing roster, with an explicit measured-learner denominator and shared ranks for ties. Never render the record percentile as an ordinal rank. Unknown or failed roster data leaves rank unavailable rather than inventing a value. Preserve the record's own readiness and the server's evidence calculations.
+- Rule: Label drawer accuracy as graded outcomes within the last 200 evidence events. Roster accuracy uses each learner's graded outcomes within the latest 2,000 events across the enrolled class. The roster attempt count sums approved-skill mastery attempts and is not the accuracy denominator. Momentum compares the last ten graded outcomes with the preceding ten inside the record window. A displayed zero is neutral, including a small change that rounds to zero points.
+- Investigation gate: Before metric edits, use Fred-proved canonical/legacy identity anchors and the actual roster/drawer request targets for a counts-only ownership and window check. Never infer identity from names or merge legacy history in the UI. Stop immediately on cross-learner mixing. Agents prepare and locally validate read-only SQL, Fred runs hosted counts. Zero cross-owner counts prove the checked filters and anchors only, not the semantic authorship of historically misattributed rows.
+- Rule: Skills measured uses approved skills for the same institution/course. A change from 14 to 15 requires counts from the same environment/course and a dated comparison before attributing it to an approval or an environment difference.
+- Acceptance: Test measured course rank, ties, unmeasured/absent learner and failed roster, explicit accuracy window, positive/negative/zero momentum and both learner surfaces. Validate count-query results with synthetic real local Postgres including wrong-target/cross-alias counterexamples. Do not edit APIs, migrations, identity records or configuration.
+- Status: planned, metric implementation awaits the counts-only identity check.
+- Verified by: Static source trace of cohort.py roster and learner_record, LearnerStanding.tsx and the course/learner query keys. The counts-only query and its synthetic local PostgreSQL 17.6 proof pass. Runtime Hanna counts and the 14/15 comparison are not yet verified.
+
+#### Counts review before implementation
+
+Fred privately fills [learner-counts.readonly.sql](../../../apps/web/src/features/instructor/tests/learner-counts.readonly.sql) with independently proved institution/course, canonical/legacy anchors and actual roster/drawer request targets. It runs a repeatable-read, read-only transaction and returns one aggregate JSON object, no identifiers or event rows. Required inputs must be set, all supplied anchors must exist in the institution, both canonical learners must be enrolled, targets must match Hanna's canonical anchor and every cross-family/Alfred-owned counter must be zero. Missing legacy mapping or timestamp boundary ties are unresolved evidence, not clean attribution. Stop on a cross-learner finding. Source filters alone do not prove historical semantic ownership.
+
+Run the [local SQL proof](../../../apps/web/src/features/instructor/tests/learner-counts.local.py) with Python 3.10+ and Docker's cached PostgreSQL image. It creates/removes only its network-disabled, port-free synthetic container. On PostgreSQL 17.6 it verifies separate accuracy windows, attempt totals, 10/10 momentum counts, course/institution scope, 2,000-event cap, missing parameters, wrong drawer target, cross-family anchor collision and cross-family alias owner, and a rejected write in a read-only transaction. The synthetic 286/381 versus 138/200 example recreates the displayed percentages to test arithmetic. It is not Hanna's measured data, an RLS proof or a migration replay.
+
+Counts remain requested from Fred. No learner metric code has changed. The current skill denominator is the institution/course's approved-skill count. Optional observation-time counts can show current approved skills created/reviewed later, but cannot reconstruct an immutable approval history or establish why the earlier dashboard showed 14 without a matching earlier environment/course observation. Do not infer that a skill was newly approved from the two screenshots alone.
+
 ## API contract
 
 ### Accepted presentation boundary
@@ -225,6 +243,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Define course rank, explicit evidence windows, neutral zero and counts-only identity gate before learner standing edits | Fred's instructor learner drawer findings and WI-24 identity constraint, WI-34 | INSTR-REQ-012, INSTR-REQ-003/005 retained |
 | 2026-10-27 | Record local unified Next implementation and the final sequential browser checks while retaining human/hosted gates | Fred's APPROVAL-09 unified-pager request, WI-34 | INSTR-REQ-010, TWIN-REQ-011 |
 | 2026-10-27 | Route assigned Tutor Start to an editable fresh-chat topic draft without changing plan decisions or other destinations | Fred's APPROVAL-09 assigned Tutor Start request, WI-34 | INSTR-REQ-007, TUTOR-REQ-018 |
 | 2026-10-27 | Apply the shared single-pager control to instructor learner/Twin views while preserving H errors, keysets and guards | APPROVAL-09 | INSTR-REQ-010; TWIN-REQ-011 |
