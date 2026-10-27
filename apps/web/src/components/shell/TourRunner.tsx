@@ -37,6 +37,7 @@ export function TourRunner({ steps, dismissKey }: {
   const setTourStep = useUI((state) => state.setTourStep);
   const visits = useRef<Visit[]>([]);
   const routes = useRef<Record<string, string>>({});
+  const rosterLearnerRoute = useRef<string | undefined>(undefined);
   const backwards = useRef(false);
   const notified = useRef(false);
 
@@ -57,6 +58,7 @@ export function TourRunner({ steps, dismissKey }: {
     if (tourStep === null) {
       visits.current = [];
       routes.current = {};
+      rosterLearnerRoute.current = undefined;
       backwards.current = false;
       notified.current = false;
       return;
@@ -141,6 +143,10 @@ export function TourRunner({ steps, dismissKey }: {
       if (cancelled || moving || tourStep === null) return;
       if (!instructor && step.studentAction) { skipAction(); return; }
       const selector = step.clickSelector ?? step.selector;
+      if (instructor && step.selector === "#tour-at-risk-first-flag"
+          && !visibleTarget(step.selector) && rosterLearnerRoute.current) {
+        routes.current["/class/student/$uid"] = rosterLearnerRoute.current;
+      }
       if (step.click && !step.explainOnly && isTourUiClick(selector) &&
           !(step.clickOnlyWhenClosed && visibleTarget(step.clickOnlyWhenClosed))) {
         const target = visibleTarget(selector);
@@ -155,6 +161,15 @@ export function TourRunner({ steps, dismissKey }: {
     }
     function showStep(target?: Element) {
       if (cancelled || tourStep === null) return;
+      if (instructor) {
+        const link = visibleTarget('[role="dialog"] a[href^="/class/student/"]');
+        if (link instanceof HTMLAnchorElement) {
+          const url = new URL(link.href, window.location.href);
+          if (url.origin === window.location.origin && matchesTourRoute(url.pathname, "/class/student/$uid")) {
+            rosterLearnerRoute.current = url.pathname;
+          }
+        }
+      }
       if (visits.current.at(-1)?.index !== tourStep) visits.current.push({ index: tourStep, pathname, search: search as Record<string, unknown> });
       if (target) prefill();
       instance = driver({

@@ -152,6 +152,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class",
     selector: "#tour-at-risk-first-flag",
+    fallbackDescription: "There is no visible needs-support flag here. Next uses the learner already introduced from the roster when one is available.",
     optional: true,
     title: "One learner",
     description:

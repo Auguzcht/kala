@@ -12,7 +12,7 @@ let assertions=0;const check=(condition,label)=>{assert.ok(condition,label);asse
 const skill={skillId:'storage',name:'Cloud storage',moduleRef:'Cloud basics',bloomLevel:'understand',estimate:0.5,attempts:2,band:'proficient'};
 const ident={userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL'};
 const evidence=Array.from({length:20},(_,i)=>({id:'event-'+i,type:'practice',correct:true,latencyMs:1000,skillName:'Cloud storage',createdAt:'2026-10-25T00:00:00Z'}));
-async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal'}={}){
+async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal',noFlags=false}={}){
  const context=await browser.newContext({viewport:{width,height:950},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(15000);
  if(dismissal!==null)await context.addInitScript(({role,dismissal})=>localStorage.setItem(`kala.${role}.tour.demo`,dismissal),{role,dismissal});
  await context.addInitScript(()=>{
@@ -52,7 +52,7 @@ async function fixture(width,{role='student',completed=false,empty=false,noMater
   if(path.endsWith('/roster'))return reply({courseId:'course',students:empty?[]:[{...ident,readiness:0.5,band:'proficient',attempts:20,evidenceCount:20,accuracy:0.5,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,weakestSkillName:'Cloud storage',skillsWithEvidence:1,skillsTotal:1,status:'needs-support'}]});
   if(path.endsWith('/stats'))return reply({courseId:'course',learners:empty?0:1,activeLearners:0,startedLearners:empty?0:1,notStartedLearners:0,cohortReadiness:0.5,medianReadiness:0.5,accuracy:0.5,evidenceCount:20,medianLatencyMs:1000,hintsUsed:0,skillsTracked:1,skillsCovered:1,bandDistribution:[{band:'proficient',count:1}],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
   if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:0.5,skills:[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',cohortBand:'proficient',cohortEstimate:0.5}],students:empty?[]:[ident],cells:empty?[]:[{userId:'learner',skillId:'storage',estimate:0.5,attempts:20,band:'proficient'}]});
-  if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:empty?[]:[{...ident,reason:'Practice can reinforce storage concepts.',daysInactive:0,evidenceCount:20,weakestSkillNames:['Cloud storage']}]});
+  if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:empty||noFlags?[]:[{...ident,reason:'Practice can reinforce storage concepts.',daysInactive:0,evidenceCount:20,weakestSkillNames:['Cloud storage']}]});
   if(path.endsWith('/record'))return reply({courseId:'course',...ident,readiness:0.5,band:'proficient',cohortReadiness:0.5,percentile:50,accuracy:0.5,momentum:null,attempts:20,evidenceCount:20,hintsUsed:0,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,status:'developing',skills:[skill],activityByType:[],activitySeries:[],readinessTrend:[],evidence});
   if(path.endsWith('/evidence'))return reply({courseId:'course',evidence,nextCursor:null});
   if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:empty?[]:[{id:'recommendation',userId:'learner',courseId:'course',skillId:'storage',skillName:'Cloud storage',title:'Review cloud storage',kind:'practice',priority:'medium',rationale:'Review reinforces this concept.',evidence:[{label:'Practice',detail:'Two recent checks show room to improve.'}],status:'suggested',confidence:0.5,expectedGain:null,source:'heuristic',decidedBy:null,decidedAt:null,decisionNote:null,instructorNote:null,createdAt:'2026-10-25T00:00:00Z'}]});
@@ -160,6 +160,16 @@ try {
    await f.page.getByText('First time here?',{exact:true}).waitFor({state:'detached'});
    check(await f.page.getByRole('button',{name:'Take the tour',exact:true}).count()===1,'instructor completion retains manual restart '+width);
    console.log(`instructor ${width} empty=${empty}: ${visited.size} distinct steps; mutations=${f.state.mutations.length}`);
+   await f.context.close();
+  }
+  {
+   const f=await fixture(width,{role:'instructor',noFlags:true});await start(f);
+   await walk(f,{width,role:'instructor',back:true});
+   check(new Set(f.state.visited.map(step=>step.index)).size===27,'TOUR-REQ-009 no-flags class visits all 27 steps '+width);
+   const recordSteps=f.state.visited.filter(step=>step.index>=16);
+   check(recordSteps.length===11&&recordSteps.every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 no-flags steps 17–27 show actual record targets '+width);
+   check(f.state.visited.some(step=>step.index===15&&step.fallback),'TOUR-REQ-009 missing step-16 flag explains the roster route '+width);
+   check(f.state.gets.every(path=>instructorReads.has(path))&&f.state.mutations.length===0&&await f.page.evaluate(()=>window.__tourWriteClicks.length===0),'TOUR-REQ-009 no-flags transition uses only audited reads '+width);
    await f.context.close();
   }
   for(const step15Layout of ['absent','alternate']){
