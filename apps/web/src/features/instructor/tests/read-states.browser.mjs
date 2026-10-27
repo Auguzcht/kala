@@ -10,9 +10,9 @@ const out=resolve(process.env.KALA_UI_SCREENSHOTS??'/tmp/kala-instructor-read-st
 let assertions=0;const check=(v,label)=>{assert.ok(v,label);assertions++;};
 const makeEvents=n=>Array.from({length:n},(_,i)=>({id:`event-${i}`,type:['practice','diagnostic','flashcard','tutor'][i%4],correct:i%2===0,latencyMs:i%3?1250:null,skillName:`Event ${String(i+1).padStart(3,'0')}: Explain durable cloud storage and access controls`,createdAt:new Date(Date.UTC(2026,9,24,12,0)-i*60000).toISOString()}));
 const skills=[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',moduleRef:'Cloud basics',estimate:0.55,attempts:5,band:'proficient'}];
-async function fixture(width,{mode='instructor',reduced='reduce',failure='empty',surface='class'}={}){
+async function fixture(width,{mode='instructor',reduced='reduce',failure='empty',surface='class',metrics=false}={}){
   const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(10000);
-  let release;const gate=new Promise(resolve=>release=resolve);const state={calls:[],mode:failure,release,mutations:0};const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let release;const gate=new Promise(resolve=>release=resolve);const state={calls:[],mode:failure,release,mutations:0,rosterFailed:false,metricRoster:{courseId:'course',students:Array.from({length:25},(_,i)=>({userId:i===0?'learner':'peer-'+i,displayName:i===0?'Demo learner':'Synthetic peer '+i,pseudonym:'Learner '+i,initials:'SL',readiness:i===0?0.739:i===1?0.55:null,band:'no-evidence',attempts:i===0?381:0,evidenceCount:i===0?396:0,accuracy:i===0?0.75:null,lastActiveAt:null,daysInactive:null,weakestSkillName:null,skillsWithEvidence:i===0?11:0,skillsTotal:15,status:i===0?'on-track':'not-started'}))}};const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await context.route('**/*',async route=>{
     const url=new URL(route.request().url());if(url.hostname!=='localhost'||url.port!=='5173')return route.abort();
     if(url.pathname==='/__twin_presentation')return route.fulfill({contentType:'text/html',body:`<!doctype html><html><head><link rel="stylesheet" href="/src/styles/globals.css"></head><body><div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script><script type="module">
@@ -35,6 +35,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
       if(typeof state.mode==='number')return route.fulfill({status:state.mode,json:{detail:'synthetic failure'}});
     }
     if(path.endsWith('/evidence'))return reply({courseId:'course',evidence:[],nextCursor:null});
+    if(metrics&&path.endsWith('/roster'))return state.rosterFailed?route.fulfill({status:403,json:{detail:'synthetic denial'}}):reply(state.metricRoster);
     if(path.endsWith('/roster'))return reply({courseId:'course',students:surface==='sheet'?[{userId:'learner',displayName:'Synthetic sheet learner',pseudonym:'Synthetic learner',initials:'SL',readiness:null,band:'no-evidence',attempts:0,evidenceCount:0,accuracy:null,lastActiveAt:null,daysInactive:null,weakestSkillName:null,skillsWithEvidence:0,skillsTotal:0,status:'not-started'}]:[]});
     if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:null,skills:[],students:[],cells:[]});
     if(path.endsWith('/stats'))return reply({courseId:'course',learners:0,activeLearners:0,startedLearners:0,notStartedLearners:0,cohortReadiness:null,medianReadiness:null,accuracy:null,evidenceCount:0,medianLatencyMs:null,hintsUsed:0,skillsTracked:0,skillsCovered:0,bandDistribution:[],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
@@ -48,6 +49,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
     if(path.endsWith('/diagnostic'))return reply({courseId:'course',status:'ready',readyCount:1,questions:[{id:'q',skillId:'storage',bloomLevel:'understand',prompt:'Which storage fits?',choices:[{id:'a',label:'Object storage'},{id:'b',label:'Temporary disk'}]}],pendingSkillIds:[],failedSkillIds:[],skippedSkillCount:0});
     if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:[]});
     if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:[]});
+    if(metrics&&path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:0.739,band:'proficient',cohortReadiness:0.644,percentile:200,accuracy:0.69,momentum:0,attempts:381,evidenceCount:200,hintsUsed:0,lastActiveAt:null,daysInactive:0,status:'on-track',skills:[],activityByType:[],activitySeries:[],readinessTrend:[],evidence:[]});
     if(path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:null,band:'no-evidence',cohortReadiness:null,percentile:null,accuracy:null,momentum:null,attempts:0,evidenceCount:0,hintsUsed:0,lastActiveAt:null,daysInactive:null,status:'not-started',skills:[],activityByType:[],activitySeries:[],readinessTrend:[],evidence:[]});
     return reply({});
   });
@@ -144,6 +146,28 @@ try {
     check(state.mutations===0&&f.errors.length===0,'denied roster sheet never mutates or crashes');
     await page.keyboard.press('Escape');await sheet.waitFor({state:'hidden'});
     check(await row.isVisible(),'keyboard close returns to the actual roster');
+    await f.context.close();
+  }
+  for(const width of [375,1440]) for(const surface of ['sheet','learner']) {
+    const f=await fixture(width,{surface,metrics:true}),{page,state}=f;
+    if(surface==='sheet'){await page.locator('#tour-roster-first-row').waitFor();await page.locator('#tour-roster-first-row').click();}
+    const standing=page.locator('#tour-standing');await standing.waitFor();
+    await standing.getByText('1st of 2',{exact:true}).waitFor();
+    check(await standing.getByText('Learners with measured readiness',{exact:true}).isVisible(),'INSTR-REQ-012 rank denominator labels only measured course learners');
+    check(await standing.getByText('200th',{exact:true}).count()===0,'INSTR-REQ-012 never renders the invalid percentile as ordinal');
+    check(await standing.getByText('69%',{exact:true}).isVisible(),'INSTR-REQ-012 keeps the learner record accuracy');
+    check(await standing.getByText('Graded outcomes in last 200 events · 0 hints used',{exact:true}).isVisible(),'INSTR-REQ-012 accuracy window visible on '+surface);
+    state.metricRoster.students[1].readiness=0.739;
+    await page.evaluate(()=>window.__readStateClient.invalidateQueries({queryKey:['roster','course']}));
+    await standing.getByText('Tied 1st of 2',{exact:true}).waitFor();
+    check(await standing.getByText('Tied 1st of 2',{exact:true}).isVisible(),'INSTR-REQ-012 equal readiness gives an explicit shared rank');
+    state.rosterFailed=true;
+    await page.evaluate(()=>window.__readStateClient.invalidateQueries({queryKey:['roster','course']}));
+    await standing.getByText('Course rank unavailable',{exact:true}).waitFor();
+    check(await standing.getByText('Tied 1st of 2',{exact:true}).count()===0,'INSTR-REQ-012 failed roster never retains a stale rank');
+    check(await standing.getByText('69%',{exact:true}).isVisible(),'INSTR-REQ-012 unavailable course rank preserves own record');
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'INSTR-REQ-012 standing fits viewport');
+    check(state.mutations===0&&f.errors.length===0,'INSTR-REQ-012 standing reads never write or crash');
     await f.context.close();
   }
   console.log(`INSTR-REQ-011 browser checks: ${assertions} assertions passed`);

@@ -1,7 +1,8 @@
 import { InstructorReadFailure } from "@/features/instructor/components/InstructorReadFailure";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState } from "react";
-import { useAtRisk, useLearnerRecord } from "@/features/instructor";
+import { useAtRisk, useLearnerRecord, useRoster } from "@/features/instructor";
+import { courseStanding } from "@/features/instructor/lib/standing";
 import { DecisionCenter } from "@/features/instructor/components/DecisionCenter";
 import { LearnerStanding } from "@/features/instructor/components/LearnerStanding";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +30,7 @@ export function LearnerTriage({
   userId: string;
 }) {
   const record = useLearnerRecord(courseId, userId);
+  const roster = useRoster(courseId);
   const atRisk = useAtRisk(courseId);
   const [deidentified, setDeidentified] = useState(false);
 
@@ -55,6 +57,7 @@ export function LearnerTriage({
       <LearnerStanding
         userId={userId}
         record={r}
+        standing={roster.isError ? null : courseStanding(roster.data, courseId, userId)}
         flag={flag}
         deidentified={deidentified}
         onDeidentifiedChange={setDeidentified}

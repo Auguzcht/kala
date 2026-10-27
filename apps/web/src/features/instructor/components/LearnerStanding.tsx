@@ -6,6 +6,7 @@ import type {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ordinal, type CourseStanding } from "@/features/instructor/lib/standing";
 
 // The standing block shared by the triage sheet and the full record page:
 // identity, why-flagged (if any), and the four comparison numbers. This is
@@ -44,12 +45,14 @@ function pct(value: number | null | undefined): string {
 export function LearnerStanding({
   userId,
   record,
+  standing,
   flag,
   deidentified,
   onDeidentifiedChange,
 }: {
   userId: string;
   record: LearnerRecordData;
+  standing: CourseStanding | null;
   flag?: AtRiskFlag;
   deidentified: boolean;
   onDeidentifiedChange: (v: boolean) => void;
@@ -125,8 +128,8 @@ export function LearnerStanding({
         />
         <Stat
           label="Class standing"
-          value={r.percentile === null ? "—" : `${r.percentile}th`}
-          sub={r.cohortReadiness === null ? "—" : `class at ${pct(r.cohortReadiness)}`}
+          value={standing ? `${standing.tied ? "Tied " : ""}${ordinal(standing.rank)} of ${standing.total}` : "—"}
+          sub={standing ? "Learners with measured readiness" : "Course rank unavailable"}
         />
         <Stat
           label="Accuracy"

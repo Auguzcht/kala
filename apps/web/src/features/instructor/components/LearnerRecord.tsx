@@ -3,7 +3,8 @@ import { EvidenceHistoryLedger } from "@/features/twin";
 import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { useAtRisk, useLearnerRecord } from "@/features/instructor";
+import { useAtRisk, useLearnerRecord, useRoster } from "@/features/instructor";
+import { courseStanding } from "@/features/instructor/lib/standing";
 import { DecisionCenter } from "@/features/instructor/components/DecisionCenter";
 import { LearnerStanding } from "@/features/instructor/components/LearnerStanding";
 import { MasteryBand, MasteryRadar, MasteryRing } from "@/components/kala";
@@ -50,6 +51,7 @@ export function LearnerRecord({
   userId: string;
 }) {
   const record = useLearnerRecord(courseId, userId);
+  const roster = useRoster(courseId);
   const atRisk = useAtRisk(courseId);
   const [deidentified, setDeidentified] = useState(false);
 
@@ -81,6 +83,7 @@ export function LearnerRecord({
       <LearnerStanding
         userId={userId}
         record={r}
+        standing={roster.isError ? null : courseStanding(roster.data, courseId, userId)}
         flag={flag}
         deidentified={deidentified}
         onDeidentifiedChange={setDeidentified}
