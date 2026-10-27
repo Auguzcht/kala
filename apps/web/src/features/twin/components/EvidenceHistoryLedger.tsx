@@ -30,7 +30,14 @@ export function EvidenceHistoryLedger({ courseId, targetId, fallbackEvents, fall
         <p role="alert" className="text-sm text-muted-foreground">Activity is unavailable for this course or learner.</p>
       ) : failedStaff ? null : (
         <EvidenceLedger key={history.scopeKey} events={active ? history.events : fallbackEvents}
-          totalLabel={active ? "loaded events" : undefined} />
+          totalLabel={active ? "loaded events" : undefined}
+          hasMore={active && history.hasNextPage && !invalidCursor}
+          loadingMore={history.isFetching}
+          onLoadMore={async () => {
+            const result = await history.fetchNextPage();
+            if (result.isError) throw result.error;
+            return new Set(result.data?.pages.flatMap((page) => page.evidence.map((event) => event.id))).size;
+          }} />
       )}
       {history.isError && !unavailable ? (
         <div className="flex flex-wrap items-center gap-2" role="alert">
@@ -43,12 +50,6 @@ export function EvidenceHistoryLedger({ courseId, targetId, fallbackEvents, fall
             else void history.refetch();
           }}>{invalidCursor ? "Reload activity" : "Retry activity"}</Button>
         </div>
-      ) : null}
-      {active && history.hasNextPage && !invalidCursor && !unavailable && !failedStaff ? (
-        <Button variant="outline" disabled={history.isFetching} aria-busy={history.isFetchingNextPage}
-          onClick={() => { void history.fetchNextPage(); }}>
-          {history.isFetchingNextPage ? "Loading older activity" : "Load older activity"}
-        </Button>
       ) : null}
     </div>
   );

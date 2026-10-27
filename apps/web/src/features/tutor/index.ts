@@ -1,4 +1,5 @@
 export { TutorChat } from "@/features/tutor/components/TutorChat";
+export { createAssignedTutorDraft } from "@/features/tutor/lib/assigned-draft";
 export {
   useAskTutor,
   useTutorAsk,

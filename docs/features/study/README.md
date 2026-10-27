@@ -81,6 +81,14 @@ Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH
 - Status: implemented locally; deployed acceptance remains pending
 - Verified by: final-ui-pass.browser.mjs checks exact Test wording and student/staff role boundaries. Material flag accuracy remains a source-limited finding; no hosted repair.
 
+### STUDY-REQ-008: Show hint and explanation actions as student turns
+
+- Rule: Activating Give me a hint or Explain more appends a visible student bubble with that request before Kala's single pending answer. Hint, explanation and typed follow-ups share an ordered local thread for the current card. Each completed activation retains its own pair of turns, including repeated actions. Keep the shared user/assistant presentation, anchors, column geometry and reduced motion.
+- Rule: Reuse the existing stateless ask endpoint and styles. A hint includes the current card prompt and asks not to reveal the answer, without including the hidden back. Explain more is available on the back and includes that card's prompt, answer and explanation for context. Typed follow-ups keep their current card/side context. Serialize assistance requests and preserve one model-waiting indicator. On failure retain the student turn and offer Retry using the same captured request without duplicating that turn. Moving to another card/session, replaying or changing scope clears this local thread and ignores old callbacks.
+- Acceptance: At 375px/1440px, pending and completed hint/explain actions appear as user then Kala turns, in click order. Verify exact request intent/styles, no back in front-side hints, repeated actions, typed follow-ups, failed/retried requests and late responses after a card switch. Preserve review counts, replay/idempotency, existing ask semantics and the absence of conversation-create/upload calls. No backend or scheduling change.
+- Status: implemented locally under Fred's APPROVAL-09 follow-up request, WI-34. Human confirmation remains pending.
+- Verified by: final-ui-pass.browser.mjs covers hint/explain/freeform order, immediate user turns, exact request context/style, repeated actions, retry and stale-response isolation at both widths. The 21 existing Study component cases retain review/replay/idempotency coverage. No hosted acceptance claim.
+
 ## API contract
 | Method and path | Purpose | Auth | Notes |
 | --- | --- | --- | --- |
@@ -91,7 +99,7 @@ Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH
 Read approved skills, live generated_items, courses, institutions, srs_state and skill_bank_state. Nonzero Study selection uses the existing tenant-scoped claim RPC and exposure/tracking writes. Counts use SELECT only. No SQL or RPC changes.
 
 ## AI usage (if any)
-No provider calls for deck selection or replay. Existing optional tutor assistance is outside these requirements.
+No provider calls for deck selection or replay. Optional card-scoped tutor assistance follows STUDY-REQ-008 through the existing stateless ask endpoint.
 
 ## Edge cases and known limits
 Daily cap applies only to fresh review claims, not resuming unrated cards or Study all. Retired items and rejected skills stay excluded. Membership due badges count scheduled reviewed cards, independently of resumable unrated cards. No next-due field is added in this change. Live LMS and production smoke checks remain the maintainer's responsibility.
@@ -105,6 +113,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Specify chronological student/assistant turns for card hint, explain and typed requests with scoped retry before frontend implementation | Fred's APPROVAL-09 follow-up request, WI-34 | STUDY-REQ-008 |
 | 2026-10-27 | Separate due/new completion fetching from replay; define honest empty/date state, student Test copy and shared loading before implementation | APPROVAL-08, coordinator C1/C2 | STUDY-REQ-003/006/007; DIAG-REQ-008/014 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |

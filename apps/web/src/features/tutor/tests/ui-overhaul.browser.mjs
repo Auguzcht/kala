@@ -75,6 +75,10 @@ async function fixture(
     patches: 0,
     creates: 0,
     asks: 0,
+    askRequests: [],
+    mutations: [],
+    plan: [],
+    rejectAsk: false,
     uploads: 0,
     attachmentDeletes: 0,
     rejectUploads: true,
@@ -85,6 +89,7 @@ async function fixture(
     rejectPatch: false,
     lastPatch: null,
     holdDetail: null,
+    holdList: null,
     diagnosticCompleted: false,
     holdDiagnosticSubmit: null,
     masteryRows: [
@@ -121,6 +126,7 @@ async function fixture(
     if (!url.pathname.startsWith("/__lane_u_api__")) return route.continue();
     const path = url.pathname.slice("/__lane_u_api__".length),
       method = route.request().method();
+    if (method !== "GET") state.mutations.push({ path, method });
     const reply = (json, status = 200) => route.fulfill({ status, json });
     if (path === "/courses/synthetic-course")
       return reply({ id: "synthetic-course", title: "AWS101" });
@@ -199,8 +205,10 @@ async function fixture(
           },
         ],
       });
-    if (path === "/tutor/conversations" && method === "GET")
+    if (path === "/tutor/conversations" && method === "GET") {
+      if (state.holdList) await state.holdList;
       return reply({ conversations: state.rows });
+    }
     if (path === "/tutor/conversations" && method === "POST") {
       state.creates++;
       const created = row("created");
@@ -209,8 +217,12 @@ async function fixture(
     }
     if (path === "/tutor/ask") {
       state.asks++;
+      const body = route.request().postDataJSON();
+      state.askRequests.push(body);
       if (state.holdAsk) await state.holdAsk;
-      const { question } = route.request().postDataJSON();
+      if (state.rejectAsk) return reply({ detail: 'Synthetic retryable answer failure.' }, 503);
+      const { question } = body;
+      if(state.skipPersistence)return reply({answer:"Unsaved synthetic answer.",conversationId:body.conversation_id??"created"});
       state.messages.push(
         {
           id: `u-${state.asks}`,
@@ -224,7 +236,7 @@ async function fixture(
           role: "assistant",
           content:
             "Object storage keeps durable copies of your data. Access policies control who can read and update each object.",
-          style: "default",
+          style: body.style,
           createdAt: "2026-10-25T11:00:01Z",
         },
       );
@@ -316,7 +328,7 @@ async function fixture(
         sessionId: "synthetic-session",
         hasMore: false,
       });
-    if (path.endsWith("/plan")) return reply({ plan: [] });
+    if (path.endsWith("/plan")) return reply({ courseId: 'synthetic-course', plan: state.plan });
     return reply({});
   });
   return { context, page, state, errors };
@@ -327,7 +339,187 @@ async function screenshot(page, name, width) {
     animations: "disabled",
   });
 }
+const edgesOf = (locator) => locator.evaluate((el) => {
+  const { left, right, width } = el.getBoundingClientRect();
+  return { left, right, width };
+});
+const matchingEdges = (a, b) => Math.abs(a.left - b.left) <= 1 && Math.abs(a.right - b.right) <= 1;
 try {
+  for (const width of [375, 1440]) {
+    const assigned = await fixture(width);
+    const title = 'Reinforce cloud cost comparison';
+    const topic = 'Compare cloud and traditional IT infrastructure';
+    assigned.state.messages = [{ id: 'old-answer', role: 'assistant', content: 'Existing saved chat content', style: 'default', createdAt: '2026-10-27T10:00:00Z' }];
+    assigned.state.plan = [
+      { id: 'assigned-tutor', title, kind: 'tutor', priority: 'high', status: 'approved', skillId: 'storage', skillName: topic, instructorNote: 'Instructor note is displayed but not automatically sent', assignedAt: null },
+      { id: 'assigned-practice', title: 'Assigned practice', kind: 'practice', priority: 'medium', status: 'approved', skillId: 'storage', skillName: topic, instructorNote: null, assignedAt: null },
+      { id: 'assigned-outreach', title: 'Talk with your instructor', kind: 'outreach', priority: 'low', status: 'approved', skillId: null, skillName: null, instructorNote: null, assignedAt: null },
+    ];
+    const start = async () => {
+      await assigned.page.goto('http://localhost:5173/course');
+      const row = assigned.page.getByText(title, { exact: true }).locator('../..');
+      await row.getByRole('button', { name: 'Start', exact: true }).click();
+      await assigned.page.waitForURL('http://localhost:5173/course/tutor');
+      await assigned.page.getByPlaceholder('Ask Kala…').waitFor();
+    };
+    await start();
+    const input = assigned.page.getByPlaceholder('Ask Kala…');
+    const initialText = await input.inputValue();
+    check(initialText.includes(topic) && /key ideas.*example/.test(initialText), `TUTOR-REQ-018 assigned Start seeds relevant topic at ${width}`);
+    check(await input.evaluate(el => el === document.activeElement) && await assigned.page.getByText('Existing saved chat content', { exact: true }).count() === 0, `TUTOR-REQ-018 fresh draft is focused without resuming saved chat at ${width}`);
+    check(assigned.state.mutations.length === 0 && !assigned.page.url().includes(topic) && !assigned.page.url().includes('conversation='), `TUTOR-REQ-018 Start has no mutations or prompt in URL at ${width}`);
+    check(!initialText.includes('Instructor note') && !initialText.includes('Demo learner'), `TUTOR-REQ-018 draft excludes note and profile at ${width}`);
+    const edited = initialText + ' Focus on running costs.';
+    await input.fill(edited);
+    await assigned.page.locator('input[type=file]').setInputFiles({ name: 'draft.txt', mimeType: 'text/plain', buffer: Buffer.from('Local staged attachment') });
+    await assigned.page.getByRole('button', { name: 'Remove draft.txt', exact: true }).waitFor();
+    check(await input.inputValue() === edited && assigned.state.mutations.length === 0, `TUTOR-REQ-018 rerender and staging preserve edits without upload at ${width}`);
+    await assigned.page.getByRole('button', { name: 'Remove draft.txt', exact: true }).click();
+    if (width < 1024) await assigned.page.getByRole('button', { name: 'Open chat history' }).click();
+    await assigned.page.getByRole('button', { name: 'New chat', exact: true }).filter({ has: assigned.page.locator('svg') }).click();
+    await assigned.page.waitForFunction(() => document.querySelector('#tour-tutor-input textarea')?.value === '');
+    check(await input.inputValue() === '' && assigned.state.mutations.length === 0, `TUTOR-REQ-018 New chat clears handoff without reapplying it at ${width}`);
+    assigned.state.plan[0].skillName = null;
+    await start();
+    const fallbackText = await input.inputValue();
+    check(fallbackText.includes(title), `TUTOR-REQ-018 missing skill uses assignment title at ${width}`);
+    await input.fill(fallbackText + ' Give me a concrete example.');
+    assigned.state.messages = [];
+    if (width === 375) await input.press('Enter');
+    else await assigned.page.getByRole('button', { name: 'Send message', exact: true }).click();
+    await assigned.page.waitForURL('**/course/tutor?conversation=created');
+    await assigned.page.locator('#tour-tutor-response').waitFor();
+    check(assigned.state.creates === 1 && assigned.state.asks === 1 && assigned.state.askRequests[0].question === fallbackText + ' Give me a concrete example.', `TUTOR-REQ-018 explicit Enter/Send creates new chat and asks edited draft once at ${width}`);
+    check(assigned.state.askRequests[0].conversation_id === 'created' && assigned.state.mutations.length === 2 && assigned.state.uploads === 0 && assigned.state.patches === 0, `TUTOR-REQ-018 submission uses fresh conversation without plan mutation at ${width}`);
+    await screenshot(assigned.page, 'assigned-tutor-submitted', width);
+    await assigned.page.goto('http://localhost:5173/course');
+    const outreach = assigned.page.getByText('Talk with your instructor', { exact: true }).locator('../..');
+    check(await outreach.getByRole('button').count() === 0, `INSTR-REQ-007 outreach keeps no invented CTA at ${width}`);
+    await assigned.page.getByText('Assigned practice', { exact: true }).locator('../..').getByRole('button', { name: 'Start', exact: true }).click();
+    await assigned.page.waitForURL('http://localhost:5173/course/skills');
+    check(assigned.errors.length === 0, `INSTR-REQ-007 other Start destination remains unchanged at ${width}`);
+    await assigned.context.close();
+  }
+  for (const width of [375, 1440]) {
+    const follow = await fixture(width);
+    const original = 'What is object storage?';
+    follow.state.messages = [
+      { id: 'original-user', role: 'user', content: original, style: null, createdAt: '2026-10-27T10:00:00Z' },
+      { id: 'original-answer', role: 'assistant', content: 'Object storage keeps data as durable objects.', style: 'default', createdAt: '2026-10-27T10:00:01Z' },
+    ];
+    await follow.page.goto('http://localhost:5173/course/tutor?conversation=existing');
+    await follow.page.getByRole('button', { name: "Explain like I'm 5", exact: true }).waitFor();
+    check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).locator('[aria-hidden=true]').innerText()==='🧸',`TUTOR-REQ-021 simple explanation uses a static emoji at ${width}`);
+    check(await follow.page.getByRole('button',{name:'More detail',exact:true}).locator('[aria-hidden=true]').innerText()==='🔎',`TUTOR-REQ-021 detail uses a static emoji at ${width}`);
+
+    const historyInput=follow.page.getByPlaceholder('Ask Kala…');
+    await historyInput.press('ArrowUp');
+    check(await historyInput.inputValue()===original,`TUTOR-REQ-022 saved history recalls only the user prompt at ${width}`);
+    await historyInput.press('ArrowDown');
+    check(await historyInput.inputValue()===''&&follow.state.asks===0,`TUTOR-REQ-022 saved browsing restores empty without asking at ${width}`);
+    await follow.page.evaluate(()=>{window.__messageCopies=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__messageCopies.push(text);}}});});
+    const copyByKeyboard=async button=>{await button.focus();await button.press('Enter');};
+    await copyByKeyboard(follow.page.getByRole('button',{name:'Copy your message',exact:true}).first());
+    check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))===original,`TUTOR-REQ-017 saved user content copies exactly at ${width}`);
+    await copyByKeyboard(follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).first());
+    check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))==='Object storage keeps data as durable objects.',`TUTOR-REQ-017 saved reply content copies exactly at ${width}`);
+    check(follow.state.asks===0,`TUTOR-REQ-017 saved-message copy sends no ask at ${width}`);
+    for (const [label, style, intent] of [["Explain like I'm 5", 'eli5', "Explain your last answer like I'm 5"], ['More detail', 'detail', 'Explain your last answer in more detail']]) {
+      let release;
+      follow.state.holdAsk = new Promise(done => { release = done; });
+      await follow.page.getByRole('button', { name: label, exact: true }).click();
+      const pendingUser = follow.page.locator('#tour-tutor-user-turn');
+      await pendingUser.waitFor();
+      check((await pendingUser.innerText()).startsWith(intent), `TUTOR-REQ-021 ${style} immediately renders explicit user instruction at ${width}`);
+      await follow.page.locator('#tour-tutor-thinking').waitFor();
+      await copyByKeyboard(pendingUser.getByRole('button',{name:'Copy your message',exact:true}));
+      check((await follow.page.evaluate(()=>window.__messageCopies.at(-1))).startsWith(intent),`TUTOR-REQ-017 pending user turn copies its own explicit question at ${width}`);
+      check(await follow.page.locator('#tour-tutor-thinking').getByRole('button').count()===0,`TUTOR-REQ-017 pending Kala reply has no copy control at ${width}`);
+
+      const request = follow.state.askRequests.at(-1);
+      check(request.question.startsWith(intent) && request.question !== original && request.style === style && request.conversation_id === 'existing', `TUTOR-REQ-021 ${style} request keeps intent/style/conversation at ${width}`);
+      check(await follow.page.locator('svg.animate-spin').count() === 0 && await follow.page.locator('#tour-tutor-thinking [role=status]').count() === 1, `TUTOR-REQ-021 ${style} one pending indicator at ${width}`);
+      release(); follow.state.holdAsk = null;
+      await pendingUser.waitFor({ state: 'detached' });
+      await follow.page.getByRole('button', { name: 'More detail', exact: true }).waitFor();
+      check(await follow.page.getByText(original, { exact: true }).count() === 1, `TUTOR-REQ-021 ${style} never copies original input at ${width}`);
+    }
+    follow.state.rejectAsk = true;
+    await follow.page.getByRole('button', { name: "Explain like I'm 5", exact: true }).click();
+    await follow.page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
+    const failedRequest = follow.state.askRequests.at(-1);
+    check(await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 failed newer turn hides old explanation actions at ${width}`);
+    await historyInput.press('ArrowUp');
+    check(await historyInput.inputValue()===failedRequest.question,`TUTOR-REQ-022 failed visible user turn remains available in history at ${width}`);
+    await historyInput.press('ArrowDown');
+    check(await historyInput.inputValue()==='',`TUTOR-REQ-022 failed-turn browsing restores empty draft at ${width}`);
+    follow.state.rejectAsk = false;
+    await follow.page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await follow.page.locator('#tour-tutor-user-turn').waitFor({ state: 'detached' });
+    check(JSON.stringify(follow.state.askRequests.at(-1)) === JSON.stringify(failedRequest), `TUTOR-REQ-021 retry preserves exact follow-up request at ${width}`);
+    follow.state.skipPersistence=true;
+    await follow.page.getByRole('button',{name:'More detail',exact:true}).click();
+    await follow.page.getByText('This answer may not have been saved.',{exact:true}).waitFor();
+    const asksBeforeCopy=follow.state.asks;
+    await copyByKeyboard(follow.page.getByRole('button',{name:'Copy your message',exact:true}).last());
+    check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))===follow.state.askRequests.at(-1).question,`TUTOR-REQ-017 local user turn copies its captured request at ${width}`);
+    await copyByKeyboard(follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).last());
+    check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))==='Unsaved synthetic answer.',`TUTOR-REQ-017 local answer excludes save-status text at ${width}`);
+    check(follow.state.asks===asksBeforeCopy,`TUTOR-REQ-017 local copy makes no additional ask at ${width}`);
+    await historyInput.fill('Keep my draft');
+    await historyInput.press('ArrowUp');
+    check(await historyInput.inputValue()===follow.state.askRequests.at(-1).question,`TUTOR-REQ-022 local unsaved user prompt joins the same history at ${width}`);
+    await historyInput.press('ArrowDown');
+    check(await historyInput.inputValue()==='Keep my draft'&&follow.state.asks===asksBeforeCopy,`TUTOR-REQ-022 local browsing restores draft without a new ask at ${width}`);
+    await historyInput.fill('');
+    check(follow.state.creates === 0 && follow.state.uploads === 0 && follow.state.patches === 0 && follow.state.deletes === 0, `TUTOR-REQ-021 explanation chips make only the existing ask at ${width}`);
+    const completedBeforeGreeting=await follow.page.locator('[data-tutor-message=assistant]').count();
+    await follow.page.getByPlaceholder('Ask Kala…').fill('Hello!');await follow.page.getByPlaceholder('Ask Kala…').press('Enter');
+    await follow.page.waitForFunction(n=>document.querySelectorAll('[data-tutor-message=assistant]').length===n+1,completedBeforeGreeting);
+    check(await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 local unsaved greeting hides chips after older learning turns at ${width}`);
+    follow.state.skipPersistence=false;
+    follow.state.messages.push({id:'casual-user',role:'user',content:'Hello!',style:null,createdAt:'2026-10-28T00:00:01Z'}, {id:'casual-answer',role:'assistant',content:'Hello! What would you like to learn today?',style:'default',createdAt:'2026-10-28T00:00:02Z'});
+    await follow.page.reload();
+    await follow.page.getByText('Hello! What would you like to learn today?',{exact:true}).waitFor();
+    check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).count()===0&&await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 casual latest turn hides chips despite older learning messages at ${width}`);
+    follow.state.messages.push({id:'learning-user',role:'user',content:'Hi, can you explain cloud storage?',style:null,createdAt:'2026-10-28T00:00:03Z'}, {id:'learning-answer',role:'assistant',content:'Object storage keeps data as durable objects.',style:'default',createdAt:'2026-10-28T00:00:04Z'});
+    await follow.page.reload();
+    await follow.page.getByRole('button',{name:'More detail',exact:true}).waitFor();
+    check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).isVisible(),`TUTOR-REQ-021 reopened mixed greeting/learning exchange retains chips at ${width}`);
+    check(follow.errors.length === 0, `TUTOR-REQ-021 no runtime errors at ${width}`);
+    await screenshot(follow.page, 'tutor-explicit-followups', width);
+    await follow.context.close();
+  }
+  for (const width of [375, 1440]) {
+    const scrolling = await fixture(width);
+    scrolling.state.messages = Array.from({ length: 60 }, (_, i) => ({ id: `long-answer-${i}`, role: 'assistant', content: `Synthetic paragraph ${i} with enough text to overflow the reading surface.`, style: 'default', createdAt: '2026-10-27T10:00:00Z' }));
+    await scrolling.page.goto('http://localhost:5173/course/tutor?conversation=existing');
+    await scrolling.page.locator('#tour-tutor-response').waitFor();
+    await scrolling.page.clock.fastForward(10000);
+    await scrolling.page.clock.resume();
+    const scroller = scrolling.page.locator('[role=log] > div');
+    const scrollEdges = await edgesOf(scroller);
+    check(Math.abs(scrollEdges.right - width) <= 1, `DESIGN-REQ-002 overflowing Tutor native scrollbar stays at viewport right edge at ${width}`);
+    check(await scroller.evaluate(el => el.scrollHeight > el.clientHeight), `DESIGN-REQ-002 Tutor scrollbar fixture really overflows at ${width}`);
+    const answerEdges = await edgesOf(scrolling.page.locator('#tour-tutor-response'));
+    check(matchingEdges(answerEdges, await edgesOf(scrolling.page.locator('#tour-tutor-input [data-slot=input-group]'))), `DESIGN-REQ-002 full-width scroller preserves Tutor column at ${width}`);
+    await scrolling.page.addStyleTag({ content: '[role=log] > div::-webkit-scrollbar { width: 16px; } [role=log] > div { overflow-y: scroll; }' });
+    check(matchingEdges(answerEdges, await edgesOf(scrolling.page.locator('#tour-tutor-response'))) && matchingEdges(answerEdges, await edgesOf(scrolling.page.locator('#tour-tutor-input [data-slot=input-group]'))), `DESIGN-REQ-002 persistent scrollbar preserves matching column edges at ${width}`);
+    check(await scroller.evaluate(el => getComputedStyle(el).overflowX === 'hidden') && Math.abs((await edgesOf(scroller)).right - width) <= 1, `DESIGN-REQ-002 persistent scrollbar stays at right without a horizontal scrollbar at ${width}`);
+    await scrolling.page.waitForFunction(() => {
+      const el = document.querySelector('[role=log] > div');
+      return el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+    });
+    const bottomPosition = await scroller.evaluate(el => el.scrollTop);
+    await scroller.hover();
+    await scrolling.page.mouse.wheel(0, -100000);
+    await scrolling.page.waitForFunction(before => document.querySelector('[role=log] > div').scrollTop < before - 20, bottomPosition);
+    check(await scroller.evaluate(el => el.scrollTop < el.scrollHeight - el.clientHeight - 20) && await scrolling.page.evaluate(() => window.scrollY === 0), `DESIGN-REQ-002 Tutor retains stream scroll ownership at ${width}`);
+    console.log(`WI-34 overflowing Tutor scroller at ${width}: ${JSON.stringify(scrollEdges)}`);
+    await screenshot(scrolling.page, 'tutor-page-edge-scrollbar', width);
+    check(scrolling.errors.length === 0, 'Tutor full-width scrollbar has no runtime errors');
+    await scrolling.context.close();
+  }
   for (const width of [1440, 375]) {
     const { context, page, state, errors } = await fixture(width, {
       empty: true,
@@ -492,6 +684,8 @@ try {
     const input = page.getByPlaceholder("Ask Kala…");
     await input.waitFor();
     await page.getByRole("heading", { level: 1 }).waitFor();
+    const composer = page.locator('#tour-tutor-input [data-slot=input-group]');
+    const emptyComposerEdges = await edgesOf(composer);
     check(
       await page
         .locator("main")
@@ -634,6 +828,19 @@ try {
       .first()
       .waitFor();
     await page.clock.resume();
+    const messageEdges = await edgesOf(page.locator('#tour-tutor-response'));
+    const composerEdges = await edgesOf(composer);
+    check(matchingEdges(messageEdges, composerEdges), `DESIGN-REQ-002 Tutor message/composer edges match at ${width}`);
+    check(matchingEdges(emptyComposerEdges, composerEdges), `DESIGN-REQ-002 Tutor empty/conversation composer edges match at ${width}`);
+    const userBubbleEdges = await edgesOf(page.getByText('How does object storage work?', { exact: true }).last());
+    check(Math.abs(userBubbleEdges.right - composerEdges.right) <= 1, `DESIGN-REQ-002 Tutor user bubble stays at column right edge at ${width}`);
+    await page.locator('input[type=file]').setInputFiles({ name: 'column.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic column check') });
+    await page.getByRole('button', { name: 'Remove column.txt', exact: true }).waitFor();
+    const attachmentComposerEdges = await edgesOf(composer);
+    check(matchingEdges(messageEdges, attachmentComposerEdges), `DESIGN-REQ-002 Tutor attachment composer retains edges at ${width}`);
+    console.log(`WI-34 Tutor edges at ${width}: ${JSON.stringify({ message: messageEdges, composer: composerEdges, emptyComposer: emptyComposerEdges, attachmentComposer: attachmentComposerEdges, userBubble: userBubbleEdges })}`);
+    await screenshot(page, 'shared-column-tutor', width);
+    await page.getByRole('button', { name: 'Remove column.txt', exact: true }).click();
     check(await page.locator('#tour-tutor-thinking').count()===0,
       'TUTOR-REQ-010 completed answer removes the waiting indicator');
     check(
@@ -1817,16 +2024,36 @@ try {
     const reduced=await fixture(width,{reducedMotion:'reduce'});
     let releaseDetail;
     reduced.state.holdDetail=new Promise(done=>{releaseDetail=done});
+    let releaseList;
+    reduced.state.holdList=new Promise(done=>{releaseList=done});
     await reduced.page.goto('http://localhost:5173/course/tutor?conversation=existing');
     const chat=reduced.page.locator('[data-study-surface]');
-    await chat.getByText('Loading conversation…',{exact:true}).waitFor();
+    const conversationLoading=chat.getByRole('status',{name:'Loading conversation',exact:true});
+    await conversationLoading.waitFor();
     check(await chat.locator('svg.animate-spin').count()===0
       && await chat.locator('[data-slot=skeleton]').count()===2
       && await chat.locator('[data-slot=skeleton]').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).animationName==='none')),
       `TUTOR-REQ-010 reduced-motion conversation skeletons without spinner at ${width}`);
+    check(await conversationLoading.innerText()==='' && await conversationLoading.getAttribute('aria-busy')==='true',
+      `TUTOR-REQ-020 conversation loading is skeleton-only with accessible busy status at ${width}`);
+    if(width<1024) await reduced.page.getByRole('button',{name:'Open chat history'}).click();
+    const historyLoading=reduced.page.getByRole('status',{name:'Loading chats',exact:true});
+    await historyLoading.waitFor();
+    check(await historyLoading.innerText()==='' && await historyLoading.getAttribute('aria-busy')==='true'
+      && await historyLoading.locator('[data-slot=skeleton]').count()===3
+      && await historyLoading.locator('svg.animate-spin').count()===0
+      && await historyLoading.locator('[data-slot=skeleton]').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).animationName==='none')),
+      `TUTOR-REQ-020 history loading is skeleton-only, accessible and static under reduced motion at ${width}`);
+    check(reduced.state.creates===0 && reduced.state.asks===0 && reduced.state.uploads===0 && reduced.state.patches===0 && reduced.state.deletes===0,
+      `TUTOR-REQ-020 pending read states make no mutations at ${width}`);
+    await screenshot(reduced.page,'tutor-skeleton-only-loading',width);
+    releaseList();
+    reduced.state.holdList=null;
+    await historyLoading.waitFor({state:'detached'});
+    if(width<1024) await reduced.page.keyboard.press('Escape');
     releaseDetail();
     reduced.state.holdDetail=null;
-    await chat.getByText('Loading conversation…',{exact:true}).waitFor({state:'detached'});
+    await conversationLoading.waitFor({state:'detached'});
     if(width<1024) await reduced.page.getByRole('button',{name:'Open chat history'}).click();
     await reduced.page.getByRole('button',{name:'Actions for Understanding cloud storage'}).click();
     await reduced.page.getByRole('menuitem',{name:'Rename',exact:true}).click();

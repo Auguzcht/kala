@@ -6,6 +6,7 @@ import type {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ordinal, type CourseStanding } from "@/features/instructor/lib/standing";
 
 // The standing block shared by the triage sheet and the full record page:
 // identity, why-flagged (if any), and the four comparison numbers. This is
@@ -44,12 +45,14 @@ function pct(value: number | null | undefined): string {
 export function LearnerStanding({
   userId,
   record,
+  standing,
   flag,
   deidentified,
   onDeidentifiedChange,
 }: {
   userId: string;
   record: LearnerRecordData;
+  standing: CourseStanding | null;
   flag?: AtRiskFlag;
   deidentified: boolean;
   onDeidentifiedChange: (v: boolean) => void;
@@ -57,6 +60,7 @@ export function LearnerStanding({
   const r = record;
   const name = deidentified ? r.pseudonym : r.displayName;
   const status = STATUS_META[r.status];
+  const momentumPoints = r.momentum === null ? null : Math.round(r.momentum * 100);
 
   return (
     <div className="space-y-5" id="tour-standing">
@@ -125,23 +129,23 @@ export function LearnerStanding({
         />
         <Stat
           label="Class standing"
-          value={r.percentile === null ? "—" : `${r.percentile}th`}
-          sub={r.cohortReadiness === null ? "—" : `class at ${pct(r.cohortReadiness)}`}
+          value={standing ? `${standing.tied ? "Tied " : ""}${ordinal(standing.rank)} of ${standing.total}` : "—"}
+          sub={standing ? "Learners with measured readiness" : "Course rank unavailable"}
         />
         <Stat
           label="Accuracy"
           value={pct(r.accuracy)}
-          sub={`${r.hintsUsed} hints used`}
+          sub={`Graded outcomes in last 200 events · ${r.hintsUsed} recorded hints`}
         />
         <Stat
           label="Momentum"
           value={
-            r.momentum === null
+            momentumPoints === null
               ? "—"
-              : `${r.momentum > 0 ? "+" : ""}${Math.round(r.momentum * 100)} pts`
+              : `${momentumPoints > 0 ? "+" : ""}${momentumPoints} pts`
           }
-          sub="last 10 vs previous 10"
-          tone={r.momentum === null ? "neutral" : r.momentum >= 0 ? "green" : "red"}
+          sub="Last 10 vs previous 10 graded"
+          tone={momentumPoints === null || momentumPoints === 0 ? "neutral" : momentumPoints > 0 ? "green" : "red"}
         />
       </div>
     </div>

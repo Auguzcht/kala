@@ -2,19 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { TutorComposer } from "@/features/tutor/components/TutorComposer";
 import { TutorWelcome } from "@/features/tutor/components/TutorWelcome";
 import { TutorDropOverlay } from "@/features/tutor/components/TutorDropOverlay";
-import { pickGreeting, validateTutorFile, createConversationResolver } from "@/features/tutor/lib/presentation";
+import { pickGreeting, validateTutorFile, createConversationResolver, shouldOfferExplanations } from "@/features/tutor/lib/presentation";
 import { dockLayout } from "@/components/ai-elements/dock-layout";
 import { useCourse } from "@/features/courses";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { readAssignedTutorDraft } from "@/features/tutor/lib/assigned-draft";
 import { toast } from "sonner";
 import { StudyStream } from "@/components/study/StudyStream";
-import { UserBlock } from "@/components/study/UserBlock";
-import { AssistantBlock } from "@/components/study/AssistantBlock";
+import { StudyColumn } from "@/components/study/StudyColumn";
+import { TutorMessage } from "@/features/tutor/components/TutorMessage";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { apiErrorReason } from "@/lib/api-error";
@@ -60,8 +62,10 @@ export function TutorChat({ courseId }: { courseId: string }) {
     typeof search === "object" && search !== null && "conversation" in search
       ? (search as { conversation?: string }).conversation
       : undefined;
+  const navigationState = useLocation({ select: (location) => location.state });
+  const assignedDraft = activeId ? null : readAssignedTutorDraft(navigationState, courseId);
+  const assignedDraftId = assignedDraft?.id;
   const active = useTutorConversation(activeId ?? null);
-  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   // The in-flight turn, held until the server's message list actually
   // contains it — gating on `isPending` instead meant it vanished the
   // instant the request resolved, before the invalidated query had
@@ -84,11 +88,12 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const uploadsInFlight = useRef(0);
-  const [hasTyped, setHasTyped] = useState(false);
+  const [hasTyped, setHasTyped] = useState(Boolean(assignedDraft));
   const [greetingDate] = useState(() => new Date());
   const course = useCourse(courseId);
   const resolveConversation = useRef(createConversationResolver());
   const epoch = useRef(0);
+  const [composerSession, setComposerSession] = useState(0);
   const [waitingLong, setWaitingLong] = useState(false);
   const askingSince = useRef(0);
   const uploadAttachment = useUploadTutorAttachment();
@@ -109,19 +114,23 @@ export function TutorChat({ courseId }: { courseId: string }) {
       return;
     }
     epoch.current += 1;
+    setComposerSession((current) => current + 1);
     resolveConversation.current = createConversationResolver();
-    setHasTyped(false);
+    setHasTyped(Boolean(assignedDraftId));
     uploadsInFlight.current = 0;
     setUploading(false);
     setPendingTurn(null);
     setUnconfirmedTurns([]);
-    setLastQuestion(null);
-  }, [activeId]);
+  }, [activeId, assignedDraftId]);
 
   // Resume once on entry; a later explicit New chat must stay empty.
   const conversations = useTutorConversations(courseId);
   const autoResumedRef = useRef(false);
   useEffect(() => {
+    if (assignedDraft) {
+      autoResumedRef.current = true;
+      return;
+    }
     if (autoResumedRef.current || conversations.isLoading) return;
     autoResumedRef.current = true;
     if (activeId) return;
@@ -134,7 +143,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
         replace: true,
       });
     }
-  }, [activeId, conversations.data, conversations.isLoading, navigate]);
+  }, [activeId, assignedDraft, conversations.data, conversations.isLoading, navigate]);
 
   async function ensureConversation() {
     return resolveConversation.current(activeId, async () => {
@@ -159,7 +168,6 @@ export function TutorChat({ courseId }: { courseId: string }) {
     },
     onSuccess: async (data, variables) => {
       if (variables.origin !== epoch.current) return;
-      setLastQuestion(variables.question);
       // Preserve the normal saved-response handoff. A failed/missing save
       // must not discard an answer already returned by the tutor.
       let saved = false;
@@ -282,6 +290,11 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const localTurns = unconfirmedTurns.filter(
     (turn) => turn.conversationId === activeId && !hasSavedTurn(messages, turn),
   );
+  const latestLocal = localTurns.at(-1);
+  const latestQuestion = latestLocal?.question ?? [...messages].reverse().find((message) => message.role === "user")?.content;
+  const latestAnswer = latestLocal?.answer ?? (lastMessage?.role === "assistant" ? lastMessage.content : undefined);
+  const promptHistory = [...messages.filter((message) => message.role === "user").map((message) => message.content),
+    ...localTurns.map((turn) => turn.question), ...(pendingTurn ? [pendingTurn.question] : [])];
 
   const asking = pendingTurn?.status === "asking";
   useEffect(() => {
@@ -294,24 +307,24 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const empty = !active.isLoading && !active.isError && messages.length === 0 && localTurns.length === 0 && !pendingTurn;
 
   return (
-    <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
-      <div className={cn("flex min-h-0 flex-1 flex-col", empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
+    <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col [container-type:inline-size]">
+      <StudyColumn className={cn(empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
       {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
-        {activeId && active.isLoading ? <div role="status" className="space-y-3 text-sm text-muted-foreground">
-          <p>Loading conversation…</p><Skeleton className="h-12 w-3/4 motion-reduce:animate-none" /><Skeleton className="h-16 w-full motion-reduce:animate-none" />
-        </div> : null}
+        {activeId && active.isLoading ? <LoadingRegion label="Loading conversation" className="space-y-3">
+          <Skeleton className="h-12 w-3/4 motion-reduce:animate-none" /><Skeleton className="h-16 w-full motion-reduce:animate-none" />
+        </LoadingRegion> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
         {messages.map((m) => m.role === "user" ? (
-          <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />
+          <TutorMessage key={m.id} role="user" text={m.content} initials={userInitials || undefined} />
         ) : (
-          <AssistantBlock key={m.id} text={m.content} id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
+          <TutorMessage key={m.id} role="assistant" text={m.content} id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
             animate={m.id === lastMessage?.id} animationKey={m.id === lastMessage?.id ? `${courseId}:tutor:${m.id}` : undefined} />
         ))}
 
         {localTurns.map((turn, index) => (
           <div key={turn.id} className="mr-auto w-full max-w-full">
-            <UserBlock text={turn.question} initials={userInitials || undefined} />
-            <AssistantBlock
+            <TutorMessage role="user" text={turn.question} initials={userInitials || undefined} />
+            <TutorMessage role="assistant"
               text={turn.answer}
               id={index === localTurns.length - 1 ? "tour-tutor-response" : undefined}
             />
@@ -327,7 +340,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
                 request fails, in which case it stays visible with a retry
                 action rather than disappearing. */}
             <div id="tour-tutor-user-turn" className="mr-auto w-full max-w-full">
-              <UserBlock text={pendingTurn.question} initials={userInitials || undefined} />
+              <TutorMessage role="user" text={pendingTurn.question} initials={userInitials || undefined} />
             </div>
             {pendingTurn.status === "asking" ? (
               <div id="tour-tutor-thinking" className="mr-auto w-full max-w-full">
@@ -356,21 +369,31 @@ export function TutorChat({ courseId }: { courseId: string }) {
           </>
         ) : null}
 
-        {!send.isPending && lastQuestion ? (
+        {!pendingTurn && !send.isPending && !active.isLoading && !active.isError && shouldOfferExplanations(latestQuestion, latestAnswer) ? (
           <div className="mr-auto w-full">
-            <FollowUpChips onPick={(style) => askQuestion(lastQuestion, style)} />
+            <FollowUpChips onPick={(style) => {
+              const instruction = style === "eli5"
+                ? "Explain your last answer like I'm 5, using simple words and an everyday example."
+                : "Explain your last answer in more detail, including the reasoning and a concrete example.";
+              const unsavedAnswer = localTurns.at(-1)?.answer;
+              askQuestion(unsavedAnswer
+                ? `${instruction}\n\nThe answer to explain:\n${unsavedAnswer}`
+                : instruction, style);
+            }} />
           </div>
         ) : null}
       </StudyStream>}
-      <div className={cn("shrink-0", empty ? "px-4" : dockLayout.footer)}>
-        <div className={cn("mx-auto w-full max-w-[800px]", dockLayout.content)}>
-          <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} onDragChange={setDragging}
+      <div className={cn("shrink-0", !empty && dockLayout.footer)}>
+        <div className={cn("w-full", dockLayout.content)}>
+          <TutorComposer key={`${courseId}:${composerSession}`} dropTarget={dropTarget} onDragChange={setDragging}
+            promptHistory={promptHistory}
+            initialDraft={assignedDraft ?? undefined}
             attachments={active.data?.attachments ?? []} onFiles={handleFiles}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
             onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />
         </div>
       </div>
-      </div>
+      </StudyColumn>
       {dragging ? <TutorDropOverlay /> : null}
     </div>
   );

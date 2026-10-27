@@ -1,5 +1,21 @@
 import type { TutorConversation } from "@/features/tutor/schema/tutor.schema";
 
+// A local presentation filter for common casual exchanges, not semantic intent.
+// Whole clauses must match so "Hello, explain EC2" remains a learning request.
+const CASUAL_CLAUSE = /^(?:(?:hi|hello|hey|hiya|good (?:morning|afternoon|evening|night)|thanks(?: a lot| so much)?|thank you(?: very much| so much)?|you(?:'re| are) welcome|ok(?:ay)?|sure|yes|no|got it|i see|understood|sounds good|bye|goodbye|see you(?: later)?|take care|how are you(?: doing)?|how(?:'s| is) it going|what(?:'s| is) up|who are you|what(?:'s| is) your name|what can you do|can you help(?: me)?|tell me a joke|how(?:'s| is) the weather|what(?:'s| is) the weather(?: like)?|what time is it|kamusta|kumusta|salamat)(?:\s+(?:kala|there|again|too))?)(?:\s+(?:and\s+)?(?:hi|hello|thanks|thank you|good night|goodbye|bye|how are you))*$/u;
+
+function casualExchange(text: string): boolean {
+  const clauses = text.toLowerCase().replace(/[’‘]/g, "'")
+    .split(/[.!?,\n]+/).map((part) => part.replace(/[^\p{L}\p{N}\s']/gu, "").trim()).filter(Boolean);
+  return clauses.length > 0 && clauses.every((clause) => CASUAL_CLAUSE.test(clause));
+}
+
+export function shouldOfferExplanations(question: string | undefined, answer: string | undefined): boolean {
+  if (!answer?.trim() || (question && casualExchange(question))) return false;
+  if (casualExchange(answer)) return false;
+  return true;
+}
+
 export function supportsConversationManagement(
   conversation: TutorConversation,
 ): boolean {

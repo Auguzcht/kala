@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { pageWindow } from "@/lib/pagination";
 import {
@@ -42,15 +42,53 @@ function outcomeStyles(e: EvidenceEvent): { dot: string; word: string; wordClass
   return { dot: "bg-destructive", word: "not quite", wordClass: "text-destructive" };
 }
 
-export function EvidenceLedger({ events, className, totalLabel = "recent events" }: {
+export function EvidenceLedger({ events, className, totalLabel = "recent events", hasMore = false, loadingMore = false, onLoadMore }: {
   events: EvidenceEvent[]; className?: string; totalLabel?: string;
+  hasMore?: boolean; loadingMore?: boolean; onLoadMore?: () => Promise<number>;
 }) {
   const reduceMotion = useReducedMotion();
   const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const requestInFlight = useRef(false);
+  const pageIntent = useRef(0);
+  const mounted = useRef(true);
   const pages = Math.max(1, Math.ceil(events.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);
   const visible = events.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-  useEffect(() => { setPage((current) => Math.min(current, pages - 1)); }, [pages]);
+  useEffect(() => {
+    setPage((current) => {
+      const next = Math.min(current, pages - 1);
+      pageIntent.current = next;
+      return next;
+    });
+  }, [pages]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  function selectPage(next: number) {
+    pageIntent.current = next;
+    setPage(next);
+  }
+  const nextDisabled = loading || loadingMore || (safePage >= pages - 1 && (!hasMore || !onLoadMore));
+  async function nextPage() {
+    if (nextDisabled || requestInFlight.current) return;
+    if (safePage < pages - 1) { selectPage(safePage + 1); return; }
+    if (!onLoadMore) return;
+    requestInFlight.current = true;
+    setLoading(true);
+    try {
+      const count = await onLoadMore();
+      if (mounted.current && count > events.length && pageIntent.current === safePage) {
+        selectPage(safePage + (events.length % PAGE_SIZE === 0 ? 1 : 0));
+      }
+    } catch {
+      // The history owner retains its existing Retry/Reload/error presentation.
+    } finally {
+      requestInFlight.current = false;
+      if (mounted.current) setLoading(false);
+    }
+  }
 
   if (events.length === 0) {
     return (
@@ -98,12 +136,12 @@ export function EvidenceLedger({ events, className, totalLabel = "recent events"
         <p role="status" className="font-mono text-[11px] text-muted-foreground">
           {safePage * PAGE_SIZE + 1}–{Math.min(events.length, (safePage + 1) * PAGE_SIZE)} of {events.length} {totalLabel}
         </p>
-        {pages > 1 ? (
+        {pages > 1 || hasMore ? (
           <Pagination aria-label={`Evidence pages, page ${safePage + 1} of ${pages}`}>
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious href="#" aria-disabled={safePage === 0} tabIndex={safePage === 0 ? -1 : undefined}
-                  onClick={(event) => { event.preventDefault(); setPage(Math.max(0, safePage - 1)); }}
+                  onClick={(event) => { event.preventDefault(); selectPage(Math.max(0, safePage - 1)); }}
                   className={safePage === 0 ? "pointer-events-none opacity-40" : undefined} />
               </PaginationItem>
               {pageWindow(safePage, pages).map((item, i) => item === null ? (
@@ -111,13 +149,14 @@ export function EvidenceLedger({ events, className, totalLabel = "recent events"
               ) : (
                 <PaginationItem key={item} className={item !== safePage ? "hidden sm:list-item" : undefined}>
                   <PaginationLink href="#" aria-label={`Page ${item + 1}`} isActive={item === safePage}
-                    onClick={(event) => { event.preventDefault(); setPage(item); }}>{item + 1}</PaginationLink>
+                    onClick={(event) => { event.preventDefault(); selectPage(item); }}>{item + 1}</PaginationLink>
                 </PaginationItem>
               ))}
               <PaginationItem>
-                <PaginationNext href="#" aria-disabled={safePage >= pages - 1} tabIndex={safePage >= pages - 1 ? -1 : undefined}
-                  onClick={(event) => { event.preventDefault(); setPage(Math.min(pages - 1, safePage + 1)); }}
-                  className={safePage >= pages - 1 ? "pointer-events-none opacity-40" : undefined} />
+                <PaginationNext href="#" aria-disabled={nextDisabled} tabIndex={nextDisabled ? -1 : undefined}
+                  aria-busy={loading || loadingMore || undefined}
+                  onClick={(event) => { event.preventDefault(); void nextPage(); }}
+                  className={nextDisabled ? "pointer-events-none opacity-40" : undefined} />
               </PaginationItem>
             </PaginationContent>
           </Pagination>

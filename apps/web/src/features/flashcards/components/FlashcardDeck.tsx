@@ -23,6 +23,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { celebrateOnce } from "@/lib/celebrate";
 import { cn } from "@/lib/utils";
+import { apiErrorReason } from "@/lib/api-error";
 import {
   useFlashcardDeck,
   useFlashcardMembership,
@@ -32,7 +33,7 @@ import {
 import { usePracticeSetResults } from "@/features/practice";
 import { useBankStatus } from "@/features/bank";
 import { useTwin } from "@/features/twin";
-import { useTutorAsk } from "@/features/tutor";
+import { useTutorAsk, type TutorStyle } from "@/features/tutor";
 import type { FlashcardCard, FlashcardDeck as FlashcardDeckData } from "@/features/flashcards/schema/flashcards.schema";
 import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 
@@ -64,7 +65,17 @@ import { cardStatePresentation } from "@/features/flashcards/lib/card-state";
 // topic" back button), not something this component offers.
 
 type Phase = "front" | "back";
-type FollowUpTurn = { question: string; answer: string };
+type CardHelpTurn = {
+  id: number;
+  kind: "hint" | "explain" | "followup";
+  question: string;
+  requestQuestion: string;
+  style: TutorStyle;
+  pendingLabel: string;
+  status: "pending" | "complete" | "failed";
+  answer?: string;
+  error?: string;
+};
 function StateBadge({ state }: { state: FlashcardCard["state"] }) {
   const presentation = state === "due" ? null : cardStatePresentation(state);
   return (
@@ -167,9 +178,8 @@ function FlashcardSession({
   const membership = useFlashcardMembership(courseId, skillId ?? "");
   const bank = useBankStatus(courseId);
   const review = useReviewFlashcard(courseId);
-  const hint = useTutorAsk(courseId);
-  const explain = useTutorAsk(courseId);
-  const followUp = useTutorAsk(courseId);
+  const assistance = useTutorAsk(courseId);
+  const helpInFlightRef = useRef(false);
 
   const [index, setIndex] = useState(0);
   const [sessionCards, setSessionCards] = useState<FlashcardCard[] | null>(null);
@@ -185,12 +195,7 @@ function FlashcardSession({
   const [deckDone, setDeckDone] = useState(false);
   const [isReplay, setIsReplay] = useState(false);
   const [ratingsByItemId, setRatingsByItemId] = useState<Record<string, boolean>>({});
-  const [hintText, setHintText] = useState<string | null>(null);
-  const [explainText, setExplainText] = useState<string | null>(null);
-  const [hintAnimationKey, setHintAnimationKey] = useState<string | undefined>();
-  const [explainAnimationKey, setExplainAnimationKey] = useState<string | undefined>();
-  const [followUpTurns, setFollowUpTurns] = useState<FollowUpTurn[]>([]);
-  const [pendingFollowUp, setPendingFollowUp] = useState<string | null>(null);
+  const [helpTurns, setHelpTurns] = useState<CardHelpTurn[]>([]);
   const startedAtRef = useRef(Date.now());
   const replySequenceRef = useRef(0);
   const reviewInFlightRef = useRef(false);
@@ -228,12 +233,8 @@ function FlashcardSession({
     contentEpochRef.current += 1;
     setPhase("front");
     setDeckDone(false);
-    setHintText(null);
-    setExplainText(null);
-    setHintAnimationKey(undefined);
-    setExplainAnimationKey(undefined);
-    setFollowUpTurns([]);
-    setPendingFollowUp(null);
+    setHelpTurns([]);
+    helpInFlightRef.current = false;
     startedAtRef.current = Date.now();
   }, [index, data?.courseId, responseSessionKey]);
 
@@ -634,10 +635,8 @@ function FlashcardSession({
       setDeckDone(false);
       setIndex(0);
       setPhase("front");
-      setHintText(null);
-      setExplainText(null);
-      setFollowUpTurns([]);
-      setPendingFollowUp(null);
+      setHelpTurns([]);
+      helpInFlightRef.current = false;
     } catch {
       setNewCardsNotice("We could not check for new cards. Try again.");
     } finally {
@@ -659,12 +658,8 @@ function FlashcardSession({
     setDeckDone(false);
     setPhase("front");
     setRatingsByItemId({});
-    setHintText(null);
-    setExplainText(null);
-    setHintAnimationKey(undefined);
-    setExplainAnimationKey(undefined);
-    setFollowUpTurns([]);
-    setPendingFollowUp(null);
+    setHelpTurns([]);
+    helpInFlightRef.current = false;
     startedAtRef.current = Date.now();
   }
 
@@ -676,59 +671,78 @@ function FlashcardSession({
     setDeckDone(false);
     setIndex(0);
     setPhase("front");
-    setHintText(null);
-    setExplainText(null);
-    setFollowUpTurns([]);
-    setPendingFollowUp(null);
+    setHelpTurns([]);
+    helpInFlightRef.current = false;
     setOffset((current) => current + 20);
   }
 
-  function askHint() {
+  function sendCardHelp(
+    request: Omit<CardHelpTurn, "id" | "status" | "answer" | "error">,
+    retryId?: number,
+  ) {
+    if (helpInFlightRef.current || assistance.isPending) return;
+    helpInFlightRef.current = true;
     const requestEpoch = contentEpochRef.current;
-    setHintText(null);
-    setHintAnimationKey(`${courseId}:${replySessionId}:${card.itemId}:hint:${++replySequenceRef.current}`);
-    hint.mutate(
+    const id = retryId ?? ++replySequenceRef.current;
+    const turn: CardHelpTurn = { ...request, id, status: "pending" };
+    setHelpTurns((turns) => retryId === undefined
+      ? [...turns, turn]
+      : turns.map((current) => current.id === id ? turn : current));
+    assistance.mutate(
+      { question: request.requestQuestion, style: request.style },
       {
-        question: `Give me a hint for this recall card without revealing the answer: "${card.prompt}"`,
-        style: "eli5",
+        onSuccess: (result) => {
+          if (requestEpoch !== contentEpochRef.current) return;
+          helpInFlightRef.current = false;
+          setHelpTurns((turns) => turns.map((current) => current.id === id
+            ? { ...current, status: "complete", answer: result.answer }
+            : current));
+        },
+        onError: (error) => {
+          if (requestEpoch !== contentEpochRef.current) return;
+          helpInFlightRef.current = false;
+          setHelpTurns((turns) => turns.map((current) => current.id === id
+            ? { ...current, status: "failed", error: apiErrorReason(error) ?? "Kala couldn't answer. Try again." }
+            : current));
+        },
       },
-      { onSuccess: (r) => { if (requestEpoch === contentEpochRef.current) setHintText(r.answer); } }
     );
+  }
+
+  function askHint() {
+    sendCardHelp({
+      kind: "hint", question: "Give me a hint", style: "eli5",
+      requestQuestion: `Give me a hint for this recall card without revealing the answer: "${card.prompt}"`,
+      pendingLabel: "Kala is preparing a hint…",
+    });
   }
 
   function askExplain() {
-    const requestEpoch = contentEpochRef.current;
-    setExplainText(null);
-    setExplainAnimationKey(`${courseId}:${replySessionId}:${card.itemId}:explain:${++replySequenceRef.current}`);
-    explain.mutate(
-      { question: `Explain this in more detail: ${card.prompt}`, style: "detail" },
-      { onSuccess: (r) => { if (requestEpoch === contentEpochRef.current) setExplainText(r.answer); } }
-    );
+    sendCardHelp({
+      kind: "explain", question: "Explain more", style: "detail",
+      requestQuestion: [
+        "Explain this flashcard answer in more detail, including the reasoning and a concrete example.",
+        `Card prompt: ${card.prompt}`,
+        `Card answer: ${card.back.label ?? "Answer unavailable"}`,
+        `Card explanation: ${card.back.explanation ?? ""}`,
+      ].join("\n\n"),
+      pendingLabel: "Kala is preparing an explanation…",
+    });
   }
 
   function askAboutCard(question: string) {
-    const requestEpoch = contentEpochRef.current;
-    setPendingFollowUp(question);
-    followUp.mutate(
-      {
-        question: [
-          "You are Kala helping a student study one flashcard.",
-          "The card is a term/prompt with a definition/answer on the back. Guide recall without simply stating the back while they are still on the front; explain the concept clearly once they have flipped.",
-          `Card prompt: ${card.prompt}`,
-          `Card back: ${card.back.label ?? "Answer unavailable"}`,
-          `Side shown: ${phase}.`,
-          `Student question: ${question}`,
-        ].join("\n\n"),
-      },
-      {
-        onSuccess: (answer) => {
-          if (requestEpoch !== contentEpochRef.current) return;
-          setFollowUpTurns((turns) => [...turns, { question, answer: answer.answer }]);
-          setPendingFollowUp(null);
-        },
-        onError: () => { if (requestEpoch === contentEpochRef.current) setPendingFollowUp(null); },
-      }
-    );
+    sendCardHelp({
+      kind: "followup", question, style: "default",
+      requestQuestion: [
+        "You are Kala helping a student study one flashcard.",
+        "The card is a term/prompt with a definition/answer on the back. Guide recall without simply stating the back while they are still on the front; explain the concept clearly once they have flipped.",
+        `Card prompt: ${card.prompt}`,
+        `Card back: ${card.back.label ?? "Answer unavailable"}`,
+        `Side shown: ${phase}.`,
+        `Student question: ${question}`,
+      ].join("\n\n"),
+      pendingLabel: "Kala is thinking…",
+    });
   }
 
   markRef.current = mark;
@@ -775,7 +789,7 @@ function FlashcardSession({
             : dockPrimary}
           secondary={dockSecondary}
           onAsk={phase === "back" ? askAboutCard : undefined}
-          askPending={followUp.isPending}
+          askPending={assistance.isPending}
           placeholder="Ask Kala about this card…"
         />
       }
@@ -910,7 +924,7 @@ function FlashcardSession({
             <button
               type="button"
               onClick={askHint}
-              disabled={hint.isPending}
+              disabled={assistance.isPending}
               className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <BrainIcon size={14} aria-hidden />
@@ -921,7 +935,7 @@ function FlashcardSession({
             <button
               type="button"
               onClick={askExplain}
-              disabled={explain.isPending}
+              disabled={assistance.isPending}
               className="inline-flex items-center gap-1.5 font-semibold text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <SparklesIcon size={14} aria-hidden />
@@ -930,45 +944,30 @@ function FlashcardSession({
           ) : null}
         </div>
 
-        {/* Kala's thread for this card: the hint/explanation turn, then any
-            free-text follow-ups from the dock. Rendered as the same
-            UserBlock/AssistantBlock bubbles LessonChat uses, so every surface
-            talks the same way. */}
-        {hintText || hint.isPending || explainText || explain.isPending ? (
+        {helpTurns.length > 0 ? (
           <div className="space-y-5 border-t pt-5">
-            {hintText || hint.isPending ? (
-              <AssistantBlock
-                text={hintText ?? undefined}
-                pending={hint.isPending}
-                pendingLabel="Kala is preparing a hint…"
-                animationKey={hintAnimationKey}
-              />
-            ) : null}
-            {explainText || explain.isPending ? (
-              <AssistantBlock
-                text={explainText ?? undefined}
-                pending={explain.isPending}
-                pendingLabel="Kala is preparing an explanation…"
-                animationKey={explainAnimationKey}
-              />
-            ) : null}
-          </div>
-        ) : null}
-
-        {followUpTurns.map((turn, turnIndex) => (
-          <div key={`${turn.question}-${turnIndex}`} className="space-y-3">
-            <UserBlock text={turn.question} />
-            <AssistantBlock
-              id={turnIndex === 0 ? "tour-study-reply" : undefined}
-              text={turn.answer}
-              animationKey={`${courseId}:${replySessionId}:${card.itemId}:follow-up:${turnIndex}`}
-            />
-          </div>
-        ))}
-        {pendingFollowUp ? (
-          <div className="space-y-3">
-            <UserBlock text={pendingFollowUp} />
-            <AssistantBlock pending pendingLabel="Kala is thinking…" />
+            {helpTurns.map((turn) => (
+              <div key={turn.id} data-study-help-turn={turn.kind} className="space-y-3">
+                <UserBlock text={turn.question} />
+                {turn.status === "failed" ? (
+                  <div role="alert" className="space-y-2 text-sm text-destructive">
+                    <p>{turn.error}</p>
+                    <Button variant="outline" disabled={assistance.isPending}
+                      onClick={() => sendCardHelp(turn, turn.id)}>Retry</Button>
+                  </div>
+                ) : (
+                  <AssistantBlock
+                    id={turn.kind === "followup" && turn.status === "complete"
+                      && turn.id === helpTurns.find((item) => item.kind === "followup")?.id
+                      ? "tour-study-reply" : undefined}
+                    text={turn.answer}
+                    pending={turn.status === "pending"}
+                    pendingLabel={turn.pendingLabel}
+                    animationKey={`${courseId}:${replySessionId}:${card.itemId}:help:${turn.id}`}
+                  />
+                )}
+              </div>
+            ))}
           </div>
         ) : null}
       </StudyStream>

@@ -84,6 +84,9 @@ const directTargets = {
   'id:tour-rec-card': ['features/instructor/components/DecisionCenter.tsx'],
   'id:tour-record-intervene': ['features/instructor/components/LearnerRecord.tsx'],
   'id:tour-record-ledger': ['features/instructor/components/LearnerRecord.tsx'],
+  'id:tour-record-readiness': ['features/instructor/components/LearnerRecord.tsx'],
+  'id:tour-record-readiness-trend': ['features/instructor/components/LearnerRecord.tsx'],
+  'id:tour-record-activity': ['features/instructor/components/LearnerRecord.tsx'],
   'id:tour-record-radar': ['features/instructor/components/LearnerRecord.tsx'],
   'id:tour-roster-filter': ['features/instructor/components/RosterTable.tsx'],
   'id:tour-roster-first-row': ['features/instructor/components/RosterTable.tsx'],
@@ -130,7 +133,7 @@ const steps = [...student.TOUR_STEPS, ...instructor.INSTRUCTOR_TOUR_STEPS,
   ...student.createStudentTour({ skillId: 'fixture', setId: 'saved', completedOnly: true })];
 const selectors = new Set();
 for (const step of steps) {
-  for (const key of ['selector', 'waitFor', 'clickSelector', 'clickOnlyWhenClosed']) if (step[key]) selectors.add(step[key]);
+  for (const key of ['selector', 'waitFor', 'clickSelector', 'clickOnlyWhenClosed', 'activateSelector']) if (step[key]) selectors.add(step[key]);
   if (step.waitState) selectors.add(step.waitState.selector);
   if (step.prefill) selectors.add('#' + step.prefill.inputId);
 }

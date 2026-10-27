@@ -32,6 +32,22 @@ Rules:
 - **Never encode state by color alone.** Pair color with an icon, shape, or label. The heatmap encodes value plus a secondary cue (value label or fill pattern).
 - Charts use the brand ramp via `--chart-1..6` (ink, slate, orange, gold, green — red last, at-risk axis only).
 
+### DESIGN-REQ-001: Text-selection colors
+
+Approved APPROVAL-09,2026-10-27. Define semantic selection tokens in globals.css: `--selection-background` is `#BCD3F4` in both themes. `--selection-foreground` uses the existing dark ink value, through `--brand-ink` in light mode and `--brand-ink-foreground` in dark mode. Apply them to body and input/textarea selection, including the Rename chat field, without changing the primary brand token to recolor other controls. Remove local dark-selection overrides. Preserve text contrast and native selection behavior. The new blue is scoped to text-selection feedback, not a new decorative brand palette.
+
+At the approved base there is no authored global ::selection rule in globals.css. Input.tsx's selection:bg-primary / selection:text-primary-foreground utilities are the explicit dark-selection source found in code. Fred implements the token/global rule and reconciles local overrides; do not claim an unobserved global rule caused every selection. Verify selected body and editable text in both themes and at375px/1440px.
+
+### DESIGN-REQ-002: Shared content and dock column edges
+
+Approved APPROVAL-09,2026-10-27. Study and Tutor message/content columns and their corresponding dock containers share the same left/right column edges at every viewport. Use one consistent max-width/gutter contract; do not independently combine outer footer padding, inner column padding and dock padding so one becomes narrower or shifts sideways. Textarea internal padding is distinct from the outer dock edge. Preserve scroll ownership, bottom clearance, action state, empty/attachment layouts, reduced motion and the scoped dock shape exceptions.
+
+The shared column defines the 800px maximum shell width and horizontal gutters once: 16px below the small breakpoint and 24px above it. Content and dock inherit the same inset from this ancestor. The scroll region must span the full available surface width so its native scrollbar stays at the page's right edge, outside the centered message column. A full-bleed stream may cancel and restore the inherited inset inside its scroller without defining another gutter or maximum width. Keep session bars outside the column and keep textarea/card internal padding distinct from column gutters. In a full-viewport fixture, content and loading cards remain 343px wide at 375px and 752px wide at 1440px.
+
+Lesson teaching, reinforcement checks and graded feedback follow this same outer-scroll rule. Their native scrollbar must stay at the right edge of the available page surface while cards and the fixed dock inherit the shared inset. Check takeover must not introduce a scroll area constrained to the card width.
+
+Measure actual card, Kala reply container and complete dock row edges in Study action and compose modes, plus Tutor message containers and composer in empty, conversation and attachment states at 375px/1440px. Corresponding left and right edges must agree within 1px. Preserve scroll ownership and bottom clearance when moving the shared ancestor. APPROVAL-09 item 1 authorizes the frontend implementation and its browser measurements.
+
 ## Radius and shape
 
 - Base `--radius` is `0.25rem`. Interactive elements 2–4px, data surfaces 0. Not the default pill or blob.
@@ -116,3 +132,13 @@ Responsive to mobile, visible keyboard focus (the orange ring), reduced motion r
 - Do not round everything into pills. Boxy 2–4px radius; pills were the previous system's mistake.
 - Do not let the chevron become decoration; the previous chevron mark and the old hornbill are superseded by the current Kala logo (`public/Kala-Logo.png`).
 - Do not import Aceternity / Tailark / Magic UI flourishes into the daily-use app surfaces. Marketing components stay in `src/components/marketing/`.
+
+
+## Change log
+
+| Date | Change | Authority / IDs |
+| --- | --- | --- |
+| 2026-10-28 | Explicitly include Lesson teaching, reinforcement checks and graded feedback in the page-edge scrollbar rule before implementation | Fred’s Lesson scrollbar request, APPROVAL-09, WI-34, LESSON-REQ-006, DESIGN-REQ-002 |
+| 2026-10-27 | Specify light-blue selection for body and editable text in both themes, using the existing dark ink counterpart for contrast | Fred's highlight request, APPROVAL-09, WI-34, DESIGN-REQ-001 |
+| 2026-10-27 | Specify one ancestor for the 800px shell and responsive gutters, matching stream/dock edges within 1px, retaining loading widths and keeping the native scrollbar at the page edge | APPROVAL-09 item 1 and Fred's scrollbar correction, WI-34, DESIGN-REQ-002 |
+| 2026-10-27 | Define selection background token and common content/dock edges before Fred's direct polish | APPROVAL-09; DESIGN-REQ-001/002 |

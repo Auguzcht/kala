@@ -421,9 +421,10 @@ export function LessonChat({
             animate={{ opacity: 1, scale: 1 }}
             exit={reduceMotion ? undefined : { opacity: 0, scale: 0.98 }}
             transition={{ duration: reduceMotion ? 0 : 0.18 }}
-            className="h-full min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-10 sm:pt-14"
+            className="-mx-(--study-column-inset) h-full min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:auto] pb-8 pt-10 sm:pt-14"
           >
-            <div className="mx-auto w-full max-w-[800px]">
+            {/* Keep the native scrollbar outside the shared card/dock column. */}
+            <div className="w-[100cqw] px-(--study-column-inset)">
               <AnswerableCard
                 id="tour-lesson-check"
                 eyebrow="Check yourself"

@@ -13,6 +13,7 @@ import ts from "typescript";
 import * as presentation from "../lib/presentation.ts";
 import { dockLayout } from "../../../components/ai-elements/dock-layout.ts";
 import { apiErrorReason } from "../../../lib/api-error.ts";
+import * as assignedDraft from "../lib/assigned-draft.ts";
 
 const require = createRequire(import.meta.url);
 const source = readFileSync(new URL("./TutorChat.tsx", import.meta.url), "utf8");
@@ -38,6 +39,7 @@ function mount({ messages = [], error, refetch } = {}) {
   let tree;
   let search = { conversation: "conversation-1" };
   let askCalls = 0;
+  const askRequests = [];
   const toasts = [];
   const active = { data: { id: "conversation-1", messages, attachments: [] }, isLoading: false };
   const hooks = {
@@ -67,7 +69,7 @@ function mount({ messages = [], error, refetch } = {}) {
     async invalidateQueries({ queryKey }) {
       if (queryKey[0] !== "tutor-conversation") return;
       if (refetch) await refetch(active);
-      else active.data = { ...active.data, messages: [...active.data.messages, ...messagePair()] };
+      else active.data = { ...active.data, messages: [...active.data.messages, ...messagePair(`new-${askCalls}`, askRequests.at(-1)?.question ?? question)] };
     },
   };
   const modules = {
@@ -92,11 +94,13 @@ function mount({ messages = [], error, refetch } = {}) {
         };
       },
     },
-    "@tanstack/react-router": { useNavigate: () => () => {}, useSearch: () => search },
+    "@tanstack/react-router": { useNavigate: () => () => {}, useSearch: () => search, useLocation: ({ select }) => select({ state: {} }) },
     sonner: { toast: { error: (...args) => toasts.push(args) } },
     "@/features/tutor/lib/presentation": presentation,
+    "@/features/tutor/lib/assigned-draft": assignedDraft,
     "@/components/ai-elements/dock-layout": { dockLayout },
     "@/features/tutor/components/TutorComposer": uiModule("TutorComposer"),
+    "@/features/tutor/components/TutorMessage": uiModule("TutorMessage"),
     "@/features/tutor/components/TutorWelcome": uiModule("TutorWelcome"),
     "@/features/tutor/components/TutorDropOverlay": uiModule("TutorDropOverlay"),
     "@/features/courses": { useCourse: () => ({ data: { title: "AWS101" } }) },
@@ -104,8 +108,9 @@ function mount({ messages = [], error, refetch } = {}) {
     "@/lib/utils": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/lib/api-error": { apiErrorReason },
     "@/features/tutor/api/tutor.api": {
-      async askTutor() {
+      async askTutor(courseId, submittedQuestion, style, conversationId) {
         askCalls++;
+        askRequests.push({ courseId, question: submittedQuestion, style, conversationId });
         if (error) throw error;
         return { answer, conversationId: "conversation-1" };
       },
@@ -157,9 +162,14 @@ function mount({ messages = [], error, refetch } = {}) {
   }
   render();
   return {
-    active, toasts, render,
+    active, toasts, render, askRequests,
     async ask(q = question) {
       elements(tree, "TutorComposer")[0].props.onAsk(q);
+      await mutationTask;
+      return render();
+    },
+    async pick(style) {
+      elements(tree, "FollowUpChips")[0].props.onPick(style);
       await mutationTask;
       return render();
     },
@@ -250,4 +260,34 @@ test("TUTOR-REQ-001 saved timestamp ties do not duplicate a returned answer", as
   const html = await ui.ask();
   assert.equal(html.split(answer).length - 1, 1);
   assert.ok(!html.includes("may not have been saved"));
+});
+
+test("TUTOR-REQ-021 reopened saved chats submit explicit explanation requests in the same conversation", async () => {
+  const ui = mount({ messages: messagePair("saved") });
+  let html = await ui.pick("eli5");
+  assert.equal(ui.askRequests[0].style, "eli5");
+  assert.match(ui.askRequests[0].question, /Explain your last answer like I'm 5/);
+  assert.notEqual(ui.askRequests[0].question, question);
+  assert.equal(ui.askRequests[0].conversationId, "conversation-1");
+  assert.equal(html.split(question).length - 1, 1);
+  assert.ok(html.includes("Explain your last answer like I"));
+  html = await ui.pick("detail");
+  assert.equal(ui.askRequests[1].style, "detail");
+  assert.match(ui.askRequests[1].question, /last answer in more detail/);
+  assert.equal(ui.askRequests[1].conversationId, "conversation-1");
+  assert.equal(html.split(question).length - 1, 1);
+  assert.ok(!html.includes("may not have been saved"));
+});
+
+test("TUTOR-REQ-021 follow-up to an unsaved answer includes that visible answer as context", async () => {
+  const ui = mount({ refetch: async () => {} });
+  await ui.ask();
+  await ui.pick("eli5");
+  assert.match(ui.askRequests[1].question, /The answer to explain:/);
+  assert.ok(ui.askRequests[1].question.includes(answer));
+  assert.equal(ui.askRequests[1].style, "eli5");
+  ui.active.data = { ...ui.active.data, messages: [] };
+  const html = ui.switchConversation("conversation-2");
+  assert.ok(!html.includes("The answer to explain"));
+  assert.ok(!html.includes(answer));
 });
