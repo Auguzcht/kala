@@ -85,7 +85,7 @@ All browser results use synthetic fixtures. Main server PID 98534 replaced the f
 15. Planned features with no shipped code: admin console, researcher portal, AGS grade passback. The Practice/Test spec is not fully authored.
 16. Design exceptions awaiting lead designer review: pill-shaped chat docks and the Tutor empty-state mascot.
 17. Test fixtures. Some renderer and browser fixtures live outside the repo (WI-20).
-18. Human-facing root README, logo, licensing and attribution. Owner: Fred or ITO. Add Kala’s transparent logo and the Alfred Nodado / Auguzcht and OAICI attribution in a separately approved docs pass. No license has been inferred or granted by this closeout.
+18. License selection. Owner: project owners, Fred or ITO. The human-facing root README, existing transparent logo and Alfred Nodado / Auguzcht and OAICI attribution were completed in the October 28 after-freeze, Fred-approved docs pass. The README states “Not yet selected. To be decided by the project owners.” No license has been inferred or granted, and no LICENSE file or logo asset was added or changed.
 19. Local worktree codex/tour-refresh-handoff holds unreviewed, uncommitted pre-APPROVAL-08 tour edits. Not part of the release and not handed over. Fred discards or reviews it later.
 20. Local worktree fg1b-preparation (merged, clean) is retained as this task's primary checkout. Fred removes it after the session.
 
@@ -117,6 +117,12 @@ FG-1b membership was verified by comparing the previous/current secret versions 
 Freeze starts at 2026-10-28T03:44:49+08:00 (Asia/Manila; 2026-10-27T19:44:49Z UTC), the final closeout commit timestamp. Development has ended. Any later docs-only change needs Fred. All open items above remain with their named owners; live acceptance is Fred’s recorded decision, not inferred from synthetic tests or health.
 
 The full student-tour rework branch/worktree stays preserved for ITO. Cleanup is local only and limited to clean merged worktrees/branches; no unmerged or dirty work is deleted. Sixteen clean merged worktrees and 33 merged local branches were removed; two already-absent worktree registrations were pruned. The three explicitly retained worktrees remain. The exact inventory and verification are in the release report; the final documentation publication result is reported after its commit.
+
+## Change log
+
+| Date | Approval | Change |
+| --- | --- | --- |
+| 2026-10-28 | **after freeze, Fred-approved** | Rewrote the root README as a short human-facing landing page: existing transparent logo, closeout-first status, documentation links, stack, repository map, Alfred Nodado (Auguzcht) / OAICI attribution and explicit undecided license. README-only commit: `ff8cb36b57ee25d2b374e25c0f66a57c0397eb6e`. All 18 local link/image targets resolve and the sole hosted link, the production app, returned HTTP 200. Logos are unchanged; no LICENSE file added. This closeout entry is a separate docs-only commit so the README commit changes only README.md. The original freeze timestamp is unchanged. |
 
 ## Historical sources
 
