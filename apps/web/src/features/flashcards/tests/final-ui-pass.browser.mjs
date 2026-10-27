@@ -27,21 +27,24 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (url.pathname === '/__u2') {
    const hook = await (await page.request.get('http://localhost:5173/src/features/flashcards/hooks/use-flashcards.ts')).text();
    const queryModule = hook.match(/from "([^"]*\/@tanstack_react-query\.js[^\"]*)"/)[1];
-   const views = { study: 'FlashcardDeck', diagnostic: 'DiagnosticPanel', test: 'PracticePanel', browse: 'TestBrowser', proposals: 'SkillReviewPanel', studyBrowse: 'StudyBrowser', analysis: 'DecisionCenter', stats: 'GamificationSummary' };
+   const views = { lesson: 'LessonChat', study: 'FlashcardDeck', diagnostic: 'DiagnosticPanel', test: 'PracticePanel', browse: 'TestBrowser', proposals: 'SkillReviewPanel', studyBrowse: 'StudyBrowser', analysis: 'DecisionCenter', stats: 'GamificationSummary' };
    return route.fulfill({ contentType: 'text/html', body: `<link rel="stylesheet" href="/src/styles/globals.css"><div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script><script type="module">
    import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';import {QueryClient,QueryClientProvider} from '${queryModule}';
    import {GamificationSummary} from '/src/features/gamification/components/GamificationSummary.tsx';import {FlashcardDeck} from '/src/features/flashcards/components/FlashcardDeck.tsx';import {DiagnosticPanel} from '/src/features/diagnostic/components/DiagnosticPanel.tsx';import {PracticePanel} from '/src/features/practice/components/PracticePanel.tsx';import {TestBrowser} from '/src/features/skill-hub/components/TestBrowser.tsx';import {StudyBrowser} from '/src/features/skill-hub/components/StudyBrowser.tsx';import {SkillReviewPanel} from '/src/features/instructor/components/SkillReviewPanel.tsx';import {DecisionCenter} from '/src/features/instructor/components/DecisionCenter.tsx';
+   import {LessonChat} from '/src/features/lessons/components/LessonChat.tsx';
    const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});window.u2Client=client;
    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client},React.createElement('main',{style:{height:'100vh',maxWidth:'100%',overflow:'hidden'}},React.createElement(${views[view]},{courseId:'course',skillId:'skill',${view === 'test' ? "setId:'saved'," : ''}mode:'${mode}',onExit:()=>{},onStart:()=>{},onSelectSet:()=>{},userId:'learner',learnerName:'Demo learner'}))));</script>` });
   }
   if (!url.pathname.startsWith('/__u2_api')) return route.continue();
   const path = url.pathname.slice('/__u2_api'.length), reply = (json, status = 200) => route.fulfill({ json, status });
   if (req.method() !== 'GET') state.posts.push({ path, method: req.method(), body: req.postDataJSON() });
+  if (path === '/lessons/course/skill/skill') return reply({ lessonId: 'lesson', skillId: 'skill', moduleRef: null, title: 'Cloud lesson', status: 'ready', steps: [{ id: 'step', position: 0, summary: 'Synthetic lesson summary', detailPoints: ['Synthetic detail'], misconception: null, keyTakeaway: 'Synthetic takeaway', bloomLevel: 'understand', check: { itemId: question.id, prompt: question.prompt, choices: question.choices } }] });
   if (path.endsWith('/diagnostic/submit')) { await new Promise(r => { state.releaseSubmit = r; }); return reply({correctCount:2,total:2,results:[],masteryDelta:[]}); }
   if (path.endsWith('/review')) { state.reviews.push(req.postDataJSON()); return reply({ remembered: true, graduated: false, dueInHours: 1, dueAt: '2099-11-02T08:30:00Z', box: 1, reward }); }
   if (path.endsWith('/skills/propose')) { if (state.holdModel) await new Promise(r => { state.releaseModel = r; }); return reply({status:'queued'}); }
   if (path.endsWith('/ask')) { if (state.holdAsk) await new Promise(r => { state.releaseAsk = r; }); return reply({ answer: 'Synthetic hint answer.' }); }
   if (path.endsWith('/deck')) {
+   if (url.searchParams.get('limit') === '0') return reply({ courseId: 'course', cards: [], stats: { tracked: 1, due: 0, learning: 1, mastered: 0 }, mode: 'review', sessionId: null, hasMore: false });
    state.deckCalls.push(Object.fromEntries(url.searchParams));
    if (state.hold) await pending;
    if (state.holdNew && state.deckCalls.length > 1) await new Promise(r => { state.releaseNew = r; });
@@ -68,6 +71,11 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
 }
 const capture = async (page, name, width) => page.screenshot({ path: resolve(out, `${name}-${width}.png`), animations: 'disabled' });
 const widthOf = locator => locator.evaluate(el => el.getBoundingClientRect().width);
+const edgesOf = locator => locator.evaluate(el => {
+ const { left, right, width } = el.getBoundingClientRect();
+ return { left, right, width };
+});
+const matchingEdges = (a, b) => Math.abs(a.left - b.left) <= 1 && Math.abs(a.right - b.right) <= 1;
 const recall = async page => { await page.getByRole('button', { name: 'Show answer', exact: true }).click(); await page.getByRole('button', { name: 'Got it', exact: true }).click(); };
 try {
  for (const width of [375, 1440]) {
@@ -76,7 +84,7 @@ try {
    const f = await fixture(width, { view, hold: true, reduced: width === 375 });
    await f.page.goto('http://localhost:5173/__u2');
    const loading = f.page.getByRole('status').filter({ has: f.page.locator('img[src="/Kala-Logo.png"]') });
-   await loading.waitFor(); const loadingWidth = await widthOf(loading);
+   await loading.waitFor(); const loadingWidth = await widthOf(loading), loadingEdges = await edgesOf(loading);
    check(await loading.locator('svg.animate-spin').count() === 0, `${view} loading has no spinner`);
    check(await loading.locator('img').evaluate(el => getComputedStyle(el).animationName === 'none'), `${view} static mascot`);
    check(await loading.locator('.bg-muted').count() >= 3, `${view} has skeleton lines`);
@@ -84,11 +92,52 @@ try {
    const content = view === 'study' ? f.page.locator('.relative.border.bg-card').filter({ has: f.page.getByText('Recall first', { exact: true }) }) : view === 'test' ? f.page.locator('#tour-practice-card') : f.page.locator('#tour-diagnostic-card > div').last();
    await content.waitFor(); const contentWidth = await widthOf(content); measurements[view] = contentWidth;
    check(Math.abs(loadingWidth - contentWidth) < 1, `${view} loading/content width match ${width}: ${loadingWidth}/${contentWidth}`);
+   check(matchingEdges(loadingEdges, await edgesOf(content)), `DESIGN-REQ-002 ${view} loading/content edges match at ${width}`);
+   check(Math.abs(contentWidth - (width === 375 ? 343 : 752)) <= 1, `DESIGN-REQ-002 ${view} retains U2 content width at ${width}`);
    check(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${view} no horizontal overflow`);
    await capture(f.page, `${view}-content`, width); check(f.errors.length === 0, `${view} runtime clean: ${f.errors}`); await f.context.close();
   }
+  const lesson = await fixture(width, { view: 'lesson', reduced: true });
+  await lesson.page.goto('http://localhost:5173/__u2');
+  const teaching = lesson.page.locator('#tour-lesson-explain');
+  await teaching.waitFor();
+  const teachingEdges = await edgesOf(teaching);
+  const lessonDockEdges = await edgesOf(lesson.page.locator('#tour-lesson-dock > div'));
+  check(matchingEdges(teachingEdges, lessonDockEdges), `DESIGN-REQ-002 shared Lesson teaching/dock edges at ${width}`);
+  await lesson.page.getByRole('button', { name: 'Continue', exact: true }).click();
+  const lessonCheck = lesson.page.locator('#tour-lesson-check');
+  await lessonCheck.waitFor();
+  check(matchingEdges(teachingEdges, await edgesOf(lessonCheck)), `DESIGN-REQ-002 Lesson check inherits shared gutters once at ${width}`);
+  check(lesson.state.posts.length === 0 && lesson.errors.length === 0, 'Lesson layout transition has no writes or runtime errors');
+  await lesson.context.close();
   console.log(`U2 measured card widths at ${width}: ${JSON.stringify(measurements)}`);
   check(Math.abs(measurements.test - measurements.diagnostic) < 1, `Diagnostic/Test same column ${width}`);
+  const shellStudy = await fixture(width, { hold: true, reduced: true });
+  await shellStudy.page.goto('http://localhost:5173/course/flashcards');
+  await shellStudy.page.locator('#tour-flashcards-recommended').click();
+  const shellLoading = shellStudy.page.getByRole('status').filter({ has: shellStudy.page.locator('img[src="/Kala-Logo.png"]') });
+  await shellLoading.waitFor();
+  const shellLoadingEdges = await edgesOf(shellLoading);
+  shellStudy.state.release();
+  const shellCard = shellStudy.page.locator('.relative.border.bg-card').filter({ has: shellStudy.page.getByText('Recall first', { exact: true }) });
+  await shellCard.waitFor();
+  await shellStudy.page.getByRole('button', { name: 'Give me a hint', exact: true }).click();
+  await shellStudy.page.getByText('Synthetic hint answer.', { exact: true }).waitFor();
+  const shellReply = shellStudy.page.locator('.mr-auto.w-full.max-w-full').filter({ has: shellStudy.page.getByText('Synthetic hint answer.', { exact: true }) });
+  await shellStudy.page.getByRole('button', { name: 'Show answer', exact: true }).click();
+  const shellCardEdges = await edgesOf(shellCard), shellReplyEdges = await edgesOf(shellReply);
+  const shellDockEdges = await edgesOf(shellStudy.page.locator('#tour-study-dock > div'));
+  const shellScroll = await edgesOf(shellStudy.page.locator('[role=log] > div'));
+  check(Math.abs(shellScroll.right - width) <= 1, `DESIGN-REQ-002 Study native scrollbar stays at viewport right edge at ${width}`);
+  check(matchingEdges(shellCardEdges, shellReplyEdges) && matchingEdges(shellCardEdges, shellDockEdges), `DESIGN-REQ-002 full-page Study card/reply/action dock match at ${width}`);
+  check(matchingEdges(shellLoadingEdges, shellCardEdges), `DESIGN-REQ-002 full-page Study loading/content match at ${width}`);
+  await shellStudy.page.getByRole('button', { name: 'Ask a follow-up', exact: true }).click();
+  const shellComposeEdges = await edgesOf(shellStudy.page.locator('#tour-study-dock > div'));
+  check(matchingEdges(shellCardEdges, shellComposeEdges), `DESIGN-REQ-002 full-page Study compose dock matches at ${width}`);
+  check(shellStudy.errors.length === 0 && shellStudy.state.reviews.length === 0, 'full-page Study measurements do not post reviews or raise runtime errors');
+  console.log(`WI-34 full-page Study edges at ${width}: ${JSON.stringify({ loading: shellLoadingEdges, card: shellCardEdges, reply: shellReplyEdges, actionDock: shellDockEdges, composeDock: shellComposeEdges, scroller: shellScroll })}`);
+  await capture(shellStudy.page, 'shared-column-study-page', width);
+  await shellStudy.context.close();
   const progress = await fixture(width, { view: 'stats', reduced: true }); progress.state.holdSummary = true;
   await progress.page.goto('http://localhost:5173/__u2'); const statSkeleton = progress.page.getByRole('status', { name: 'Loading your progress', exact: true }); await statSkeleton.waitFor();
   check(await statSkeleton.evaluate(el => getComputedStyle(el).animationName === 'none'), 'progress stat skeleton honors reduced motion');
@@ -159,6 +208,21 @@ try {
    check(await f.page.getByRole('button', { name: 'Give me a hint', exact: true }).isDisabled(), 'model initiating label stable and disabled');
    check(await f.page.locator('svg.animate-spin').count() === 0 && await f.page.getByText('Thinking…', { exact: true }).count() === 0, 'one model shimmer and no second spinner/Thinking');
    f.state.releaseAsk(); await f.page.getByText('Synthetic hint answer.', { exact: true }).waitFor();
+   const content = f.page.locator('.relative.border.bg-card').filter({ has: f.page.getByText('Recall first', { exact: true }) });
+   const reply = f.page.locator('.mr-auto.w-full.max-w-full').filter({ has: f.page.getByText('Synthetic hint answer.', { exact: true }) });
+   const dock = f.page.locator('#tour-study-dock > div');
+   const cardEdges = await edgesOf(content), replyEdges = await edgesOf(reply);
+   await f.page.getByRole('button', { name: 'Show answer', exact: true }).click();
+   const actionEdges = await edgesOf(dock);
+   check(matchingEdges(cardEdges, replyEdges) && matchingEdges(cardEdges, actionEdges), `DESIGN-REQ-002 ${mode} Study card/reply/action dock edges at ${width}`);
+   await f.page.getByRole('button', { name: 'Ask a follow-up', exact: true }).click();
+   const composeEdges = await edgesOf(dock);
+   check(matchingEdges(cardEdges, composeEdges), `DESIGN-REQ-002 ${mode} Study compose dock edges at ${width}`);
+   check(Math.abs((await edgesOf(dock.locator('[data-slot=input-group]'))).left - cardEdges.left) <= 1, `DESIGN-REQ-002 Study compose input starts at column edge at ${width}`);
+   console.log(`WI-34 Study ${mode} edges at ${width}: ${JSON.stringify({ card: cardEdges, reply: replyEdges, actionDock: actionEdges, composeDock: composeEdges })}`);
+   await capture(f.page, `shared-column-${mode}`, width);
+   await f.page.getByRole('button', { name: 'Cancel', exact: true }).click();
+   await f.page.getByRole('button', { name: 'Flip to question', exact: true }).click();
    await recall(f.page); await f.page.getByText('Study complete', { exact: true }).waitFor();
    f.state.holdNew = true; const getNew = f.page.getByRole('button', { name: 'Get new cards', exact: true }); await getNew.click();
    check(await getNew.isDisabled() && await f.page.getByText('Study complete', { exact: true }).isVisible(), 'delayed Get new cards retains completion');

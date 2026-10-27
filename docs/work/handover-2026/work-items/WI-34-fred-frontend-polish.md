@@ -21,4 +21,62 @@ After Fred finishes, coordinator reviews the bounded diff and runs affected brow
 
 Amendment1 grants the separate _SYSTEM-only backend branch codex/no-name-greeting under TUTOR-REQ-019, with E1 AST/19-guard proof and full API/enrollment tests. This narrow grant supersedes the backend stop only for that literal and existing test extension. Combined integration waits for Fred's frontend completion/checks; no deploy or push is delegated.
 
+## Item 1: Shared column edges
+
+2026-10-27. Fred directly delegates item 1 frontend implementation and a single local commit to Codex in this chat. This supersedes the earlier Fred-only source ownership for this item. DESIGN-REQ-002 was updated first with an observable 1px tolerance, one common ancestor owning the 800px shell and 16px/24px responsive gutters, and a change-log entry. Status: done-awaiting-confirmation for item 1 only. Planner review and Fred's visual confirmation remain pending. Other WI-34 items remain in-progress.
+
+Implementation: StudyColumn owns the shared content inset above both stream and dock. StudySurface and TutorChat use it and supply the inline-size container. StudyStream bleeds to the full surface width, then restores the inherited inset inside its scroller. A persistent native scrollbar does not shift the column. ComposeDock and the shared dock footer no longer add independent horizontal widths/gutters. Tutor empty/conversation/attachment layouts use the same column. Lesson check takeover also removes its redundant gutter because it consumes StudySurface. No action, request, identity, evidence or tour-anchor behavior changes.
+
+### Scenarios and measured evidence
+
+All measurements below are CSS pixels from getBoundingClientRect in Chromium, using the existing worktree server on port 5173 with synthetic auth/API fixtures and external traffic blocked. Study rows cover card, Kala reply, complete action dock row and complete compose dock row. Loading cards have the same edges. Tutor rows cover the Kala message container and composer in empty, conversation and attachment states. Short user bubbles retain their content width and align with the column's right edge. Every corresponding edge difference was 0px.
+
+| Scenario | Viewport | Left | Right | Width |
+| --- | --- | --- | --- | --- |
+| WI-34-T01: Study full-page card/reply/loading/action/compose | 375 | 72 | 359 | 287 |
+| WI-34-T01: Study full-page card/reply/loading/action/compose | 1440 | 372 | 1124 | 752 |
+| WI-34-T02: Tutor message/empty/conversation/attachment composer | 375 | 72 | 359 | 287 |
+| WI-34-T02: Tutor message/empty/conversation/attachment composer | 1440 | 532 | 1284 | 752 |
+| WI-34-T03: U2 full-viewport Study review/all card/reply/action/compose | 375 | 16 | 359 | 343 |
+| WI-34-T03: U2 full-viewport Study review/all card/reply/action/compose | 1440 | 344 | 1096 | 752 |
+
+The 56px navigation rail explains the full-page mobile width. U2's full-viewport loading/content widths remain 343px/752px for Study, Test and Diagnostic. Tutor desktop measurements use the default 320px history sidebar. Existing sidebar resize, floating dock overlap, last-action scroll clearance, keyboard and reduced-motion assertions pass. Lesson teaching/dock/check widths match at both viewports with no grading writes.
+
+### Verification and delivery
+
+Files changed in item 1:
+
+```text
+apps/web/src/components/study/StudyColumn.tsx
+apps/web/src/components/study/StudySurface.tsx
+apps/web/src/components/study/StudyStream.tsx
+apps/web/src/components/study/ComposeDock.tsx
+apps/web/src/components/ai-elements/dock-layout.ts
+apps/web/src/features/tutor/components/TutorChat.tsx
+apps/web/src/features/lessons/components/LessonChat.tsx
+apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs
+apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+apps/web/src/styles/DESIGN.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+```
+
+- Source revision: b041201 plus this item's working-tree files, recorded in one local item commit. Environment: local with synthetic browser requests. No hosted requests or writes were made.
+- `node apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs`: 184 assertions passed. Extended DESIGN-REQ-002 checks retain every existing request/idempotency and role assertion. The first added full-page run failed because the synthetic counts request consumed its first deck fixture. The fixture now treats limit=0 as a counts-only request, then the full suite passed.
+- `node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs`: 275 assertions passed, including empty/conversation/attachment edges and preserved sidebar/attachment behavior.
+- `node --test apps/web/src/components/shell/tests/tour-anchors.test.mjs`: 53 passed, including all seven unchanged historical E3 proofs.
+- `pnpm --filter web lint`: passed with 18 existing Fast Refresh warnings and zero errors. `pnpm --filter web typecheck` and `pnpm --filter web build`: passed. Existing route-generator circular-dependency and bundle-size warnings remain.
+- `python3 scripts/docs_check.py` and `python3 -m unittest discover -s scripts -p 'test_docs_check.py'`: passed, 18 documentation unit tests. `git diff --check`: passed.
+- Screenshots: `/tmp/kala-approval09-item1-study` and `/tmp/kala-approval09-item1-tutor`, local only, not retained.
+- Scope: frontend source, matching browser tests, DESIGN.md and this work item only. No merge, push, deployment, API, migration, hosted or configuration change. Secrets printed: none.
+
+### Scrollbar correction before the item commit
+
+Fred observed a centered native scrollbar in the first implementation despite its passing column measurements. That implementation constrained the scroll region along with the content. DESIGN-REQ-002 was clarified before correcting the code: the scroll region spans the full available surface, while content and dock retain the same inherited inset. The initial 184/275 browser results above did not prove the scrollbar placement.
+
+The added long-conversation fixture checks actual vertical overflow, wheel scrolling in the stream without document movement, page-edge placement, and retained content/composer edges with both native overlay and a forced 16px persistent scrollbar. Its first scroll-ownership assertion raced initial stick-to-bottom animation. The fixture now uses separate saved paragraphs, lets initial scrolling settle and verifies a real upward wheel gesture. No existing permission or data assertion was removed or weakened.
+
+Full-page Study scroller bounds are x=56..375 and x=56..1440. Tutor scroller bounds are x=56..375 and x=376..1440 with the default desktop history sidebar. Thus the native scrollbar is at the viewport's right edge at both widths. Card/reply/dock and loading measurements in the table remain unchanged.
+
+Final correction verification: final-ui-pass.browser.mjs 186 assertions passed and ui-overhaul.browser.mjs 289 assertions passed. All earlier behavioral assertions remain. The table above reflects the corrected implementation. Planner/Fred review is still pending and no merge or publication was performed.
+
 Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. No frontend application edits were made by Codex.

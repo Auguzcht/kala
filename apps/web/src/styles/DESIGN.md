@@ -42,7 +42,9 @@ At the approved base there is no authored global ::selection rule in globals.css
 
 Approved APPROVAL-09,2026-10-27. Study and Tutor message/content columns and their corresponding dock containers share the same left/right column edges at every viewport. Use one consistent max-width/gutter contract; do not independently combine outer footer padding, inner column padding and dock padding so one becomes narrower or shifts sideways. Textarea internal padding is distinct from the outer dock edge. Preserve scroll ownership, bottom clearance, action state, empty/attachment layouts, reduced motion and the scoped dock shape exceptions.
 
-The U2 StudyStream padding move is a starting finding, not a frozen pixel requirement. Compare actual content-card/message-container and dock bounding rectangles at375px/1440px, including Tutor empty and conversation states, and Study action/compose modes. Fred owns the implementation; no source UI change is made by the coordinator.
+The shared column defines the 800px maximum shell width and horizontal gutters once: 16px below the small breakpoint and 24px above it. Content and dock inherit the same inset from this ancestor. The scroll region must span the full available surface width so its native scrollbar stays at the page's right edge, outside the centered message column. A full-bleed stream may cancel and restore the inherited inset inside its scroller without defining another gutter or maximum width. Keep session bars outside the column and keep textarea/card internal padding distinct from column gutters. In a full-viewport fixture, content and loading cards remain 343px wide at 375px and 752px wide at 1440px.
+
+Measure actual card, Kala reply container and complete dock row edges in Study action and compose modes, plus Tutor message containers and composer in empty, conversation and attachment states at 375px/1440px. Corresponding left and right edges must agree within 1px. Preserve scroll ownership and bottom clearance when moving the shared ancestor. APPROVAL-09 item 1 authorizes the frontend implementation and its browser measurements.
 
 ## Radius and shape
 
@@ -134,4 +136,5 @@ Responsive to mobile, visible keyboard focus (the orange ring), reduced motion r
 
 | Date | Change | Authority / IDs |
 | --- | --- | --- |
+| 2026-10-27 | Specify one ancestor for the 800px shell and responsive gutters, matching stream/dock edges within 1px, retaining loading widths and keeping the native scrollbar at the page edge | APPROVAL-09 item 1 and Fred's scrollbar correction, WI-34, DESIGN-REQ-002 |
 | 2026-10-27 | Define selection background token and common content/dock edges before Fred's direct polish | APPROVAL-09; DESIGN-REQ-001/002 |

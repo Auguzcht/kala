@@ -11,6 +11,6 @@ export const dockLayout = {
   // Overlap the stream by one collapsed dock, so text can pass behind the pill.
   // The stream reserves pb-24 for the last message and places its scroll button above it.
   footer:
-    "pointer-events-none relative z-10 -mt-16 bg-gradient-to-t from-background via-background/95 to-background/0 px-4 pb-4",
+    "pointer-events-none relative z-10 -mt-16 bg-gradient-to-t from-background via-background/95 to-background/0 pb-4",
   content: "pointer-events-auto",
 } as const;

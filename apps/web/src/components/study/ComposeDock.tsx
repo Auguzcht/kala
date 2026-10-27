@@ -84,7 +84,7 @@ export function ComposeDock({
 
   return (
     <div id={tourId} className={dockLayout.footer}>
-      <div className={cn("mx-auto flex max-w-[800px] items-end gap-2", dockLayout.content)}>
+      <div className={cn("flex w-full items-end gap-2", dockLayout.content)}>
         <div className="min-w-0 flex-1">
           {attachmentChips ? (
             <div className="mb-2 flex flex-wrap gap-2">{attachmentChips}</div>

@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { StudyStream } from "@/components/study/StudyStream";
+import { StudyColumn } from "@/components/study/StudyColumn";
 import { UserBlock } from "@/components/study/UserBlock";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
@@ -294,8 +295,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const empty = !active.isLoading && !active.isError && messages.length === 0 && localTurns.length === 0 && !pendingTurn;
 
   return (
-    <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
-      <div className={cn("flex min-h-0 flex-1 flex-col", empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
+    <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col [container-type:inline-size]">
+      <StudyColumn className={cn(empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
       {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
         {activeId && active.isLoading ? <div role="status" className="space-y-3 text-sm text-muted-foreground">
           <p>Loading conversation…</p><Skeleton className="h-12 w-3/4 motion-reduce:animate-none" /><Skeleton className="h-16 w-full motion-reduce:animate-none" />
@@ -362,15 +363,15 @@ export function TutorChat({ courseId }: { courseId: string }) {
           </div>
         ) : null}
       </StudyStream>}
-      <div className={cn("shrink-0", empty ? "px-4" : dockLayout.footer)}>
-        <div className={cn("mx-auto w-full max-w-[800px]", dockLayout.content)}>
+      <div className={cn("shrink-0", !empty && dockLayout.footer)}>
+        <div className={cn("w-full", dockLayout.content)}>
           <TutorComposer key={`${courseId}:${epoch.current}`} dropTarget={dropTarget} onDragChange={setDragging}
             attachments={active.data?.attachments ?? []} onFiles={handleFiles}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}
             onTyping={() => setHasTyped(true)} pending={send.isPending} uploading={uploading} />
         </div>
       </div>
-      </div>
+      </StudyColumn>
       {dragging ? <TutorDropOverlay /> : null}
     </div>
   );

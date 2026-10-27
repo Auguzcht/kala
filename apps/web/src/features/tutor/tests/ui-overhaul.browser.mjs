@@ -327,7 +327,42 @@ async function screenshot(page, name, width) {
     animations: "disabled",
   });
 }
+const edgesOf = (locator) => locator.evaluate((el) => {
+  const { left, right, width } = el.getBoundingClientRect();
+  return { left, right, width };
+});
+const matchingEdges = (a, b) => Math.abs(a.left - b.left) <= 1 && Math.abs(a.right - b.right) <= 1;
 try {
+  for (const width of [375, 1440]) {
+    const scrolling = await fixture(width);
+    scrolling.state.messages = Array.from({ length: 60 }, (_, i) => ({ id: `long-answer-${i}`, role: 'assistant', content: `Synthetic paragraph ${i} with enough text to overflow the reading surface.`, style: 'default', createdAt: '2026-10-27T10:00:00Z' }));
+    await scrolling.page.goto('http://localhost:5173/course/tutor?conversation=existing');
+    await scrolling.page.locator('#tour-tutor-response').waitFor();
+    await scrolling.page.clock.fastForward(10000);
+    await scrolling.page.clock.resume();
+    const scroller = scrolling.page.locator('[role=log] > div');
+    const scrollEdges = await edgesOf(scroller);
+    check(Math.abs(scrollEdges.right - width) <= 1, `DESIGN-REQ-002 overflowing Tutor native scrollbar stays at viewport right edge at ${width}`);
+    check(await scroller.evaluate(el => el.scrollHeight > el.clientHeight), `DESIGN-REQ-002 Tutor scrollbar fixture really overflows at ${width}`);
+    const answerEdges = await edgesOf(scrolling.page.locator('#tour-tutor-response'));
+    check(matchingEdges(answerEdges, await edgesOf(scrolling.page.locator('#tour-tutor-input [data-slot=input-group]'))), `DESIGN-REQ-002 full-width scroller preserves Tutor column at ${width}`);
+    await scrolling.page.addStyleTag({ content: '[role=log] > div::-webkit-scrollbar { width: 16px; } [role=log] > div { overflow-y: scroll; }' });
+    check(matchingEdges(answerEdges, await edgesOf(scrolling.page.locator('#tour-tutor-response'))) && matchingEdges(answerEdges, await edgesOf(scrolling.page.locator('#tour-tutor-input [data-slot=input-group]'))), `DESIGN-REQ-002 persistent scrollbar preserves matching column edges at ${width}`);
+    check(await scroller.evaluate(el => getComputedStyle(el).overflowX === 'hidden') && Math.abs((await edgesOf(scroller)).right - width) <= 1, `DESIGN-REQ-002 persistent scrollbar stays at right without a horizontal scrollbar at ${width}`);
+    await scrolling.page.waitForFunction(() => {
+      const el = document.querySelector('[role=log] > div');
+      return el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+    });
+    const bottomPosition = await scroller.evaluate(el => el.scrollTop);
+    await scroller.hover();
+    await scrolling.page.mouse.wheel(0, -100000);
+    await scrolling.page.waitForFunction(before => document.querySelector('[role=log] > div').scrollTop < before - 20, bottomPosition);
+    check(await scroller.evaluate(el => el.scrollTop < el.scrollHeight - el.clientHeight - 20) && await scrolling.page.evaluate(() => window.scrollY === 0), `DESIGN-REQ-002 Tutor retains stream scroll ownership at ${width}`);
+    console.log(`WI-34 overflowing Tutor scroller at ${width}: ${JSON.stringify(scrollEdges)}`);
+    await screenshot(scrolling.page, 'tutor-page-edge-scrollbar', width);
+    check(scrolling.errors.length === 0, 'Tutor full-width scrollbar has no runtime errors');
+    await scrolling.context.close();
+  }
   for (const width of [1440, 375]) {
     const { context, page, state, errors } = await fixture(width, {
       empty: true,
@@ -492,6 +527,8 @@ try {
     const input = page.getByPlaceholder("Ask Kala…");
     await input.waitFor();
     await page.getByRole("heading", { level: 1 }).waitFor();
+    const composer = page.locator('#tour-tutor-input [data-slot=input-group]');
+    const emptyComposerEdges = await edgesOf(composer);
     check(
       await page
         .locator("main")
@@ -634,6 +671,19 @@ try {
       .first()
       .waitFor();
     await page.clock.resume();
+    const messageEdges = await edgesOf(page.locator('#tour-tutor-response'));
+    const composerEdges = await edgesOf(composer);
+    check(matchingEdges(messageEdges, composerEdges), `DESIGN-REQ-002 Tutor message/composer edges match at ${width}`);
+    check(matchingEdges(emptyComposerEdges, composerEdges), `DESIGN-REQ-002 Tutor empty/conversation composer edges match at ${width}`);
+    const userBubbleEdges = await edgesOf(page.getByText('How does object storage work?', { exact: true }).last());
+    check(Math.abs(userBubbleEdges.right - composerEdges.right) <= 1, `DESIGN-REQ-002 Tutor user bubble stays at column right edge at ${width}`);
+    await page.locator('input[type=file]').setInputFiles({ name: 'column.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic column check') });
+    await page.getByRole('button', { name: 'Remove column.txt', exact: true }).waitFor();
+    const attachmentComposerEdges = await edgesOf(composer);
+    check(matchingEdges(messageEdges, attachmentComposerEdges), `DESIGN-REQ-002 Tutor attachment composer retains edges at ${width}`);
+    console.log(`WI-34 Tutor edges at ${width}: ${JSON.stringify({ message: messageEdges, composer: composerEdges, emptyComposer: emptyComposerEdges, attachmentComposer: attachmentComposerEdges, userBubble: userBubbleEdges })}`);
+    await screenshot(page, 'shared-column-tutor', width);
+    await page.getByRole('button', { name: 'Remove column.txt', exact: true }).click();
     check(await page.locator('#tour-tutor-thinking').count()===0,
       'TUTOR-REQ-010 completed answer removes the waiting indicator');
     check(

@@ -38,14 +38,20 @@ export function StudyStream({
   return (
     <div
       className={cn(
-        "relative flex h-full min-h-0 flex-1 flex-col",
+        "relative -mx-(--study-column-inset) flex h-full min-h-0 flex-1 flex-col",
         height,
         className
       )}
     >
       <Conversation>
-        <ConversationContent className="gap-5 px-0 pt-6 pb-24">
-          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-5 px-4 sm:px-6">
+        {/* Bleed the scroll region to the surface edge, then restore only the
+            inherited inset. The full surface width also keeps a persistent
+            native scrollbar from shifting the content column. */}
+        <ConversationContent
+          scrollClassName="overflow-x-hidden [scrollbar-gutter:auto]!"
+          className="w-[100cqw] gap-5 px-(--study-column-inset) pt-6 pb-24"
+        >
+          <div className="flex w-full flex-col gap-5">
             {children}
           </div>
         </ConversationContent>
