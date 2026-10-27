@@ -12,8 +12,7 @@ import { readAssignedTutorDraft } from "@/features/tutor/lib/assigned-draft";
 import { toast } from "sonner";
 import { StudyStream } from "@/components/study/StudyStream";
 import { StudyColumn } from "@/components/study/StudyColumn";
-import { UserBlock } from "@/components/study/UserBlock";
-import { AssistantBlock } from "@/components/study/AssistantBlock";
+import { TutorMessage } from "@/features/tutor/components/TutorMessage";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -311,16 +310,16 @@ export function TutorChat({ courseId }: { courseId: string }) {
         </LoadingRegion> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
         {messages.map((m) => m.role === "user" ? (
-          <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />
+          <TutorMessage key={m.id} role="user" text={m.content} initials={userInitials || undefined} />
         ) : (
-          <AssistantBlock key={m.id} text={m.content} id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
+          <TutorMessage key={m.id} role="assistant" text={m.content} id={m.id === lastMessage?.id ? "tour-tutor-response" : undefined}
             animate={m.id === lastMessage?.id} animationKey={m.id === lastMessage?.id ? `${courseId}:tutor:${m.id}` : undefined} />
         ))}
 
         {localTurns.map((turn, index) => (
           <div key={turn.id} className="mr-auto w-full max-w-full">
-            <UserBlock text={turn.question} initials={userInitials || undefined} />
-            <AssistantBlock
+            <TutorMessage role="user" text={turn.question} initials={userInitials || undefined} />
+            <TutorMessage role="assistant"
               text={turn.answer}
               id={index === localTurns.length - 1 ? "tour-tutor-response" : undefined}
             />
@@ -336,7 +335,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
                 request fails, in which case it stays visible with a retry
                 action rather than disappearing. */}
             <div id="tour-tutor-user-turn" className="mr-auto w-full max-w-full">
-              <UserBlock text={pendingTurn.question} initials={userInitials || undefined} />
+              <TutorMessage role="user" text={pendingTurn.question} initials={userInitials || undefined} />
             </div>
             {pendingTurn.status === "asking" ? (
               <div id="tour-tutor-thinking" className="mr-auto w-full max-w-full">

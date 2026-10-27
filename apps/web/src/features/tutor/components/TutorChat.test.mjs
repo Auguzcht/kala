@@ -100,6 +100,7 @@ function mount({ messages = [], error, refetch } = {}) {
     "@/features/tutor/lib/assigned-draft": assignedDraft,
     "@/components/ai-elements/dock-layout": { dockLayout },
     "@/features/tutor/components/TutorComposer": uiModule("TutorComposer"),
+    "@/features/tutor/components/TutorMessage": uiModule("TutorMessage"),
     "@/features/tutor/components/TutorWelcome": uiModule("TutorWelcome"),
     "@/features/tutor/components/TutorDropOverlay": uiModule("TutorDropOverlay"),
     "@/features/courses": { useCourse: () => ({ data: { title: "AWS101" } }) },
