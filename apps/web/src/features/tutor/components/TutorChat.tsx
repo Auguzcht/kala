@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { TutorComposer } from "@/features/tutor/components/TutorComposer";
 import { TutorWelcome } from "@/features/tutor/components/TutorWelcome";
 import { TutorDropOverlay } from "@/features/tutor/components/TutorDropOverlay";
-import { pickGreeting, validateTutorFile, createConversationResolver } from "@/features/tutor/lib/presentation";
+import { pickGreeting, validateTutorFile, createConversationResolver, shouldOfferExplanations } from "@/features/tutor/lib/presentation";
 import { dockLayout } from "@/components/ai-elements/dock-layout";
 import { useCourse } from "@/features/courses";
 import { cn } from "@/lib/utils";
@@ -290,6 +290,9 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const localTurns = unconfirmedTurns.filter(
     (turn) => turn.conversationId === activeId && !hasSavedTurn(messages, turn),
   );
+  const latestLocal = localTurns.at(-1);
+  const latestQuestion = latestLocal?.question ?? [...messages].reverse().find((message) => message.role === "user")?.content;
+  const latestAnswer = latestLocal?.answer ?? (lastMessage?.role === "assistant" ? lastMessage.content : undefined);
 
   const asking = pendingTurn?.status === "asking";
   useEffect(() => {
@@ -364,7 +367,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
           </>
         ) : null}
 
-        {!send.isPending && !active.isError && (localTurns.length > 0 || lastMessage?.role === "assistant") ? (
+        {!pendingTurn && !send.isPending && !active.isLoading && !active.isError && shouldOfferExplanations(latestQuestion, latestAnswer) ? (
           <div className="mr-auto w-full">
             <FollowUpChips onPick={(style) => {
               const instruction = style === "eli5"

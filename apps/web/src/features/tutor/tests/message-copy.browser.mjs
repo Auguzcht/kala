@@ -43,7 +43,7 @@ try{
     check(await tooltip.evaluate(el=>!!el.querySelector('svg')),'TUTOR-REQ-017 tooltip retains the shared arrow');
    }else check(await actions.evaluate(el=>getComputedStyle(el).opacity)==='1','TUTOR-REQ-017 touch keeps copy discoverable');
 
-   if(width===375)await button.tap();else{await button.focus();await button.press('Enter');}
+   if(width===375)await button.tap();else if(role==='user')await button.click();else{await button.focus();await button.press('Enter');}
    await section.getByRole('status').filter({hasText:/^Copied$/}).waitFor();
    check(await actions.evaluate(el=>getComputedStyle(el).opacity)==='1','TUTOR-REQ-017 keyboard/touch activation retains accessible feedback');
    check(await page.evaluate(()=>window.__copies.at(-1))===text,'TUTOR-REQ-017 exact isolated message content '+key+' '+width);

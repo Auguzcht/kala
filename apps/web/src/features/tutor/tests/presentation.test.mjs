@@ -6,6 +6,7 @@ import {
   pickGreeting,
   validateTutorFile,
   createConversationResolver,
+  shouldOfferExplanations,
 } from "../lib/presentation.ts";
 import { tutorConversationSchema } from "../schema/tutor.schema.ts";
 
@@ -139,4 +140,24 @@ test("WI-22 desktop history bounds leave room for the conversation", async () =>
   assert.equal(clampTutorHistoryWidth(320, 1440), 320);
   assert.equal(tutorHistoryMaxWidth(1024), 440);
   assert.ok(1024 - 56 - tutorHistoryMaxWidth(1024) >= 480);
+});
+
+
+test("TUTOR-REQ-021 casual latest turns do not offer explanation chips", () => {
+  for (const question of ["Hello!", "Hi Kala", "Good morning", "Hi, how are you?", "Thanks!", "Thank you so much", "Okay", "Got it", "Bye!", "Who are you?", "What's your name?", "What can you do?", "Can you help me?", "Tell me a joke", "How's the weather?", "What time is it?", "Salamat!", "Kumusta?"]) {
+    assert.equal(shouldOfferExplanations(question, "Hello! I’m glad you’re here. What would you like to learn or work on today?"), false, question);
+  }
+});
+
+test("TUTOR-REQ-021 learning requests and mixed greetings keep explanation chips", () => {
+  for (const question of ["What is EC2?", "EC2?", "Explain cloud computing", "Hi, can you explain S3?", "Thanks, what about databases?", "Explain your last answer in more detail", "What does 'hello world' mean in programming?"]) {
+    assert.equal(shouldOfferExplanations(question, "EC2 provides virtual computers."), true, question);
+  }
+  assert.equal(shouldOfferExplanations(undefined, "Object storage keeps data as durable objects."), true);
+});
+
+test("TUTOR-REQ-021 absent answers and brief acknowledgements have no explanation chips", () => {
+  assert.equal(shouldOfferExplanations("Explain storage", undefined), false);
+  assert.equal(shouldOfferExplanations("Explain storage", "  "), false);
+  assert.equal(shouldOfferExplanations("Tell me something", "Okay!"), false);
 });

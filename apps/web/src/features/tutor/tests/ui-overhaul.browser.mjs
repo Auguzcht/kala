@@ -409,10 +409,14 @@ try {
     ];
     await follow.page.goto('http://localhost:5173/course/tutor?conversation=existing');
     await follow.page.getByRole('button', { name: "Explain like I'm 5", exact: true }).waitFor();
+    check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).locator('[aria-hidden=true]').innerText()==='🧸',`TUTOR-REQ-021 simple explanation uses a static emoji at ${width}`);
+    check(await follow.page.getByRole('button',{name:'More detail',exact:true}).locator('[aria-hidden=true]').innerText()==='🔎',`TUTOR-REQ-021 detail uses a static emoji at ${width}`);
+
     await follow.page.evaluate(()=>{window.__messageCopies=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__messageCopies.push(text);}}});});
-    await follow.page.getByRole('button',{name:'Copy your message',exact:true}).first().click();
+    const copyByKeyboard=async button=>{await button.focus();await button.press('Enter');};
+    await copyByKeyboard(follow.page.getByRole('button',{name:'Copy your message',exact:true}).first());
     check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))===original,`TUTOR-REQ-017 saved user content copies exactly at ${width}`);
-    await follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).first().click();
+    await copyByKeyboard(follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).first());
     check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))==='Object storage keeps data as durable objects.',`TUTOR-REQ-017 saved reply content copies exactly at ${width}`);
     check(follow.state.asks===0,`TUTOR-REQ-017 saved-message copy sends no ask at ${width}`);
     for (const [label, style, intent] of [["Explain like I'm 5", 'eli5', "Explain your last answer like I'm 5"], ['More detail', 'detail', 'Explain your last answer in more detail']]) {
@@ -423,7 +427,7 @@ try {
       await pendingUser.waitFor();
       check((await pendingUser.innerText()).startsWith(intent), `TUTOR-REQ-021 ${style} immediately renders explicit user instruction at ${width}`);
       await follow.page.locator('#tour-tutor-thinking').waitFor();
-      await pendingUser.getByRole('button',{name:'Copy your message',exact:true}).click();
+      await copyByKeyboard(pendingUser.getByRole('button',{name:'Copy your message',exact:true}));
       check((await follow.page.evaluate(()=>window.__messageCopies.at(-1))).startsWith(intent),`TUTOR-REQ-017 pending user turn copies its own explicit question at ${width}`);
       check(await follow.page.locator('#tour-tutor-thinking').getByRole('button').count()===0,`TUTOR-REQ-017 pending Kala reply has no copy control at ${width}`);
 
@@ -439,6 +443,7 @@ try {
     await follow.page.getByRole('button', { name: "Explain like I'm 5", exact: true }).click();
     await follow.page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
     const failedRequest = follow.state.askRequests.at(-1);
+    check(await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 failed newer turn hides old explanation actions at ${width}`);
     follow.state.rejectAsk = false;
     await follow.page.getByRole('button', { name: 'Retry', exact: true }).click();
     await follow.page.locator('#tour-tutor-user-turn').waitFor({ state: 'detached' });
@@ -447,12 +452,25 @@ try {
     await follow.page.getByRole('button',{name:'More detail',exact:true}).click();
     await follow.page.getByText('This answer may not have been saved.',{exact:true}).waitFor();
     const asksBeforeCopy=follow.state.asks;
-    await follow.page.getByRole('button',{name:'Copy your message',exact:true}).last().click();
+    await copyByKeyboard(follow.page.getByRole('button',{name:'Copy your message',exact:true}).last());
     check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))===follow.state.askRequests.at(-1).question,`TUTOR-REQ-017 local user turn copies its captured request at ${width}`);
-    await follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).last().click();
+    await copyByKeyboard(follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).last());
     check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))==='Unsaved synthetic answer.',`TUTOR-REQ-017 local answer excludes save-status text at ${width}`);
     check(follow.state.asks===asksBeforeCopy,`TUTOR-REQ-017 local copy makes no additional ask at ${width}`);
     check(follow.state.creates === 0 && follow.state.uploads === 0 && follow.state.patches === 0 && follow.state.deletes === 0, `TUTOR-REQ-021 explanation chips make only the existing ask at ${width}`);
+    const completedBeforeGreeting=await follow.page.locator('[data-tutor-message=assistant]').count();
+    await follow.page.getByPlaceholder('Ask Kala…').fill('Hello!');await follow.page.getByPlaceholder('Ask Kala…').press('Enter');
+    await follow.page.waitForFunction(n=>document.querySelectorAll('[data-tutor-message=assistant]').length===n+1,completedBeforeGreeting);
+    check(await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 local unsaved greeting hides chips after older learning turns at ${width}`);
+    follow.state.skipPersistence=false;
+    follow.state.messages.push({id:'casual-user',role:'user',content:'Hello!',style:null,createdAt:'2026-10-28T00:00:01Z'}, {id:'casual-answer',role:'assistant',content:'Hello! What would you like to learn today?',style:'default',createdAt:'2026-10-28T00:00:02Z'});
+    await follow.page.reload();
+    await follow.page.getByText('Hello! What would you like to learn today?',{exact:true}).waitFor();
+    check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).count()===0&&await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 casual latest turn hides chips despite older learning messages at ${width}`);
+    follow.state.messages.push({id:'learning-user',role:'user',content:'Hi, can you explain cloud storage?',style:null,createdAt:'2026-10-28T00:00:03Z'}, {id:'learning-answer',role:'assistant',content:'Object storage keeps data as durable objects.',style:'default',createdAt:'2026-10-28T00:00:04Z'});
+    await follow.page.reload();
+    await follow.page.getByRole('button',{name:'More detail',exact:true}).waitFor();
+    check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).isVisible(),`TUTOR-REQ-021 reopened mixed greeting/learning exchange retains chips at ${width}`);
     check(follow.errors.length === 0, `TUTOR-REQ-021 no runtime errors at ${width}`);
     await screenshot(follow.page, 'tutor-explicit-followups', width);
     await follow.context.close();
