@@ -56,6 +56,13 @@ Orient students and instructors within the real workspace using guided highlight
 - Status: implemented
 - Verified by: full reduced-motion walks and viewport bounds at 1440px/375px; keyboard Back and normal-motion Skip/Escape checks. Driver overlay now uses the brand-ink token. Screen-reader and live acceptance remain separate checks.
 
+### TOUR-REQ-006: Preserve historical scope proof and current target bindings
+- Rule: The seven accepted TOUR-REFRESH AST comparisons remain pinned to full accepted revision c3d6b6351f7adbfc6e8da1d43e371014473c8b74 and its pre-tour baseline3a6a0aab27a8212f77b83e96b26127d830a696ba. A committed two-sided normalized-AST checksum/attribute-count attestation makes that historical proof independent of local Git depth. If a verifier uses historical Git objects instead, absence fails clearly; never skip. Subsequent approved feature changes do not redefine the historical tour-only boundary.
+- Rule: Independently enumerate every selector in current student/default/hub and instructor definitions, including wait/click/prefill targets and composite alternatives. Check its current component binding, including forwarded/dynamic IDs, exactly once at the rendering anchor. Preserve the current PracticePanel Study-spec comment. Runtime conditional visibility, absence/skip and route-specific uniqueness remain browser checks; a source binding is not proof of a visible DOM node.
+- Acceptance: Keep all seven comparisons, no skip/only/todo or deleted anchors. Cover every current tour target, not just the original seven. Run old verifier before E3, new verifier before lanes and after merges; full desktop/mobile tour suite after integration must pass with zero mutating requests, reporting its new assertion count beside historical616. A disappeared target stops for explicit tour-definition/spec resolution.
+- Status: planned
+- Verified by: pending APPROVAL-08 E3 coordinator proof and integrated tour rerun.
+
 ## API contract
 
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -117,6 +124,7 @@ The coordinator released the approved DOCS-HYGIENE merge; the rebase completed w
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Separate pinned historical AST scope attestation from exhaustive current tour-target checks before approved UI changes | APPROVAL-08 Amendment3, coordinator-only E3 | TOUR-REQ-006 |
 | 2026-10-25 | Refresh current UI anchors/copy; skip unavailable conditional steps; add Back and synthetic zero-mutation acceptance | User-authorized TOUR-REFRESH | TOUR-REQ-001, TOUR-REQ-003, TOUR-REQ-004, TOUR-REQ-005 |
 | 2026-10-25 | Specify per-step visible-target checks, bounded optional skips and remembered concrete learner routes before runner changes | TOUR-REFRESH continuation in the existing UI worktree | TOUR-REQ-001, TOUR-REQ-003, TOUR-REQ-004, TOUR-REQ-005 |
 | 2026-10-25 | Write full source-backed feature spec; record incomplete acceptance and contradictions | APPROVAL-05 rev 2 Lane P; handover WI-08 | TOUR-REQ-001 through TOUR-REQ-005 |

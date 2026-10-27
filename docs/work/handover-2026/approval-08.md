@@ -65,3 +65,12 @@ Build only after feasibility proves no migration, no evidence/mastery table chan
 Order unchanged: FG-6, FG-8, FG-7a/7b, FG-9. Land reviewed08 changes on local main before FG-8 for one combined release. No agent deploy/push of application changes.
 
 FG-9 adds student dashboard with no material copy, one hint indicator, Get new cards empty behavior, rename dialog, short Hello reply and matching loading/content width at375px/1440px. Conditional edit acceptance is recorded only if implemented under Amendment2B. Each lane and FG-L end with the full AGENTS AUDIT REPORT block. Synthetic checks do not fill live rows.
+
+
+## Amendment 3 — E3, coordinator-only tour proof update
+
+Coordinator alone edits apps/web/src/components/shell/tests/tour-anchors.test.mjs on main before lanes rebase; lanes never touch it. Preserve all seven original historical AST comparisons against accepted TOUR-REFRESH fullSHAc3d6b6351f7adbfc6e8da1d43e371014473c8b74 and pre-tour3a6a0aab27a8212f77b83e96b26127d830a696ba. Prefer committed AST checksums for both sides so shallow/fresh clones run. If Git objects are read instead, a missing object fails clearly, never skips.
+
+Check every current tour target/selector against its current rendering component, including forwarded IDs/anchors, not only the original seven. Keep current PracticePanel documentation-comment check. No skip, only, todo, weakened assertion or deleted comparison; never delete/rename an anchor to make the test pass. A genuine disappeared target stops for coordinator tour-definition then TOUR-spec resolution. If an element moves, retain/report its anchor.
+
+Record old-test run before change, any failures attributable to08, new-test run on main and post-T2/U2 merge run. Name all seven comparisons and identify TwinBody as the one already historical rather than a current-body check. Run full tour browser after both merges, zero mutating requests, report its assertion count beside old616.
