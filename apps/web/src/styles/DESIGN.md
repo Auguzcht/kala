@@ -89,6 +89,15 @@ Rationale: identify the empty conversational entry point without competing with 
 
 APPROVAL-06 section 2, reconciling Fred's accepted 2026-10-25 Lane U refinements: Tutor action glyphs may use their published lucide-animated variants on whole-control hover/focus, with static fallback for unavailable variants. Do not substitute a generic tilt/nudge/pulse. The drop overlay's Upload glyph reacts to drag entry. Overflowing history titles may make one gentle hover journey to the end and back; short titles remain static. History popup entry/exit remains immediate. Local attachment preview dialogs may have short state-transition motion. Reduced motion disables these effects. These are scoped interaction responses, not additional idle loops; only the empty-state logo has the idle exception above. Lead designer review remains pending.
 
+## Pending and loading states
+
+Approved APPROVAL-08, 2026-10-27. This replaces the earlier app-wide Spinner convention.
+
+- A spinner appears only inside the control the user just activated for a submit-type action (Send, Save, Submit, Start set, Retry), while its request is pending. Disable that control during the request. Preserve accessible names, focus and reduced motion.
+- Never put a spinner in a skeleton, loading card, tab body, header stat or beside status text. A page/card load uses skeleton blocks and at most one line of text.
+- Waiting for a model answer uses exactly one indicator: the existing shimmer text line, for example “Kala is preparing a hint”. No spinner accompanies it. The initiating control is disabled with a stable label/icon, rather than becoming a second “Thinking…” indicator. This single-indicator rule takes precedence over a submit-control spinner during the model-answer phase.
+- Test, Study and Diagnostic share one loading card: static Kala mascot, one line and skeleton lines. Its width matches the content card it replaces; Diagnostic and Test runners share one content-column width. Use existing tokens and honor 375px/1440px layouts. This does not grant a new mascot idle loop.
+
 ## Quality floor (every screen)
 
 Responsive to mobile, visible keyboard focus (the orange ring), reduced motion respected, empty and error states written as direction not mood ("Take a short diagnostic to build your baseline", not "No data"). Errors say what happened and how to fix it, in the product's voice.

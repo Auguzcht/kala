@@ -49,9 +49,9 @@ Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH
 - Verified by: services/api/tests/test_study_deck_approved.py
 
 ### STUDY-REQ-003: Replay the completed session locally
-- Rule: completion offers “Go through these again” and “Check for more cards”. Replay starts at card 1 with the same session cards and retains the posted-rating guard; it sends no new review POSTs. Label replay as practice without schedule changes. Check for more retains reload selection behavior. Empty copy distinguishes “All caught up” from “No cards yet”; show next due time if supplied.
+- Rule: completion offers “Go through these again” and “Get new cards”. Replay starts at card 1 with the same session cards and retains the posted-rating guard; it sends no new review POSTs. Label replay as practice without schedule changes. Get new cards follows STUDY-REQ-006; it never invokes local replay. Empty copy distinguishes “All caught up” from “No cards yet”; show next due time if supplied.
 - Acceptance: complete, replay, and rate the same cards without additional review POSTs; a separate action requests another deck.
-- Status: implemented
+- Status: in-progress; APPROVAL-08 amendment specified before implementation
 - Verified by: apps/web/src/features/flashcards/tests/study-deck.test.mjs
 
 ### STUDY-REQ-004: Include eligible native flip cards in Study fresh selection
@@ -67,6 +67,19 @@ Study card/deck and Test next-item/set list/set detail/results GETs follow [AUTH
 - Acceptance: an empty course-wide deck with a ready bank renders “All caught up” for tracked cards and “No cards yet” for zero tracked cards, without “Preparing questions”.
 - Status: implemented
 - Verified by: apps/web/src/features/flashcards/tests/study-deck.test.mjs, “STUDY-REQ-005 empty ready course distinguishes caught up from no cards”
+
+### STUDY-REQ-006: Get due or new cards without replaying the completed session
+- Rule: Completion's second action is “Get new cards”. Use existing due/new selection, never Study-all or local replay. While checking, disable the action. Keep the completion screen until an eligible result exists. Exclude every item already rated in this session, retaining the rating/idempotency guard across fetches and replay; never show or POST a rated card as a new encounter because the action was pressed.
+- Rule: When no eligible cards return, remain on completion and show inline “No new cards right now. Your next review is {date}.” Use actual server scheduling data for the date (the existing review dueAt or scoped membership dates); never infer it from arbitrary delays or fabricate availability. If an accurate date cannot be obtained within frontend-owned paths, stop and report the missing contract. Do not change the review request, evidence/mastery writes, SQL, API or scheduler.
+- Acceptance: Empty, duplicate-only, mixed duplicate/unseen and genuinely new results; delayed fetch; repeated activation; one-card and multi-card sessions; replay followed by Get new cards; server-provided next date. No reset/replay on an empty result and no duplicate review POST. Record any observed rated-card resurfacing as a bug/evidence entry. Existing due priority, fresh-card cap and local replay behavior remain intact.
+- Status: planned
+- Verified by: pending APPROVAL-08 U2 component/browser tests.
+
+### STUDY-REQ-007: Keep student Test copy about practice
+- Rule: The Test tab's dashed new-set card says “New practice set” / “Fresh questions. Choose 5, 10, or 20 at a time.” Do not show “This skill doesn't have course material yet.” or other material-availability wording on student learning surfaces. Instructor review retains its material concern. Preserve existing availability/generation rules; the reported IaaS/PaaS/SaaS flag versus four sets/20 attempts is investigation-only, not permission to repair flags or data.
+- Acceptance: Student and instructor role fixtures prove the copy boundary; 5/10/20 selection, existing permitted requests and no-data behavior remain unchanged. Report source locations and the basis/limits of the flag finding without inventing hosted verification.
+- Status: planned
+- Verified by: pending APPROVAL-08 U2 role/copy tests.
 
 ## API contract
 | Method and path | Purpose | Auth | Notes |
@@ -92,6 +105,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Separate due/new completion fetching from replay; define honest empty/date state, student Test copy and shared loading before implementation | APPROVAL-08, coordinator C1/C2 | STUDY-REQ-003/006/007; DIAG-REQ-008/014 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-24 | Define minimal freeze scope before implementation | APPROVAL-01, Lane F and confirmed section 5 | STUDY-REQ-001, STUDY-REQ-002, STUDY-REQ-003 |

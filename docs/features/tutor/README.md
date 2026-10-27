@@ -58,10 +58,10 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 
 ### TUTOR-REQ-005: Conversation groups and management controls
 
-- Rule: Replace Today / Yesterday / Older with Collapsible groups named Pinned and Recents. Show Pinned only when at least one conversation is pinned. Preserve pinned order; Recents has local newest/oldest/title sorting. Rows expose a pin button and a DropdownMenu on hover or keyboard focus; actions remain visible while the menu is open. Menus open toward the right on desktop, respect viewport collisions on mobile, and enter and exit immediately. Long overflowing titles reveal their text with one gentle hover movement to the end and back; short titles and reduced-motion titles remain static. The menu contains Rename, Pin or Unpin, and Delete. Rename edits the title inline and uses Lane B's PATCH contract; pin and unpin use the same contract. Delete requires confirmation before calling the existing DELETE route. Cancelling confirmation sends no delete request. Deleting the active conversation returns to a new-chat view. Do not add Share, Archive or Move to project.
+- Rule: Replace Today / Yesterday / Older with Collapsible groups named Pinned and Recents. Show Pinned only when at least one conversation is pinned. Preserve pinned order; Recents has local newest/oldest/title sorting. Rows expose a pin button and a DropdownMenu on hover or keyboard focus; actions remain visible while the menu is open. Menus open toward the right on desktop, respect viewport collisions on mobile, and enter and exit immediately. Long overflowing titles reveal their text with one gentle hover movement to the end and back; short titles and reduced-motion titles remain static. The menu contains Rename, Pin or Unpin, and Delete. Rename opens the existing Dialog primitive and uses TUTOR-REQ-002's existing PATCH contract; pin and unpin use the same contract. Delete requires confirmation before calling the existing DELETE route. Cancelling confirmation sends no delete request. Deleting the active conversation returns to a new-chat view. Do not add Share, Archive or Move to project.
 - Rule: Preserve optional and nullable pinnedAt in the frontend schema. Show pin and rename controls only when pinnedAt is present in the corresponding list-response row; null means supported but unpinned. Older responses that omit the property retain working conversation selection and confirmed deletion without PATCH controls.
-- Acceptance: Pinned appears only with pinned rows; Recents contains unpinned rows. Both groups collapse and expand. Keyboard focus reveals row actions. Responses omitting pinnedAt show no pin or rename controls and cause no PATCH calls. Supported responses allow inline rename and pin/unpin. Delete sends no request before confirmation, sends none after cancellation, and clears the active conversation after successful confirmed deletion.
-- Status: implemented
+- Acceptance: Pinned appears only with pinned rows; Recents contains unpinned rows. Both groups collapse and expand. Keyboard focus reveals row actions. Responses omitting pinnedAt show no pin or rename controls and cause no PATCH calls. Supported responses allow dialog rename and pin/unpin under TUTOR-REQ-012. Delete sends no request before confirmation, sends none after cancellation, and clears the active conversation after successful confirmed deletion.
+- Status: in-progress; APPROVAL-08 amendment specified before implementation
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ### TUTOR-REQ-006: Center the empty-chat composer and select a local greeting
@@ -96,9 +96,9 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 
 ### TUTOR-REQ-010: Show an honest waiting state and retain deadline recovery
 
-- Rule: While waiting for an answer, show the existing Shimmer with "Thinking", changing after about eight seconds to "Still working on it". Reset the timer for each ask and clean it up on completion, failure or conversation change. Do not show invented step traces or a Reasoning component. On tutor_timeout, show the server's safe retry message. Preserve TUTOR-REQ-001's returned-answer and persistence-recovery behavior.
+- Rule: While waiting for an answer, show exactly one existing Shimmer line with "Thinking", changing after about eight seconds to "Still working on it". Follow DESIGN.md: no spinner beside the line or in the message body; disable the initiating control with a stable label/icon, never a second Thinking indicator. Non-model submit actions may show a spinner only inside the activated, disabled control while its request is pending. Reset the timer for each ask and clean it up on completion, failure or conversation change. Do not show invented step traces or a Reasoning component. On tutor_timeout, show the server's safe retry message. Preserve TUTOR-REQ-001's returned-answer and persistence-recovery behavior.
 - Acceptance: Controlled time shows Thinking initially and Still working on it after approximately eight seconds; completion/failure stops the waiting state. Retrying starts a fresh timer. Timeout detail remains visible with Retry, and existing saved/unsaved-answer recovery tests continue to pass.
-- Status: implemented
+- Status: in-progress; APPROVAL-08 amendment specified before implementation
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
 
 ### TUTOR-REQ-011: Preserve the Tutor and Study hub component boundary
@@ -118,6 +118,38 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Acceptance: Tutor uses conversation attachments; Study hub asks remain stateless and text-only. No prohibited component is introduced. Sources and Inline Citation remain planned.
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
+
+### TUTOR-REQ-012: Rename through an accessible dialog
+- Rule: Replace inline editing with the existing Dialog primitive. Title “Rename chat”, helper “Keep it short and recognizable”, input prefilled with the current title and selected on opening. Provide Cancel and Save. Trim the input; Save is disabled for blank or unchanged titles and during the existing PATCH. Enter saves only when valid; Esc cancels. Cancel/Esc makes no request. Return focus to the originating “...” trigger after close, retaining capability gating, ownership, title-length validation and safe failure feedback. A pending Save spinner appears only inside Save.
+- Acceptance: Pointer/keyboard opening, selected input, blank/unchanged/trimmed input, Enter exactly once, Escape/Cancel no PATCH, pending lock, success/error and focus return at 375px/1440px. Pin/delete/list compatibility and existing API authorization remain intact.
+- Status: planned
+- Verified by: pending APPROVAL-08 T2 synthetic dialog and retained management tests.
+
+### TUTOR-REQ-013: Answer small talk briefly without a study roadmap
+- Rule: The existing Tutor system prompt tells the model that greetings or messages with no course question receive a short, friendly reply and an offer to help. No roadmap or “course context” wording for that exchange. This is prompt-only: no classifier/model call, model/provider/config/routing change, bypass of grounding or graded-answer protections for actual questions, or evidence/persistence change.
+- Acceptance: A mocked-provider test proves the small-talk rule reaches the existing system prompt alongside retained teaching/safety instructions. A real “Hello!” response remains FG-9; local prompt inspection cannot claim model behavior or latency.
+- Status: planned
+- Verified by: pending APPROVAL-08 T2 mocked-provider test and Fred FG-9.
+
+### TUTOR-REQ-014: Defer image attachments until privacy controls are reviewed
+- Rule: Image attachment support is planned only. The current sanitizer operates on text and does not de-identify image contents; enabling images presents a PDPA/privacy risk. Continue current TXT/MD/PDF staging, type/size validation and text-based handling. Do not enable image MIME types, previews, uploads, OCR or multimodal provider inputs in this round.
+- Acceptance: Existing image rejection remains unchanged. Any later implementation requires a separately approved privacy/sanitization contract and scope.
+- Status: planned
+- Verified by: existing attachment rejection tests; no image implementation is authorized by APPROVAL-08.
+
+### TUTOR-REQ-015: Edit only the most recent sent prompt after feasibility approval
+- Rule: The approved target is the latest user prompt only. Older user messages have no edit control. A pencil appears on hover/focus under that last user message; editing is inline, with Cancel and Send. Esc cancels. Send is disabled for blank or unchanged text. Saving replaces the last exchange (old user prompt and Kala reply), then sends the edited prompt; no older history, evidence or mastery changes.
+- Gate: First investigate schema/dependencies, ownership, course/enrollment admission, message ordering, attachments, in-flight asks and failure/transaction behavior. Build only if no migration is needed, evidence/mastery tables are untouched, and last-exchange deletion is owner/institution/course-scoped and respects AUTH-REQ-007 admission. Submit the concrete route contract/feasibility to the coordinator for a spec-first amendment before coding it. The new route must be a new function only; pre-existing functions, imports, guards and signatures stay unchanged, except E1's single system-prompt literal. If those constraints cannot hold, do not build it; mark this requirement planned/deferred to ITO with the exact reason.
+- Acceptance if built: Only the last user message offers editing; pointer/keyboard, Cancel/Esc, blank/unchanged text and single pending Send work at 375px/1440px. Correct owner/enrolled course succeeds; other owner, course/institution, non-enrolled student, stale last exchange and denied requests do not remove messages or send a replacement. Older turns, attachments and protected writes remain intact. Specify failure/retry behavior before implementation, rather than silently losing or duplicating a turn.
+- Status: planned; feasibility and concrete API contract pending APPROVAL-08 Amendment 2B review. This is conditional authorization, not an implementation claim.
+- Verified by: pending T2 source-backed feasibility/AST/security/browser tests or explicit ITO deferral.
+
+### TUTOR-REQ-016: Inspect latency without changing runtime settings
+- Rule: FG-L is delegated by Fred, read-only, solely for T2-5. Use only AWS sts get-caller-identity (print Account only), logs describe-log-groups with prefix /aws/lambda/, logs start-query, logs get-query-results and logs filter-log-events. Discover the API group; ambiguous candidates stop. Query only the last 48 hours, descending tutor_timing/provider lines, limit50. Parse in memory; no raw output or files.
+- Rule: Report stage median/max for retrieval/embedding, primary, fallback and total, fallback-request count and primary429/other errors by model/status. Distinguish insufficient timing coverage/correlation from measured absence. Recommend keep settings, a Fred-gated primary/fallback swap, or streaming as an ITO follow-up; never apply one. Missing/expired credentials, need for another AWS command, or a body/personal-data field stops this step; report only the offending field name for a privacy finding.
+- Acceptance: Output/evidence contains only aggregate numbers, stage/model/status names; account ID is the sole identity output allowed. Raw data is local only, not retained. No raw log lines, user/institution identifiers, bodies, emails, tokens, secrets or provider/config changes. This delegate does not release other Fred gates.
+- Status: planned
+- Verified by: pending T2 FG-L aggregate report, marked delegated by Fred, read-only.
 
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
@@ -142,6 +174,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Specify rename dialog, single waiting indicator, prompt-only small talk, planned images, conditional last-prompt editing and delegated read-only timing before implementation | APPROVAL-08, coordinator C1/C2 | TUTOR-REQ-005/010/012–016; DIAG-REQ-008 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-24 | Minimal freeze spec created before implementation | APPROVAL-01, section 2 Lane T and confirmed amendment A1 | TUTOR-REQ-001 |

@@ -90,12 +90,12 @@ Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/
 - Status: implemented
 - Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; completion, navigation, refetch, mobile, confetti and reduced-motion evidence in docs/work/handover-2026/evidence/ui-overhaul.md.
 
-### DIAG-REQ-008: Use the shared Spinner for actual waiting states across Kala
+### DIAG-REQ-008: Keep pending feedback inside the activated control
 
-- Rule: Fred's app-wide visual correction uses the existing Spinner for real loading/submitting/mutating states: one per loading region or waiting label, and in place of action icons while that action is pending. Shared loading panels, skeleton regions, assistant waiting labels, Tutor save/pin/delete/preview, Diagnostic preparation/submission and notification loading use the same primitive. Keep existing indicators where already present. Preserve skeleton layouts, shimmer, request ownership, pending locks and timing; do not infer activity from arbitrary ellipses in placeholders, truncated text or menu icons. Do not add spinners to static empty/error states.
-- Acceptance: Representative student/instructor loading regions and pending actions expose the spinner and an accessible waiting label; resolved content removes it; reduced motion leaves the same icon static. No request, auth, grading or navigation behavior changes solely for this visual pass.
-- Status: implemented
-- Verified by: source inventory and shared loading browser fixtures in apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; Study/Tutor regressions and checks recorded in docs/work/handover-2026/evidence/ui-overhaul.md.
+- Rule: Follow DESIGN.md's Pending and loading states. A spinner belongs only inside the user-activated submit-type control for its pending request, with that control disabled. Never place one in skeletons, loading cards, tab bodies, header stats or status text. Model waiting has exactly one shimmer line; its initiating control remains disabled without a second spinner/Thinking indicator. Page/card loads use skeletons and at most one line of text. This supersedes the APPROVAL-06 app-wide Spinner convention without changing request ownership, scheduling, submission or persistence.
+- Acceptance: Inventory every Spinner, Loader2 and animate-spin use with source location and keep/remove reason. Diagnostic header stats and baseline/saved-progress loading have no spinner; model assistance has one shimmer. Pending submit controls remain disabled/accessibly named. Check both roles, 375px/1440px and reduced motion; no data-write or request-timing change.
+- Status: in-progress; APPROVAL-08 specification precedes implementation.
+- Verified by: historical APPROVAL-06 loading fixture/source proof is superseded for spinner placement; new C1 behavior awaits U2/T2 inventory, synthetic browser and retained regression checks.
 
 ## Diagnostic availability (Lane G, APPROVAL-06)
 
@@ -133,16 +133,23 @@ Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/
 
 ### DIAG-REQ-013: Present optional actionable and waiting counts compatibly
 
-- Rule: The frontend status schema accepts optional dueSkillCount and waitingForMaterialCount. When dueSkillCount is present, the Diagnostic badge and workspace action follow that actionable count (including zero), taking precedence over the legacy due boolean. When absent, preserve the legacy due signal and use a count-free action label. Show a quiet singular/plural “N topics are waiting for course material” line only for a positive waitingForMaterialCount; it has no action button and is absent when the field is omitted. For question responses, render available questions first; when empty, preserve preparing/failure status, then show material waiting for a positive optional waitingForMaterialCount, otherwise caught up. Missing fields retain legacy handling. Never synthesize evidence or make generation calls to clear a badge.
-- Acceptance: Omitted legacy fields, actionable zero with legacy due=true, positive actionable count and material-only waiting all render correctly; zero/absent waiting shows no line. Workspace and rail agree on whether a Diagnostic action is due.
-- Status: implemented
-- Verified by: apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs, including legacy/new response and schema fixtures; live acceptance remains FG-5.
+- Rule: The frontend status schema accepts optional dueSkillCount and waitingForMaterialCount. When dueSkillCount is present, the Diagnostic badge and workspace action follow that actionable count (including zero), taking precedence over the legacy due boolean. When absent, preserve the legacy due signal and use a count-free action label. Material availability is instructor-only: never show missing/waiting-for-course-material copy on student workspace, Diagnostic, Test or Study surfaces. Instructor skill review keeps truthful availability wording. Retain the optional field and its backend meaning; do not change availability or actionable counts to remove the copy. For question responses, render available questions first; when empty, preserve preparation/failure versus genuine empty states using student-facing wording that does not explain material availability. Missing fields retain legacy handling. Never synthesize evidence or make generation calls to clear a badge.
+- Acceptance: Omitted legacy fields, actionable zero with legacy due=true, positive actionable count and material-only waiting retain correct action/badge behavior. Positive, zero or absent waiting counts produce no material copy for students; instructor review retains it. Workspace and rail agree on whether a Diagnostic action is due.
+- Status: in-progress; APPROVAL-08 amendment specified before implementation
+- Verified by: existing response/schema fixtures remain relevant; the student-copy assertions await the named E2 correction and new role tests. Live acceptance remains FG-9.
 
 ### APPROVAL-06 cross-surface recovery and navigation
 
 - Rule: Existing roster, skill-proposal and Twin skill pagination uses Tab-reachable links or buttons, explicit endpoint disabled semantics and the existing 40px sizing. Twin's Practice this opens the shown skill's canonical Test browse pane, never starts automatically. Root error/not-found returns authenticated staff to /class and students to /course; without a session it gives the Blackboard session-ended instruction with no dead relaunch button. The public root says “Open Kala from your course in Blackboard.” Session-expired says “Your session ended. Go back to your Blackboard course and open Kala again.” No password sign-in is introduced.
 - Rule: /course/practice without skillId redirects to /course/skills with replace; existing skillId/setId bridges remain canonical Test browse links. Keep /course/lessons and the course-wide /course/flashcards deck. Remove only stale SessionBar source commentary, not routes. Evidence labels state Last 20 events for Twin and Last 25 events for learner-record ledger; statistics based on bounded samples are labelled Based on recent activity and do not imply lifetime evidence totals. No full-history paging/API change.
 - Acceptance: Keyboard pager boundaries and page changes work without a hash jump; contextual Practice this retains skillId and tab=test with no start; each role/no-session error destination is correct; direct root/expiry have the approved copy; legacy links preserve set context and no-skill entry redirects. Count windows remain explicit with empty/partial/full data. Reduced motion and existing layout remain.
+
+### DIAG-REQ-014: Share the learning loading card and content width
+
+- Rule: Test, Study and Diagnostic use one shared loading card with a static Kala mascot, one waiting line and skeleton lines. No spinner or unrelated motion. Match each loading card to the width of the content card that replaces it. Diagnostic and Test runners use the same content-column width, with existing tokens, viewport gutters and keyboard/reduced-motion behavior retained.
+- Acceptance: At 375px and 1440px, measured loading/content widths match without overflow, and Diagnostic/Test columns agree. Resolve into content, genuine empty or error states without a stuck skeleton. Tours retain valid or safely skipped targets and never write data.
+- Status: planned
+- Verified by: pending APPROVAL-08 U2 synthetic browser checks; no live acceptance claim.
 
 ## API contract
 
@@ -186,6 +193,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Replace loading spinners with activated-control feedback and one model shimmer; keep material copy instructor-only and share the learning loading card before implementation | APPROVAL-08, coordinator C1/C2 | DIAG-REQ-008/013/014 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
 | 2026-10-25 | Define Diagnostic presentation, scroll reachability, route audit and component boundary before implementation | APPROVAL-05 rev 2, Lane U | DIAG-REQ-001, DIAG-REQ-002, DIAG-REQ-003, DIAG-REQ-004, DIAG-REQ-005 |

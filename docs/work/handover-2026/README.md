@@ -139,3 +139,8 @@ Local automated integration is green. Fred subsequently reported completing the 
 The accepted handoff retires Tutor new-chat starters, stages files locally until Send and retains a Diagnostic purpose header. Earlier WI-22 descriptions are historical initial scope; current feature specs and APPROVAL-06 govern. Design exceptions include Fred's accepted dock/control/history refinements, with lead designer review still pending. Live provider recovery, hosted migration application, deployment and click-through remain Fred gates.
 
 Additional source-audit follow-up: [WI-26 instructor course authorization and recommendation visibility](work-items/WI-26-instructor-course-authorization.md) — planned, ITO; high-priority review before institutional production sign-off. This is separate from H01(a) enrollment convergence.
+
+
+## APPROVAL-08 delivery round — 2026-10-27
+
+[APPROVAL-08 with Amendments1/2](approval-08.md) opens [WI-27 final UI pass](work-items/WI-27-final-ui-pass.md) and [WI-28 Tutor polish](work-items/WI-28-tutor-polish.md). Coordinator commits design/specs before lanes branch from current local main. T2 then U2 merge after reports/checks; E1/E2 preserve07 guards/history and each later lane rebases. FG-L delegates only the named read-only CloudWatch commands and aggregate output. Conditional last-prompt editing requires feasibility and a committed route contract; images remain planned. No human release or live acceptance is recorded by this dispatch. Earlier delivery snapshots above are historical.
