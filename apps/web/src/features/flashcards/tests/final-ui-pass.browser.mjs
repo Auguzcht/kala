@@ -16,7 +16,7 @@ const reward = { xp: 0, attempts: 1, correct: 1, streakDays: 1, badges: [] };
 async function fixture(width, { view = 'study', role = 'student', mode = 'review', reduced = true, hold = false, noMaterial = false } = {}) {
  const context = await browser.newContext({ viewport: { width, height: 950 }, reducedMotion: reduced ? 'reduce' : 'no-preference', timezoneId: 'Asia/Manila', locale: 'en-US' });
  const page = await context.newPage(); page.setDefaultTimeout(15000);
- const errors = [], state = { deckCalls: [], reviews: [], posts: [], initialCards: [card('first')], nextCards: [], failDiagnostic: false, diagnostic: null, hold, noMaterial, holdNew: false, holdAsk: false, holdModel: false, sizes: [] };
+ const errors = [], state = { deckCalls: [], reviews: [], posts: [], initialCards: [card('first')], nextCards: [], failDiagnostic: false, diagnostic: null, hold, noMaterial, holdNew: false, holdAsk: false, holdModel: false, holdSummary: false, sizes: [] };
  page.on('pageerror', e => errors.push(e.message));
  let release; const pending = new Promise(r => { release = r; }); state.release = () => { state.hold = false; release(); };
  await context.route('**/*', async route => {
@@ -27,10 +27,10 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (url.pathname === '/__u2') {
    const hook = await (await page.request.get('http://localhost:5173/src/features/flashcards/hooks/use-flashcards.ts')).text();
    const queryModule = hook.match(/from "([^"]*\/@tanstack_react-query\.js[^\"]*)"/)[1];
-   const views = { study: 'FlashcardDeck', diagnostic: 'DiagnosticPanel', test: 'PracticePanel', browse: 'TestBrowser', proposals: 'SkillReviewPanel', studyBrowse: 'StudyBrowser', analysis: 'DecisionCenter' };
+   const views = { study: 'FlashcardDeck', diagnostic: 'DiagnosticPanel', test: 'PracticePanel', browse: 'TestBrowser', proposals: 'SkillReviewPanel', studyBrowse: 'StudyBrowser', analysis: 'DecisionCenter', stats: 'GamificationSummary' };
    return route.fulfill({ contentType: 'text/html', body: `<link rel="stylesheet" href="/src/styles/globals.css"><div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script><script type="module">
    import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';import {QueryClient,QueryClientProvider} from '${queryModule}';
-   import {FlashcardDeck} from '/src/features/flashcards/components/FlashcardDeck.tsx';import {DiagnosticPanel} from '/src/features/diagnostic/components/DiagnosticPanel.tsx';import {PracticePanel} from '/src/features/practice/components/PracticePanel.tsx';import {TestBrowser} from '/src/features/skill-hub/components/TestBrowser.tsx';import {StudyBrowser} from '/src/features/skill-hub/components/StudyBrowser.tsx';import {SkillReviewPanel} from '/src/features/instructor/components/SkillReviewPanel.tsx';import {DecisionCenter} from '/src/features/instructor/components/DecisionCenter.tsx';
+   import {GamificationSummary} from '/src/features/gamification/components/GamificationSummary.tsx';import {FlashcardDeck} from '/src/features/flashcards/components/FlashcardDeck.tsx';import {DiagnosticPanel} from '/src/features/diagnostic/components/DiagnosticPanel.tsx';import {PracticePanel} from '/src/features/practice/components/PracticePanel.tsx';import {TestBrowser} from '/src/features/skill-hub/components/TestBrowser.tsx';import {StudyBrowser} from '/src/features/skill-hub/components/StudyBrowser.tsx';import {SkillReviewPanel} from '/src/features/instructor/components/SkillReviewPanel.tsx';import {DecisionCenter} from '/src/features/instructor/components/DecisionCenter.tsx';
    const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});window.u2Client=client;
    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,{client},React.createElement('main',{style:{height:'100vh',maxWidth:'100%',overflow:'hidden'}},React.createElement(${views[view]},{courseId:'course',skillId:'skill',${view === 'test' ? "setId:'saved'," : ''}mode:'${mode}',onExit:()=>{},onStart:()=>{},onSelectSet:()=>{},userId:'learner',learnerName:'Demo learner'}))));</script>` });
   }
@@ -54,7 +54,7 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (path.endsWith('/sets/saved')) { if (state.hold) await pending; return reply({ courseId: 'course', setId: 'saved', skillId: 'skill', kind: 'practice', status: 'ready', items: [question], requestedSize: 1, readyCount: 1, pendingCount: 0, failedCount: 0, failedOffsets: [], attemptedCount: 0, correctCount: 0, lastAttemptedAt: null }); }
   if (path.endsWith('/results')) return reply({ courseId: 'course', setId: 'saved', score: { correct: 0, answered: 0, total: 1, percent: null }, totalXp: 0, masteryBefore: { level: 'developing', value: .2 }, masteryAfter: { level: 'developing', value: .2 }, questions: [] });
   if (path.endsWith('/sets')) return reply({ courseId: 'course', sets: [] });
-  if (path.endsWith('/summary')) return reply({ xp: 0, attempts: 0, correct: 0, streakDays: 0, badges: [] });
+  if (path.endsWith('/summary')) { if(state.holdSummary) await new Promise(r => { state.releaseSummary = r; }); return reply({ xp: 0, attempts: 0, correct: 0, streakDays: 0, badges: [] }); }
   if (path.endsWith('/twin')) return reply({ courseId: 'course', readiness: .2, skills: [{ skillId: 'skill', name: 'Cloud skill', moduleRef: null, bloomLevel: 'understand', estimate: .2, attempts: 0, band: 'developing' }], evidence: [] });
   if (path === '/courses/course') return reply({ id: 'course', title: 'AWS101' });
   if (path.endsWith('/next-up')) return reply({ courseId: 'course', next: null });
@@ -88,6 +88,11 @@ try {
   }
   console.log(`U2 measured card widths at ${width}: ${JSON.stringify(measurements)}`);
   check(Math.abs(measurements.test - measurements.diagnostic) < 1, `Diagnostic/Test same column ${width}`);
+  const progress = await fixture(width, { view: 'stats', reduced: true }); progress.state.holdSummary = true;
+  await progress.page.goto('http://localhost:5173/__u2'); const statSkeleton = progress.page.getByRole('status', { name: 'Loading your progress', exact: true }); await statSkeleton.waitFor();
+  check(await statSkeleton.evaluate(el => getComputedStyle(el).animationName === 'none'), 'progress stat skeleton honors reduced motion');
+  check(await progress.page.locator('svg.animate-spin').count() === 0, 'progress stat has no loading spinner');
+  progress.state.releaseSummary(); await statSkeleton.waitFor({ state: 'detached' }); check(progress.errors.length === 0, 'progress stat resolves without runtime error'); await progress.context.close();
   for (const role of ['student', 'instructor']) {
    const f = await fixture(width, { role });
    const statusLoaded = f.page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/diagnostic/status'));

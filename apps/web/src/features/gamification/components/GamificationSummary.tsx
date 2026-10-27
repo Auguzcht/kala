@@ -65,7 +65,7 @@ export function GamificationSummary({
     prevBadgeCountRef.current = count;
   }, [data]);
 
-  if (isLoading) return <Skeleton aria-label="Loading your progress" className="h-3.5 w-24" />;
+  if (isLoading) return <Skeleton role="status" aria-label="Loading your progress" className="h-3.5 w-24 motion-reduce:animate-none" />;
   if (!data) return null;
   const alive = data.streakDays > 0;
 
