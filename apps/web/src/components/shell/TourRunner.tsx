@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { driver } from "driver.js";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
@@ -7,10 +8,13 @@ import { useUI } from "@/stores/ui-store";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { isTourUiClick, matchesTourRoute } from "@/components/shell/tour-route";
 import type { TourStepConfig } from "@/components/shell/student-tour";
+import type { Roster } from "@/features/instructor";
+import { progressLearnerSearch, progressTourLearner } from "@/components/shell/tour-learner";
 
 export type TourPresentationStep = TourStepConfig & {
   explainOnly?: boolean;
   fallbackDescription?: string;
+  progressLearner?: "select" | "record";
 };
 
 type Visit = { index: number; pathname: string; search: Record<string, unknown> };
@@ -29,6 +33,7 @@ export function TourRunner({ steps, dismissKey }: {
   dismissKey: (userId: string) => string;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { pathname, search } = useLocation();
   const session = useSession();
   const instructor = session?.role === "instructor" || session?.role === "admin";
@@ -38,8 +43,17 @@ export function TourRunner({ steps, dismissKey }: {
   const visits = useRef<Visit[]>([]);
   const routes = useRef<Record<string, string>>({});
   const rosterLearnerRoute = useRef<string | undefined>(undefined);
+  const rosterLearnerCourse = useRef<string | undefined>(undefined);
+  const restoreRoster = useRef<(() => void) | undefined>(undefined);
   const backwards = useRef(false);
   const notified = useRef(false);
+  useEffect(() => () => restoreRoster.current?.(), []);
+  useEffect(() => {
+    if (!matchesTourRoute(pathname, "/class")) {
+      restoreRoster.current?.();
+      restoreRoster.current = undefined;
+    }
+  }, [pathname]);
 
   // Escape also works while waiting for a target or animating the overlay.
   useEffect(() => {
@@ -59,6 +73,9 @@ export function TourRunner({ steps, dismissKey }: {
       visits.current = [];
       routes.current = {};
       rosterLearnerRoute.current = undefined;
+      rosterLearnerCourse.current = undefined;
+      restoreRoster.current?.();
+      restoreRoster.current = undefined;
       backwards.current = false;
       notified.current = false;
       return;
@@ -67,6 +84,7 @@ export function TourRunner({ steps, dismissKey }: {
     if (!step) { setTourStep(null); return; }
     let cancelled = false;
     let moving = false;
+    let progressRowReady = false;
     let instance: ReturnType<typeof driver> | undefined;
     const exit = () => setTourStep(null);
     const complete = () => {
@@ -100,8 +118,8 @@ export function TourRunner({ steps, dismissKey }: {
       }
       advance(tourStep + 1);
     };
-    // Never send a literal $uid or wildcard to the router. A UI-only record
-    // link supplies the first concrete learner route; Back can reuse it.
+    // Never send a literal $uid or wildcard to the router. A progress row
+    // from the current course's roster supplies a concrete route for Back.
     const routeMatches = matchesTourRoute(pathname, step.route);
     if (routeMatches) routes.current[step.route] = pathname;
     if (!routeMatches) {
@@ -128,6 +146,53 @@ export function TourRunner({ steps, dismissKey }: {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       }
     }
+    async function prepareProgressRow() {
+      rosterLearnerRoute.current = undefined;
+      rosterLearnerCourse.current = undefined;
+      delete routes.current["/class/student/$uid"];
+      const courseId = session?.courseId ?? "";
+      const key = ["roster", courseId];
+      const cacheStart = performance.now();
+      while (!cancelled && queryClient.getQueryState<Roster>(key)?.status === "pending"
+          && performance.now() - cacheStart < 1200) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+      if (cancelled) return;
+      const roster = queryClient.getQueryState<Roster>(key);
+      const learner = roster?.status === "success" ? progressTourLearner(roster.data, courseId) : undefined;
+      if (!learner || !roster?.data) return;
+      rosterLearnerRoute.current = `/class/student/${encodeURIComponent(learner.userId)}`;
+      rosterLearnerCourse.current = courseId;
+      const query = progressLearnerSearch(roster.data, learner);
+      const input = visibleTarget("#tour-roster-search");
+      const buttons = [...document.querySelectorAll<HTMLButtonElement>("#tour-roster-filter button")];
+      const all = buttons.find((button) => button.textContent?.trim() === "All");
+      if (!query || !(input instanceof HTMLInputElement) || !all) return;
+      const previousSearch = input.value;
+      const previousFilter = buttons.find((button) => button.dataset.state === "on");
+      const setSearch = (value: string) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      if (!restoreRoster.current) restoreRoster.current = () => {
+        if (input.isConnected) setSearch(previousSearch);
+        if (isTourUiClick("#tour-roster-filter") && previousFilter?.isConnected && previousFilter.dataset.state !== "on") previousFilter.click();
+      };
+      if (isTourUiClick("#tour-roster-filter") && all.dataset.state !== "on") all.click();
+      setSearch(query);
+      const start = performance.now();
+      while (!cancelled && performance.now() - start < 1200) {
+        const rows = document.querySelectorAll("#roster-panel tbody tr");
+        const row = visibleTarget(step.selector);
+        const label = row?.querySelector("td")?.textContent ?? "";
+        if (rows.length === 1 && row && input.value === query
+            && [learner.displayName, learner.pseudonym].some((name) => label.includes(name))) {
+          progressRowReady = true;
+          return row;
+        }
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    }
     function prefill() {
       if (!step.prefill) return;
       const input = document.querySelector<HTMLTextAreaElement>(`#${step.prefill.inputId} textarea`);
@@ -143,9 +208,13 @@ export function TourRunner({ steps, dismissKey }: {
       if (cancelled || moving || tourStep === null) return;
       if (!instructor && step.studentAction) { skipAction(); return; }
       const selector = step.clickSelector ?? step.selector;
-      if (instructor && step.selector === "#tour-at-risk-first-flag"
-          && !visibleTarget(step.selector) && rosterLearnerRoute.current) {
+      if (instructor && step.progressLearner === "record" && rosterLearnerRoute.current
+          && rosterLearnerCourse.current === session?.courseId) {
         routes.current["/class/student/$uid"] = rosterLearnerRoute.current;
+      }
+      if (instructor && step.progressLearner === "select" && !progressRowReady) {
+        advance(tourStep + 1);
+        return;
       }
       if (step.click && !step.explainOnly && isTourUiClick(selector) &&
           !(step.clickOnlyWhenClosed && visibleTarget(step.clickOnlyWhenClosed))) {
@@ -161,15 +230,6 @@ export function TourRunner({ steps, dismissKey }: {
     }
     function showStep(target?: Element) {
       if (cancelled || tourStep === null) return;
-      if (instructor) {
-        const link = visibleTarget('[role="dialog"] a[href^="/class/student/"]');
-        if (link instanceof HTMLAnchorElement) {
-          const url = new URL(link.href, window.location.href);
-          if (url.origin === window.location.origin && matchesTourRoute(url.pathname, "/class/student/$uid")) {
-            rosterLearnerRoute.current = url.pathname;
-          }
-        }
-      }
       if (visits.current.at(-1)?.index !== tourStep) visits.current.push({ index: tourStep, pathname, search: search as Record<string, unknown> });
       if (target) prefill();
       instance = driver({
@@ -209,7 +269,10 @@ export function TourRunner({ steps, dismissKey }: {
         });
       }
     }
-    const ready = instructor && step.explainOnly
+    const ready = instructor && step.progressLearner === "record"
+        && (!rosterLearnerRoute.current || rosterLearnerCourse.current !== session?.courseId) ? Promise.resolve(undefined)
+      : instructor && step.progressLearner === "select" ? prepareProgressRow()
+      : instructor && step.explainOnly
       ? Promise.resolve(visibleTarget(step.selector))
       : wait(step.waitFor ?? step.selector, instructor ? 1200 : step.waitState ? 120_000 : step.optional || backwards.current ? 1200 : 8000);
     void ready.then(async (element) => {
@@ -222,6 +285,6 @@ export function TourRunner({ steps, dismissKey }: {
       showStep(target);
     });
     return () => { cancelled = true; instance?.destroy(); };
-  }, [tourStep, pathname, search, navigate, steps, dismissKey, session?.userId, instructor, reduceMotion, setTourStep]);
+  }, [tourStep, pathname, search, navigate, steps, dismissKey, session?.userId, session?.courseId, queryClient, instructor, reduceMotion, setTourStep]);
   return null;
 }

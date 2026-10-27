@@ -48,10 +48,12 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class",
     selector: "#tour-roster-first-row",
+    progressLearner: "select",
+    fallbackDescription: "A learner with recorded progress could not be shown in this roster view. Select Next to continue.",
     optional: true,
     title: "Triage a learner",
     description:
-      "Click a row to open the triage sheet — the roster stays underneath, so triaging three learners in a row costs no re-orientation.",
+      "The tour selects a learner with recorded progress from the whole roster. Next opens their triage sheet while the roster stays underneath.",
     click: true,
   },
   // ---- The triage sheet (standing + decide only) ------------------------
@@ -152,12 +154,13 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class",
     selector: "#tour-at-risk-first-flag",
-    fallbackDescription: "There is no visible needs-support flag here. Next uses the learner already introduced from the roster when one is available.",
+    progressLearner: "record",
+    explainOnly: true,
+    fallbackDescription: "Next opens the chosen learner's record when a learner with progress is available. Otherwise, the record explanations remain available as fallbacks.",
     optional: true,
     title: "One learner",
     description:
-      "Open the full record — the deep dive that needs width: mastery instruments and the evidence ledger.",
-    click: true,
+      "Next opens the same learner with progress introduced during triage. Their full record adds mastery instruments and the evidence ledger. Existing recommendations appear when available.",
   },
   // ---- The record page (deep dive) --------------------------------------
   // Every tab is opened by the tour itself — Decide, Mastery, Activity —

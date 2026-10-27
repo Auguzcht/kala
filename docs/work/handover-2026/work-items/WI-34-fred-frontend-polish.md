@@ -377,3 +377,21 @@ docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
 ```
 
 Planner limits: Fred's live flow review remains pending. Invalid upstream percentile arithmetic and configured-primary fallback provenance remain backend findings. Historical legacy anchors were not merged or certified. The separate backend greeting lane and sent-message editing deferral are unchanged. No secrets printed.
+
+
+## Follow-up: Progress learner selection and open-item review
+
+2026-10-28. Fred finds that empty learners, sorted first in the triage roster, produce empty recommendation and record explanations. The previous single-learner fixture and no-support-flag fix proved navigation but did not cover 23 unstarted learners before two measured learners. TOUR-REQ-009 is amended before code. WI-34-T12 covers selection from the complete cached roster, a progress learner beyond page one, existing filters/search, de-identification, a no-progress roster, both widths, all 27 steps, stable identity and zero writes/model generation. Names are never hard-coded into selection. Status: in-progress.
+
+
+## Follow-up: Coverage caption and incomplete hint telemetry
+
+2026-10-28. Fred reports Skills covered showing 0 hints used after many Skill hub Give hint actions. INSTR-REQ-013 is specified first. Source shows the counter sums stored evidence hints_used, while flashcard stateless hints and review requests do not carry that count. WI-34-T13 changes the coverage caption to describe evidence coverage and names remaining drawer hint numbers recorded hints. It does not fabricate a total. Complete cross-surface hint tracking stays open for an approved backend contract. No backend/config/data write is authorized here. Status: in-progress for frontend presentation.
+
+
+## Open-item audit: Original message-copy item
+
+2026-10-28. The catalogue check finds TUTOR-REQ-017 still planned and no message Copy control in TutorChat. This is an uncompleted original APPROVAL-09 frontend item, distinct from the explicitly deferred sent-message editing. The existing spec defines its behavior before implementation. WI-34-T14 covers saved, local/unsaved and optimistic user turns, completed Kala replies, exact per-message clipboard content, denied/unavailable access, deferred success, repeated activation, keyboard/touch and both widths. No API/edit action or shared Study default changes. Status: in-progress.
+
+
+Progress-selection verification: tour-route plus unchanged E3 pass 58 tests, and tour.browser passes 3264 assertions at 375px/1440px. The new 25-row fixtures put 23 unstarted learners before two learners with progress, start with an excluding search/status filter and de-identification, and expose an unrelated support flag. Triage and record both use the same progress learner. No-progress rosters never request a learner record. Escape restores the original search and status filter. No model/write request or write-control click occurs. An initial test used button semantics for Radix’s single-select filter, which renders radio semantics. The test and selected-state check now use the actual button/data-state contract. No E3 edit. One final no-progress explanatory fallback guard follows the passing browser run and will be checked by the final combined gate.

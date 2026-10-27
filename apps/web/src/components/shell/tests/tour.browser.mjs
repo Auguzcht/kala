@@ -12,7 +12,7 @@ let assertions=0;const check=(condition,label)=>{assert.ok(condition,label);asse
 const skill={skillId:'storage',name:'Cloud storage',moduleRef:'Cloud basics',bloomLevel:'understand',estimate:0.5,attempts:2,band:'proficient'};
 const ident={userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL'};
 const evidence=Array.from({length:20},(_,i)=>({id:'event-'+i,type:'practice',correct:true,latencyMs:1000,skillName:'Cloud storage',createdAt:'2026-10-25T00:00:00Z'}));
-async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal',noFlags=false}={}){
+async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal',noFlags=false,mixedProgress=false,noProgress=false}={}){
  const context=await browser.newContext({viewport:{width,height:950},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(15000);
  if(dismissal!==null)await context.addInitScript(({role,dismissal})=>localStorage.setItem(`kala.${role}.tour.demo`,dismissal),{role,dismissal});
  await context.addInitScript(()=>{
@@ -49,10 +49,14 @@ async function fixture(width,{role='student',completed=false,empty=false,noMater
   if(path.endsWith('/plan'))return reply({plan:[]});
   if(path.endsWith('/skills/proposed'))return reply({courseId:'course',proposed:empty||step15Layout==='absent'?[]:[{id:'proposal',name:'Explain cloud storage',bloom_level:'understand',blueprint_weight:1,proposed_source:'Course material'}]});
   if(path.endsWith('/skills/auto-matched'))return reply({courseId:'course',autoMatched:[]});
-  if(path.endsWith('/roster'))return reply({courseId:'course',students:empty?[]:[{...ident,readiness:0.5,band:'proficient',attempts:20,evidenceCount:20,accuracy:0.5,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,weakestSkillName:'Cloud storage',skillsWithEvidence:1,skillsTotal:1,status:'needs-support'}]});
+  if(path.endsWith('/roster')){
+   const measured={...ident,readiness:0.5,band:'proficient',attempts:20,evidenceCount:20,accuracy:0.5,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,weakestSkillName:'Cloud storage',skillsWithEvidence:1,skillsTotal:1,status:'on-track'};
+   const blanks=Array.from({length:noProgress?25:23},(_,i)=>({...measured,userId:'empty-'+i,displayName:'Unstarted learner '+i,pseudonym:'Unstarted '+i,initials:'UL',readiness:null,attempts:0,evidenceCount:0,accuracy:null,lastActiveAt:null,daysInactive:null,skillsWithEvidence:0,status:'not-started'}));
+   return reply({courseId:'course',students:empty?[]:noProgress?blanks:mixedProgress?[...blanks,{...measured,userId:'other-progress',displayName:'Other measured learner',pseudonym:'Learner B',evidenceCount:13,attempts:13}, {...measured,evidenceCount:396,attempts:381}]:[measured]});
+  }
   if(path.endsWith('/stats'))return reply({courseId:'course',learners:empty?0:1,activeLearners:0,startedLearners:empty?0:1,notStartedLearners:0,cohortReadiness:0.5,medianReadiness:0.5,accuracy:0.5,evidenceCount:20,medianLatencyMs:1000,hintsUsed:0,skillsTracked:1,skillsCovered:1,bandDistribution:[{band:'proficient',count:1}],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
   if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:0.5,skills:[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',cohortBand:'proficient',cohortEstimate:0.5}],students:empty?[]:[ident],cells:empty?[]:[{userId:'learner',skillId:'storage',estimate:0.5,attempts:20,band:'proficient'}]});
-  if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:empty||noFlags?[]:[{...ident,reason:'Practice can reinforce storage concepts.',daysInactive:0,evidenceCount:20,weakestSkillNames:['Cloud storage']}]});
+  if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:empty||noFlags?[]:[{...ident,...(mixedProgress||noProgress?{userId:'empty-0',displayName:'Unstarted learner 0'}:{}),reason:'Practice can reinforce storage concepts.',daysInactive:0,evidenceCount:20,weakestSkillNames:['Cloud storage']}]});
   if(path.endsWith('/record'))return reply({courseId:'course',...ident,readiness:0.5,band:'proficient',cohortReadiness:0.5,percentile:50,accuracy:0.5,momentum:null,attempts:20,evidenceCount:20,hintsUsed:0,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,status:'developing',skills:[skill],activityByType:[],activitySeries:[],readinessTrend:[],evidence});
   if(path.endsWith('/evidence'))return reply({courseId:'course',evidence,nextCursor:null});
   if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:empty?[]:[{id:'recommendation',userId:'learner',courseId:'course',skillId:'storage',skillName:'Cloud storage',title:'Review cloud storage',kind:'practice',priority:'medium',rationale:'Review reinforces this concept.',evidence:[{label:'Practice',detail:'Two recent checks show room to improve.'}],status:'suggested',confidence:0.5,expectedGain:null,source:'heuristic',decidedBy:null,decidedAt:null,decisionNote:null,instructorNote:null,createdAt:'2026-10-25T00:00:00Z'}]});
@@ -170,6 +174,41 @@ try {
    check(recordSteps.length===11&&recordSteps.every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 no-flags steps 17–27 show actual record targets '+width);
    check(f.state.visited.some(step=>step.index===15&&step.fallback),'TOUR-REQ-009 missing step-16 flag explains the roster route '+width);
    check(f.state.gets.every(path=>instructorReads.has(path))&&f.state.mutations.length===0&&await f.page.evaluate(()=>window.__tourWriteClicks.length===0),'TOUR-REQ-009 no-flags transition uses only audited reads '+width);
+   await f.context.close();
+  }
+  for(const noProgress of [false,true]) {
+   const f=await fixture(width,{role:'instructor',mixedProgress:true,noProgress});
+   await f.page.getByRole('textbox',{name:'Search the roster',exact:true}).fill('Unstarted');
+   await f.page.locator('#tour-roster-filter').locator('button').filter({hasText:/^Not started$/}).click();
+   await f.page.getByRole('switch',{name:'De-identify names on this page',exact:true}).click();
+   await start(f);await walk(f,{width,role:'instructor',back:true});
+   check(new Set(f.state.visited.map(step=>step.index)).size===27,'TOUR-REQ-009 mixed roster all 27 steps '+width+' noProgress='+noProgress);
+   if(noProgress){
+    check(!f.state.gets.some(path=>path.includes('/students/')),'TOUR-REQ-009 no-progress roster never opens an empty learner');
+    check(f.state.visited.some(step=>step.index===4&&step.fallback),'TOUR-REQ-009 no-progress triage explains its fallback');
+    check(await f.page.getByRole('textbox',{name:'Search the roster',exact:true}).inputValue()==='Unstarted','TOUR-REQ-009 no-progress view preserves prior search');
+   }else{
+    check(f.state.visited.filter(step=>step.index>=16).every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 mixed roster record steps use the progress learner');
+    check(f.state.visited.filter(step=>[5,6,7].includes(step.index)).every(step=>!step.fallback),'TOUR-REQ-009 triage opens the off-page progress learner');
+    check(!f.state.gets.some(path=>path.includes('/students/empty-')||path.includes('/students/other-progress/')),'TOUR-REQ-009 unrelated support flag and unstarted rows never override chosen progress learner');
+   }
+   check(f.state.mutations.length===0&&f.state.gets.every(path=>instructorReads.has(path)),'TOUR-REQ-009 mixed roster selection uses only existing reads');
+   await f.context.close();
+  }
+  {
+   const f=await fixture(width,{role:'instructor',mixedProgress:true});
+   const search=f.page.getByRole('textbox',{name:'Search the roster',exact:true});await search.fill('Unstarted');
+   await f.page.locator('#tour-roster-filter button').filter({hasText:/^Not started$/}).click();
+   await start(f);
+   for(let index=0;index<4;index++){
+    const popover=f.page.locator(`.driver-popover[data-tour-step="${index}"]`);await popover.waitFor();await popover.locator('.driver-popover-next-btn').click();
+   }
+   await f.page.locator('.driver-popover[data-tour-step="4"][data-tour-fallback="false"]').waitFor();
+   check(await search.inputValue()==='Learner A','TOUR-REQ-009 progress row is revealed with the existing unique search');
+   await f.page.keyboard.press('Escape');
+   await f.page.waitForFunction(()=>document.querySelector('#tour-roster-search')?.value==='Unstarted');
+   check(await f.page.locator('#tour-roster-filter button').filter({hasText:/^Not started$/}).getAttribute('data-state')==='on','TOUR-REQ-009 Escape restores the original status filter');
+   check(f.state.mutations.length===0,'TOUR-REQ-009 restored controls never write');
    await f.context.close();
   }
   for(const step15Layout of ['absent','alternate']){

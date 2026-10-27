@@ -42,3 +42,23 @@ test('TOUR-REQ-009 all 27 instructor steps avoid write clicks and write-completi
  }
  assert.match(INSTRUCTOR_TOUR_STEPS[14].description,/Approve.*Reject.*Next/);
 });
+
+test('TOUR-REQ-009 selects progress beyond page one without hard-coded identities',async()=>{
+ const {progressTourLearner,progressLearnerSearch}=await import('../tour-learner.ts');
+ const row=(userId,evidenceCount=0,attempts=0)=>({userId,displayName:'Synthetic '+userId,pseudonym:'Learner '+userId,weakestSkillName:'Cloud basics',evidenceCount,attempts,skillsWithEvidence:attempts?1:0});
+ const students=[...Array.from({length:23},(_,i)=>row('empty-'+i)),row('measured-small',13,13),row('measured-large',396,381)];
+ const roster={courseId:'course',students};
+ const learner=progressTourLearner(roster,'course');
+ assert.equal(learner.userId,'measured-large');
+ assert.equal(students[0].userId,'empty-0');
+ assert.equal(progressLearnerSearch(roster,learner),'Learner measured-large');
+ assert.equal(progressTourLearner(roster,'other'),undefined);
+ assert.equal(progressTourLearner(undefined,'course'),undefined);
+ assert.equal(progressTourLearner({courseId:'course',students:students.slice(0,23)},'course'),undefined);
+ assert.equal(INSTRUCTOR_TOUR_STEPS[4].progressLearner,'select');
+ assert.equal(INSTRUCTOR_TOUR_STEPS[15].progressLearner,'record');
+ assert.ok(INSTRUCTOR_TOUR_STEPS[15].explainOnly&&!INSTRUCTOR_TOUR_STEPS[15].click);
+ const duplicates={courseId:'course',students:[{...row('a',1),pseudonym:'Same',displayName:'Same'},{...row('b',1),pseudonym:'Same',displayName:'Same'}]};
+ assert.equal(progressLearnerSearch(duplicates,duplicates.students[0]),undefined);
+ assert.equal(progressTourLearner(duplicates,'course').userId,'a');
+});
