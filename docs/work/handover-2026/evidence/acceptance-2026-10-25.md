@@ -34,7 +34,6 @@ Release records: [APPROVAL-06](../approval-06.md) and [APPROVAL-07 with confirme
 | Tutor delete cancellation and confirmed deletion | not-run | not-run | |
 | Launched learner appears in instructor roster with canonical recent history | not-run | not-run | Legacy history remains separate under WI-24 |
 | Public root, session-expired and not-found under student/staff/no-session states | not-run | not-run | |
-| Existing tours: record actual broken step only | not-run | not-run | |
 | CloudWatch stage/status diagnostics for any remaining provider failure | not-run | not-run | No raw log bodies |
 
 Synthetic automated checks do not fill these live rows. A healthy health endpoint does not prove model access, LTI, permissions or pin persistence. If a case is not reproducible, record not-run with its reason. Full-history paging and historical identity repair are added below for APPROVAL-07; they were not included in the original FG-5 pass.
@@ -101,3 +100,15 @@ WI-24/25/26 remain open until their actual checks pass. No repair, new migration
 ## APPROVAL-07 local integration prerequisite update
 
 H, M and Amendment7 are merged locally in the approved order. Generated contracts and full merged local tests are prepared; exact final counts/source, browser server restoration and migration checksum proof are in the coordinator report. These do not fill any hosted or live row. A real governance refusal is a valid FG-7 outcome, with the affected history explicitly unrepaired; success-only FG-9 repair rows must be marked not-run with that reason rather than fabricated as passed.
+
+
+## FG-9 tour amendment — APPROVAL-08 Amendment7a
+
+Student walkthrough checks are removed because the full TOUR-2 no-write plan is blocked. No student tour is accepted or exercised through hidden entry. Retain old tour results only as historical synthetic evidence.
+
+| Check |375px |1440px |Status/notes |
+| --- | --- | --- | --- |
+| Student sees no tour auto-offer or manual entry |not-run |not-run |After minimal hide source is published |
+| Instructor tour runs end to end, only if retained after destination read audit |not-run |not-run |If instructor is also hidden, mark not-applicable with actual decision |
+
+Other APPROVAL-08 FG-9 additions: no student material copy, one hint indicator, Get new cards empty result, rename dialog, short Hello reply and loading/content width at375px/1440px remain human checks. No local test fills these rows.

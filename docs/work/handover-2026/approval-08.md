@@ -98,3 +98,12 @@ U2 may edit apps/web/src/routes/course/index.tsx only to remove the material not
 In H's Diagnostic browser test only, failed/caught-up expected-copy lines may change **only if** their existing text contains material or course-team wording removed by Amendment4. Student states stay distinct: not-ready/no questions uses “Your baseline check isn't ready yet. Check back later.”; completed/caught-up keeps its own message and never says isn't ready; fetch failure keeps its error and H05 Retry, never resembles empty/not-ready. If U2 collapses states, fix the component, not the assertion.
 
 Fixtures, paging, seeds, state setup, Retry/badge/count/navigation assertions and every non-material expected line remain unchanged. Proof lists each changed expected old/new line and its state, plus a three-state distinct-message table; rerun H full browser and U2 suites on5173. U2 AUDIT names E2 extended by Amendment6. Coordinator reconciles DIAG-REQ-012/013 before final lane rebase/commit.
+
+
+## Amendment 7a — preserve TOUR-2, minimally hide student entry
+
+The full TOUR-2 rework stays unmerged; preserve its branch and audit file as-is for ITO. On a new small branch within tour-shell ownership, one source flag hides the student Take the tour? auto-offer and manual entry. First audit instructor destination pages: if side-effecting GETs fire, hide instructor too; if not, retain it unchanged. Report which case. Definitions/copy are not edited; no anchors removed, E3 stays passing. Test student entry absence, instructor case and anchor proof.
+
+Coordinator marks no-write/twelve-step outline blocked because destination GETs have side effects (enqueue, generate, claim, exposure), links preserved audit under Historical sources and records tour hidden for students in change log. WI-32 Side-effect-free reads is planned for ITO, lists every audited dirty GET by route and notes tour/future-prefetch dependency. “Zero mutating requests” needs database-write or request-side-effect-log measurement, not HTTP method.
+
+FG-9 removes tour walkthrough checks for students, adds no student offer/entry, and retains instructor end-to-end only if instructor tour remains. Minimal disable reports Amendment7a. This supersedes expanded read-only-mode consideration; no API-client/store/query-hook scope is granted.
