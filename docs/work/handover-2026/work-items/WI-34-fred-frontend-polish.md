@@ -498,3 +498,8 @@ docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
 ```
 
 Fred’s final live tour confirmation remains pending. Earlier backend/data follow-ups retain their previously recorded status. Secrets printed: none.
+
+
+## Final Tutor freeze polish
+
+2026-10-28. Fred requests three final frontend items before freeze: message-hover icon-only Copy with the shared tooltip above it, static emoji explanation chips hidden after casual exchanges, and Up/Down history of the current chat’s own user prompts with draft restoration. TUTOR-REQ-017/021/022 and the change log are specified first. WI-34-T16 covers hover/focus/touch copy and truthful clipboard status. WI-34-T17 covers static emoji and latest-turn casual/learning visibility, saved/local/reopened conversations and unchanged explanation payloads. WI-34-T18 covers prompt traversal, draft/caret restoration, multiline/IME/modifiers, edits, chat resets, explicit send and zero network calls from history navigation. Each implementation item receives one commit. Final regression and planner freeze report follow, without new scope, backend/config/migration/hosted changes or integration/push/deploy. Status: in-progress.
