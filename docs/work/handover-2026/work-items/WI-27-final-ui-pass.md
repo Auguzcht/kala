@@ -1,6 +1,6 @@
 ---
 id: WI-27
-status: in-progress
+status: done-awaiting-confirmation
 owner: coordinator; implementation Lane U2
 ---
 
@@ -8,7 +8,7 @@ owner: coordinator; implementation Lane U2
 
 Delivery record: [APPROVAL-08 with Amendments1/2](../approval-08.md). Requirements: DIAG-REQ-008/013/014; STUDY-REQ-003/006/007, DESIGN.md Pending and loading states. Branch codex/final-ui-pass. Coordinator owns all specs/design/records; lane owns only its brief's implementation/tests. All07 paths are frozen except the named E1/E2 and conditional new Tutor function. No application push/deploy before the human release gates.
 
-Implementation and lane audit pending. Local tests and screenshots remain separate from FG-9. End at AUDIT REPORT; coordinator merges T2 first, then U2 rebased with retained proofs. Timing is delegated by Fred, read-only; raw data is local only, not retained. Conditional editing requires the feasibility/contract checkpoint; image support remains planned.
+Implementation and lane audit reviewed; candidate795b10f merged locally atad7a9ac after T2. Component21, unit77, U2 browser146, retained H643 and legacy tour616 pass; web checks pass. T2 strict follow-up is merged atdebe791; the final nine-suite main browser batch passes1,702 assertions. No live acceptance is implied. Local tests and screenshots remain separate from FG-9. End at AUDIT REPORT; coordinator merges T2 first, then U2 rebased with retained proofs. Timing is delegated by Fred, read-only; raw data is local only, not retained. Conditional editing requires the feasibility/contract checkpoint; image support remains planned.
 
 
 ## Confirmed scope refinements

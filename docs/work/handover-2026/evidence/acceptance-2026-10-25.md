@@ -6,7 +6,7 @@ Release records: [APPROVAL-06](../approval-06.md) and [APPROVAL-07 with confirme
 
 | Field | Recorded result |
 | --- | --- |
-| Approved source SHA | pending final coordinator report |
+| Approved source SHA | APPROVAL-08 application/test source `debe79146783c891e270ac2c2f0fe6dd333dd27e`; final documentation-only SHA in coordinator response; not published |
 | FG-1 paid fallback on a different serving provider, fresh runtime and hint retest | Paid fallback saved/verified by explicitly delegated CLI update at08:01+08; fresh runtime and hint retest pending. [Evidence](fg1-paid-fallback-2026-10-25.md) |
 | FG-2 hosted Postgres major (Lane DB only) | Direct authorized pre-check observed17.6/major17 on2026-10-25; dashboard confirmation not reported |
 | FG-3 migration0037 operator/time/environment | Fred reports applied on2026-10-25, dev-hosted; post-checks verified at07:50+08 |
@@ -109,6 +109,15 @@ Student walkthrough checks are removed because the full TOUR-2 no-write plan is 
 | Check |375px |1440px |Status/notes |
 | --- | --- | --- | --- |
 | Student sees no tour auto-offer or manual entry |not-run |not-run |After minimal hide source is published |
-| Instructor tour runs end to end, only if retained after destination read audit |not-run |not-run |If instructor is also hidden, mark not-applicable with actual decision |
+| Instructor tour runs end to end |not-run |not-run |Retained unchanged after the10-handler/42-function read-only source audit; synthetic646-assertion suite is not live acceptance |
 
-Other APPROVAL-08 FG-9 additions: no student material copy, one hint indicator, Get new cards empty result, rename dialog, short Hello reply and loading/content width at375px/1440px remain human checks. No local test fills these rows.
+Other APPROVAL-08 FG-9 additions remain human checks at375px/1440px. No local test fills these rows.
+
+| Check |375px |1440px |Status/notes |
+| --- | --- | --- | --- |
+| Student dashboard, Diagnostic, Study and Test show no material-availability copy |not-run |not-run |Instructor skill review retains its copy |
+| Study hint has exactly one waiting indicator and its control is disabled |not-run |not-run |No duplicate Thinking or spinner |
+| Get new cards with no eligible result stays on completion with actual next-review date |not-run |not-run |No replay or rated card resurfacing |
+| Rename chat dialog selects current title; Enter saves, Esc cancels, focus returns |not-run |not-run |Blank/unchanged disabled, existing PATCH |
+| Tutor Hello! receives a short friendly reply and offer to help |not-run |not-run |Prompt tests are not live model behavior |
+| Test/Study/Diagnostic loading cards match replacement content widths |not-run |not-run |One static mascot, one line, skeletons, no spinner |

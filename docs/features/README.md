@@ -19,7 +19,7 @@ Registry checked for DOCS-HYGIENE on 2026-10-25. Active means an implemented are
 | [instructor-insights](instructor-insights/README.md) | `INSTR` | Roster, heatmap, at-risk list, student sheet, decisions, plan | `routers/dashboard.py`, `features/instructor/`, `features/plan/` | active, partial |
 | [gamification](gamification/README.md) | `GAME` | XP, streaks, celebrations | `routers/gamification.py`, `features/gamification/` | active |
 | [ai-platform](ai-platform/README.md) | `AI` | Provider router, model tiers, de-identification, concurrency, errors | `services/api/app/ai/`, worker `model_errors.py` | active |
-| [tour](tour/README.md) | `TOUR` | Student and instructor guided tours (never write data) | `components/shell/*Tour*` | active |
+| [tour](tour/README.md) | `TOUR` | Student tour hidden pending side-effect-free reads; instructor walkthrough retained | `components/shell/*Tour*` | active |
 | admin (spec not authored) | `ADMIN` | Institution admin console | none yet | planned |
 | research (spec not authored) | `RES` | Researcher portal, grants, consented anonymized views, exports | migration `0003_research.sql` only | planned |
 | grade-passback (spec not authored) | `AGS` | LTI Assignment and Grade Services | none yet | planned |

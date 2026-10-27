@@ -14,13 +14,13 @@ tests: [apps/web/src/components/shell/tests/tour.browser.mjs, apps/web/src/compo
 # Student and instructor walkthroughs
 
 ## Purpose
-Orient students and instructors within the real workspace using guided highlights, local navigation and editable examples. Tours may point at a learning action but must leave grading, saving, sending, generation and retakes to the user's own explicit action.
+The instructor walkthrough orients staff within the real workspace using guided highlights and local navigation. Student tour entry is hidden while side-effect-free reads are blocked; its future outline is specified below but is not delivered. An enabled tour may point at an action but must leave grading, saving, sending, generation and retakes to the user's own explicit action.
 
 ## Actors and permissions
 
 | Actor (app_role) | Can | Cannot |
 | --- | --- | --- |
-| student | Start/dismiss/restart their walkthrough; skip real learning actions | Have the runner rate/answer/send/start a test for them |
+| student | Use learning pages normally; tour entry is hidden while side-effect-free reads are blocked | Start the walkthrough or have it perform learning actions |
 | instructor/admin | Walk through roster, triage, charts, skill review and learner record | Have the runner approve/reject/analyze/assign for them |
 | tour runner | Navigate, open permitted UI panels/tabs, prefill an empty draft | Click persistence or model-call actions |
 
@@ -62,8 +62,8 @@ Orient students and instructors within the real workspace using guided highlight
 - Rule: The seven accepted TOUR-REFRESH AST comparisons remain pinned to full accepted revision c3d6b6351f7adbfc6e8da1d43e371014473c8b74 and its pre-tour baseline3a6a0aab27a8212f77b83e96b26127d830a696ba. A committed two-sided normalized-AST checksum/attribute-count attestation makes that historical proof independent of local Git depth. If a verifier uses historical Git objects instead, absence fails clearly; never skip. Subsequent approved feature changes do not redefine the historical tour-only boundary.
 - Rule: Independently enumerate every selector in current student/default/hub and instructor definitions, including wait/click/prefill targets and composite alternatives. Check its current component binding, including forwarded/dynamic IDs, exactly once at the rendering anchor. Preserve the current PracticePanel Study-spec comment. Runtime conditional visibility, absence/skip and route-specific uniqueness remain browser checks; a source binding is not proof of a visible DOM node.
 - Acceptance: Keep all seven comparisons, no skip/only/todo or deleted anchors. Cover every current tour target, not just the original seven. Run old verifier before E3, new verifier before lanes and after merges; full desktop/mobile tour suite after integration must pass with zero mutating requests, reporting its new assertion count beside historical616. A disappeared target stops for explicit tour-definition/spec resolution.
-- Status: planned
-- Verified by: pending APPROVAL-08 E3 coordinator proof and integrated tour rerun.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/components/shell/tests/tour-anchors.test.mjs:53 passing checks, including all seven pinned historical proofs and current anchors/comment; tour-route.test.mjs:3. No dependency on Git history in fresh/shallow clones.
 
 ### TOUR-REQ-007: Follow the twelve-step student outline
 - Rule: Before starting, build these twelve steps in this order. Each has target/fallback copy and stable progress: (1) workspace Next up card, fallback “Kala suggests your next step here.”; (2) workspace Your twin at a glance; (3) Diagnostic start, fallback on Diagnostic “Your baseline check opens when its questions are ready. Until then, practice in Skills.”; (4) Skills first row, fallback “Skills appear here once your course is set up.”; (5) Lesson content and Continue, explain only and never click; (6) Lesson chat dock button; (7) Study Start studying button only and due count; (8) centered completion explanation, never start a deck: Go through these again replays this session and Get new cards checks new/due cards; (9) saved Test sets or New practice set card; (10) Tutor composer; (11) Tutor history/menu covering rename/pin/delete without performing them; (12) Twin evidence/Load older activity, fallback “Your learning evidence will show here as you practice.” Steps expected always present still retain an unexpected-absence fallback under TOUR-REQ-004.
@@ -75,8 +75,8 @@ Orient students and instructors within the real workspace using guided highlight
 ### TOUR-REQ-008: Hide student tour entry until reads are side-effect-free
 - Rule: One source flag in the tour shell hides both the student “Take the tour?” auto-offer and manual tour entry. Do not change tour definitions/copy or delete/rename anchors. Preserve the blocked TOUR-2 branch/audit unchanged for ITO. Separately audit instructor destination GETs: if side-effecting, hide its entry too; otherwise keep the instructor tour unchanged.
 - Acceptance: Student fresh/dismissed states have neither offer nor manual entry. Instructor entry/offer matches its audited decision; if retained, its existing end-to-end flow passes. E3 current anchors and all seven historical comparisons remain passing. No backend, configuration, evidence/mastery or tour-definition change.
-- Status: planned; minimal-disable branch must be separate from blocked codex/tour-rework.
-- Verified by: pending APPROVAL-08 Amendment7a role-entry tests, instructor source audit/browser and E3.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/components/shell/tests/tour.browser.mjs:646 assertions (historical616) at375px/1440px. Student entry absent; instructor destination source audit permits keeping its flow unchanged, all27 steps covered. E3 53/routes3 pass. Human FG-9 remains pending.
 
 ## API contract
 
@@ -98,7 +98,7 @@ No direct model call from the runner or sample-text generation. Examples are det
 APPROVAL-08 Amendment7a keeps the full twelve-step/no-write rework blocked and the student tour hidden. Existing instructor behavior is retained only after its read-only destination audit. The future stricter no-write invariant must be measured by database changes or a request-side-effect log, not inferred from HTTP methods. [WI-32](../../work/handover-2026/work-items/WI-32-side-effect-free-reads.md) tracks the dependency for tours and future prefetching.
 
 
-The earlier skip/GET-side-effect notes below describe the pre-TOUR-2 implementation. APPROVAL-08 requires fixed fallbacks and strictly read-only demonstration; those notes do not waive TOUR-REQ-002/004/007. Source integration remains pending.
+The earlier student skip/GET-side-effect notes below describe the preserved, hidden implementation. The twelve-step/fixed-fallback student rework remains blocked and unmerged. Amendment7a retains the instructor flow unchanged after its read-only destination audit; it does not impose the blocked restructure on that flow.
 
 - Missing/removed or hidden anchors are skipped; an empty class still walks through its available overview targets and omits learner-dependent steps.
 - Optional results/Study-completion steps never create a session, submit answers or rate cards to reach their targets. The normal flow may skip them; the browse-step copy also explains the eventual end controls.
@@ -109,7 +109,7 @@ The earlier skip/GET-side-effect notes below describe the pre-TOUR-2 implementat
 
 | Locations at source revision | Finding | Proposed resolution (not implemented here) |
 | --- | --- | --- |
-| `docs/features/README.md:22` (tour never writes); `apps/web/src/components/shell/CourseShell.tsx:214` (bank status); `services/api/app/routers/bank.py:56` (wake); `services/api/app/routers/lessons.py:44` (GET generation) | Runner avoids explicit learning mutations, but normal reads/navigation can cause operational/content writes. | Define the invariant as no automatic learner evidence/actions, or add a read-only tour route mode; prove with network-spy acceptance. |
+| `docs/features/README.md:22` (tour never writes); `apps/web/src/components/shell/CourseShell.tsx:214` (bank status); `services/api/app/routers/bank.py:56` (wake); `services/api/app/routers/lessons.py:44` (GET generation) | Runner avoids explicit learning mutations, but normal reads/navigation can cause operational/content writes. | Resolved for current delivery by Amendment7a: hide student entry, preserve the blocked rework and plan WI-32 side-effect-free reads. Future proof measures database writes or request-side-effect logs; HTTP-method spies alone are insufficient. |
 | `AGENTS.md` (tokens only); former TourRunner overlay literal | Previously hardcoded rgba. | Resolved by TOUR-REFRESH: brand-ink token with the existing 0.35 opacity; no shared palette change. |
 | `apps/web/src/components/shell/CourseShell.tsx:220` (legacy availability); `apps/web/src/components/shell/CourseShell.tsx:231` (five-question message) | Legacy ready lesson can qualify without five bank MCQs; message describes a stronger precondition. | Make message mode-aware or deliberately tighten precondition with UI acceptance tests. |
 

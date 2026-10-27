@@ -1,7 +1,7 @@
 ---
 id: WI-30
 status: blocked
-owner: coordinator; implementation Lane TOUR-2
+owner: ITO; preserved TOUR-2 branch and audit
 ---
 
 # Fixed read-only student walkthrough

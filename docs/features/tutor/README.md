@@ -61,8 +61,8 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Rule: Replace Today / Yesterday / Older with Collapsible groups named Pinned and Recents. Show Pinned only when at least one conversation is pinned. Preserve pinned order; Recents has local newest/oldest/title sorting. Rows expose a pin button and a DropdownMenu on hover or keyboard focus; actions remain visible while the menu is open. Menus open toward the right on desktop, respect viewport collisions on mobile, and enter and exit immediately. Long overflowing titles reveal their text with one gentle hover movement to the end and back; short titles and reduced-motion titles remain static. The menu contains Rename, Pin or Unpin, and Delete. Rename opens the existing Dialog primitive and uses TUTOR-REQ-002's existing PATCH contract; pin and unpin use the same contract. Delete requires confirmation before calling the existing DELETE route. Cancelling confirmation sends no delete request. Deleting the active conversation returns to a new-chat view. Do not add Share, Archive or Move to project.
 - Rule: Preserve optional and nullable pinnedAt in the frontend schema. Show pin and rename controls only when pinnedAt is present in the corresponding list-response row; null means supported but unpinned. Older responses that omit the property retain working conversation selection and confirmed deletion without PATCH controls.
 - Acceptance: Pinned appears only with pinned rows; Recents contains unpinned rows. Both groups collapse and expand. Keyboard focus reveals row actions. Responses omitting pinnedAt show no pin or rename controls and cause no PATCH calls. Supported responses allow dialog rename and pin/unpin under TUTOR-REQ-012. Delete sends no request before confirmation, sends none after cancellation, and clears the active conversation after successful confirmed deletion.
-- Status: in-progress; APPROVAL-08 amendment specified before implementation
-- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs and presentation.test.mjs; dialog/pin/delete/capability and retained TutorChat regressions. Synthetic checks do not establish live FG-9.
 
 ### TUTOR-REQ-006: Center the empty-chat composer and select a local greeting
 
@@ -98,8 +98,8 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 
 - Rule: While waiting for an answer, show exactly one existing Shimmer line with "Thinking", changing after about eight seconds to "Still working on it". Follow DESIGN.md: no spinner beside the line or in the message body; disable the initiating control with a stable label/icon, never a second Thinking indicator. Non-model submit actions may show a spinner only inside the activated, disabled control while its request is pending. Reset the timer for each ask and clean it up on completion, failure or conversation change. Do not show invented step traces or a Reasoning component. On tutor_timeout, show the server's safe retry message. Preserve TUTOR-REQ-001's returned-answer and persistence-recovery behavior.
 - Acceptance: Controlled time shows Thinking initially and Still working on it after approximately eight seconds; completion/failure stops the waiting state. Retrying starts a fresh timer. Timeout detail remains visible with Retry, and existing saved/unsaved-answer recovery tests continue to pass.
-- Status: in-progress; APPROVAL-08 amendment specified before implementation
-- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs; apps/web/src/features/tutor/tests/presentation.test.mjs; existing TutorChat regressions. Synthetic viewport/reduced-motion coverage is recorded in the accepted handoff; live acceptance is FG-5.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs covers one shimmer, eight-second timer, disabled stable Send, reset and timeout/recovery. Synthetic viewport/reduced-motion checks pass; live FG-9 remains pending.
 
 ### TUTOR-REQ-011: Preserve the Tutor and Study hub component boundary
 
@@ -122,14 +122,14 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 ### TUTOR-REQ-012: Rename through an accessible dialog
 - Rule: Replace inline editing with the existing Dialog primitive. Title “Rename chat”, helper “Keep it short and recognizable”, input prefilled with the current title and selected on opening. Provide Cancel and Save. Trim the input; Save is disabled for blank or unchanged titles and during the existing PATCH. Enter saves only when valid; Esc cancels. Cancel/Esc makes no request. Return focus to the originating “...” trigger after close, retaining capability gating, ownership, title-length validation and safe failure feedback. A pending Save spinner appears only inside Save.
 - Acceptance: Pointer/keyboard opening, selected input, blank/unchanged/trimmed input, Enter exactly once, Escape/Cancel no PATCH, pending lock, success/error and focus return at 375px/1440px. Pin/delete/list compatibility and existing API authorization remain intact.
-- Status: planned
-- Verified by: pending APPROVAL-08 T2 synthetic dialog and retained management tests.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs covers dialog selection, trim, Enter/Escape, one PATCH, pending/error locks and focus return at375px/1440px. Live FG-9 remains pending.
 
 ### TUTOR-REQ-013: Answer small talk briefly without a study roadmap
 - Rule: The existing Tutor system prompt tells the model that greetings or messages with no course question receive a short, friendly reply and an offer to help. No roadmap or “course context” wording for that exchange. This is prompt-only: no classifier/model call, model/provider/config/routing change, bypass of grounding or graded-answer protections for actual questions, or evidence/persistence change.
 - Acceptance: A mocked-provider test proves the small-talk rule reaches the existing system prompt alongside retained teaching/safety instructions. A real “Hello!” response remains FG-9; local prompt inspection cannot claim model behavior or latency.
-- Status: planned
-- Verified by: pending APPROVAL-08 T2 mocked-provider test and Fred FG-9.
+- Status: implemented locally; live model behavior remains pending
+- Verified by: services/api/tests/test_tutor_small_talk_approval08.py:2 mocked-provider tests; full API1016 and enrollment116 pass. E1 proves only the module-level prompt literal changed. Fred's Hello! observation remains FG-9.
 
 ### TUTOR-REQ-014: Defer image attachments until privacy controls are reviewed
 - Rule: Image attachment support is planned only. The current sanitizer operates on text and does not de-identify image contents; enabling images presents a PDPA/privacy risk. Continue current TXT/MD/PDF staging, type/size validation and text-based handling. Do not enable image MIME types, previews, uploads, OCR or multimodal provider inputs in this round.

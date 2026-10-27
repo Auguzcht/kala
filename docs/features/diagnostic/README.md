@@ -94,8 +94,8 @@ Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/
 
 - Rule: Follow DESIGN.md's Pending and loading states. A spinner belongs only inside the user-activated submit-type control for its pending request, with that control disabled. Never place one in skeletons, loading cards, tab bodies, header stats or status text. Model waiting has exactly one shimmer line; its initiating control remains disabled without a second spinner/Thinking indicator. Page/card loads use skeletons and at most one line of text. This supersedes the APPROVAL-06 app-wide Spinner convention without changing request ownership, scheduling, submission or persistence.
 - Acceptance: Inventory every Spinner, Loader2 and animate-spin use with source location and keep/remove reason. Diagnostic header stats and baseline/saved-progress loading have no spinner; model assistance has one shimmer. Pending submit controls remain disabled/accessibly named. Check both roles, 375px/1440px and reduced motion; no data-write or request-timing change.
-- Status: in-progress; APPROVAL-08 specification precedes implementation.
-- Verified by: historical APPROVAL-06 loading fixture/source proof is superseded for spinner placement; new C1 behavior awaits U2/T2 inventory, synthetic browser and retained regression checks.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: U2/T2 rendered-site inventories; final-ui-pass.browser.mjs146 assertions and the strict mixed Tutor loading fixture. Single Diagnostic footer-submit feedback, disabled choices and model shimmer are covered at375px/1440px. Live FG-9 remains pending.
 
 ## Diagnostic availability (Lane G, APPROVAL-06)
 
@@ -135,8 +135,8 @@ Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/
 
 - Rule: The frontend status schema accepts optional dueSkillCount and waitingForMaterialCount. When dueSkillCount is present, the Diagnostic badge and workspace action follow that actionable count (including zero), taking precedence over the legacy due boolean. When absent, preserve the legacy due signal and use a count-free action label. Material availability is instructor-only: never show missing/waiting-for-course-material copy on student workspace, Diagnostic, Test or Study surfaces. For a student not-ready state with no available questions use exactly “Your baseline check isn't ready yet. Check back later.” A completed baseline keeps its distinct caught-up message. Fetch failure keeps its error message and H05 Retry; never make it look empty/not-ready. Instructor views keep their current copy. Instructor skill review keeps truthful availability wording. Retain the optional field and its backend meaning; do not change availability or actionable counts to remove the copy. For question responses, render available questions first; when empty, preserve preparation/failure versus genuine empty states using student-facing wording that does not explain material availability. Missing fields retain legacy handling. Never synthesize evidence or make generation calls to clear a badge.
 - Acceptance: Omitted legacy fields, actionable zero with legacy due=true, positive actionable count and material-only waiting retain correct action/badge behavior. Positive, zero or absent waiting counts produce no material copy for students; instructor review retains it. Prove three distinct student messages for not-ready, caught-up and fetch failure, retaining Retry. E2 expected-copy edits are limited to lines containing material/course-team wording; other expectations remain unchanged. Workspace and rail agree on whether a Diagnostic action is due.
-- Status: in-progress; APPROVAL-08 amendment specified before implementation
-- Verified by: existing response/schema fixtures remain relevant; the student-copy assertions await the named E2 correction and new role tests. Live acceptance remains FG-9.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/features/diagnostic/tests/frontend-closeout.browser.mjs114 assertions, with only two E2 material expectations changed; U2 role/state fixtures retain distinct not-ready, caught-up and fetch-error/Retry behavior. Live FG-9 remains pending.
 
 ### APPROVAL-06 cross-surface recovery and navigation
 
@@ -148,8 +148,8 @@ Diagnostic status and question-retrieval GETs follow [AUTH-REQ-007](../lti-auth/
 
 - Rule: Test, Study and Diagnostic use one shared loading card with a static Kala mascot, one waiting line and skeleton lines. No spinner or unrelated motion. Match each loading card to the width of the content card that replaces it. Diagnostic and Test runners use the same content-column width, with existing tokens, viewport gutters and keyboard/reduced-motion behavior retained.
 - Acceptance: At 375px and 1440px, measured loading/content widths match without overflow, and Diagnostic/Test columns agree. Resolve into content, genuine empty or error states without a stuck skeleton. Tours retain valid or safely skipped targets and never write data.
-- Status: planned
-- Verified by: pending APPROVAL-08 U2 synthetic browser checks; no live acceptance claim.
+- Status: implemented locally; deployed acceptance remains pending
+- Verified by: apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs146 assertions measure matching loading/content343px at375px and752px at1440px, with no spinner. No live acceptance claim.
 
 ## API contract
 

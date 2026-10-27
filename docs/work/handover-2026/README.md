@@ -144,3 +144,7 @@ Additional source-audit follow-up: [WI-26 instructor course authorization and re
 ## APPROVAL-08 delivery round — 2026-10-27
 
 [APPROVAL-08 with Amendments1/2](approval-08.md) opens [WI-27 final UI pass](work-items/WI-27-final-ui-pass.md) and [WI-28 Tutor polish](work-items/WI-28-tutor-polish.md). Coordinator commits design/specs before lanes branch from current local main. T2 then U2 merge after reports/checks; E1/E2 preserve07 guards/history and each later lane rebases. FG-L delegates only the named read-only CloudWatch commands and aggregate output. Conditional last-prompt editing requires feasibility and a committed route contract; images remain planned. No human release or live acceptance is recorded by this dispatch. Earlier delivery snapshots above are historical.
+
+## APPROVAL-08 reviewed local continuation
+
+T2 merged3375647, then rebased U2 mergedad7a9ac. Amendment7a minimal student-tour disable mergedeb3e739 after its instructor read-only source audit and646 synthetic assertions (old616). The full TOUR-2 branch/audit remain preserved/unmerged. WI-27/28/33 await human confirmation; WI-29 editing and WI-32 side-effect-free reads stay planned for ITO, WI-30 is blocked, WI-31 tracks the FG-L privacy stop. No local result completes FG-6→FG-8→FG-7a/b→FG-9, publishes application code or finalizes closeout.

@@ -77,6 +77,16 @@ One API log-group candidate discovered; exact last48hours descending tutor_timin
 
 All requested stage medians/maxima, fallback-request count and primary status/model counts are **unavailable**, not zero. The15–20s attribution is unestablished because inspection stopped immediately. Recommendation: keep configuration unchanged. No inference about provider credit or model availability follows. Fixing the logged field is a separate scoped diagnostics follow-up, not permission to alter E1's router scope.
 
+## Post-U2 strict mixed-suite follow-up
+
+After U2/minimal-disable integration, T2 rebased ontoeb3e739795f0f0ece5c9e4568cb68b71216b19c0 and committedd379004d903fa848ba0954e4ff69ddd8dcae6053. Coordinator reviewed and merged atdebe79146783c891e270ac2c2f0fe6dd333dd27e. Only ui-overhaul.browser.mjs changes:34 insertions/11 deletions, no source/docs/tour-test edit.
+
+The obsolete three-spinner fixture now strictly requires zero loading spinners, three accessible waiting regions, one static Kala mascot, one text line/two skeleton blocks and one shared model-wait line at both widths. It checks static loading cards with motion enabled and reduced motion. The upload test requires disabled busy Send with one stable icon/zero spinners while retaining file-status checks. No skipped/conditional acceptance, unrelated assertion or copy expectation changed.
+
+Two failed test attempts are retained: the fixture lacked a charset and decoded ellipsis labels as Windows-1252; the existing upload assertion expected a spinner after U2's approved stable icon. The test HTML now declares UTF-8 and the upload expectation enforces the integrated C1 contract. These are test-only changes, not product fixes or relaxed error assertions. Final full mixed browser passes267 assertions (initial T2 candidate258), frontend21, E3 53/routes3 and lint/typecheck/build pass. Vite PID17468 was verified in the T2 worktree with HTTP200, then stopped;5173 released to coordinator. Synthetic screenshots are local only, not retained.
+
+No further API rerun was needed for that one test-only commit; root's integrated API1016/worker117 are tied to the same API/worker source. No further FG-L read ran; the user_id_prefix stop remains.
+
 ```text
 AUDIT REPORT
 Task / brief ID: APPROVAL-08 T2, WI-28, E1; FG-L delegated by Fred, read-only

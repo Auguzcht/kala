@@ -1,6 +1,14 @@
 # Handover closeout record — acceptance incomplete
 
-Progress snapshot for APPROVAL-07, 2026-10-25, integrated code/contracts `8e51040f1dda4235f9b12ad344da4cd81442e1e9`. This is the first reading item for the initiative, **record, not authority**. Current operation uses [AGENTS.md](../../../AGENTS.md), [the task router](../../README.md), feature specs and engineering runbooks. Other initiative files record delivery history. This page does not declare the release complete.
+Progress snapshot updated for APPROVAL-08, 2026-10-27. APPROVAL-07 integrated code/contracts remains `8e51040f1dda4235f9b12ad344da4cd81442e1e9`. This is the first reading item for the initiative, **record, not authority**. Current operation uses [AGENTS.md](../../../AGENTS.md), [the task router](../../README.md), feature specs and engineering runbooks. Other initiative files record delivery history. This page does not declare the release complete.
+
+## APPROVAL-08 local continuation
+
+T2's rename dialog, single model-wait indicator and prompt-only small talk merged at3375647. U2's student-copy boundary, loading cards and Get new cards/session safeguards merged atad7a9ac, after rebasing on T2. Amendment7a's minimal student-tour disable merged ateb3e739. The instructor destination source audit permits retaining its tour unchanged; its27-step synthetic walkthrough passes. Full TOUR-2 remains blocked/unmerged, with its branch/audit preserved exactly. No new read-only client/store/hook mode is included.
+
+Current local API passes1,016 and worker117. U2's component21, retained frontend/E3/route77, new browser146 and H643 pass. Minimal tour browser646 replaces the old616 matrix and checks absent student entry plus the unchanged instructor flow. T2's strict mixed loading-fixture follow-upd379004 mergeddebe791 and passes267 assertions. The final sequential merged-main browser pass is1,702 assertions across nine suites, including role/history/error cases. Frontend/E3/route77 and Study component21 have no skips. Local lint/typecheck/build pass with existing warnings. These results do not advance any human gate.
+
+Conditional editing is deferred to ITO under WI-29; images stay planned. Delegated FG-L stopped on actual field user_id_prefix and produced no timing aggregates or latency attribution. WI-31 tracks that privacy finding. WI-32 plans side-effect-free reads for tours/prefetching; zero writes requires database-write or request-side-effect evidence, not HTTP method. FG-9 removes the student walkthrough and instead checks no offer/manual entry; the retained instructor walkthrough remains required.
 
 ## Locally integrated delivery
 
@@ -17,9 +25,9 @@ Fred reported 0037 applied to dev-hosted; read-only post-checks passed on 2026-1
 | Gate / stream | Status | Required next evidence |
 | --- | --- | --- |
 | FG-6 —0038/0039 | Reviewed locally; not applied to hosted by agents | Fred follows the two current migration runbooks, records intended environment/revision, pre-checks and post-checks |
-| FG-8 —backend/publication | Not run for APPROVAL-07 | Fred captures rollback identities, deploys backend, verifies alias/worker/health, pushes fast-forward and records Vercel Ready source |
+| FG-8 —backend/publication | Not run for APPROVAL-07/08 | Fred captures rollback identities, deploys backend including the08 prompt literal, verifies alias/worker/health, pushes fast-forward and records Vercel Ready source |
 | FG-7a/7b —identity repair | Tooling and exact backup/restore locally proved; no real pair run | Fred counts-only dry run, planner review, then apply/recompute/capture or a valid governance refusal; unresolved history recorded honestly |
-| FG-9 plus retained FG-5 | Not run | Fred's real role/course LTI observations, permission denial, complete-history paging, repair/refusal outcome, Study Hint/Explain, Tutor and Diagnostic acceptance |
+| FG-9 plus retained FG-5 | Not run | Fred's real role/course LTI observations, permission denial, complete-history paging, repair/refusal outcome, Study Hint/Explain, Tutor/Diagnostic/loading-width acceptance, absent student tour entry and retained instructor tour |
 | Local database workflow | Not installed; hosted major confirmation still gates configuration | Confirmed dashboard major, approved workflow/replay/types and two clean verifies |
 | Fresh ITO recreation | All13 runbooks remain execution-unverified drafts | Institutional accounts/decisions, named-human procedure execution and acceptance |
 
@@ -35,6 +43,11 @@ Fred reported 0037 applied to dev-hosted; read-only post-checks passed on 2026-1
 
 ## Historical sources
 
+- [APPROVAL-08 coordinator record](evidence/approval-08-coordinator.md)
+- [U2 reviewed report](evidence/approval-08-u2.md)
+- [T2 reviewed report](evidence/approval-08-t2.md)
+- [Minimal tour disable report](evidence/approval-08-tour-disable.md)
+- [Preserved blocked TOUR-2 audit](evidence/approval-08-tour2-audit.md)
 - [APPROVAL-07 coordinator report and final checks](evidence/approval-07-coordinator.md)
 - [SEC inventory/proof](evidence/wi26-course-authorization.md)
 - [H browser/index/history proof](evidence/wi25-evidence-history.md)
