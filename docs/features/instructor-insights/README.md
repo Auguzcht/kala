@@ -120,7 +120,7 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Rule: An inaccessible learner URL uses “Learner unavailable”, non-disclosing course/learner copy and Back to class linking `/class`; transient learner failures retain retry. No API change or additional query retry loop. Never expose raw error bodies or resource existence.
 - Acceptance: Synthetic browser cases at 375px/1440px for 404, 403, 500, network failure, slow response and genuine empty class across roster, at-risk, cohort stats and learner record. No false empty roster/zero stats on error, no permanent skeleton, and successful transient Retry recovery. Existing charts/stats/learning behavior and accessible controls remain intact.
 - Status: done-awaiting-confirmation; synthetic verification complete, live acceptance pending.
-- Verified by: `apps/web/src/features/instructor/tests/read-states.browser.mjs` (222 assertions at 375px/1440px, including denied, failed, slow, empty and retry cases).
+- Verified by: `apps/web/src/features/instructor/tests/read-states.browser.mjs` (314 assertions at 375px/1440px, including denied, failed, slow, empty and retry cases).
 
 ### INSTR-REQ-012: Make learner standing and measurement windows explicit
 
@@ -131,8 +131,8 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Investigation gate: Before metric edits, inspect the course/learner query filters and run counts-only ownership/window checks for the current enrolled records. Use independently proved canonical/legacy pairs for any historical attribution claim and actual request targets for any live-browser identity claim. Record missing proof explicitly. Never infer identity from names or merge legacy history in the UI. Stop immediately on cross-learner mixing. Agents prepare and locally validate read-only SQL. Fred runs hosted counts or explicitly authorizes the agent to use the Supabase CLI for counts only. Zero cross-owner counts prove the checked filters and anchors only, not the semantic authorship of historically misattributed rows.
 - Rule: Skills measured uses approved skills for the same institution/course. A change from 14 to 15 requires counts from the same environment/course and a dated comparison before attributing it to an approval or an environment difference.
 - Acceptance: Test measured course rank, ties, unmeasured/absent learner and failed roster, explicit accuracy window, positive/negative/zero momentum and both learner surfaces. Validate count-query results with synthetic real local Postgres including wrong-target/cross-alias counterexamples. Do not edit APIs, migrations, identity records or configuration.
-- Status: in-progress, owner Codex. Current enrolled-record counts are checked before presentation edits. Historical WI-24 pairs remain unresolved and are not merged or certified.
-- Verified by: Static source trace of cohort.py roster and learner_record, LearnerStanding.tsx and the course/learner query keys. The counts-only query and its synthetic local PostgreSQL 17.6 proof pass. Hosted current-record counts are recorded below. Historical semantic attribution remains outside this counts-only proof.
+- Status: done-awaiting-confirmation. Current enrolled-record counts precede the presentation fixes. Historical WI-24 pairs remain unresolved and are not merged or certified.
+- Verified by: Static source trace of cohort.py roster and learner_record, LearnerStanding.tsx and the course/learner query keys. The counts-only query and its synthetic local PostgreSQL 17.6 proof pass. standing.test.ts passes four cases and read-states.browser.mjs passes 314 assertions across both learner surfaces at 375px/1440px, including ties, filtered roster, failed roster, bounded accuracy and positive/negative/null/rounded-zero momentum. Hosted current-record counts are recorded below. Historical semantic attribution remains outside this counts-only proof.
 
 #### Counts review before implementation
 
@@ -166,6 +166,8 @@ Thus roster accuracy is 297/396 = 75%, drawer accuracy is 138/200 = 69%, and 381
 The local app points to the deployed API and the same Supabase project used for these CLI counts. Approved skills are course/institution-scoped in source. Current approval metadata accounts for 14 becoming 15: one existing skill was reviewed today after the first screenshot, with no approved skill newly created today. This supports an approval change rather than a separate local skill catalogue. Current timestamps are not an immutable approval history or a replay of the earlier hosted dashboard.
 
 [Candidate discovery](../../../apps/web/src/features/instructor/tests/learner-counts.discovery.sql) returns counts only and refuses to imply a real pair from names. Its synthetic SQL proof completed on local PostgreSQL 17.6 before Fred's subsequent CLI-only direction. No further local database run is part of the hosted investigation. Generic aggregate SQL and discovery are retained with tests. Hosted scoped query/aggregate artifacts are in `/tmp/kala-approval09-hosted-counts` and the detail-count counterpart, local only, not retained. No identifiers, rows, credentials, configuration or hosted writes are recorded.
+
+Final integrated checks after the learner presentation changes: lint passes with zero errors and 18 existing warnings, typecheck/build pass, frontend units pass 54 and unchanged E3 passes 53. All ten browser suites run sequentially against the original 5173 server. The new drawer fixture first selected the first triage row, which was an unmeasured learner rather than its intended synthetic learner. The rank correctly remained unavailable. The fixture now searches for the intended learner before opening the drawer, also proving rank uses the full roster despite filtering. The full read-states suite then passes 314, while review-feedback passes 63 and presentation passes 148. No product change was needed for that fixture correction. The original failed run remains in the local result manifest. Documentation checks pass. No backend, model/configuration, migration, identity repair or hosted application write is part of these fixes.
 
 ## API contract
 
@@ -274,6 +276,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Record completed standing/window/momentum checks, current-record counts and remaining historical identity/provenance limits | Fred's learner drawer items 1–5, WI-34 | INSTR-REQ-006, INSTR-REQ-012 |
 | 2026-10-27 | Specify neutral rounded zero after 9/10 versus 9/10 hosted counts confirm zero momentum | Fred's drawer item 3, WI-34 | INSTR-REQ-012 |
 | 2026-10-27 | Specify measured course rank shared by drawer/full record, ties and unavailable roster handling before replacing the percentile ordinal | Fred's drawer item 1 after current-record counts, WI-34 | INSTR-REQ-012 |
 | 2026-10-27 | Record explicitly authorized CLI current-record counts before accuracy-window edits, with unresolved legacy mapping kept separate | Fred's CLI direction, WI-34 | INSTR-REQ-012 |

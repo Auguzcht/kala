@@ -297,3 +297,83 @@ Fred's live revisit shows steps 17–27 falling back on the class overview after
 TOUR-REQ-009 is amended first. The shell records a visible same-origin Open full record link from the actual roster drawer visited at steps 5–8. Only when step 16 has no flag, Next uses that observed link. It is cleared between runs and never overrides a present flag's existing navigation. No feature files, learner IDs, API fields, student definitions, CourseShell flag or E3 verifier change. WI-34-T11 asserts all 27 steps and actual configured record targets for every step 17–27 with a populated roster and zero flags at both widths, with zero writes. Status: done-awaiting-confirmation.
 
 Verification: build, lint, typecheck, tour-route plus unchanged E3 (57 total tests), tour.browser (2406 assertions), docs checker (188 files, zero violations), documentation units (18) and diff whitespace check pass. No-support-flag record steps 17–27 each have their actual configured target at 375px and 1440px, rather than merely passing fallback. CourseShell.tsx, student-tour.ts and tour-anchors.test.mjs remain byte-identical to 5f17777. Browser artifacts are at `/tmp/kala-approval09-tour-noflags`, local only, not retained. Fred’s live walkthrough remains pending.
+
+
+## Final integration audit after Fred's tour and drawer follow-ups
+
+2026-10-27. Status for the frontend work in this chat: done-awaiting-confirmation. The user will restart the instructor tour from step 1 and review all 27 steps. The no-support-flag fixture reaches actual learner targets for steps 17–27 at both widths. Student tour remains hidden. The all-27 audit above still applies, with write-adjacent steps 15, 20, 21, 22 and 25 informational and Next driven.
+
+Fred subsequently authorized hosted Supabase CLI counts and explicitly requested that method. Only read-only aggregate queries were run. The current-record results, source windows, resolved presentation fixes, the 14-to-15 approval metadata, closed model-source item and unresolved historical identity limits are recorded in the [INSTR specification](../../../features/instructor-insights/README.md#counts-review-before-implementation). No API, migration, config, hosted application/identity write or merge/push/deploy was performed. This report does not mark WI-24 repaired.
+
+Latest product verification: lint has zero errors and 18 pre-existing warnings. Typecheck and production build pass. Frontend units pass 54, E3 passes 53 with its seven historical proofs unchanged. All ten browser scripts run sequentially, one at a time on the original server PID 40695 at 5173 from this worktree. Corrected final results:
+
+| Browser suite | Assertions |
+| --- | --- |
+| tour | 2406 |
+| frontend-closeout | 114 |
+| final-ui-pass | 216 |
+| read-states | 314 |
+| review-feedback | 63 |
+| text-selection | 40 |
+| ui-overhaul | 339 |
+| evidence-history-scope | 16 |
+| evidence-history | 118 |
+| presentation | 148 |
+| Total | 3774 |
+
+The initial expanded drawer fixture selected the first triage row rather than its intended measured learner, so the truthful unavailable rank caused a fixture timeout. The fixture now searches for its intended learner and the complete 314-assertion read-states suite passes, also proving class rank ignores the displayed roster filter. No product-source correction was needed. This resolved fixture failure is preserved in the original manifest, not overwritten as an original all-green run. The nine other browser results already pass on the same product source.
+
+Local artifacts: `/tmp/kala-approval09-final-instructor` contains the complete sequential run and original fixture failure. `/tmp/kala-approval09-standing-final.log` contains the corrected complete read-states run. `/tmp/kala-approval09-completed-checks.json` combines final counts with the retained original result. All are local only, not retained.
+
+The existing literal data-tour and tour ID anchors are preserved in changed frontend files. CourseShell.tsx, student-tour.ts and tour-anchors.test.mjs remain byte-identical to 9b81f62. Services, packages, infrastructure and configuration have no diff from that frontend preparation revision. Source base remains eb9409a8. The frontend commit sequence is local on codex/fred-polish. Spec/design changes precede implementation, with separate commits for each implementation item and the later tour regression.
+
+Files changed by this frontend round since preparation 9b81f62 (44 paths):
+
+```text
+apps/web/src/components/ai-elements/dock-layout.ts
+apps/web/src/components/kala/evidence-ledger.tsx
+apps/web/src/components/shell/TourRunner.tsx
+apps/web/src/components/shell/TutorSidebar.tsx
+apps/web/src/components/shell/instructor-tour.ts
+apps/web/src/components/shell/tests/tour-route.test.mjs
+apps/web/src/components/shell/tests/tour.browser.mjs
+apps/web/src/components/study/ComposeDock.tsx
+apps/web/src/components/study/StudyColumn.tsx
+apps/web/src/components/study/StudyStream.tsx
+apps/web/src/components/study/StudySurface.tsx
+apps/web/src/components/ui/input.tsx
+apps/web/src/features/flashcards/components/FlashcardDeck.tsx
+apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs
+apps/web/src/features/instructor/components/LearnerRecord.tsx
+apps/web/src/features/instructor/components/LearnerStanding.tsx
+apps/web/src/features/instructor/components/LearnerTriage.tsx
+apps/web/src/features/instructor/lib/standing.ts
+apps/web/src/features/instructor/tests/learner-counts.discovery.sql
+apps/web/src/features/instructor/tests/learner-counts.local.py
+apps/web/src/features/instructor/tests/learner-counts.readonly.sql
+apps/web/src/features/instructor/tests/read-states.browser.mjs
+apps/web/src/features/instructor/tests/standing.test.ts
+apps/web/src/features/lessons/components/LessonChat.tsx
+apps/web/src/features/plan/components/InstructorPlan.tsx
+apps/web/src/features/tutor/components/TutorChat.test.mjs
+apps/web/src/features/tutor/components/TutorChat.tsx
+apps/web/src/features/tutor/components/TutorComposer.tsx
+apps/web/src/features/tutor/index.ts
+apps/web/src/features/tutor/lib/assigned-draft.ts
+apps/web/src/features/tutor/tests/assigned-draft.test.mjs
+apps/web/src/features/tutor/tests/text-selection.browser.mjs
+apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+apps/web/src/features/twin/components/EvidenceHistoryLedger.tsx
+apps/web/src/features/twin/tests/evidence-history-scope.browser.mjs
+apps/web/src/features/twin/tests/evidence-history.browser.mjs
+apps/web/src/styles/DESIGN.md
+apps/web/src/styles/globals.css
+docs/features/instructor-insights/README.md
+docs/features/study/README.md
+docs/features/tour/README.md
+docs/features/tutor/README.md
+docs/features/twin/README.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+```
+
+Planner limits: Fred's live flow review remains pending. Invalid upstream percentile arithmetic and configured-primary fallback provenance remain backend findings. Historical legacy anchors were not merged or certified. The separate backend greeting lane and sent-message editing deferral are unchanged. No secrets printed.
