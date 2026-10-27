@@ -91,3 +91,10 @@ U2-1 also gives student Diagnostic empty state exactly “Your baseline check is
 ## Amendment 5 — E4, workspace route ownership
 
 U2 may edit apps/web/src/routes/course/index.tsx only to remove the material notice89–93 and unused variable45 (only if no other reader), after checking whether any07 lane touched it and rebasing if so. Role audit first: student-only route removes notice; if staff also reach it, retain staff-only notice. Never remove shared hooks/queries, Diagnostic badges/action counts, other queries, navigation/layout or unrelated imports. Only now-unused imports may be removed. TOUR-2-required Next up/Twin glance data-tour anchors are separately allowed as attribute-only edits in this file, same commit. Report route role reachability, anchors, narrow diff, student absence and instructor presence if reachable, workspace tour tests and lint/typecheck/build. Every other07 path remains frozen.
+
+
+## Amendment 6 — E2 extension, directly confirmed by Fred in U2
+
+In H's Diagnostic browser test only, failed/caught-up expected-copy lines may change **only if** their existing text contains material or course-team wording removed by Amendment4. Student states stay distinct: not-ready/no questions uses “Your baseline check isn't ready yet. Check back later.”; completed/caught-up keeps its own message and never says isn't ready; fetch failure keeps its error and H05 Retry, never resembles empty/not-ready. If U2 collapses states, fix the component, not the assertion.
+
+Fixtures, paging, seeds, state setup, Retry/badge/count/navigation assertions and every non-material expected line remain unchanged. Proof lists each changed expected old/new line and its state, plus a three-state distinct-message table; rerun H full browser and U2 suites on5173. U2 AUDIT names E2 extended by Amendment6. Coordinator reconciles DIAG-REQ-012/013 before final lane rebase/commit.
