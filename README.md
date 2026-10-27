@@ -1,8 +1,10 @@
-<p align="center">
-  <img src="apps/web/public/Kala-Logo.png" alt="Kala hornbill logo" width="144" />
-</p>
+<div align="center">
+  <img src="apps/web/public/Kala-Logo.png" alt="Kala hornbill logo" width="160" />
+  <h1>Kala</h1>
+  <p><strong>An AI learning companion and digital learning twin for Blackboard Learn.</strong></p>
+</div>
 
-# Kala
+## About Kala
 
 Kala is an AI learning companion and digital learning twin. It runs as an intelligence layer on top of Blackboard Learn. Students and instructors enter through an LTI 1.3 link. Blackboard owns course content and grades. Supabase owns learning evidence.
 
@@ -43,8 +45,14 @@ Kala is an AI learning companion and digital learning twin. It runs as an intell
 
 ## Attribution
 
-Built with love by **Alfred Nodado (Auguzcht)** for **Mapúa Malayan Colleges of Mindanao’s Office for Artificial Intelligence Curriculum Integration (OAICI)**.
+Developed by **Alfred Nodado (Auguzcht)** for **Mapúa Malayan Colleges of Mindanao’s Office for Artificial Intelligence Curriculum Integration (OAICI)**.
 
-## License
+## Copyright and license
 
-Not yet selected. To be decided by the project owners.
+To be determined by Mapúa Malayan Colleges of Mindanao (OAICI).
+
+---
+
+<div align="center">
+  <p><strong>Built with ❤️ for Mapúa Malayan Colleges of Mindanao’s OAICI.</strong></p>
+</div>
