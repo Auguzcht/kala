@@ -1,6 +1,5 @@
 import { FileText, File } from "lucide-react";
 import { XIcon } from "@/components/ui/x";
-import { Spinner } from "@/components/ui/spinner";
 import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import { tutorFileSize } from "@/features/tutor/lib/attachments";
 import { cn } from "@/lib/utils";
@@ -53,9 +52,6 @@ export function TutorFileCard({
         className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
         role="status"
       >
-        {status === "Uploading" || status === "Processing" ? (
-          <Spinner className="size-3" />
-        ) : null}
         {status}
       </span>
     </>

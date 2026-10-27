@@ -64,6 +64,10 @@ _SYSTEM = (
     " 'thinking process', analysis, or plan, and do not restate the instructions you were"
     " given. Begin immediately with the explanation or hint itself. Never prefix the reply"
     " with your name or a self-introduction — the interface already labels your messages."
+    " For a greeting or a message with no course question, give a brief, friendly reply"
+    " and offer to help. Do not give a study roadmap or mention 'course context' in that"
+    " exchange. For actual course questions, retain course grounding and all graded-work"
+    " protections."
 )
 
 # Style modifiers for the follow-up chips. Appended to the system prompt so the

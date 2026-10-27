@@ -14,7 +14,7 @@ import { UserBlock } from "@/components/study/UserBlock";
 import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { apiErrorReason } from "@/lib/api-error";
@@ -297,7 +297,9 @@ export function TutorChat({ courseId }: { courseId: string }) {
     <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col">
       <div className={cn("flex min-h-0 flex-1 flex-col", empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
       {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
-        {activeId && active.isLoading ? <div role="status" className="flex items-center gap-2"><Spinner aria-hidden /><Shimmer>Loading conversation…</Shimmer></div> : null}
+        {activeId && active.isLoading ? <div role="status" className="space-y-3 text-sm text-muted-foreground">
+          <p>Loading conversation…</p><Skeleton className="h-12 w-3/4 motion-reduce:animate-none" /><Skeleton className="h-16 w-full motion-reduce:animate-none" />
+        </div> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
         {messages.map((m) => m.role === "user" ? (
           <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />
@@ -328,11 +330,15 @@ export function TutorChat({ courseId }: { courseId: string }) {
               <UserBlock text={pendingTurn.question} initials={userInitials || undefined} />
             </div>
             {pendingTurn.status === "asking" ? (
-              <AssistantBlock
-                id="tour-tutor-thinking"
-                pending
-                pendingLabel={waitingLong ? "Still working on it" : "Thinking"}
-              />
+              <div id="tour-tutor-thinking" className="mr-auto w-full max-w-full">
+                <div className="mb-2 flex items-center gap-2">
+                  <img src="/Kala-Logo.png" alt="" className="size-7 shrink-0 object-contain" />
+                  <span className="text-sm font-semibold text-foreground">Kala</span>
+                </div>
+                <div role="status" className="px-1 text-sm leading-relaxed">
+                  <Shimmer className="text-sm">{waitingLong ? "Still working on it" : "Thinking"}</Shimmer>
+                </div>
+              </div>
             ) : (
               <div className="mr-auto flex w-full max-w-full items-center gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                 <span className="flex-1">{pendingTurn.message ?? "Kala couldn't answer that."}</span>

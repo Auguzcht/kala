@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MoreHorizontal, Pin, PinOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Input } from "@/components/ui/input";
+import { TutorRenameDialog } from "@/features/tutor/components/TutorRenameDialog";
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -37,7 +36,7 @@ export function TutorConversationRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const update = useUpdateTutorConversation(courseId);
   const [renaming, setRenaming] = useState(false);
-  const [title, setTitle] = useState("");
+  const trigger = useRef<HTMLButtonElement>(null);
   const capable = supportsConversationManagement(conversation);
   const name = conversation.title || "Untitled chat";
   function onError(error: unknown) {
@@ -51,13 +50,6 @@ export function TutorConversationRow({
       { onError },
     );
   }
-  function saveTitle() {
-    if (!title.trim() || update.isPending) return;
-    update.mutate(
-      { id: conversation.id, title: title.trim() },
-      { onSuccess: () => setRenaming(false), onError },
-    );
-  }
   return (
     <div
       className={cn(
@@ -67,48 +59,9 @@ export function TutorConversationRow({
           : "border-transparent hover:bg-accent/60",
       )}
     >
-      {renaming && capable ? (
-        <form
-          className="min-w-0 flex-1 space-y-1 py-1"
-          onSubmit={(event) => {
-            event.preventDefault();
-            saveTitle();
-          }}
-        >
-          <Input
-            autoFocus
-            aria-label="Chat title"
-            value={title}
-            maxLength={80}
-            disabled={update.isPending}
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setRenaming(false);
-            }}
-          />
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              type="submit"
-              disabled={!title.trim() || update.isPending}
-              aria-busy={update.isPending || undefined}
-            >
-              {update.isPending ? <Spinner aria-hidden /> : null}
-              {update.isPending ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              type="button"
-              onClick={() => setRenaming(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <TutorTitle name={name} active={active} onSelect={onSelect} />
-      )}
+      <TutorTitle name={name} active={active} onSelect={onSelect} />
+      {renaming && capable ? <TutorRenameDialog conversation={conversation} courseId={courseId}
+        onClose={() => setRenaming(false)} trigger={trigger} /> : null}
       <div
         className={cn(
           "flex shrink-0 items-center",
@@ -120,6 +73,7 @@ export function TutorConversationRow({
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
+              ref={trigger}
               size="icon"
               variant="ghost"
               className="size-7 rounded-lg focus-visible:ring-inset focus-visible:ring-offset-0"
@@ -140,7 +94,6 @@ export function TutorConversationRow({
                   {...renameIcon.events}
                   onSelect={() => {
                     setRenaming(true);
-                    setTitle(conversation.title ?? "");
                   }}
                 >
                   <SquarePenIcon
@@ -156,7 +109,7 @@ export function TutorConversationRow({
                   disabled={update.isPending}
                   onSelect={() => pin()}
                 >
-                  {update.isPending ? <Spinner aria-hidden /> : conversation.pinnedAt ? <PinOff /> : <Pin />}
+                  {conversation.pinnedAt ? <PinOff /> : <Pin />}
                   {conversation.pinnedAt ? "Unpin" : "Pin"}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="mx-1 my-2" />
@@ -182,7 +135,7 @@ export function TutorConversationRow({
             aria-busy={update.isPending || undefined}
             onClick={() => pin()}
           >
-            {update.isPending ? <Spinner aria-hidden /> : conversation.pinnedAt ? <PinOff size={14} /> : <Pin size={14} />}
+            {conversation.pinnedAt ? <PinOff size={14} /> : <Pin size={14} />}
           </Button>
         ) : null}
       </div>
