@@ -49,6 +49,8 @@
   /* brand tokens (additive, semantic: a color means one thing) */
   --brand-ink: #0e1b33;
   --brand-ink-foreground: #f7f8fb;
+  --selection-background: #bcd3f4;
+  --selection-foreground: var(--brand-ink);
   --brand-slate: #1f2f4d;
   --brand-slate-foreground: #f7f8fb;
   --brand-orange: #ff8a00;           /* action, intervene, primary CTA */
@@ -123,6 +125,7 @@
 
   --brand-ink: #f7f8fb;
   --brand-ink-foreground: #0e1b33;
+  --selection-foreground: var(--brand-ink-foreground);
   --brand-slate: #9aa3b2;
   --brand-slate-foreground: #0e1b33;
   --brand-orange: #ff8a00;
@@ -238,6 +241,10 @@
 }
 
 @layer base {
+  ::selection {
+    background-color: var(--selection-background);
+    color: var(--selection-foreground);
+  }
   * {
     border-color: var(--border);
     outline-color: color-mix(in oklch, var(--ring) 50%, transparent);

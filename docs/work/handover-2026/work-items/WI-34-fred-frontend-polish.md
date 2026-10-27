@@ -79,4 +79,14 @@ Full-page Study scroller bounds are x=56..375 and x=56..1440. Tutor scroller bou
 
 Final correction verification: final-ui-pass.browser.mjs 186 assertions passed and ui-overhaul.browser.mjs 289 assertions passed. All earlier behavioral assertions remain. The table above reflects the corrected implementation. Planner/Fred review is still pending and no merge or publication was performed.
 
+## Text selection: Light-blue highlight
+
+2026-10-27. Fred requests this after the scrollbar correction. Base: item 1 commit 5386c5d. Requirement: DESIGN-REQ-001. Status: done-awaiting-confirmation for this item only. DESIGN.md and its change log were updated before code to specify the same BCD3F4 background and dark ink foreground in both themes. `globals.css` defines semantic selection tokens and a global ::selection rule. The Input primitive removes its local primary-color selection override. Primary and brand values are unchanged.
+
+Files changed: `apps/web/src/styles/DESIGN.md`, `apps/web/src/styles/globals.css`, `apps/web/src/components/ui/input.tsx`, `apps/web/src/features/tutor/tests/text-selection.browser.mjs` and this work item.
+
+WI-34-T04: `node apps/web/src/features/tutor/tests/text-selection.browser.mjs` passed 40 assertions across 375px/1440px and light/dark styles. Real DOM selection of body text, the shared Input used by Rename chat, and Textarea retains the exact native selection range. Computed selection colors are rgb(188, 211, 244) and rgb(14, 27, 51) for every case. No horizontal overflow or runtime errors. The synthetic local fixture blocks all external traffic. Screenshots are in `/tmp/kala-approval09-selection`, local only, not retained. Human visual confirmation remains pending.
+
+Web lint/typecheck/build passed, retaining the same 18 existing lint warnings and route-generator/bundle-size warnings. Documentation checker, 18 documentation unit tests and `git diff --check` passed. No hosted action or configuration change. Secrets printed: none.
+
 Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. No frontend application edits were made by Codex.

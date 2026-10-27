@@ -34,7 +34,7 @@ Rules:
 
 ### DESIGN-REQ-001: Text-selection colors
 
-Approved APPROVAL-09,2026-10-27. Define semantic selection tokens in globals.css: `--selection-background` is `#BCD3F4`; `--selection-foreground` uses the existing ink token. Apply them to text selection, including input/textarea selection, without changing the primary brand token to recolor other controls. Preserve text contrast and native selection behavior. The new blue is scoped to text-selection feedback, not a new decorative brand palette.
+Approved APPROVAL-09,2026-10-27. Define semantic selection tokens in globals.css: `--selection-background` is `#BCD3F4` in both themes. `--selection-foreground` uses the existing dark ink value, through `--brand-ink` in light mode and `--brand-ink-foreground` in dark mode. Apply them to body and input/textarea selection, including the Rename chat field, without changing the primary brand token to recolor other controls. Remove local dark-selection overrides. Preserve text contrast and native selection behavior. The new blue is scoped to text-selection feedback, not a new decorative brand palette.
 
 At the approved base there is no authored global ::selection rule in globals.css. Input.tsx's selection:bg-primary / selection:text-primary-foreground utilities are the explicit dark-selection source found in code. Fred implements the token/global rule and reconciles local overrides; do not claim an unobserved global rule caused every selection. Verify selected body and editable text in both themes and at375px/1440px.
 
@@ -136,5 +136,6 @@ Responsive to mobile, visible keyboard focus (the orange ring), reduced motion r
 
 | Date | Change | Authority / IDs |
 | --- | --- | --- |
+| 2026-10-27 | Specify light-blue selection for body and editable text in both themes, using the existing dark ink counterpart for contrast | Fred's highlight request, APPROVAL-09, WI-34, DESIGN-REQ-001 |
 | 2026-10-27 | Specify one ancestor for the 800px shell and responsive gutters, matching stream/dock edges within 1px, retaining loading widths and keeping the native scrollbar at the page edge | APPROVAL-09 item 1 and Fred's scrollbar correction, WI-34, DESIGN-REQ-002 |
 | 2026-10-27 | Define selection background token and common content/dock edges before Fred's direct polish | APPROVAL-09; DESIGN-REQ-001/002 |
