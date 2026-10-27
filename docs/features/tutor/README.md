@@ -151,6 +151,12 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Status: blocked after delegated read-only FG-L stopped on actual field user_id_prefix; raw data is local only, not retained.
 - Verified by: T2 executed the allowed discovery/query and stopped before aggregation under Fred's privacy condition. Metrics and primary/fallback attribution are unavailable, not zero; configuration stays unchanged. WI-31 plans the separate diagnostics follow-up. No raw values retained.
 
+### TUTOR-REQ-019: Never use a material person's name to address the student
+- Rule: The Tutor system prompt says never address the student by name. Any names in course material refer to people in that material, not the student. Keep normal discussion of named people in curriculum possible without turning those names into the learner's identity. This is a system-prompt-only instruction, not a new sanitizer, identity lookup, classifier or provider/configuration change.
+- Acceptance: The existing mocked-provider small-talk tests assert both instructions reach the actual provider-bound system prompt for default/detail styles, alongside all retained teaching/safety rules. Whole-module AST proof permits only the one _SYSTEM string literal; all19 existing enrollment-guarded functions remain identical. Full API suite and the116-case enrollment matrix pass. Live model behavior remains Fred's deploy/FG-9 check; a mocked assertion does not establish compliance.
+- Status: planned; specified before implementation under APPROVAL-09 Amendment1.
+- Verified by: pending prompt-only implementation, extended test_tutor_small_talk_approval08.py, AST proof and full API/enrollment checks.
+
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
@@ -174,6 +180,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Require no name-based address and distinguish people in course material from the student; one _SYSTEM literal only | APPROVAL-09 Amendment1, Fred's course-material classification | TUTOR-REQ-019 |
 | 2026-10-27 | Specify rename dialog, single waiting indicator, prompt-only small talk, planned images, conditional last-prompt editing and delegated read-only timing before implementation | APPROVAL-08, coordinator C1/C2 | TUTOR-REQ-005/010/012–016; DIAG-REQ-008 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |
