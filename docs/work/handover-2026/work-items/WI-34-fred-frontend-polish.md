@@ -101,7 +101,7 @@ Files changed: `docs/features/tutor/README.md`, `apps/web/src/features/tutor/com
 
 Web lint/typecheck/build passed with the same 18 existing lint warnings and route-generator/bundle-size warnings. E3/tour anchors: 53 passed, including all seven unmodified historical proofs. Documentation checker, 18 documentation unit tests and `git diff --check` passed. Synthetic local requests only. Human review remains pending. No merge, push, hosted/configuration change or deployment. Secrets printed: none.
 
-## Load older activity: Documentation/source answer
+## Load older activity: Initial documentation/source answer
 
 Fred asks whether the extra button has value. Current EvidenceLedger pagination slices only the loaded rows into groups of ten. EvidenceHistoryLedger's separate button fetches another server batch through useEvidenceHistory, normally 25 rows under TWIN-REQ-010. Thus three local pages of 25 loaded events do not include all server history. TWIN-REQ-011 already specifies removing the separate button and fetching the next batch through Next on the final loaded page, preserving keysets, permissions, errors and scope. This behavior remains planned and is not implemented by the three fixes above. This request was a documentation/source check, with no ledger edit made.
 
@@ -149,4 +149,93 @@ Implementation: InstructorPlan uses Tutor's public draft factory, then passes a 
 
 Files: InstructorPlan.tsx, Tutor's public index, lib/assigned-draft.ts, TutorChat.tsx, TutorComposer.tsx, TutorChat.test.mjs, tests/assigned-draft.test.mjs, ui-overhaul.browser.mjs, Tutor/Instructor specifications and this work item. Scoped verification: Tutor browser 339 assertions passed, focused Tutor/draft units 13 passed, lint/typecheck passed with the same existing warnings. The first extra practice-destination assertion expected the legacy intermediate URL. It was corrected to the existing practice route's Skills redirect, then passed. Final combined regression gate remains pending until the separately requested ledger item is complete.
 
-Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. No frontend application edits were made by Codex.
+## Unified evidence pagination
+
+2026-10-27. Fred confirms the separate Load older activity button should be replaced by Next. Base 9c24b4a. TWIN-REQ-011 is clarified first with its change log: fetching into a partial terminal page fills that page before advancing so the 25-row server batch does not cause unseen events to be skipped. Existing TWIN-REQ-003/010 and INSTR-REQ-010 presentation apply. Status: in-progress, owner Codex. One local commit for this item and the final cumulative regression evidence.
+
+WI-34-T09 covers loaded-page navigation, delayed/successful boundary fetch, duplicate clicks, full/partial terminal pages, empty/duplicate-only batches without loops, genuine end, errors/Retry/Reload, Previous during fetch, and student/instructor role/account/course/learner isolation. Preserve the history hook, backend limits/cursors, deduplication, H fixtures and all permission/data assertions. No API, migration, configuration or hosted change.
+
+## Historical preparation checkpoint
+
+Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. At that preparation checkpoint, no frontend application edits had been made by Codex. The implementation and final frontend verification below supersede that preparation-only state.
+
+## Final cumulative frontend verification
+
+2026-10-27. Every item directly requested in this chat is implemented locally and done-awaiting-confirmation. This does not mark the entire WI-34/APPROVAL-09 catalogue complete or establish hosted acceptance. The assigned-start and unified-pager items above have now passed the combined frontend gate. Planner review and Fred's visual/live acceptance remain pending.
+
+Source: frontend item commits 5386c5d, a02345c, 74e5f92, 44599f0 and 9c24b4a plus the final unified-pager working-tree paths committed with this report. Original requested branch base eb9409a8. The six frontend item commits follow the existing preparation commit 9b81f62. No source edits were made during the full check run. The original Vite process 40695 remained the sole listener on 5173 and served this worktree throughout. All browser requests used synthetic auth/API interception with external traffic blocked.
+
+| Item | Delivered behavior | Commit |
+| --- | --- | --- |
+| Shared column and scrollbar correction | Study card/reply/dock and Tutor messages/composer share edges. Native scrollbar remains at the page's right edge. U2 full-viewport loading/content widths remain 343px/752px. | 5386c5d |
+| Text selection | BCD3F4 background with dark ink text for body/Input/Textarea in light and dark styles. Primary brand values unchanged. | a02345c |
+| Tutor read loading | Conversation and history show skeletons with accessible status/busy labels, without visible loading sentences. | 74e5f92 |
+| Tutor/Study follow-ups | Explicit last-answer Tutor instructions with existing styles. Study hint/explain/typed actions produce ordered user/Kala pairs with scoped retry. | 44599f0 |
+| Assigned Tutor Start | Fresh editable topic draft, focused dock, no auto-resume/send, and lazy create/ask only after Enter/Send. | 9c24b4a |
+| Unified evidence pagination | Separate older button removed. Next loads batches, handles partial pages without skipping new events, guards duplicate fetches and preserves error/identity/scope behavior. | This report's item commit, parent 9c24b4a |
+
+Final commands ran in Fred's requested order: web lint, typecheck, build, every frontend unit file, E3, all ten current browser suites sequentially, docs checker, documentation units and diff whitespace check. All 18 command stages passed.
+
+- `pnpm --filter web lint`: pass, zero errors and 18 pre-existing Fast Refresh warnings.
+- `pnpm --filter web typecheck`: pass. Existing route-generator circular-dependency warning remains.
+- `pnpm --filter web build`: pass. Existing large-bundle warning remains.
+- `node --experimental-vm-modules --test` for all seven non-E3 frontend unit files: 49 passed, zero failed/skipped. The external Study renderer fixture was supplied using the documented environment variable.
+- `node --test apps/web/src/components/shell/tests/tour-anchors.test.mjs`: 53 passed, including all seven unmodified historical E3 proofs.
+- `python3 scripts/docs_check.py`: pass, 188 documentation files, zero machine-path or record-link violations.
+- `python3 -m unittest discover -s scripts -p 'test_docs_check.py'`: 18 passed.
+- `git diff --check`: pass.
+
+| Browser suite in sequential run order | Assertions passed |
+| --- | ---: |
+| components/shell/tests/tour.browser.mjs | 646 |
+| features/diagnostic/tests/frontend-closeout.browser.mjs | 114 |
+| features/flashcards/tests/final-ui-pass.browser.mjs | 216 |
+| features/instructor/tests/read-states.browser.mjs | 222 |
+| features/instructor/tests/review-feedback.browser.mjs | 63 |
+| features/tutor/tests/text-selection.browser.mjs | 40 |
+| features/tutor/tests/ui-overhaul.browser.mjs | 339 |
+| features/twin/tests/evidence-history-scope.browser.mjs | 16 |
+| features/twin/tests/evidence-history.browser.mjs | 118 |
+| features/twin/tests/presentation.browser.mjs | 148 |
+| Total | 1922 |
+
+Browser paths are relative to apps/web/src. Both 375px and 1440px and the suites' existing reduced-motion/keyboard cases are retained. The ledger adaptation replaces obsolete separate-load-button interactions with Next under TWIN-REQ-011. The initial own-history error assertion expected ten visible rows on page one, while the new fetch occurs on the five-row terminal page. It now compares the exact pre-failure visible rows, strengthening retention proof. Staff hiding, denials, scope/cursor, deduplication and request-limit assertions remain intact. Empty and duplicate-only batches do not advance or loop. The evidence-history hook and API are unchanged.
+
+Logs, result manifest and synthetic screenshots: `/tmp/kala-approval09-final`, local only, not retained. No real provider response quality, live LMS flow or hosted migration/deployment is inferred from these local checks. No merge, push, API/backend/migration/configuration/hosted-data change or deployment was performed. Secrets printed: none.
+
+### Cumulative files changed
+
+30 paths across the six frontend items, relative to the existing preparation commit 9b81f62:
+
+```text
+apps/web/src/components/ai-elements/dock-layout.ts
+apps/web/src/components/kala/evidence-ledger.tsx
+apps/web/src/components/shell/TutorSidebar.tsx
+apps/web/src/components/study/ComposeDock.tsx
+apps/web/src/components/study/StudyColumn.tsx
+apps/web/src/components/study/StudyStream.tsx
+apps/web/src/components/study/StudySurface.tsx
+apps/web/src/components/ui/input.tsx
+apps/web/src/features/flashcards/components/FlashcardDeck.tsx
+apps/web/src/features/flashcards/tests/final-ui-pass.browser.mjs
+apps/web/src/features/lessons/components/LessonChat.tsx
+apps/web/src/features/plan/components/InstructorPlan.tsx
+apps/web/src/features/tutor/components/TutorChat.test.mjs
+apps/web/src/features/tutor/components/TutorChat.tsx
+apps/web/src/features/tutor/components/TutorComposer.tsx
+apps/web/src/features/tutor/index.ts
+apps/web/src/features/tutor/lib/assigned-draft.ts
+apps/web/src/features/tutor/tests/assigned-draft.test.mjs
+apps/web/src/features/tutor/tests/text-selection.browser.mjs
+apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs
+apps/web/src/features/twin/components/EvidenceHistoryLedger.tsx
+apps/web/src/features/twin/tests/evidence-history-scope.browser.mjs
+apps/web/src/features/twin/tests/evidence-history.browser.mjs
+apps/web/src/styles/DESIGN.md
+apps/web/src/styles/globals.css
+docs/features/instructor-insights/README.md
+docs/features/study/README.md
+docs/features/tutor/README.md
+docs/features/twin/README.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+```

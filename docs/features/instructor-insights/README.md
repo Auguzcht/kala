@@ -113,7 +113,7 @@ This focused amendment defines visible feedback for instructor skill reviews and
 - Status: done-awaiting-confirmation; local integration verified, hosted acceptance pending.
 - Verified by: `services/api/tests/test_evidence_history.py`, `test_evidence_history_routes.py`, the local index/keyset fixture and Twin history/scope browser suites; no hosted acceptance claim.
 
-- APPROVAL-09 presentation amendment: the shared ledger removes its separate older-batch button. Next fetches older activity at the last loaded page under TWIN-REQ-011, for learner record and Twin drill-down alike. Keep all authorization, keyset, identity cache, error/unavailable/Retry states and instructor summary limits unchanged. Fred implements and final affected browser checks remain pending.
+- APPROVAL-09 presentation amendment: the shared ledger removes its separate older-batch button. Next fetches older activity at the last loaded page under TWIN-REQ-011, for learner record and Twin drill-down alike. Keep all authorization, keyset, identity cache, error/unavailable/Retry states and instructor summary limits unchanged. Implemented locally with history 118, scope 16, presentation 148 and instructor read-state 222 assertions passing in the final sequential browser run. Human/hosted confirmation remains pending.
 
 ### INSTR-REQ-011: Distinguish loading, unavailable, failed and empty instructor views
 - Rule: Roster, at-risk, cohort stats/charts, heatmap and learner record/drill-down callers use existing UI primitives and tokens. Loading uses the current skeleton only while loading. Any failed request, including a refetch after cached success, is not an empty class, zero statistics or a stuck skeleton. For 403/404 show “This class isn't available to you”; for other failures show “Couldn't load the class, try again”, with Retry where meaningful. Successful empty data keeps the actual empty state.
@@ -225,6 +225,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Record local unified Next implementation and the final sequential browser checks while retaining human/hosted gates | Fred's APPROVAL-09 unified-pager request, WI-34 | INSTR-REQ-010, TWIN-REQ-011 |
 | 2026-10-27 | Route assigned Tutor Start to an editable fresh-chat topic draft without changing plan decisions or other destinations | Fred's APPROVAL-09 assigned Tutor Start request, WI-34 | INSTR-REQ-007, TUTOR-REQ-018 |
 | 2026-10-27 | Apply the shared single-pager control to instructor learner/Twin views while preserving H errors, keysets and guards | APPROVAL-09 | INSTR-REQ-010; TWIN-REQ-011 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | INSTR-REQ-008–011 |

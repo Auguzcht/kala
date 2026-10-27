@@ -123,11 +123,12 @@ Own Twin, next-up and assigned-plan GETs follow [AUTH-REQ-007](../lti-auth/READM
 
 ### TWIN-REQ-011: Use the ledger pager to load older activity
 - Rule: Remove the separate Load older activity button. Next advances through already-loaded ten-row pages. On the last loaded page with a live next cursor, that same Next control requests one older batch using H's existing keyset hook and advances to the next page only after new rows arrive. Disable duplicate activation while pending. At the actual end, disable Next. Do not auto-fetch merely by rendering or pressing Previous.
+- Partial page: If the final loaded page has fewer than ten rows, the first successful boundary fetch fills that page and keeps it selected so no newly fetched events are skipped. A later Next advances normally. If the loaded page was full, successful fetching advances one page. Returning to an earlier page while fetching cancels automatic advancement. Keep Next visible for a single loaded page when an older cursor exists.
 - Rule: Preserve `(created_at DESC,id DESC)` order, opaque cursor validation, ID deduplication, identity/role/course-scoped cache/reset and all existing API fields/limits. Errors retain the established unavailable, transient-failure, cursor-reload and retry behavior; no failed request becomes an empty ledger or false total. A failed/empty/duplicate-only batch does not advance to a fabricated page or create an automatic fetch loop. Loaded-activity counts remain honest, not lifetime statistics.
 - Rule: The same shared behavior applies to student Twin, instructor Twin drill-down and instructor learner record. Preserve H's role denial/error states and all instructor data/summary boundaries. No backend, SQL, evidence/mastery write or API change.
 - Acceptance: Next within loaded pages; final-loaded Next delayed/success/error/retry; genuine end, empty and duplicate-only batches; Previous and numbered navigation; scope switches, student/instructor denial and cursor errors;375px/1440px keyboard/reduced motion. Remove only obsolete separate-load-button expectations from affected tests while retaining H fixtures, cursor and identity-scope assertions.
-- Status: planned; Fred implements under APPROVAL-09 after this specification.
-- Verified by: pending affected Twin/history/instructor browser suites after Fred finishes; existing keyset API tests stay unchanged.
+- Status: implemented locally for Fred's direct APPROVAL-09 unified-pager request, WI-34. Human confirmation remains pending.
+- Verified by: evidence-history.browser.mjs 118 assertions, evidence-history-scope.browser.mjs 16, Twin presentation 148 and instructor read-state 222 in the final sequential browser run. All ten browser suites pass. Existing keyset API tests and hook contracts stay unchanged. No hosted acceptance claim.
 
 ## API contract
 
@@ -219,6 +220,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Clarify partial-page filling without skipping fetched events and keep native Next as the only older-batch control before implementation | Fred's APPROVAL-09 unified-pager request, WI-34 | TWIN-REQ-011, TWIN-REQ-003/010, INSTR-REQ-010 presentation |
 | 2026-10-27 | Specify one pager: final-loaded Next fetches the next keyset batch for student/instructor views; preserve H errors/scope and backend contracts | APPROVAL-09 | TWIN-REQ-003/010/011 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | TWIN-REQ-003/009/010; AUTH-REQ-007 |
 | 2026-10-25 | Require existing enrollment admission on inventoried student GETs; preserve staff, mutations and enrolled processing | APPROVAL-07 Amendment 7; coordinator spec before follow-up implementation | AUTH-REQ-007; WI-26 |

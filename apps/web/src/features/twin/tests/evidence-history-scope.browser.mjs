@@ -40,7 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
     });
     await page.goto('http://localhost:5173/__history_scope');
     const loaded=n=>page.getByText(`Showing ${n} of your activity`,{exact:true});
-    await loaded(25).waitFor();await page.getByRole('button',{name:'Load older activity',exact:true}).click();await loaded(49).waitFor();check(await loaded(49).isVisible(),'overlapping pages deduplicate IDs without inflating the loaded count');
+    await loaded(25).waitFor();for(let i=0;i<3;i++) await page.getByRole('link',{name:'Go to next page',exact:true}).click();await loaded(49).waitFor();check(await loaded(49).isVisible(),'overlapping pages deduplicate IDs without inflating the loaded count');
     await page.getByRole('link',{name:'Go to next page',exact:true}).click();
     const changeSession=async patch=>page.evaluate(patch=>{window.__scopeSession={...window.__scopeSession,...patch};window.dispatchEvent(new Event('scope-session'));},patch);
     state.actor='account-b';await changeSession({userId:'account-b'});await page.getByText('account-b course-a own event 0',{exact:true}).waitFor();await loaded(25).waitFor();
