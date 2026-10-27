@@ -43,3 +43,14 @@ FG-L preflight source field finding: user_id_prefix. Hosted presence and latency
 ## Outstanding at this checkpoint
 
 E3/spec commits must be incorporated before lane implementation. T2 dialog/prompt/loading, U2 learning UI/role/corrected completion and TOUR-2 first anchor/no-write feasibility audit are pending. No protected07 path is generally released. TOUR-2 stops before implementation for required protected anchors or a write needed to demonstrate. Its12-step happy/empty/mixed matrix must pass in full; no partial merge.
+
+
+## T2 reviewed merge and TOUR-2 stop
+
+T2 candidate4da2304 merged locally at3375647 after its clean nine-file report, API1,016/enrollment116/frontend21/E3 53/browser258/web proofs. Coordinator independently normalized only the _SYSTEM string and compared full Tutor AST to base; all other pre-existing code is identical. All19 guard functions are reconciled in the T2 report, not only its two owned handlers. Synthetic dialog layout/focus at375px/1440px was visually reviewed. PID3878 was stopped and5173 released to U2; no unrelated server was stopped. U2 must rebase on this merge before final checks. T2 retains ownership of its mixed browser expectation update after U2 integration.
+
+FG-L actually reached the discovered API group, then stopped on field user_id_prefix. No raw row/value retained; raw data is local only, not retained. Metrics and primary/fallback attribution remain unavailable; no configuration recommendation beyond keeping it unchanged can be justified by this stopped sample.
+
+TOUR-2 initial anchor/source audit is complete, with no implementation. Existing protected Twin/instructor anchors and write-capable destination GETs trigger Fred's Amendment4 stops. Bank status can wake work; Diagnostic can enqueue; Lesson can generate/assign/wake; membership404 fallback and saved-set/next reads can claim/record exposure. Zero POSTs is insufficient. A concrete design-only minimum frontend read-only proposal is requested for Fred's decision; no workaround, synthetic-only guarantee or partial tour merge is released. U2/T2 continue their independent approved work. Existing required protected anchors have not been silently reused or edited. New unprotected anchors remain a proposal until the named resolution.
+
+Fred directly clarified E2 in U2 via Amendment6: not-ready, completed/caught-up and fetch-error/Retry remain distinct. Main0fef4e0 reconciles the shared spec and record. Only material/course-team expected-copy lines may change; all other assertions/fixtures remain frozen.
