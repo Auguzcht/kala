@@ -60,6 +60,7 @@ export function LearnerStanding({
   const r = record;
   const name = deidentified ? r.pseudonym : r.displayName;
   const status = STATUS_META[r.status];
+  const momentumPoints = r.momentum === null ? null : Math.round(r.momentum * 100);
 
   return (
     <div className="space-y-5" id="tour-standing">
@@ -139,12 +140,12 @@ export function LearnerStanding({
         <Stat
           label="Momentum"
           value={
-            r.momentum === null
+            momentumPoints === null
               ? "—"
-              : `${r.momentum > 0 ? "+" : ""}${Math.round(r.momentum * 100)} pts`
+              : `${momentumPoints > 0 ? "+" : ""}${momentumPoints} pts`
           }
-          sub="last 10 vs previous 10"
-          tone={r.momentum === null ? "neutral" : r.momentum >= 0 ? "green" : "red"}
+          sub="Last 10 vs previous 10 graded"
+          tone={momentumPoints === null || momentumPoints === 0 ? "neutral" : momentumPoints > 0 ? "green" : "red"}
         />
       </div>
     </div>

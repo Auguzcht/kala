@@ -12,7 +12,7 @@ const makeEvents=n=>Array.from({length:n},(_,i)=>({id:`event-${i}`,type:['practi
 const skills=[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',moduleRef:'Cloud basics',estimate:0.55,attempts:5,band:'proficient'}];
 async function fixture(width,{mode='instructor',reduced='reduce',failure='empty',surface='class',metrics=false}={}){
   const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(10000);
-  let release;const gate=new Promise(resolve=>release=resolve);const state={calls:[],mode:failure,release,mutations:0,rosterFailed:false,metricRoster:{courseId:'course',students:Array.from({length:25},(_,i)=>({userId:i===0?'learner':'peer-'+i,displayName:i===0?'Demo learner':'Synthetic peer '+i,pseudonym:'Learner '+i,initials:'SL',readiness:i===0?0.739:i===1?0.55:null,band:'no-evidence',attempts:i===0?381:0,evidenceCount:i===0?396:0,accuracy:i===0?0.75:null,lastActiveAt:null,daysInactive:null,weakestSkillName:null,skillsWithEvidence:i===0?11:0,skillsTotal:15,status:i===0?'on-track':'not-started'}))}};const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let release;const gate=new Promise(resolve=>release=resolve);const state={calls:[],mode:failure,release,mutations:0,rosterFailed:false,metricMomentum:0,metricRoster:{courseId:'course',students:Array.from({length:25},(_,i)=>({userId:i===0?'learner':'peer-'+i,displayName:i===0?'Demo learner':'Synthetic peer '+i,pseudonym:'Learner '+i,initials:'SL',readiness:i===0?0.739:i===1?0.55:null,band:'no-evidence',attempts:i===0?381:0,evidenceCount:i===0?396:0,accuracy:i===0?0.75:null,lastActiveAt:null,daysInactive:null,weakestSkillName:null,skillsWithEvidence:i===0?11:0,skillsTotal:15,status:i===0?'on-track':'not-started'}))}};const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await context.route('**/*',async route=>{
     const url=new URL(route.request().url());if(url.hostname!=='localhost'||url.port!=='5173')return route.abort();
     if(url.pathname==='/__twin_presentation')return route.fulfill({contentType:'text/html',body:`<!doctype html><html><head><link rel="stylesheet" href="/src/styles/globals.css"></head><body><div id="root"></div><script type="module">import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script><script type="module">
@@ -49,7 +49,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
     if(path.endsWith('/diagnostic'))return reply({courseId:'course',status:'ready',readyCount:1,questions:[{id:'q',skillId:'storage',bloomLevel:'understand',prompt:'Which storage fits?',choices:[{id:'a',label:'Object storage'},{id:'b',label:'Temporary disk'}]}],pendingSkillIds:[],failedSkillIds:[],skippedSkillCount:0});
     if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:[]});
     if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:[]});
-    if(metrics&&path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:0.739,band:'proficient',cohortReadiness:0.644,percentile:200,accuracy:0.69,momentum:0,attempts:381,evidenceCount:200,hintsUsed:0,lastActiveAt:null,daysInactive:0,status:'on-track',skills:[],activityByType:[],activitySeries:[],readinessTrend:[],evidence:[]});
+    if(metrics&&path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:0.739,band:'proficient',cohortReadiness:0.644,percentile:200,accuracy:0.69,momentum:state.metricMomentum,attempts:381,evidenceCount:200,hintsUsed:0,lastActiveAt:null,daysInactive:0,status:'on-track',skills:[],activityByType:[],activitySeries:[],readinessTrend:[],evidence:[]});
     if(path.endsWith('/record'))return reply({courseId:'course',userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL',readiness:null,band:'no-evidence',cohortReadiness:null,percentile:null,accuracy:null,momentum:null,attempts:0,evidenceCount:0,hintsUsed:0,lastActiveAt:null,daysInactive:null,status:'not-started',skills:[],activityByType:[],activitySeries:[],readinessTrend:[],evidence:[]});
     return reply({});
   });
@@ -150,13 +150,23 @@ try {
   }
   for(const width of [375,1440]) for(const surface of ['sheet','learner']) {
     const f=await fixture(width,{surface,metrics:true}),{page,state}=f;
-    if(surface==='sheet'){await page.locator('#tour-roster-first-row').waitFor();await page.locator('#tour-roster-first-row').click();}
+    if(surface==='sheet'){await page.getByRole('textbox',{name:'Search the roster',exact:true}).fill('Demo learner');await page.getByRole('row').filter({hasText:'Demo learner'}).click();}
     const standing=page.locator('#tour-standing');await standing.waitFor();
     await standing.getByText('1st of 2',{exact:true}).waitFor();
     check(await standing.getByText('Learners with measured readiness',{exact:true}).isVisible(),'INSTR-REQ-012 rank denominator labels only measured course learners');
     check(await standing.getByText('200th',{exact:true}).count()===0,'INSTR-REQ-012 never renders the invalid percentile as ordinal');
     check(await standing.getByText('69%',{exact:true}).isVisible(),'INSTR-REQ-012 keeps the learner record accuracy');
     check(await standing.getByText('Graded outcomes in last 200 events · 0 hints used',{exact:true}).isVisible(),'INSTR-REQ-012 accuracy window visible on '+surface);
+    const momentumCard=standing.getByText('Momentum',{exact:true}).locator('..');
+    check((await momentumCard.getByText('0 pts',{exact:true}).getAttribute('class')).includes('text-foreground'),'INSTR-REQ-012 true zero momentum is neutral');
+    check(await momentumCard.getByText('Last 10 vs previous 10 graded',{exact:true}).isVisible(),'INSTR-REQ-012 momentum identifies graded windows');
+    for(const [momentum,text,tone] of [[0.02,'+2 pts','text-brand-green'],[-0.02,'-2 pts','text-destructive'],[0.004,'0 pts','text-foreground'],[-0.004,'0 pts','text-foreground'],[null,'—','text-foreground']]) {
+      state.metricMomentum=momentum;
+      await page.evaluate(()=>window.__readStateClient.invalidateQueries({queryKey:['learner-record','course','learner']}));
+      const value=momentumCard.locator('p').nth(1);await value.filter({hasText:text}).waitFor();
+      check(await value.innerText()===text,'INSTR-REQ-012 momentum retains rounded points '+momentum);
+      check((await value.getAttribute('class')).includes(tone),'INSTR-REQ-012 momentum tone follows displayed points '+momentum);
+    }
     state.metricRoster.students[1].readiness=0.739;
     await page.evaluate(()=>window.__readStateClient.invalidateQueries({queryKey:['roster','course']}));
     await standing.getByText('Tied 1st of 2',{exact:true}).waitFor();
