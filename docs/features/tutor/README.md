@@ -165,6 +165,13 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Status: planned; the baseline only has tour textarea prefilling, not a reusable plan-to-Tutor navigation handoff. Fred must wire the frontend handoff without changing the backend or enabling the hidden tour.
 - Verified by: source audit of InstructorPlan.tsx, course/tutor.tsx, TutorComposer.tsx and TourRunner.tsx; implementation and workspace/Tutor browser checks pending.
 
+### TUTOR-REQ-020: Load saved conversations and chat history with skeletons
+
+- Rule: While a saved conversation or the chat-history list is initially loading, show skeleton blocks without visible “Loading conversation…” or “Loading chats…” copy. Keep an accessible status region with a descriptive aria-label and aria-busy. Skeleton motion stops under reduced motion. Show no spinner for these reads. Preserve conversation selection, responsive history, loaded/error/empty states, request scope and recovery behavior.
+- Acceptance: Delayed conversation/list requests at 375px/1440px show skeleton-only regions with accessible names and busy state. The mobile history Sheet has the same skeleton-only behavior as desktop history. Successful reads replace the skeletons with their normal state. Reads introduce no create, ask, upload, edit or delete request. Existing retry and unsaved-answer recovery assertions continue to pass.
+- Status: implemented locally under Fred's APPROVAL-09 loading-copy request, WI-34. Human confirmation remains pending.
+- Verified by: ui-overhaul.browser.mjs passes 295 assertions, including WI-34-T05 at 375px/1440px for saved-chat/history skeletons, accessible busy states, reduced motion and unchanged mutation counts. No hosted acceptance claim.
+
 ## API contract
 | Method and path | Purpose | Auth | Notes (idempotency, error codes) |
 | --- | --- | --- | --- |
@@ -188,6 +195,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 ## Change log
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Specify skeleton-only saved-chat and history loading with accessible status names and reduced-motion support | Fred's APPROVAL-09 loading-copy request, WI-34 | TUTOR-REQ-020 |
 | 2026-10-27 | Specify frontend-only message copy and new-chat unsent skill prefill before Fred edits; keep sent-message edit deferred | APPROVAL-09 | TUTOR-REQ-017/018; TUTOR-REQ-015 retained |
 | 2026-10-27 | Specify rename dialog, single waiting indicator, prompt-only small talk, planned images, conditional last-prompt editing and delegated read-only timing before implementation | APPROVAL-08, coordinator C1/C2 | TUTOR-REQ-005/010/012–016; DIAG-REQ-008 |
 | 2026-10-25 | Record merged local verification and supersede stale implementation-pending findings; retain hosted gates and bounded summary/statistics limits | APPROVAL-07 coordinator integration; no new behavior | AUTH-REQ-007 |

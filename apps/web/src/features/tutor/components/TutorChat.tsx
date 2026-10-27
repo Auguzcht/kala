@@ -16,6 +16,7 @@ import { AssistantBlock } from "@/components/study/AssistantBlock";
 import { FollowUpChips } from "@/components/study/FollowUpChips";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { useSession } from "@/lib/auth/AuthProvider";
 import { apiErrorReason } from "@/lib/api-error";
@@ -298,9 +299,9 @@ export function TutorChat({ courseId }: { courseId: string }) {
     <div data-study-surface ref={dropTarget} className="relative flex h-full min-h-0 flex-col [container-type:inline-size]">
       <StudyColumn className={cn(empty && "grid grid-rows-[1fr_auto_1fr] overflow-y-auto after:content-['']")}>
       {empty ? <TutorWelcome greeting={pickGreeting(greetingDate, courseId, course.data?.title)} idle={!hasTyped} /> : <StudyStream>
-        {activeId && active.isLoading ? <div role="status" className="space-y-3 text-sm text-muted-foreground">
-          <p>Loading conversation…</p><Skeleton className="h-12 w-3/4 motion-reduce:animate-none" /><Skeleton className="h-16 w-full motion-reduce:animate-none" />
-        </div> : null}
+        {activeId && active.isLoading ? <LoadingRegion label="Loading conversation" className="space-y-3">
+          <Skeleton className="h-12 w-3/4 motion-reduce:animate-none" /><Skeleton className="h-16 w-full motion-reduce:animate-none" />
+        </LoadingRegion> : null}
         {active.isError ? <div role="alert" className="space-y-2 text-sm"><p>This chat could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void active.refetch()}>Retry</Button></div> : null}
         {messages.map((m) => m.role === "user" ? (
           <UserBlock key={m.id} text={m.content} initials={userInitials || undefined} />

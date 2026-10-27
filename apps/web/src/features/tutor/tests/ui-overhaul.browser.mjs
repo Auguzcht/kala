@@ -85,6 +85,7 @@ async function fixture(
     rejectPatch: false,
     lastPatch: null,
     holdDetail: null,
+    holdList: null,
     diagnosticCompleted: false,
     holdDiagnosticSubmit: null,
     masteryRows: [
@@ -199,8 +200,10 @@ async function fixture(
           },
         ],
       });
-    if (path === "/tutor/conversations" && method === "GET")
+    if (path === "/tutor/conversations" && method === "GET") {
+      if (state.holdList) await state.holdList;
       return reply({ conversations: state.rows });
+    }
     if (path === "/tutor/conversations" && method === "POST") {
       state.creates++;
       const created = row("created");
@@ -1867,16 +1870,36 @@ try {
     const reduced=await fixture(width,{reducedMotion:'reduce'});
     let releaseDetail;
     reduced.state.holdDetail=new Promise(done=>{releaseDetail=done});
+    let releaseList;
+    reduced.state.holdList=new Promise(done=>{releaseList=done});
     await reduced.page.goto('http://localhost:5173/course/tutor?conversation=existing');
     const chat=reduced.page.locator('[data-study-surface]');
-    await chat.getByText('Loading conversation…',{exact:true}).waitFor();
+    const conversationLoading=chat.getByRole('status',{name:'Loading conversation',exact:true});
+    await conversationLoading.waitFor();
     check(await chat.locator('svg.animate-spin').count()===0
       && await chat.locator('[data-slot=skeleton]').count()===2
       && await chat.locator('[data-slot=skeleton]').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).animationName==='none')),
       `TUTOR-REQ-010 reduced-motion conversation skeletons without spinner at ${width}`);
+    check(await conversationLoading.innerText()==='' && await conversationLoading.getAttribute('aria-busy')==='true',
+      `TUTOR-REQ-020 conversation loading is skeleton-only with accessible busy status at ${width}`);
+    if(width<1024) await reduced.page.getByRole('button',{name:'Open chat history'}).click();
+    const historyLoading=reduced.page.getByRole('status',{name:'Loading chats',exact:true});
+    await historyLoading.waitFor();
+    check(await historyLoading.innerText()==='' && await historyLoading.getAttribute('aria-busy')==='true'
+      && await historyLoading.locator('[data-slot=skeleton]').count()===3
+      && await historyLoading.locator('svg.animate-spin').count()===0
+      && await historyLoading.locator('[data-slot=skeleton]').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).animationName==='none')),
+      `TUTOR-REQ-020 history loading is skeleton-only, accessible and static under reduced motion at ${width}`);
+    check(reduced.state.creates===0 && reduced.state.asks===0 && reduced.state.uploads===0 && reduced.state.patches===0 && reduced.state.deletes===0,
+      `TUTOR-REQ-020 pending read states make no mutations at ${width}`);
+    await screenshot(reduced.page,'tutor-skeleton-only-loading',width);
+    releaseList();
+    reduced.state.holdList=null;
+    await historyLoading.waitFor({state:'detached'});
+    if(width<1024) await reduced.page.keyboard.press('Escape');
     releaseDetail();
     reduced.state.holdDetail=null;
-    await chat.getByText('Loading conversation…',{exact:true}).waitFor({state:'detached'});
+    await conversationLoading.waitFor({state:'detached'});
     if(width<1024) await reduced.page.getByRole('button',{name:'Open chat history'}).click();
     await reduced.page.getByRole('button',{name:'Actions for Understanding cloud storage'}).click();
     await reduced.page.getByRole('menuitem',{name:'Rename',exact:true}).click();

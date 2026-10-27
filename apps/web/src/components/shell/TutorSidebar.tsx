@@ -4,6 +4,8 @@ import { ChevronDown, ListFilter } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/shared/LoadingRegion";
 import {
   Collapsible,
   CollapsibleContent,
@@ -104,13 +106,11 @@ export function TutorSidebar({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {conversations.isLoading ? (
-          <p
-            role="status"
-            className="flex items-center gap-2 p-3 text-xs text-muted-foreground"
-          >
-            <span className="h-3 w-full rounded-sm bg-muted" aria-hidden />
-            Loading chats…
-          </p>
+          <LoadingRegion label="Loading chats" className="space-y-3 p-3">
+            <Skeleton className="h-3 w-3/4 motion-reduce:animate-none" />
+            <Skeleton className="h-3 w-full motion-reduce:animate-none" />
+            <Skeleton className="h-3 w-2/3 motion-reduce:animate-none" />
+          </LoadingRegion>
         ) : conversations.isError ? (
           <div className="space-y-2 p-3 text-xs text-muted-foreground">
             <p>Chats could not be loaded.</p>

@@ -89,4 +89,20 @@ WI-34-T04: `node apps/web/src/features/tutor/tests/text-selection.browser.mjs` p
 
 Web lint/typecheck/build passed, retaining the same 18 existing lint warnings and route-generator/bundle-size warnings. Documentation checker, 18 documentation unit tests and `git diff --check` passed. No hosted action or configuration change. Secrets printed: none.
 
+## Tutor loading copy: Skeleton-only read states
+
+2026-10-27. Fred requests removal of visible conversation loading text, showing both saved-conversation and history-list loading in the screenshot. Base: text-selection commit a02345c. Requirement TUTOR-REQ-020 and its change log are specified first. WI-34-T05 covers delayed detail/history reads at 375px/1440px, desktop/mobile history, accessible status/busy state, no visible copy or spinner, reduced motion, successful replacement and unchanged mutation counts. Status: in-progress, owner Codex. This item does not alter model waiting messages or error/retry copy.
+
+Implementation complete, status: done-awaiting-confirmation for this item only. TutorChat and TutorSidebar use the existing LoadingRegion status wrapper with descriptive aria-label/aria-busy and skeleton children. The visible loading sentences are removed. Detail uses two existing skeleton blocks and the history list uses three short rows. No spinner was added.
+
+Files changed: `docs/features/tutor/README.md`, `apps/web/src/features/tutor/components/TutorChat.tsx`, `apps/web/src/components/shell/TutorSidebar.tsx`, `apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` and this work item.
+
+`node apps/web/src/features/tutor/tests/ui-overhaul.browser.mjs` passed 295 assertions, preserving its existing data/recovery/sidebar/attachment/scrollbar checks. New held list/detail requests prove empty visible status text, accessible labels/busy state, skeleton-only desktop/mobile history, static reduced-motion skeletons, no spinner and no create/ask/upload/patch/delete. Both loading regions disappear on successful reads. Screenshots are in `/tmp/kala-approval09-skeleton`, local only, not retained.
+
+Web lint/typecheck/build passed with the same 18 existing lint warnings and route-generator/bundle-size warnings. E3/tour anchors: 53 passed, including all seven unmodified historical proofs. Documentation checker, 18 documentation unit tests and `git diff --check` passed. Synthetic local requests only. Human review remains pending. No merge, push, hosted/configuration change or deployment. Secrets printed: none.
+
+## Load older activity: Documentation/source answer
+
+Fred asks whether the extra button has value. Current EvidenceLedger pagination slices only the loaded rows into groups of ten. EvidenceHistoryLedger's separate button fetches another server batch through useEvidenceHistory, normally 25 rows under TWIN-REQ-010. Thus three local pages of 25 loaded events do not include all server history. TWIN-REQ-011 already specifies removing the separate button and fetching the next batch through Next on the final loaded page, preserving keysets, permissions, errors and scope. This behavior remains planned and is not implemented by the three fixes above. This request was a documentation/source check, with no ledger edit made.
+
 Preparation: frontend specs223aa36 committed before edits; web5173/PID40695/HTTP200 verified. Separate prompt candidate65e539a passes API1016, enrollment116, E1 and19-guard proof; it remains unmerged until Fred's UI checks pass. No frontend application edits were made by Codex.
