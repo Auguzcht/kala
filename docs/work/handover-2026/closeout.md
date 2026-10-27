@@ -1,9 +1,9 @@
-# Kala handover closeout (DRAFT)
+# Kala handover closeout
 
 Prepared for: Mapúa Malayan Colleges of Mindanao ITO
 Prepared by: Alfred Nodado (Auguzcht), with planner and coordinator agents, for the Office for Artificial Intelligence Curriculum Integration (OAICI)
 Date: October 28, 2026
-Status: DRAFT. Frontend frozen at `bdba160`; local integration verified separately from live acceptance. Formal project-wide freeze time: [Fred to confirm]. This initiative is record, not operational authority.
+Status: development ended. Frontend frozen at `bdba160`. The final closeout commit starts the freeze at 2026-10-28T03:44:49+08:00 (Asia/Manila; 2026-10-27T19:44:49Z UTC). Docs-only changes after this commit need Fred. This initiative is record, not operational authority.
 
 ## What Kala is
 
@@ -25,11 +25,11 @@ ITO provisions its own AWS, Supabase, Blackboard registration and model provider
 
 | Component | Version |
 | --- | --- |
-| API Lambda | [Post-APPROVAL-09 live alias/version: Fred to confirm] |
-| Worker Lambda | [Post-APPROVAL-09 immutable image digest: Fred to confirm] |
-| Frontend (Vercel) | [New production Ready SHA after separately delegated push] |
-| Application source | `502c5a2c1105c714c9ae5bfcb3c5377a5a3824b1`; the final closeout commit changes documentation only |
-| Database migrations | 0001–0039 reported applied; FG-6 accepted by Fred. All 39 SQL files are byte-identical to the pre-09 baseline |
+| API Lambda | alias `live`, version **9**, no weighted routing; Active/Successful |
+| Worker Lambda | `sha256:4ceb1efc6a497fbab458260ecf8ed7beb9af57e145e0a2eb961b1c3066ec2b4d`; Active/Successful |
+| Frontend (Vercel) | `b3b636f30bdef744a0e412c4b9f6e1af673dd9d9`, Vercel production Ready; host `kala-ak1zr2254-auguzchts-projects.vercel.app` |
+| Application source | `b3b636f30bdef744a0e412c4b9f6e1af673dd9d9`; final closeout changes documentation only |
+| Database migrations | 0001–0039 applied; FG-6 accepted by Fred. All 39 SQL files are byte-identical to the pre-09 baseline |
 
 Known gap: 0001 to 0036 were applied by hand, so the hosted migration history table does not list them.
 
@@ -61,10 +61,10 @@ All browser results use synthetic fixtures. Main server PID 98534 replaced the f
 | Gate | Result |
 | --- | --- |
 | FG-6, migrations 0038 and 0039 | Accepted with one finding (grant drift, below) |
-| FG-8, deploy and publish | [Fred backend redeploy, separately delegated push and production Ready confirmation] |
-| FG-1b, chat model swap | Secret update applied by Codex under Fred’s explicit CLI delegation; 26 → 27 entries, two approved targets verified, all others unchanged. [New-runtime refresh and post-swap live sample/aggregates pending] |
+| FG-8, deploy and publish | Complete: backend v9/images verified; `b3b636f` pushed by Codex under Fred’s delegation, Vercel production Ready |
+| FG-1b, chat model swap | Applied; added entry **`OPENROUTER_MODEL_CHAT`** confirmed from secret-version membership (26 → 27); the primary previously used its code default. Other entries unchanged except the approved fallback swap. v9 deployed. not enough samples since v9, post-swap latency unverified, ITO to measure under WI-31 (0 timing requests in the conservative window) |
 | FG-7, identity repair | Deferred to ITO. Legacy pairs not proved |
-| FG-9, live click-through | [results table in the acceptance checklist] |
+| FG-9, live click-through | Accepted by Fred on live, October 28. The no-name greeting and model swap went live with v9 after the walkthrough. Fred spot-checks the greeting. |
 
 ## Open items for ITO, in priority order
 
@@ -72,10 +72,10 @@ All browser results use synthetic fixtures. Main server PID 98534 replaced the f
 2. WI-31, Tutor latency. The retained incident sample has 10 primary successes (chat p50 9.27 s, max 20.93 s), three fallback successes (chat p50 7.04 s, max 8.88 s) and two handler timeouts at about 23.02 s. This is pre-swap, small-sample evidence, not a current latency benchmark. Add a primary-attempt limit that keeps fallback time, then stream answers.
 3. WI-24, duplicate identity repair. Hanna Sato and Alfred Nodado each have split records from the old LTI vs REST identity bug. The cause is fixed. Old records are not merged. Script and runbook are ready (scripts/repair_identity_split.py, identity-repair runbook). The legacy pairs must be proved before any apply.
 4. WI-32, side-effect-free reads. Several GET routes enqueue work, generate content, claim cards or record exposures. Prove fixes by database writes or a side-effect log, not HTTP method.
-5. WI-30, student tour. Hidden for students because of item 4. The 12-step rework with fallbacks is preserved on branch codex/tour-rework. The 27-step instructor tour passes synthetic read-only checks locally. [New frontend publication and live walkthrough pending].
+5. WI-30, student tour. Hidden for students because of item 4. The preserved rework is available to ITO as **origin/codex/tour-rework** at **beccf5915c4caea045fc5a6e8be2945aaf8812ad**, verified on origin. Its local worktree is retained. No merge of the rework was performed during this release. The 27-step instructor tour passes synthetic read-only checks locally. Frontend `b3b636f` is production Ready. Fred accepts FG-9 on live; the post-v9 greeting spot-check remains his final confirmation.
 6. WI-29 / TUTOR-REQ-015, edit a sent prompt. Deferred. Messages lack an exchange and revision contract.
 7. Tutor image attachments. Planned. The sanitizer is text-only, so images are a Data Privacy Act risk.
-8. De-identification coverage. The sanitizer covers emails and name: patterns only. Names in course material reach the model. One such name was used to greet a student, and the merged `_SYSTEM` prompt rule now forbids addressing students by name. [Fred backend redeploy and live greeting acceptance pending].
+8. De-identification coverage. The sanitizer covers emails and name: patterns only. Names in course material reach the model. One such name was used to greet a student, and the merged `_SYSTEM` prompt rule now forbids addressing students by name. The rule is deployed in v9. Fred spot-checks the greeting after the accepted walkthrough.
 9. Hint telemetry. Flashcard hint requests are not counted. The instructor card now reads "With evidence" until tracking is complete.
 10. Instructor insights. Upstream percentile arithmetic needs review. The recommendation source label shows the configured primary, not the model that answered when the fallback ran.
 11. Database drift. SELECT grants differ from the local replay on 14 tables (RLS-gated, no anon or public policies). Run the Lane DB drift check, move migrations to supabase/migrations, and add local db:* scripts.
@@ -85,6 +85,10 @@ All browser results use synthetic fixtures. Main server PID 98534 replaced the f
 15. Planned features with no shipped code: admin console, researcher portal, AGS grade passback. The Practice/Test spec is not fully authored.
 16. Design exceptions awaiting lead designer review: pill-shaped chat docks and the Tutor empty-state mascot.
 17. Test fixtures. Some renderer and browser fixtures live outside the repo (WI-20).
+18. Human-facing root README, logo, licensing and attribution. Owner: Fred or ITO. Add Kala’s transparent logo and the Alfred Nodado / Auguzcht and OAICI attribution in a separately approved docs pass. No license has been inferred or granted by this closeout.
+19. Local worktree codex/tour-refresh-handoff holds unreviewed, uncommitted pre-APPROVAL-08 tour edits. Not part of the release and not handed over. Fred discards or reviews it later.
+20. Local worktree fg1b-preparation (merged, clean) is retained as this task's primary checkout. Fred removes it after the session.
+
 
 ## Security and cutover
 
@@ -104,14 +108,20 @@ Full records are in docs/decisions/ and the approval records.
 - Roster sync is by Blackboard REST uuid. Removals happen only after a complete roster fetch.
 - Duplicate repair refuses pairs with mismatched consent or data-request records.
 
-## Release boundary
+## Release verification and freeze
 
-The greeting fix is present in local main and **requires Fred’s backend redeploy**. The secret swap is already saved; a secret save alone does not prove a warm runtime loaded it. Fred deploys the final reviewed source, verifies the new API version/live alias and worker digest, then delegates publication separately. No push, deploy, hosted SQL, data repair or cleanup is performed by this integration. Live and gate placeholders remain intentionally unresolved.
+Fred deployed the backend; Codex performed read-only verification. API alias live is v9 with no weighted routing, API and worker are Active/Successful, the worker CodeSha256 matches the digest above, and /health returned 200. API image digest: `sha256:d4ffa142dbae15b907792f6c81a8ddd3def700e97fccbb0f38208d428c55a750`. The corresponding local image archives match deployed digests and the tracked source at b3b636f: 62 API files and 30 worker files, including each requirements export. No backend redeploy or configuration edit was performed by this release task.
 
-The full student-tour rework branch remains preserved for ITO. Safe chat/worktree/branch cleanup and the human-facing root README, transparent logo, licensing and attribution pass remain separate follow-ups. License selection has not been inferred.
+FG-1b membership was verified by comparing the previous/current secret versions in memory, with no values printed or retained. The added key is OPENROUTER_MODEL_CHAT. Timing uses Fred’s conservative start, 2026-10-27T19:22:00Z (October 28, 03:22 Asia/Manila), derived from his API update at 19:21:18Z and alias-v9 response before the 19:21:34Z worker update. The aggregate query ends at 2026-10-27T19:33:17.081306+00:00, filters version 9 log streams and finds 0 tutor_timing records: not enough samples since v9, post-swap latency unverified, ITO to measure under WI-31. No raw log rows or identifying fields were projected. This does not reopen the release gate.
+
+Freeze starts at 2026-10-28T03:44:49+08:00 (Asia/Manila; 2026-10-27T19:44:49Z UTC), the final closeout commit timestamp. Development has ended. Any later docs-only change needs Fred. All open items above remain with their named owners; live acceptance is Fred’s recorded decision, not inferred from synthetic tests or health.
+
+The full student-tour rework branch/worktree stays preserved for ITO. Cleanup is local only and limited to clean merged worktrees/branches; no unmerged or dirty work is deleted. Sixteen clean merged worktrees and 33 merged local branches were removed; two already-absent worktree registrations were pruned. The three explicitly retained worktrees remain. The exact inventory and verification are in the release report; the final documentation publication result is reported after its commit.
 
 ## Historical sources
 
 - [APPROVAL-08 closeout snapshot before this draft](evidence/approval-08-closeout-before-09.md)
 - [APPROVAL-09 integration review and checks](evidence/approval-09-final-integration.md)
 - [APPROVAL-09](approval-09.md), including Amendment 2 recorded during integration
+
+- [Delegated release, timing and cleanup record](evidence/release-closeout-2026-10-28.md)

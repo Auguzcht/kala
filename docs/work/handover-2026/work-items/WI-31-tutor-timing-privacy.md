@@ -44,3 +44,12 @@ Preparation only: no secret edit, deploy, hosted application write or new verifi
 After the preparation report, Fred explicitly delegated the AWS CLI edit. Account identity and absence of both chat-name overrides on API latest/live were checked. The two approved target models were saved in `kala/app`, then read back and compared in memory. Entry count: **26 before, 27 after**; one of the two approved keys was absent and added. Every other entry was verified unchanged. No secret value was printed or saved. No Lambda refresh, deploy or live performance acceptance is inferred from that edit.
 
 The retained pre-swap aggregate receipt at source `eb9409a8` covers 15 Tutor timing records: 10 primary successes, 3 fallback successes and 2 timeouts. Primary-success chat p50/max: 9,274.69 / 20,933.37 ms; handler: 10,985.11 / 22,099.07 ms. Fallback-success chat p50/max: 7,039.63 / 8,877.08 ms; handler: 7,798.78 / 9,501.36 ms. Timeout chat p50/max: 21,684.10 / 21,976.39 ms; handler: 23,022.83 / 23,023.07 ms, with retrieval max 923.36 ms. These counts indicate the model stage dominated those two requests; they do not prove post-swap performance. `chat_ms` may span both attempts. No raw records are retained in the repository.
+
+
+## v9 release timing — 2026-10-28
+
+Fred supplied a conservative start of **2026-10-27T19:22:00Z** (October28,03:22 Asia/Manila). His deploy output places the API update at19:21:18Z and the alias-v9 response before the worker update at19:21:34Z. This replaces the unavailable CloudTrail activation timestamp; no further CloudTrail lookup was needed. The aggregate-only query uses the discovered API group, filters v9 log streams and ends at 2026-10-27T19:33:17.081306+00:00. It returns **0 tutor_timing requests**.
+
+**not enough samples since v9, post-swap latency unverified, ITO to measure under WI-31.** No post-swap median/max, fallback count or429 count is claimed from an insufficient sample. The lack of timing rows is not proof of no errors. No raw log rows, user fields, request bodies or credentials were returned or retained. Fred explicitly makes this result non-blocking for release.
+
+Backend v9 is verified and the26-to27 secret membership comparison confirms the added entry was **OPENROUTER_MODEL_CHAT**, previously using the code default. The setting edit and deployment are historical completed actions; the primary-attempt limit, streaming and diagnostics privacy items above remain planned for ITO.
