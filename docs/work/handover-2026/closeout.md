@@ -1,64 +1,117 @@
-# Handover closeout record — acceptance incomplete
+# Kala handover closeout (DRAFT)
 
-Progress snapshot updated for APPROVAL-08, 2026-10-27. APPROVAL-07 integrated code/contracts remains `8e51040f1dda4235f9b12ad344da4cd81442e1e9`. This is the first reading item for the initiative, **record, not authority**. Current operation uses [AGENTS.md](../../../AGENTS.md), [the task router](../../README.md), feature specs and engineering runbooks. Other initiative files record delivery history. This page does not declare the release complete.
+Prepared for: Mapúa Malayan Colleges of Mindanao ITO
+Prepared by: Alfred Nodado (Auguzcht), with planner and coordinator agents, for the Office for Artificial Intelligence Curriculum Integration (OAICI)
+Date: October 28, 2026
+Status: DRAFT. Frontend frozen at `bdba160`; local integration verified separately from live acceptance. Formal project-wide freeze time: [Fred to confirm]. This initiative is record, not operational authority.
 
-## APPROVAL-08 local continuation
+## What Kala is
 
-T2's rename dialog, single model-wait indicator and prompt-only small talk merged at3375647. U2's student-copy boundary, loading cards and Get new cards/session safeguards merged atad7a9ac, after rebasing on T2. Amendment7a's minimal student-tour disable merged ateb3e739. The instructor destination source audit permits retaining its tour unchanged; its27-step synthetic walkthrough passes. Full TOUR-2 remains blocked/unmerged, with its branch/audit preserved exactly. No new read-only client/store/hook mode is included.
+Kala is an AI learning companion and digital learning twin. It runs as an intelligence layer on top of Blackboard Learn. Students and instructors enter through an LTI 1.3 link. Blackboard owns course content and grades. Supabase owns learning evidence.
 
-Current local API passes1,016 and worker117. U2's component21, retained frontend/E3/route77, new browser146 and H643 pass. Minimal tour browser646 replaces the old616 matrix and checks absent student entry plus the unchanged instructor flow. T2's strict mixed loading-fixture follow-upd379004 mergeddebe791 and passes267 assertions. The final sequential merged-main browser pass is1,702 assertions across nine suites, including role/history/error cases. Frontend/E3/route77 and Study component21 have no skips. Local lint/typecheck/build pass with existing warnings. These results do not advance any human gate.
+Runtime: React and Vite SPA on Vercel, FastAPI on AWS Lambda behind HTTP API Gateway, an EventBridge-scheduled worker Lambda, Supabase Postgres 17.6 with pgvector, model calls through the provider router in services/api/app/ai/.
 
-Conditional editing is deferred to ITO under WI-29; images stay planned. Delegated FG-L stopped on actual field user_id_prefix and produced no timing aggregates or latency attribution. WI-31 tracks that privacy finding. WI-32 plans side-effect-free reads for tours/prefetching; zero writes requires database-write or request-side-effect evidence, not HTTP method. FG-9 removes the student walkthrough and instead checks no offer/manual entry; the retained instructor walkthrough remains required.
+## Start here
 
-## Historical local integration checkpoint
+1. [AGENTS.md](../../../AGENTS.md): repository rules, the spec-first process and agent rules.
+2. [docs/README.md](../../README.md): the task router and which document wins when two disagree.
+3. [docs/features/README.md](../../features/README.md): the feature registry and specs.
+4. [docs/engineering/runbooks/](../../engineering/runbooks/README.md): environments, secrets (names only), database, security limits and 13 runbooks.
+5. This file's open-items list.
 
-DOCS-HYGIENE and TOUR-REFRESH are included in the published baseline `da765cbd27bd06c53c04ef3698c9410b503eb94a`. APPROVAL-07 then adds reviewed staff authorization and forward RLS tightening (SEC), independent full evidence-history paging and instructor failure states (H), guarded identity-repair tooling (M), and the 19 student-read enrollment guards (Amendment7). H merged after browser green, then M after its final governance proof/report, then the student follow-up. Generated contracts follow all three merges. No publication, deployment, hosted SQL or data repair occurred in this round.
+ITO provisions its own AWS, Supabase, Blackboard registration and model provider, then builds from the migrations. No data, keys or accounts carry over.
 
-Full merged API passes 1,014 tests; worker 117; frontend/tour unit 33 with no skips; Study component four. Web lint/typecheck/build and configuration inventory pass. The coordinator report records final browser verification, source and server PIDs. Both migrations have combined disposable local PostgreSQL proof; all 37 historical SQL files are byte-identical. Local proof does not establish hosted access or feature acceptance. Existing dependency/Fast Refresh/bundle warnings and external renderer/browser fixtures remain limits.
+## What is live at handover
 
-## Actual runtime record
+| Component | Version |
+| --- | --- |
+| API Lambda | [Post-APPROVAL-09 live alias/version: Fred to confirm] |
+| Worker Lambda | [Post-APPROVAL-09 immutable image digest: Fred to confirm] |
+| Frontend (Vercel) | [New production Ready SHA after separately delegated push] |
+| Application source | `502c5a2c1105c714c9ae5bfcb3c5377a5a3824b1`; the final closeout commit changes documentation only |
+| Database migrations | 0001–0039 reported applied; FG-6 accepted by Fred. All 39 SQL files are byte-identical to the pre-09 baseline |
 
-Fred reported 0037 applied to dev-hosted; read-only post-checks passed on 2026-10-25. The paid fallback setting was verified in Secrets Manager without altering the other 25 entries. Fred confirms API live alias v7 deployed at 00:04 UTC (08:04 Asia/Manila), after the secret change at 00:01 UTC, so that earlier runtime refresh is complete. I, G and U backend close-out code is in v7. Fred subsequently deployed the reviewed APPROVAL-07/08 backend from616dfc66 on2026-10-27: API live8 without weighted routing, worker Active/Successful, exact image/source mapping and health200 verified. Frontend acceptance requires its exact Vercel Ready revision; Git publication alone does not establish it. Live Hint/Explain/dock success remains FG-5 pending. Missing hosted migration-history records stay in the database stream and do not retroactively block the earlier approved deployment.
+Known gap: 0001 to 0036 were applied by hand, so the hosted migration history table does not list them.
 
-## Remaining human gates
+Rollback points: API alias v8 (and v7), the previous Vercel deployment, the saved worker image.
 
-| Gate / stream | Status | Required next evidence |
-| --- | --- | --- |
-| FG-6 —0038/0039 | Accepted by Fred on2026-10-27 with the pre-existing grant finding | Lane DB / WI-04, owner ITO, reviews14-table SELECT drift; no grant change now. Hosted role acceptance is FG-9 |
-| FG-8 —backend/publication | Backend verified; frontend publication/status delegated | One docs-only commit and fast-forward push by Codex, delegated by Fred; actual pushed SHA/production status in final coordinator response. Pending at this commit |
-| FG-7a/7b —identity repair | Tooling and exact backup/restore locally proved; no real pair run | Fred counts-only dry run, planner review, then apply/recompute/capture or a valid governance refusal; unresolved history recorded honestly |
-| FG-9 plus retained FG-5 | Not run | Fred's real role/course LTI observations, permission denial, complete-history paging, repair/refusal outcome, Study Hint/Explain, Tutor/Diagnostic/loading-width acceptance, absent student tour entry and retained instructor tour |
-| Local database workflow | Not installed; hosted major confirmation still gates configuration | Confirmed dashboard major, approved workflow/replay/types and two clean verifies |
-| Fresh ITO recreation | All13 runbooks remain execution-unverified drafts | Institutional accounts/decisions, named-human procedure execution and acceptance |
+## Verification at handover
 
-## Retained limitations
+Local on merged main, with committed backend test isolation and synthetic browser fixtures:
 
-- APPROVAL-09 Amendment1: Fred classifies the Hello Clyde finding as course material: one embedded AWS101 chunk matches; prior history, own attachments/display name/memory and attachment ownership mismatches are zero. No cross-user data was reported. Names in course material can reach the model because the sanitizer covers only emails and explicit name: patterns. Per-request retrieval results are not retained, so this is the only source found, not causal proof. A separate prompt-only TUTOR-REQ-019 fix is authorized; sanitizer changes are not.
+| Check | Result |
+| --- | --- |
+| Full API suite | 1,016 passed |
+| Worker suite | 117 passed |
+| Student enrollment matrix | 116 passed |
+| Frontend units, including Study components and routes | 62 passed, no skips |
+| E3 | 56 passed, all seven historical proofs retained |
+| Routes, repeated separately | 5 passed |
+| Browser suites | All 12 passed sequentially, 4,991 assertions. Includes the prior 11 plus prompt-history coverage |
+| Web lint / typecheck / build | Pass; 18 existing lint warnings, route-generator and bundle warnings remain |
+| OpenAPI and frontend API types | Isolated regeneration, zero diff |
+| Config inventory | Pass |
+| Documentation and checker unit tests | Zero violations; 18 unit tests passed |
+| Scope / E1 / migrations | Only the `_SYSTEM` literal changes in application backend; all 19 guard ASTs and all 39 SQL files unchanged |
 
-- WI-26 —open, in-progress, owner ITO: API staff guards, student read admission and0038 hosted policy metadata are verified; Fred accepts FG-6 with the Lane DB grant finding. Frontend publication and FG-9 acceptance remain separate. Thirteen student mutation methods are unchanged and remain a follow-up finding.
-- WI-24 —open, in-progress, owner ITO: guarded repair implementation and 14 local proof groups pass. Actual legacy history remains separate until the human gates. `refused: governance ambiguity` is a valid safe outcome, never permission to change governance records or research policies.
-- WI-25 —open, in-progress, owner ITO: independent paging and0039 hosted index metadata are verified; Fred accepts FG-6. Frontend publication and live acceptance remain separate. Legacy summary/statistics limits remain 20/25/200/2,000 as documented. No lifetime aggregate claim.
-- Legacy instructor query caches do not include validated identity/role in every key. Fresh-document LTI navigation clears in-memory cache; an in-place session replacement can reuse old legacy cache. New history keys isolate role/institution/caller/target/course/cursor and hide denied data.
-- Standard frontend runner (WI-20), source citations (WI-23), broader sanitization (WI-19), Gateway access logs (WI-18), broader call bounds and global Bedrock policy remain planned.
-- Lead designer review of the narrow DESIGN.md dock/mascot exceptions remains a handover follow-up.
-- Keep Kala Audit and all existing worktrees/chats until their live verification/acceptance and authorized cleanup. No deletion is included here.
+All browser results use synthetic fixtures. Main server PID 98534 replaced the frozen frontend server PID 40695 for verification. Both were stopped; port 5173 has no listener. Live acceptance is FG-9 below.
+
+## Human gates
+
+| Gate | Result |
+| --- | --- |
+| FG-6, migrations 0038 and 0039 | Accepted with one finding (grant drift, below) |
+| FG-8, deploy and publish | [Fred backend redeploy, separately delegated push and production Ready confirmation] |
+| FG-1b, chat model swap | Secret update applied by Codex under Fred’s explicit CLI delegation; 26 → 27 entries, two approved targets verified, all others unchanged. [New-runtime refresh and post-swap live sample/aggregates pending] |
+| FG-7, identity repair | Deferred to ITO. Legacy pairs not proved |
+| FG-9, live click-through | [results table in the acceptance checklist] |
+
+## Open items for ITO, in priority order
+
+1. WI-14, lesson generation. First-open lesson generation runs inline and can exceed the 30 s Lambda timeout. Eight API Lambda kills at 30,000 ms were observed, but route-specific attribution to the reported lesson URL was not logged. Non-ready lessons are reclaimed on reopen. Move generation to the worker with a preparing state and a duplicate guard. guided_lessons.status already supports generating, ready and failed. Estimate: 2 to 3 days without a migration, 3 to 5 with retry metadata.
+2. WI-31, Tutor latency. The retained incident sample has 10 primary successes (chat p50 9.27 s, max 20.93 s), three fallback successes (chat p50 7.04 s, max 8.88 s) and two handler timeouts at about 23.02 s. This is pre-swap, small-sample evidence, not a current latency benchmark. Add a primary-attempt limit that keeps fallback time, then stream answers.
+3. WI-24, duplicate identity repair. Hanna Sato and Alfred Nodado each have split records from the old LTI vs REST identity bug. The cause is fixed. Old records are not merged. Script and runbook are ready (scripts/repair_identity_split.py, identity-repair runbook). The legacy pairs must be proved before any apply.
+4. WI-32, side-effect-free reads. Several GET routes enqueue work, generate content, claim cards or record exposures. Prove fixes by database writes or a side-effect log, not HTTP method.
+5. WI-30, student tour. Hidden for students because of item 4. The 12-step rework with fallbacks is preserved on branch codex/tour-rework. The 27-step instructor tour passes synthetic read-only checks locally. [New frontend publication and live walkthrough pending].
+6. WI-29 / TUTOR-REQ-015, edit a sent prompt. Deferred. Messages lack an exchange and revision contract.
+7. Tutor image attachments. Planned. The sanitizer is text-only, so images are a Data Privacy Act risk.
+8. De-identification coverage. The sanitizer covers emails and name: patterns only. Names in course material reach the model. One such name was used to greet a student, and the merged `_SYSTEM` prompt rule now forbids addressing students by name. [Fred backend redeploy and live greeting acceptance pending].
+9. Hint telemetry. Flashcard hint requests are not counted. The instructor card now reads "With evidence" until tracking is complete.
+10. Instructor insights. Upstream percentile arithmetic needs review. The recommendation source label shows the configured primary, not the model that answered when the fallback ran.
+11. Database drift. SELECT grants differ from the local replay on 14 tables (RLS-gated, no anon or public policies). Run the Lane DB drift check, move migrations to supabase/migrations, and add local db:* scripts.
+12. Logging. Tutor timing logs include user_id_prefix. Review under the Data Privacy Act.
+13. Data note. Study history from before the October 27 fix may contain duplicate review rows.
+14. Long requests. The earlier endpoint audit found nine model/LMS paths at risk of exceeding the request window. Inline lesson generation remains unbounded in source; the API timeout aggregate is not a route-level proof.
+15. Planned features with no shipped code: admin console, researcher portal, AGS grade passback. The Practice/Test spec is not fully authored.
+16. Design exceptions awaiting lead designer review: pill-shaped chat docks and the Tutor empty-state mascot.
+17. Test fixtures. Some renderer and browser fixtures live outside the repo (WI-20).
+
+## Security and cutover
+
+- Every credential is replaced at cutover, when ITO provisions its own accounts.
+- docs/engineering/secrets.md lists every secret by name, store and owner, plus the exposure log. It holds no values.
+- Credentials exposed during development are logged there by name. By decision, the AWS access key was not rotated before handover because cutover replaces it.
+- The OpenRouter account ends with a low balance and is not topped up. ITO connects its own provider account.
+- Instructor course access is enforced: 403 for the wrong role, 404 for a course you don't teach.
+
+## Key decisions
+
+Full records are in docs/decisions/ and the approval records.
+- Migrations are the only database authority. They are forward only, and applied migrations are never edited.
+- Spec first: behavior changes update the spec before code.
+- No :free models in production config.
+- The tour never writes data.
+- Roster sync is by Blackboard REST uuid. Removals happen only after a complete roster fetch.
+- Duplicate repair refuses pairs with mismatched consent or data-request records.
+
+## Release boundary
+
+The greeting fix is present in local main and **requires Fred’s backend redeploy**. The secret swap is already saved; a secret save alone does not prove a warm runtime loaded it. Fred deploys the final reviewed source, verifies the new API version/live alias and worker digest, then delegates publication separately. No push, deploy, hosted SQL, data repair or cleanup is performed by this integration. Live and gate placeholders remain intentionally unresolved.
+
+The full student-tour rework branch remains preserved for ITO. Safe chat/worktree/branch cleanup and the human-facing root README, transparent logo, licensing and attribution pass remain separate follow-ups. License selection has not been inferred.
 
 ## Historical sources
 
-- [Fred's FG-6 acceptance, backend verification and frontend delegation](evidence/fg6-fg8-acceptance-2026-10-27.md)
-
-- [APPROVAL-08 coordinator record](evidence/approval-08-coordinator.md)
-- [U2 reviewed report](evidence/approval-08-u2.md)
-- [T2 reviewed report](evidence/approval-08-t2.md)
-- [Minimal tour disable report](evidence/approval-08-tour-disable.md)
-- [Preserved blocked TOUR-2 audit](evidence/approval-08-tour2-audit.md)
-- [APPROVAL-07 coordinator report and final checks](evidence/approval-07-coordinator.md)
-- [SEC inventory/proof](evidence/wi26-course-authorization.md)
-- [H browser/index/history proof](evidence/wi25-evidence-history.md)
-- [M inventory and repair proof](evidence/wi24-identity-repair.md)
-- [Prepared human acceptance checklist](evidence/acceptance-2026-10-25.md)
-- [Prior integrated checks](evidence/approval-06-integration.md)
-- [0037 post-checks](evidence/0037-postchecks-2026-10-25.md)
-- [Fallback setting verification](evidence/fg1-paid-fallback-2026-10-25.md)
-
-Update this record only from actual reviewed results. Preserve failures and unperformed gates. No confirmed-done status, acceptance or cleanup precedes the named-human evidence.
+- [APPROVAL-08 closeout snapshot before this draft](evidence/approval-08-closeout-before-09.md)
+- [APPROVAL-09 integration review and checks](evidence/approval-09-final-integration.md)
+- [APPROVAL-09](approval-09.md), including Amendment 2 recorded during integration

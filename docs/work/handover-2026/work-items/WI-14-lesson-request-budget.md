@@ -64,3 +64,8 @@ The migration adds reliability metadata, not a missing status column. Decide fai
 
 ## Delivery
 Merged: no. Deployed: no. Hosted migrations: none. Confirmation: pending implementation and named verification.
+
+
+## Retained incident trace and attribution limit
+
+Read-only aggregate investigation at source `eb9409a8` found eight API Lambda hard timeouts, all 30,000 ms, in the 2026-10-27 13:50–14:00 UTC bin (21:50–22:00 Asia/Manila). No route-identifying match was logged for the reported lesson request, so these eight kills cannot all be attributed to that URL. The source confirms inline generation/reclaim and no whole-request budget; that is the actionable WI-14 finding. One non-Tutor fallback invocation correlated with a runtime timeout; correlation does not identify its route. The worker sample had eight invocations, maximum 11,710.54 ms, zero errors and zero timeouts. No application endpoint was called to reproduce this trace, because lesson GET can write or enqueue work. Raw data is local only, not retained.

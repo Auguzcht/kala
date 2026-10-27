@@ -37,3 +37,10 @@ Paid-model cost note: Fred reported $2.63 remaining, not independently checked d
 Fred confirms the secret entry counts, performs deployment and asks 3–5 Tutor questions, one hint and one Explain more. Only afterward, run aggregate timing p50/max (`chat_ms`, `handler_ms`), fallback and 429 counts for the new-runtime test window. Rollback is the inverse swap followed by human redeployment.
 
 Preparation only: no secret edit, deploy, hosted application write or new verification query executed for FG-1b. No performance improvement or completion is claimed. This work item stays planned for its remaining ITO work.
+
+
+## Delegated execution and retained timeout trace
+
+After the preparation report, Fred explicitly delegated the AWS CLI edit. Account identity and absence of both chat-name overrides on API latest/live were checked. The two approved target models were saved in `kala/app`, then read back and compared in memory. Entry count: **26 before, 27 after**; one of the two approved keys was absent and added. Every other entry was verified unchanged. No secret value was printed or saved. No Lambda refresh, deploy or live performance acceptance is inferred from that edit.
+
+The retained pre-swap aggregate receipt at source `eb9409a8` covers 15 Tutor timing records: 10 primary successes, 3 fallback successes and 2 timeouts. Primary-success chat p50/max: 9,274.69 / 20,933.37 ms; handler: 10,985.11 / 22,099.07 ms. Fallback-success chat p50/max: 7,039.63 / 8,877.08 ms; handler: 7,798.78 / 9,501.36 ms. Timeout chat p50/max: 21,684.10 / 21,976.39 ms; handler: 23,022.83 / 23,023.07 ms, with retrieval max 923.36 ms. These counts indicate the model stage dominated those two requests; they do not prove post-swap performance. `chat_ms` may span both attempts. No raw records are retained in the repository.

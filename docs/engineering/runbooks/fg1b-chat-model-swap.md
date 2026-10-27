@@ -3,7 +3,7 @@ runbook: fg1b-chat-model-swap
 applies_to: [dev-hosted]
 who_runs_it: Fred
 time_needed: "5–10 minutes for the setting edit, plus deployment and live sampling"
-last_verified: "source reviewed at eb9409a8 on 2026-10-27; execution pending"
+last_verified: "delegated secret update verified; new-runtime live acceptance pending"
 status: planned
 ---
 
@@ -92,3 +92,8 @@ If live acceptance fails, Fred sets `OPENROUTER_MODEL_CHAT` back to `inclusionai
 ## Outstanding work
 
 WI-31 keeps the primary-attempt limit, streaming and removal of identifying timing metadata with ITO. The slow-primary path can still consume the shared budget before fallback becomes possible. WI-14 separately owns lesson-content request deadlines/background generation.
+
+
+## Delegated execution record
+
+The original task was preparation only. Fred subsequently explicitly delegated the two-setting edit through AWS CLI. Codex verified the intended account, no API latest/live environment overrides for the two names, and the new values by read-back comparison. Entry count changed from 26 to 27 because one approved key was missing. All other entries were verified unchanged. No credential value was printed or retained, and no deployment or runtime refresh was performed. The post-deploy sample and aggregate verification remain pending; future edits follow the named human procedure unless explicitly delegated again.
