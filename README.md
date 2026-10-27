@@ -45,14 +45,14 @@ Kala is an AI learning companion and digital learning twin. It runs as an intell
 
 ## Attribution
 
-Developed by **Alfred Nodado (Auguzcht)** for **Mapúa Malayan Colleges of Mindanao’s Office for Artificial Intelligence Curriculum Integration (OAICI)**.
+Developed by **Alfred Nodado (Auguzcht)** for **Mapúa Malayan Colleges Mindanao’s Office for Artificial Intelligence Curriculum Integration (OAICI)**.
 
 ## Copyright and license
 
-To be determined by Mapúa Malayan Colleges of Mindanao (OAICI).
+To be determined by Mapúa Malayan Colleges Mindanao (OAICI).
 
 ---
 
 <div align="center">
-  <p><strong>Built with ❤️ for Mapúa Malayan Colleges of Mindanao.</strong></p>
+  <p><strong>Built with ❤️ for Mapúa Malayan Colleges Mindanao.</strong></p>
 </div>
