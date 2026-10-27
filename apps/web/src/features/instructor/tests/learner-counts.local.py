@@ -48,6 +48,7 @@ try:
            '-c', 'create database standing_counts;')
     sql('''
       create table users(id uuid primary key, institution_id uuid, role text, lms_user_id text);
+      create table user_profiles(user_id uuid, display_name text);
       create table enrollments(user_id uuid, institution_id uuid, course_id uuid, role text);
       create table lms_identity_aliases(institution_id uuid, lms_user_id text, user_id uuid);
       create table skills(id uuid primary key, institution_id uuid, course_id uuid, status text,
@@ -81,6 +82,17 @@ try:
       insert into evidence_events values (gen_random_uuid(),'{uid(1)}','{uid(999)}','{uid(101)}',false,99,now());
       insert into evidence_events values (gen_random_uuid(),'{uid(1)}','{uid(100)}','{uid(999)}',false,99,now());
     """)
+    for number, name in [(1,'Hanna Sato'),(26,'Hanna Sato'),(2,'Alfred Nodado'),(27,'Alfred Nodado')]:
+        sql(f"insert into user_profiles values ('{uid(number)}','{name}');")
+    sql(f"insert into lms_identity_aliases values ('{uid(100)}','synthetic-26','{uid(1)}'), ('{uid(100)}','synthetic-27','{uid(2)}');")
+    discovery = Path(__file__).with_name('learner-counts.discovery.sql').read_text()
+    candidates = json.loads(sql(discovery).stdout)
+    assert candidates['shared_current_course_scopes'] == 1
+    assert candidates['hanna_candidate_anchors'] == candidates['alfred_candidate_anchors'] == 2
+    assert candidates['hanna_current_anchors'] == candidates['alfred_current_anchors'] == 1
+    assert candidates['hanna_legacy_alias_links_to_current'] == candidates['alfred_legacy_alias_links_to_current'] == 1
+    assert candidates['cross_family_alias_owners'] == 0
+    sql('delete from lms_identity_aliases;')
     template = Path(__file__).with_name('learner-counts.readonly.sql').read_text()
     replacements = {'institution_id':100, 'course_id':101, 'hanna_canonical':1,
                     'hanna_legacy':26, 'alfred_canonical':2, 'alfred_legacy':27,

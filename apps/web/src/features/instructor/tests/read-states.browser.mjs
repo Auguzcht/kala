@@ -105,6 +105,7 @@ try {
       }else{
         await page.locator('#tour-standing').getByRole('heading',{name:'Demo learner',exact:true}).waitFor();
         check(await page.getByRole('alert').count()===0,'learner retry recovers');
+        check(await page.locator('#tour-standing').getByText('Graded outcomes in last 200 events · 0 hints used',{exact:true}).isVisible(),'INSTR-REQ-012 drawer accuracy names the bounded graded window');
         await page.getByRole('tab',{name:'Activity',exact:true}).click();
         await page.getByText("Showing 0 of this learner's activity",{exact:true}).waitFor();
         await page.getByText(/No evidence yet\. Your recent answers/).waitFor();

@@ -126,11 +126,11 @@ This focused amendment defines visible feedback for instructor skill reviews and
 
 - Rule: Class standing is a course rank among learners with measured readiness from the existing roster, with an explicit measured-learner denominator and shared ranks for ties. Never render the record percentile as an ordinal rank. Unknown or failed roster data leaves rank unavailable rather than inventing a value. Preserve the record's own readiness and the server's evidence calculations.
 - Rule: Label drawer accuracy as graded outcomes within the last 200 evidence events. Roster accuracy uses each learner's graded outcomes within the latest 2,000 events across the enrolled class. The roster attempt count sums approved-skill mastery attempts and is not the accuracy denominator. Momentum compares the last ten graded outcomes with the preceding ten inside the record window. A displayed zero is neutral, including a small change that rounds to zero points.
-- Investigation gate: Before metric edits, use Fred-proved canonical/legacy identity anchors and the actual roster/drawer request targets for a counts-only ownership and window check. Never infer identity from names or merge legacy history in the UI. Stop immediately on cross-learner mixing. Agents prepare and locally validate read-only SQL, Fred runs hosted counts. Zero cross-owner counts prove the checked filters and anchors only, not the semantic authorship of historically misattributed rows.
+- Investigation gate: Before metric edits, use Fred-proved canonical/legacy identity anchors and the actual roster/drawer request targets for a counts-only ownership and window check. Never infer identity from names or merge legacy history in the UI. Stop immediately on cross-learner mixing. Agents prepare and locally validate read-only SQL. Fred runs hosted counts or explicitly authorizes the agent to use the Supabase CLI for counts only. Zero cross-owner counts prove the checked filters and anchors only, not the semantic authorship of historically misattributed rows.
 - Rule: Skills measured uses approved skills for the same institution/course. A change from 14 to 15 requires counts from the same environment/course and a dated comparison before attributing it to an approval or an environment difference.
 - Acceptance: Test measured course rank, ties, unmeasured/absent learner and failed roster, explicit accuracy window, positive/negative/zero momentum and both learner surfaces. Validate count-query results with synthetic real local Postgres including wrong-target/cross-alias counterexamples. Do not edit APIs, migrations, identity records or configuration.
-- Status: planned, metric implementation awaits the counts-only identity check.
-- Verified by: Static source trace of cohort.py roster and learner_record, LearnerStanding.tsx and the course/learner query keys. The counts-only query and its synthetic local PostgreSQL 17.6 proof pass. Runtime Hanna counts and the 14/15 comparison are not yet verified.
+- Status: in-progress, owner Codex. Current enrolled-record counts are checked before presentation edits. Historical WI-24 pairs remain unresolved and are not merged or certified.
+- Verified by: Static source trace of cohort.py roster and learner_record, LearnerStanding.tsx and the course/learner query keys. The counts-only query and its synthetic local PostgreSQL 17.6 proof pass. Hosted current-record counts are recorded below. Historical semantic attribution remains outside this counts-only proof.
 
 #### Counts review before implementation
 
@@ -138,7 +138,30 @@ Fred privately fills [learner-counts.readonly.sql](../../../apps/web/src/feature
 
 Run the [local SQL proof](../../../apps/web/src/features/instructor/tests/learner-counts.local.py) with Python 3.10+ and Docker's cached PostgreSQL image. It creates/removes only its network-disabled, port-free synthetic container. On PostgreSQL 17.6 it verifies separate accuracy windows, attempt totals, 10/10 momentum counts, course/institution scope, 2,000-event cap, missing parameters, wrong drawer target, cross-family anchor collision and cross-family alias owner, and a rejected write in a read-only transaction. The synthetic 286/381 versus 138/200 example recreates the displayed percentages to test arithmetic. It is not Hanna's measured data, an RLS proof or a migration replay.
 
-Counts remain requested from Fred. No learner metric code has changed. The current skill denominator is the institution/course's approved-skill count. Optional observation-time counts can show current approved skills created/reviewed later, but cannot reconstruct an immutable approval history or establish why the earlier dashboard showed 14 without a matching earlier environment/course observation. Do not infer that a skill was newly approved from the two screenshots alone.
+Fred explicitly authorized hosted Supabase CLI counts on 2026-10-27 and directed use of the CLI rather than a local Supabase stack. The CLI query uses read-only transactions and returns aggregates only. Candidate discovery finds two stored profile-labelled anchors per learner, one currently enrolled anchor each and one common institution/course scope. There are zero cross-family alias owners. Neither non-enrolled candidate has an alias link proving convergence to the current anchor, so those legacy pairs remain unresolved. Do not assign them by name alone, treat their placeholder NULL counts as measured zeros, or merge their history. The source and current-window checks below verify current stored user ownership, not historical semantic authorship or a completed WI-24 repair.
+
+| Current hosted aggregate | Count |
+| --- | --- |
+| Enrolled learners / measured learners | 25 / 2 |
+| Measured learners above Hanna / tied including Hanna | 0 / 1 |
+| Hanna current evidence / graded / correct | 396 / 396 / 297 |
+| Hanna approved-skill mastery attempts / measured skills | 381 / 11 |
+| Alfred current evidence / graded / correct | 13 / 13 / 9 |
+| Class-window events, below the 2,000 cap | 409 |
+| Hanna drawer events / graded / correct | 200 / 200 / 138 |
+| Hanna recent graded / correct | 10 / 9 |
+| Hanna prior graded / correct | 10 / 9 |
+| Hanna drawer hints | 0 |
+| Hanna checked-window events owned by Alfred's current anchor or either Alfred-labelled candidate | 0 |
+| Current approved / proposed skills | 15 / 7 |
+| Currently approved skills reviewed before 2026-10-27 / on that date | 14 / 1 |
+| Currently approved skills reviewed after the first 21:42 screenshot / created on that date | 1 / 0 |
+
+Thus roster accuracy is 297/396 = 75%, drawer accuracy is 138/200 = 69%, and 381 is a separate mastery attempt total. Momentum is 9/10 minus 9/10 = zero. Hanna is first among the two measured learners. No cross-learner mixing was found in the checked current records and source filters. Both record and roster filter institution/course/user and the frontend query keys include course and learner. The SQL target check uses the unique current enrolled candidate, not a captured live browser request, so live DOM target verification is a separate limit.
+
+The local app points to the deployed API and the same Supabase project used for these CLI counts. Approved skills are course/institution-scoped in source. Current approval metadata accounts for 14 becoming 15: one existing skill was reviewed today after the first screenshot, with no approved skill newly created today. This supports an approval change rather than a separate local skill catalogue. Current timestamps are not an immutable approval history or a replay of the earlier hosted dashboard.
+
+[Candidate discovery](../../../apps/web/src/features/instructor/tests/learner-counts.discovery.sql) returns counts only and refuses to imply a real pair from names. Its synthetic SQL proof completed on local PostgreSQL 17.6 before Fred's subsequent CLI-only direction. No further local database run is part of the hosted investigation. Generic aggregate SQL and discovery are retained with tests. Hosted scoped query/aggregate artifacts are in `/tmp/kala-approval09-hosted-counts` and the detail-count counterpart, local only, not retained. No identifiers, rows, credentials, configuration or hosted writes are recorded.
 
 ## API contract
 
@@ -247,6 +270,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-27 | Record explicitly authorized CLI current-record counts before accuracy-window edits, with unresolved legacy mapping kept separate | Fred's CLI direction, WI-34 | INSTR-REQ-012 |
 | 2026-10-27 | Record Fred's paid hosted proposer confirmation, historical saved source label and minor fallback provenance finding, with no config change | Fred closes drawer item 4, WI-34 | INSTR-REQ-006 |
 | 2026-10-27 | Define course rank, explicit evidence windows, neutral zero and counts-only identity gate before learner standing edits | Fred's instructor learner drawer findings and WI-24 identity constraint, WI-34 | INSTR-REQ-012, INSTR-REQ-003/005 retained |
 | 2026-10-27 | Record local unified Next implementation and the final sequential browser checks while retaining human/hosted gates | Fred's APPROVAL-09 unified-pager request, WI-34 | INSTR-REQ-010, TWIN-REQ-011 |

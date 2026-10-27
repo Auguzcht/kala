@@ -131,7 +131,7 @@ export function LearnerStanding({
         <Stat
           label="Accuracy"
           value={pct(r.accuracy)}
-          sub={`${r.hintsUsed} hints used`}
+          sub={`Graded outcomes in last 200 events · ${r.hintsUsed} hints used`}
         />
         <Stat
           label="Momentum"
