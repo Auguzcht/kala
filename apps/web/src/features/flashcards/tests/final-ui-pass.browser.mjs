@@ -16,7 +16,7 @@ const reward = { xp: 0, attempts: 1, correct: 1, streakDays: 1, badges: [] };
 async function fixture(width, { view = 'study', role = 'student', mode = 'review', reduced = true, hold = false, noMaterial = false } = {}) {
  const context = await browser.newContext({ viewport: { width, height: 950 }, reducedMotion: reduced ? 'reduce' : 'no-preference', timezoneId: 'Asia/Manila', locale: 'en-US' });
  const page = await context.newPage(); page.setDefaultTimeout(15000);
- const errors = [], state = { deckCalls: [], reviews: [], posts: [], initialCards: [card('first')], nextCards: [], failDiagnostic: false, diagnostic: null, hold, noMaterial, holdNew: false, holdAsk: false, sizes: [] };
+ const errors = [], state = { deckCalls: [], reviews: [], posts: [], initialCards: [card('first')], nextCards: [], failDiagnostic: false, diagnostic: null, hold, noMaterial, holdNew: false, holdAsk: false, holdModel: false, sizes: [] };
  page.on('pageerror', e => errors.push(e.message));
  let release; const pending = new Promise(r => { release = r; }); state.release = () => { state.hold = false; release(); };
  await context.route('**/*', async route => {
@@ -38,6 +38,7 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   const path = url.pathname.slice('/__u2_api'.length), reply = (json, status = 200) => route.fulfill({ json, status });
   if (req.method() !== 'GET') state.posts.push({ path, method: req.method(), body: req.postDataJSON() });
   if (path.endsWith('/review')) { state.reviews.push(req.postDataJSON()); return reply({ remembered: true, graduated: false, dueInHours: 1, dueAt: '2099-11-02T08:30:00Z', box: 1, reward }); }
+  if (path.endsWith('/skills/propose')) { if (state.holdModel) await new Promise(r => { state.releaseModel = r; }); return reply({status:'queued'}); }
   if (path.endsWith('/ask')) { if (state.holdAsk) await new Promise(r => { state.releaseAsk = r; }); return reply({ answer: 'Synthetic hint answer.' }); }
   if (path.endsWith('/deck')) {
    state.deckCalls.push(Object.fromEntries(url.searchParams));
@@ -49,7 +50,7 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (path.endsWith('/diagnostic/status')) return reply({ courseId: 'course', due: false, dueSkillCount: 0, waitingForMaterialCount: 2 });
   if (path.endsWith('/diagnostic')) { if (state.hold) await pending; return reply({ courseId: 'course', status: 'ready', questions: [question], readyCount: 1, pendingSkillIds: [], failedSkillIds: [], skippedSkillCount: 0, ...state.diagnostic }, state.failDiagnostic ? 500 : 200); }
   if (path.endsWith('/bank/status')) return reply({ courseId: 'course', bankServing: true, building: false, skills: [{ skillId: 'skill', status: state.noMaterial ? 'no_material' : 'ready', usable: !state.noMaterial, mcqReady: state.noMaterial ? 0 : 20, mcqTarget: 20, depth: 3 }] });
-  if (path.endsWith('/set') && req.method() === 'POST') { state.sizes.push(req.postDataJSON().size); return reply({ courseId: 'course', skillId: 'skill', setId: null, status: 'preparing', items: [], requestedSize: req.postDataJSON().size, readyCount: 0, pendingCount: 0, failedCount: 0, failedOffsets: [] }); }
+  if (path.endsWith('/set') && req.method() === 'POST') { state.sizes.push(Number(url.searchParams.get('size'))); return reply({ courseId: 'course', skillId: 'skill', setId: null, status: 'preparing', items: [], requestedSize: Number(url.searchParams.get('size')), readyCount: 0, pendingCount: 0, failedCount: 0, failedOffsets: [] }); }
   if (path.endsWith('/sets/saved')) { if (state.hold) await pending; return reply({ courseId: 'course', setId: 'saved', skillId: 'skill', kind: 'practice', status: 'ready', items: [question], requestedSize: 1, readyCount: 1, pendingCount: 0, failedCount: 0, failedOffsets: [], attemptedCount: 0, correctCount: 0, lastAttemptedAt: null }); }
   if (path.endsWith('/results')) return reply({ courseId: 'course', setId: 'saved', score: { correct: 0, answered: 0, total: 1, percent: null }, totalXp: 0, masteryBefore: { level: 'developing', value: .2 }, masteryAfter: { level: 'developing', value: .2 }, questions: [] });
   if (path.endsWith('/sets')) return reply({ courseId: 'course', sets: [] });
@@ -59,7 +60,7 @@ async function fixture(width, { view = 'study', role = 'student', mode = 'review
   if (path.endsWith('/next-up')) return reply({ courseId: 'course', next: null });
   if (path.endsWith('/plan')) return reply({ plan: [] });
   if (path.endsWith('/skills/proposed')) return reply({ courseId: 'course', proposed: [{ id: 'proposal', name: 'Cloud skill', bloom_level: 'understand', blueprint_weight: 1, proposed_source: 'Thin material: synthetic context' }] });
-  if (path.endsWith('/recommendations')) return reply({ courseId: 'course', userId: 'learner', recommendations: [] });
+  if (path.endsWith('/recommendations')) { if (req.method() === 'POST' && state.holdModel) await new Promise(r => { state.releaseModel = r; }); return reply({ courseId: 'course', userId: 'learner', generated: 0, recommendations: [] }); }
   throw new Error(`Unexpected synthetic request ${req.method()} ${path}`);
  });
  return { page, context, state, errors };
@@ -85,9 +86,14 @@ try {
    check(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${view} no horizontal overflow`);
    await capture(f.page, `${view}-content`, width); check(f.errors.length === 0, `${view} runtime clean: ${f.errors}`); await f.context.close();
   }
+  console.log(`U2 measured card widths at ${width}: ${JSON.stringify(measurements)}`);
   check(Math.abs(measurements.test - measurements.diagnostic) < 1, `Diagnostic/Test same column ${width}`);
   for (const role of ['student', 'instructor']) {
-   const f = await fixture(width, { role }); await f.page.goto('http://localhost:5173/course');
+   const f = await fixture(width, { role });
+   const statusLoaded = f.page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/diagnostic/status'));
+   await f.page.goto('http://localhost:5173/course'); await statusLoaded;
+   await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+   if (role === 'instructor') await f.page.getByText('2 topics are waiting for course material', { exact: true }).waitFor();
    await f.page.getByRole('heading', { name: 'Welcome back, Demo', exact: true }).waitFor();
    check(await f.page.getByText('2 topics are waiting for course material', { exact: true }).count() === (role === 'student' ? 0 : 1), `E4 ${role} material boundary`);
    check(await f.page.locator('#nav-diagnostic').getAttribute('aria-label') === 'Diagnostic', `E4 actionable-zero badge preserved for ${role}`);
@@ -106,9 +112,32 @@ try {
   const b = await fixture(width, { view: 'browse', noMaterial: true }); await b.page.goto('http://localhost:5173/__u2');
   const newSet = b.page.locator('#tour-test-new-set'); await newSet.waitFor(); await newSet.getByText('New practice set', { exact: true }).waitFor(); await newSet.getByText('Fresh questions. Choose 5, 10, or 20 at a time.', { exact: true }).waitFor();
   check(await newSet.isDisabled() && !/material/i.test(await b.page.locator('main').innerText()), 'student exact Test copy preserves unavailable gate'); check(b.state.posts.length === 0, 'unavailable Test creates no set'); await b.context.close();
+  for (const view of ['study', 'studyBrowse']) {
+   const empty = await fixture(width, { view, noMaterial: true }); empty.state.initialCards = [];
+   await empty.page.goto('http://localhost:5173/__u2'); await empty.page.getByText('No cards yet', { exact: true }).waitFor();
+   check(!/material|course team/i.test(await empty.page.locator('main').innerText()), `${view} unavailable student copy has no material explanation`);
+   check(empty.state.posts.length === 0, `${view} empty presentation makes no writes`); await empty.context.close();
+  }
+  const sizes = await fixture(width, { view: 'browse' }); await sizes.page.goto('http://localhost:5173/__u2');
+  for (const size of [5, 10, 20]) {
+   await sizes.page.getByRole('button', { name: String(size), exact: true }).click();
+   const response = sizes.page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/set'));
+   await sizes.page.locator('#tour-test-new-set').click(); await response;
+  }
+  check(sizes.state.sizes.join(',') === '5,10,20', 'Test keeps existing 5/10/20 request sizes');
+  check(sizes.state.posts.length === 3 && sizes.state.posts.every(p => p.path.endsWith('/set')), 'Test generates only explicitly selected sets'); await sizes.context.close();
+  for (const view of ['proposals', 'analysis']) {
+   const model = await fixture(width, { view, role: 'instructor', reduced: width === 375 }); model.state.holdModel = true;
+   await model.page.goto('http://localhost:5173/__u2'); const label = view === 'proposals' ? 'Refresh skills' : 'Run analysis';
+   const control = model.page.getByRole('button', { name: label, exact: true }); await control.click();
+   const pending = model.page.getByText(view === 'proposals' ? 'Kala is refreshing proposals. This can take a few minutes.' : 'Kala is preparing recommendations…', { exact: true });
+   await pending.waitFor(); check(await control.isDisabled(), `${view} model initiating label remains stable and disabled`);
+   check(await model.page.locator('svg.animate-spin').count() === 0 && await pending.count() === 1, `${view} one model shimmer without spinner`);
+   model.state.releaseModel(); check(model.state.posts.length === 1, `${view} one explicit request`); await model.context.close();
+  }
   for (const mode of ['review', 'all']) {
    const f = await fixture(width, { mode, reduced: width === 375 }); await f.page.goto('http://localhost:5173/__u2');
-   await f.page.getByText('Recall first', { exact: true }).waitFor();
+   await f.page.getByText('Recall first', { exact: true }).first().waitFor();
    f.state.holdAsk = true; await f.page.getByRole('button', { name: 'Give me a hint', exact: true }).click();
    await f.page.getByText('Kala is preparing a hint…', { exact: true }).waitFor();
    check(await f.page.getByRole('button', { name: 'Give me a hint', exact: true }).isDisabled(), 'model initiating label stable and disabled');
@@ -121,7 +150,7 @@ try {
    check(f.state.deckCalls.at(-1).mode === 'review' && f.state.deckCalls.at(-1).limit === '20' && !f.state.deckCalls.at(-1).offset, `${mode} completion uses existing due/new selector`);
    check(f.state.reviews.length === 1, 'empty refresh writes no review'); await capture(f.page, `completion-${mode}`, width);
    f.state.holdNew = false; f.state.nextCards = [card('first')]; await getNew.click(); await f.page.getByText(/No new cards right now/).waitFor(); check(await f.page.getByText('Recall first', { exact: true }).count() === 0, 'rated-only refresh never resurfaces card');
-   f.state.nextCards = [card('first'), card('new')]; await getNew.click(); await f.page.getByText('Recall new', { exact: true }).waitFor(); await recall(f.page);
+   f.state.nextCards = [card('first'), card('new')]; await getNew.click(); await f.page.getByText('Recall new', { exact: true }).first().waitFor(); await recall(f.page);
    check(f.state.reviews.map(r => r.item_id).join(',') === 'first,new', 'mixed refresh rates only unseen item');
    await f.page.getByRole('button', { name: 'Go through these again', exact: true }).click(); await recall(f.page); check(f.state.reviews.length === 2, 'local replay preserves posted guard');
    check(f.state.reviews.every(r => r.mode === 'flashcard' && r.idempotency_key && r.session_id), 'review request semantics retained'); check(f.errors.length === 0, `Study runtime clean: ${f.errors}`); await f.context.close();

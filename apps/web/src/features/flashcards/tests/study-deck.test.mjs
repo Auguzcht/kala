@@ -286,3 +286,16 @@ test('STUDY-REQ-005 an initially empty deck can recover into available cards', a
  assert.equal(deck.calls.reviews.length,1);
  await deck.unmount();
 });
+
+test('STUDY-REQ-006 repeated activation before rerender issues one due/new fetch', async () => {
+ const deck=await mountDeck({cards:[card('only')], nextCards:[], deferNew:true});
+ await recall(deck);
+ const action=deck.button('Get new cards');
+ await act(async()=>{action.props.onClick();action.props.onClick();});
+ assert.equal(deck.calls.newFetches,1);
+ assert.match(deck.text(),/Study complete/);
+ await deck.finishNew();
+ assert.match(deck.text(),/No new cards right now/);
+ assert.equal(deck.calls.reviews.length,1);
+ await deck.unmount();
+});
