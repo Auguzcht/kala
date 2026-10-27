@@ -293,6 +293,8 @@ export function TutorChat({ courseId }: { courseId: string }) {
   const latestLocal = localTurns.at(-1);
   const latestQuestion = latestLocal?.question ?? [...messages].reverse().find((message) => message.role === "user")?.content;
   const latestAnswer = latestLocal?.answer ?? (lastMessage?.role === "assistant" ? lastMessage.content : undefined);
+  const promptHistory = [...messages.filter((message) => message.role === "user").map((message) => message.content),
+    ...localTurns.map((turn) => turn.question), ...(pendingTurn ? [pendingTurn.question] : [])];
 
   const asking = pendingTurn?.status === "asking";
   useEffect(() => {
@@ -384,6 +386,7 @@ export function TutorChat({ courseId }: { courseId: string }) {
       <div className={cn("shrink-0", !empty && dockLayout.footer)}>
         <div className={cn("w-full", dockLayout.content)}>
           <TutorComposer key={`${courseId}:${composerSession}`} dropTarget={dropTarget} onDragChange={setDragging}
+            promptHistory={promptHistory}
             initialDraft={assignedDraft ?? undefined}
             attachments={active.data?.attachments ?? []} onFiles={handleFiles}
             onRemove={handleRemoveAttachment} removingId={removingId} onAsk={askQuestion}

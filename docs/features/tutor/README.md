@@ -189,7 +189,7 @@ Conversation-list and conversation-detail GETs follow [AUTH-REQ-007](../lti-auth
 - Rule: History navigation never sends, creates, edits, uploads or asks the model. The recalled prompt remains editable and requires the existing explicit Enter/Send. Editing a recalled prompt ends browsing and treats the edited text as a new draft. Successful submit and chat/new-chat/course changes reset the history position. Retain the pre-submit draft on failed/blocked file submissions.
 - Keyboard boundary: Preserve selection, IME composition and modified Up/Down. In multiline text, retain native movement except Up at the first logical line and Down at the last logical line. ArrowDown outside history does nothing beyond native editing. Clamp at the oldest entry and restore the original draft/caret when leaving the newest entry. Attachment readiness and submit locks remain unchanged.
 - Acceptance: Test empty/draft restoration, older/newer bounds, edited recall, current-chat scope, local unsaved prompts, reset after send/new chat/change, multiline boundaries, modifier/selection/IME handling and zero requests from arrow navigation. Verify Enter sends exactly the chosen prompt and no extra calls at 375px/1440px.
-- Status: in-progress, owner Codex under Fred's final APPROVAL-09 input-gesture request, WI-34.
+- Status: done-awaiting-confirmation. Implemented locally under Fred's final APPROVAL-09 input-gesture request, WI-34.
 - Verified by: pending implementation and keyboard interaction checks.
 
 ## API contract

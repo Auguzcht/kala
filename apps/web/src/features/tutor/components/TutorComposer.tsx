@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject, type KeyboardEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import {
@@ -17,6 +17,7 @@ import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import { cn } from "@/lib/utils";
 import type { TutorAttachment } from "@/features/tutor/schema/tutor.schema";
 import { validateTutorFile } from "@/features/tutor/lib/presentation";
+import { createPromptHistory, historyDirection } from "@/features/tutor/lib/prompt-history";
 import type { AssignedTutorDraft } from "@/features/tutor/lib/assigned-draft";
 import {
   type StagedTutorFile,
@@ -63,6 +64,7 @@ export function TutorComposer({
   pending,
   uploading,
   initialDraft,
+  promptHistory = [],
 }: {
   dropTarget: RefObject<HTMLDivElement | null>;
   onDragChange: (active: boolean) => void;
@@ -75,8 +77,17 @@ export function TutorComposer({
   pending: boolean;
   uploading: boolean;
   initialDraft?: AssignedTutorDraft;
+  promptHistory?: readonly string[];
 }) {
   const [draft, setDraft] = useState(() => initialDraft?.text ?? "");
+  const history = useRef(createPromptHistory());
+  const recalledCaret = useRef<{ input: HTMLTextAreaElement; start: number; end: number } | null>(null);
+  // Restore before paint so a later native key cannot race a deferred caret move.
+  useLayoutEffect(() => {
+    const caret = recalledCaret.current;
+    recalledCaret.current = null;
+    if (caret?.input.isConnected) caret.input.setSelectionRange(caret.start, caret.end);
+  });
   const [staged, setStaged] = useState<StagedTutorFile[]>([]);
   const [localFiles, setLocalFiles] = useState<Map<string, File>>(
     () => new Map(),
@@ -96,6 +107,28 @@ export function TutorComposer({
   const busy = submitting || uploading;
   const hasFiles = staged.length > 0 || attachments.length > 0;
   const blockedAttachment = attachments.some((file) => file.status !== "ready");
+
+  function recallPrompt(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.defaultPrevented || busy || pending || submitLock.current) return;
+    const input = event.currentTarget;
+    const direction = historyDirection({
+      key: event.key, value: input.value, start: input.selectionStart, end: input.selectionEnd,
+      modified: event.shiftKey || event.altKey || event.ctrlKey || event.metaKey,
+      composing: event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229,
+    });
+    if (!direction) return;
+    const recalled = history.current.move(direction, promptHistory, input.value,
+      { start: input.selectionStart, end: input.selectionEnd });
+    if (!recalled) return;
+    event.preventDefault();
+    if (input.value === recalled.text) {
+      input.setSelectionRange(recalled.caret.start, recalled.caret.end);
+    } else {
+      recalledCaret.current = { input, ...recalled.caret };
+      setDraft(recalled.text);
+    }
+    onTyping();
+  }
 
   function stageFiles(files: File[]) {
     if (submitLock.current || uploading) return;
@@ -177,6 +210,7 @@ export function TutorComposer({
             }
             if (!mounted.current) return;
             onAsk(text.trim());
+            history.current.reset();
             setDraft((current) =>
               current.trim() === text.trim() ? "" : current,
             );
@@ -273,7 +307,9 @@ export function TutorComposer({
               placeholder="Ask Kala…"
               autoFocus={Boolean(initialDraft)}
               value={draft}
+              onKeyDown={recallPrompt}
               onChange={(event) => {
+                history.current.reset();
                 setDraft(event.target.value);
                 onTyping();
               }}

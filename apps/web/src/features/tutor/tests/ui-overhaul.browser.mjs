@@ -412,6 +412,11 @@ try {
     check(await follow.page.getByRole('button',{name:"Explain like I'm 5",exact:true}).locator('[aria-hidden=true]').innerText()==='🧸',`TUTOR-REQ-021 simple explanation uses a static emoji at ${width}`);
     check(await follow.page.getByRole('button',{name:'More detail',exact:true}).locator('[aria-hidden=true]').innerText()==='🔎',`TUTOR-REQ-021 detail uses a static emoji at ${width}`);
 
+    const historyInput=follow.page.getByPlaceholder('Ask Kala…');
+    await historyInput.press('ArrowUp');
+    check(await historyInput.inputValue()===original,`TUTOR-REQ-022 saved history recalls only the user prompt at ${width}`);
+    await historyInput.press('ArrowDown');
+    check(await historyInput.inputValue()===''&&follow.state.asks===0,`TUTOR-REQ-022 saved browsing restores empty without asking at ${width}`);
     await follow.page.evaluate(()=>{window.__messageCopies=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__messageCopies.push(text);}}});});
     const copyByKeyboard=async button=>{await button.focus();await button.press('Enter');};
     await copyByKeyboard(follow.page.getByRole('button',{name:'Copy your message',exact:true}).first());
@@ -444,6 +449,10 @@ try {
     await follow.page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
     const failedRequest = follow.state.askRequests.at(-1);
     check(await follow.page.getByRole('button',{name:'More detail',exact:true}).count()===0,`TUTOR-REQ-021 failed newer turn hides old explanation actions at ${width}`);
+    await historyInput.press('ArrowUp');
+    check(await historyInput.inputValue()===failedRequest.question,`TUTOR-REQ-022 failed visible user turn remains available in history at ${width}`);
+    await historyInput.press('ArrowDown');
+    check(await historyInput.inputValue()==='',`TUTOR-REQ-022 failed-turn browsing restores empty draft at ${width}`);
     follow.state.rejectAsk = false;
     await follow.page.getByRole('button', { name: 'Retry', exact: true }).click();
     await follow.page.locator('#tour-tutor-user-turn').waitFor({ state: 'detached' });
@@ -457,6 +466,12 @@ try {
     await copyByKeyboard(follow.page.getByRole('button',{name:"Copy Kala's reply",exact:true}).last());
     check(await follow.page.evaluate(()=>window.__messageCopies.at(-1))==='Unsaved synthetic answer.',`TUTOR-REQ-017 local answer excludes save-status text at ${width}`);
     check(follow.state.asks===asksBeforeCopy,`TUTOR-REQ-017 local copy makes no additional ask at ${width}`);
+    await historyInput.fill('Keep my draft');
+    await historyInput.press('ArrowUp');
+    check(await historyInput.inputValue()===follow.state.askRequests.at(-1).question,`TUTOR-REQ-022 local unsaved user prompt joins the same history at ${width}`);
+    await historyInput.press('ArrowDown');
+    check(await historyInput.inputValue()==='Keep my draft'&&follow.state.asks===asksBeforeCopy,`TUTOR-REQ-022 local browsing restores draft without a new ask at ${width}`);
+    await historyInput.fill('');
     check(follow.state.creates === 0 && follow.state.uploads === 0 && follow.state.patches === 0 && follow.state.deletes === 0, `TUTOR-REQ-021 explanation chips make only the existing ask at ${width}`);
     const completedBeforeGreeting=await follow.page.locator('[data-tutor-message=assistant]').count();
     await follow.page.getByPlaceholder('Ask Kala…').fill('Hello!');await follow.page.getByPlaceholder('Ask Kala…').press('Enter');
