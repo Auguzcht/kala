@@ -10,7 +10,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { XIcon } from "@/components/ui/x";
 import { useTutorIcon } from "@/features/tutor/hooks/use-tutor-icon";
 import {
@@ -120,9 +120,10 @@ export function TutorFilePreview({
                   : "File contents aren't available in this session. Raw-text preview is available for TXT and MD files selected in this chat. Select the original file again to preview its contents locally."}
               </p>
             ) : !content ? (
-              <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner aria-hidden /> Loading preview…
-              </p>
+              <div role="status" className="space-y-2 text-sm text-muted-foreground">
+                <p>Loading preview…</p>
+                <Skeleton className="h-4 w-full motion-reduce:animate-none" /><Skeleton className="h-4 w-3/4 motion-reduce:animate-none" />
+              </div>
             ) : content.failed ? (
               <p role="alert" className="text-sm">
                 Couldn't read this file. You can still remove it and choose it

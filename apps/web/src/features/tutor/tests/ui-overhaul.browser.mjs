@@ -81,6 +81,10 @@ async function fixture(
     holdUpload: null,
     submit: null,
     holdAsk: null,
+    holdPatch: null,
+    rejectPatch: false,
+    lastPatch: null,
+    holdDetail: null,
     diagnosticCompleted: false,
     holdDiagnosticSubmit: null,
     masteryRows: [
@@ -268,6 +272,9 @@ async function fixture(
       if (method === "PATCH") {
         state.patches++;
         const patch = route.request().postDataJSON();
+        state.lastPatch = patch;
+        if (state.holdPatch) await state.holdPatch;
+        if (state.rejectPatch) return reply({detail:"Synthetic rename failed. Please try again."},503);
         const r = state.rows.find((x) => x.id === id);
         if ("title" in patch) r.title = patch.title;
         if ("pinned" in patch)
@@ -275,6 +282,7 @@ async function fixture(
         return reply(r);
       }
       // Detail deliberately omits pinnedAt: capability belongs to list responses.
+      if (state.holdDetail) await state.holdDetail;
       const r = {
         ...(state.rows.find((x) => x.id === id) ?? row(id)),
         messages: state.messages,
@@ -600,6 +608,12 @@ try {
     });
     await page.getByRole("button", { name: "Send message" }).click();
     await page.getByText("Thinking", { exact: true }).waitFor();
+    check(await page.locator('#tour-tutor-thinking [role=status]').count() === 1
+      && await page.locator('svg.animate-spin').count() === 0,
+      'TUTOR-REQ-010 one model shimmer with no spinner');
+    check(await page.getByRole('button',{name:'Send message',exact:true}).isDisabled()
+      && await page.getByRole('button',{name:'Send message',exact:true}).locator('svg').count() === 1,
+      'TUTOR-REQ-010 initiating Send keeps its stable icon and name');
     check(
       (await page.getByRole("heading", { level: 1 }).count()) === 0,
       "TUTOR-REQ-006 send leaves empty state",
@@ -620,6 +634,8 @@ try {
       .first()
       .waitFor();
     await page.clock.resume();
+    check(await page.locator('#tour-tutor-thinking').count()===0,
+      'TUTOR-REQ-010 completed answer removes the waiting indicator');
     check(
       await page
         .getByText("How does object storage work?", { exact: true })
@@ -950,10 +966,62 @@ try {
     );
     await screenshot(managed.page, "tutor-menu", width);
     await managed.page.getByRole("menuitem", { name: "Rename" }).click();
-    await history
-      .getByRole("textbox", { name: "Chat title" })
-      .fill("Storage review");
-    await history.getByRole("button", { name: "Save", exact: true }).click();
+    const rename = managed.page.getByRole('dialog',{name:'Rename chat',exact:true});
+    const titleInput = rename.getByRole('textbox',{name:'Chat title'});
+    await titleInput.waitFor();
+    check(await rename.getByText('Keep it short and recognizable',{exact:true}).isVisible(),
+      'TUTOR-REQ-012 dialog helper');
+    check(await titleInput.evaluate(el => document.activeElement === el && el.value === 'Understanding cloud storage'
+      && el.selectionStart === 0 && el.selectionEnd === el.value.length),
+      'TUTOR-REQ-012 initial title selected and focused');
+    check(await managed.page.locator('[data-tour=tutor-history] input[aria-label="Chat title"]').count() === 0,
+      'TUTOR-REQ-012 no inline rename row');
+    check(await rename.getByRole('button',{name:'Save',exact:true}).isDisabled(),
+      'TUTOR-REQ-012 unchanged title disabled');
+    await titleInput.fill('   ');
+    check(await rename.getByRole('button',{name:'Save',exact:true}).isDisabled(),
+      'TUTOR-REQ-012 blank title disabled');
+    await titleInput.fill(' Understanding cloud storage ');
+    check(await rename.getByRole('button',{name:'Save',exact:true}).isDisabled(),
+      'TUTOR-REQ-012 trimmed unchanged title disabled');
+    await titleInput.press('Escape');
+    await rename.waitFor({state:'detached'});
+    await managed.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Actions for Understanding cloud storage');
+    check(managed.state.patches === 0 && await history.getByRole('button',{
+      name:'Actions for Understanding cloud storage'}).evaluate(el=>document.activeElement===el),
+      'TUTOR-REQ-012 Escape sends no PATCH and restores trigger focus');
+    async function openRename(name) {
+      const actions=history.getByRole('button',{name:`Actions for ${name}`,exact:true});
+      await actions.focus();
+      await actions.press('Enter');
+      await managed.page.getByRole('menuitem',{name:'Rename',exact:true}).press('Enter');
+      await titleInput.waitFor();
+    }
+    await openRename('Understanding cloud storage');
+    await titleInput.fill('Discarded name');
+    await rename.getByRole('button',{name:'Cancel',exact:true}).click();
+    await rename.waitFor({state:'detached'});
+    await managed.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Actions for Understanding cloud storage');
+    check(managed.state.patches===0 && await history.getByRole('button',{
+      name:'Actions for Understanding cloud storage'}).evaluate(el=>document.activeElement===el),
+      'TUTOR-REQ-012 keyboard opening and Cancel restore focus without PATCH');
+    await openRename('Understanding cloud storage');
+    await titleInput.fill('  Storage review  ');
+    await screenshot(managed.page,'tutor-rename-dialog',width);
+    let releasePatch;
+    managed.state.holdPatch=new Promise(done=>{releasePatch=done});
+    await titleInput.press('Enter');
+    await managed.page.waitForFunction(()=>document.querySelector('[role=dialog] button[aria-busy=true]'));
+    await titleInput.press('Enter');
+    const save=rename.getByRole('button',{name:'Save',exact:true});
+    check(await save.isDisabled() && await titleInput.isDisabled()
+      && await save.locator('svg.animate-spin').count()===1
+      && await managed.page.locator('svg.animate-spin').count()===1,
+      'TUTOR-REQ-012 pending lock and one spinner only in activated Save');
+    check(managed.state.patches===1 && managed.state.lastPatch.title==='Storage review',
+      'TUTOR-REQ-012 Enter sends exactly one trimmed PATCH');
+    releasePatch();
+    managed.state.holdPatch=null;
     await history
       .getByRole("button", { name: "Storage review", exact: true })
       .waitFor();
@@ -961,6 +1029,21 @@ try {
       managed.state.patches === 1,
       "TUTOR-REQ-005 rename from list capability despite detail omission",
     );
+    await rename.waitFor({state:'detached'});
+    await managed.page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='Actions for Storage review');
+    check(await history.getByRole('button',{name:'Actions for Storage review'}).evaluate(el=>document.activeElement===el),
+      'TUTOR-REQ-012 successful Save restores trigger focus');
+    await openRename('Storage review');
+    await titleInput.fill('Failed rename');
+    managed.state.rejectPatch=true;
+    await rename.getByRole('button',{name:'Save',exact:true}).click();
+    await rename.getByRole('alert').waitFor();
+    check(await rename.getByRole('alert').textContent()==='Synthetic rename failed. Please try again.'
+      && await titleInput.inputValue()==='Failed rename',
+      'TUTOR-REQ-012 failure retains draft and safe retry feedback');
+    managed.state.rejectPatch=false;
+    await titleInput.press('Escape');
+    await rename.waitFor({state:'detached'});
     check(
       await history.getByRole("button", { name: "Pinned 1" }).evaluate((el) => {
         const recents = [
@@ -1001,7 +1084,7 @@ try {
       .getByRole("button", { name: "Pin Storage review", exact: true })
       .waitFor();
     check(
-      managed.state.patches === 3,
+      managed.state.patches === 4,
       "TUTOR-REQ-005 pin and unpin call PATCH",
     );
     const recents = history.getByRole("button", { name: /^Recents/ });
@@ -1651,6 +1734,11 @@ try {
   await cancelled.page.waitForFunction(() =>
     document.querySelector('button[aria-label="Attaching files"]'),
   );
+  check(await cancelled.page.getByRole('button',{name:'Attaching files'}).isDisabled()
+    && await cancelled.page.getByRole('button',{name:'Attaching files'}).locator('svg.animate-spin').count()===1
+    && await cancelled.page.locator('svg.animate-spin').count()===1
+    && await cancelled.page.locator('[data-tutor-file-card] svg.animate-spin').count()===0,
+    'TUTOR-REQ-009 upload spinner only in activated disabled Send, never file status');
   await cancelled.page
     .getByRole("button", { name: "New chat", exact: true })
     .filter({ has: cancelled.page.locator("svg") })
@@ -1701,6 +1789,49 @@ try {
     "TUTOR-REQ-005 legacy retains confirmed delete",
   );
   await legacy.context.close();
+
+  for (const width of [375,1440]) {
+    const reduced=await fixture(width,{reducedMotion:'reduce'});
+    let releaseDetail;
+    reduced.state.holdDetail=new Promise(done=>{releaseDetail=done});
+    await reduced.page.goto('http://localhost:5173/course/tutor?conversation=existing');
+    const chat=reduced.page.locator('[data-study-surface]');
+    await chat.getByText('Loading conversation…',{exact:true}).waitFor();
+    check(await chat.locator('svg.animate-spin').count()===0
+      && await chat.locator('[data-slot=skeleton]').count()===2
+      && await chat.locator('[data-slot=skeleton]').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).animationName==='none')),
+      `TUTOR-REQ-010 reduced-motion conversation skeletons without spinner at ${width}`);
+    releaseDetail();
+    reduced.state.holdDetail=null;
+    await chat.getByText('Loading conversation…',{exact:true}).waitFor({state:'detached'});
+    if(width<1024) await reduced.page.getByRole('button',{name:'Open chat history'}).click();
+    await reduced.page.getByRole('button',{name:'Actions for Understanding cloud storage'}).click();
+    await reduced.page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+    const dialog=reduced.page.getByRole('dialog',{name:'Rename chat',exact:true});
+    await dialog.getByRole('textbox',{name:'Chat title'}).waitFor();
+    check(await dialog.evaluate(el=>getComputedStyle(el).animationName==='none')
+      && await reduced.page.locator('[data-slot=dialog-overlay]').evaluateAll(nodes=>nodes.length===1 && nodes.every(n=>getComputedStyle(n).animationName==='none')),
+      `TUTOR-REQ-012 rename dialog and overlay honor reduced motion at ${width}`);
+    await dialog.getByRole('textbox',{name:'Chat title'}).press('Escape');
+    await dialog.waitFor({state:'detached'});
+    if(width<1024) await reduced.page.keyboard.press('Escape');
+    await reduced.page.evaluate(()=>{
+      Blob.prototype.text=function(){return new Promise(done=>{window.releasePreview=()=>done('Synthetic local preview')})};
+    });
+    await reduced.page.locator('input[type=file]').setInputFiles({name:'pending.txt',mimeType:'text/plain',buffer:Buffer.from('Synthetic local preview')});
+    await reduced.page.getByRole('button',{name:'Preview pending.txt',exact:true}).click();
+    const preview=reduced.page.getByRole('dialog',{name:'pending.txt',exact:true});
+    await preview.getByText('Loading preview…',{exact:true}).waitFor();
+    check(await preview.locator('[data-slot=skeleton]').count()===2
+      && await preview.locator('svg.animate-spin').count()===0
+      && await preview.locator('[data-slot=skeleton]').evaluateAll(nodes=>nodes.every(n=>getComputedStyle(n).animationName==='none')),
+      `TUTOR-REQ-009 preview loading is skeleton/text and static under reduced motion at ${width}`);
+    await reduced.page.evaluate(()=>window.releasePreview());
+    await preview.getByText('Synthetic local preview',{exact:true}).waitFor();
+    check(reduced.state.creates===0 && reduced.state.uploads===0 && reduced.state.patches===0,
+      `TUTOR-REQ-009/012 reduced-motion local loading/cancel makes no mutation at ${width}`);
+    await reduced.context.close();
+  }
   console.log(
     `WI-22 browser checks passed: ${assertions} assertions. Synthetic screenshots: ${out}`,
   );

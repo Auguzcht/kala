@@ -277,19 +277,14 @@ export function TutorComposer({
             />
           </PromptInputBody>
           <PromptInputSubmit
-            aria-label={
-              busy
-                ? "Attaching files"
-                : pending
-                  ? "Waiting for reply"
-                  : "Send message"
-            }
+            aria-label={busy ? "Attaching files" : "Send message"}
             disabled={pending || busy || blockedAttachment || !draft.trim()}
-            status={pending || busy ? "submitted" : undefined}
+            aria-busy={pending || busy || undefined}
+            status={busy && !pending ? "submitted" : undefined}
             className={dockLayout.control}
             {...submitIcon.events}
           >
-            {pending || busy ? undefined : (
+            {busy && !pending ? undefined : (
               <CornerDownLeftIcon
                 ref={submitIcon.ref}
                 size={16}
