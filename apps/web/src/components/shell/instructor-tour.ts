@@ -6,10 +6,9 @@
 // dismissal key.
 //
 // The story the steps tell is the sheet-vs-record distinction: the roster
-// row opens the triage SHEET (standing + decide, the "who do I decide for
-// right now" task), and the needs-support flag or the sheet's "Open full
-// record" link leads to the RECORD page (the deep dive — mastery and
-// activity history).
+// progress row opens the triage SHEET (standing + decide). Later Next
+// opens the same learner’s RECORD for mastery and activity history,
+// without an extra transition stop or a dependency on support flags.
 //
 // Copy rule (DESIGN.md): instructor-facing text is direction, not
 // description, and never verdict language. "Needs support", not "failing";
@@ -91,7 +90,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   // ---- Back on the overview: needs support, then the charts ------------
   {
     route: "/class",
-    selector: "#at-risk-list",
+    selector: "#at-risk-list, #tour-at-risk-first-flag",
     title: "Needs support",
     description:
       "Evidence-triggered flags with the specific reason behind each one. Supportive wording, never a verdict on a student.",
@@ -143,24 +142,13 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class",
     selector: "#tour-skill-approve",
+    progressLearner: "record",
     explainOnly: true,
     fallbackDescription: "When proposals are available, Approve makes a skill live and Reject leaves it out. Select Next to continue without changing anything.",
     optional: true,
     title: "Skill mapping and review",
     description:
       "Approve makes a proposed skill available, while Reject leaves it out. Select Next to continue without making a decision.",
-  },
-  // ---- Cross to one learner's record via a needs-support flag ----------
-  {
-    route: "/class",
-    selector: "#tour-at-risk-first-flag",
-    progressLearner: "record",
-    explainOnly: true,
-    fallbackDescription: "Next opens the chosen learner's record when a learner with progress is available. Otherwise, the record explanations remain available as fallbacks.",
-    optional: true,
-    title: "One learner",
-    description:
-      "Next opens the same learner with progress introduced during triage. Their full record adds mastery instruments and the evidence ledger. Existing recommendations appear when available.",
   },
   // ---- The record page (deep dive) --------------------------------------
   // Every tab is opened by the tour itself — Decide, Mastery, Activity —
@@ -185,6 +173,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-decide-center",
+    activateSelector: "#tour-tab-decide",
     title: "Decide",
     description:
       "The same gate as the sheet: evidence-backed proposals, your decision, nothing reaching the learner until then.",
@@ -193,6 +182,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-run-analysis",
+    activateSelector: "#tour-tab-decide",
     explainOnly: true,
     fallbackDescription: "Run analysis prepares recommendations only when you choose it outside the tour. Select Next to continue without running it.",
     title: "Decide",
@@ -202,6 +192,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-rec-card",
+    activateSelector: "#tour-tab-decide",
     explainOnly: true,
     fallbackDescription: "Recommendations appear here when available. The tour does not run analysis to create them.",
     optional: true,
@@ -212,6 +203,7 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   {
     route: "/class/student/$uid",
     selector: "#tour-decision-buttons",
+    activateSelector: "#tour-tab-decide",
     explainOnly: true,
     fallbackDescription: "When recommendations are available, Approve assigns one and Decline rejects it. Select Next to continue without recording a decision.",
     optional: true,
@@ -221,38 +213,51 @@ export const INSTRUCTOR_TOUR_STEPS: readonly TourPresentationStep[] = [
   },
   {
     route: "/class/student/$uid",
-    selector: "#tour-tab-mastery",
-    title: "Mastery",
-    description: "Where the learner's understanding actually sits, skill by skill.",
-    click: true,
+    selector: "#tour-record-readiness",
+    activateSelector: "#tour-tab-mastery",
+    title: "Readiness",
+    description: "This number and ring summarise the learner's current mastery estimate. Use the skill-by-skill view next to see where that estimate comes from.",
+    waitFor: "#tour-record-readiness",
   },
   {
     route: "/class/student/$uid",
     selector: "#tour-record-radar",
-    title: "Mastery",
+    activateSelector: "#tour-tab-mastery",
+    title: "Mastery across skills",
     description:
-      "The twin's radar, broken out by Bloom's level — and where to intervene, weakest first.",
+      "Compare the mastery profile across Bloom's levels and check which skills still have no evidence.",
     waitFor: "#tour-record-radar",
   },
   {
     route: "/class/student/$uid",
     selector: "#tour-record-intervene",
+    activateSelector: "#tour-tab-mastery",
     explainOnly: true,
     fallbackDescription: "Suggested interventions appear here when available. Select Next to continue without assigning work.",
-    title: "Mastery",
+    title: "Where to intervene",
     description: "Weakest first — the intervention list that decides what to assign.",
   },
   {
     route: "/class/student/$uid",
-    selector: "#tour-tab-activity",
-    title: "Activity",
-    description: "The evidence behind every number — trends, volume, and the ledger.",
-    click: true,
+    selector: "#tour-record-readiness-trend",
+    activateSelector: "#tour-tab-activity",
+    title: "Readiness over time",
+    description: "Follow the learner's recorded readiness snapshots over time. A trend appears once enough snapshots have been saved.",
+    waitFor: "#tour-record-readiness-trend",
+  },
+  {
+    route: "/class/student/$uid",
+    selector: "#tour-record-activity",
+    activateSelector: "#tour-tab-activity",
+    title: "Practice and activity",
+    description: "Review recorded correct and missed outcomes. The activity badges show the available events by learning type.",
+    waitFor: "#tour-record-activity",
   },
   {
     route: "/class/student/$uid",
     selector: "#tour-record-ledger",
-    title: "Activity",
+    activateSelector: "#tour-tab-activity",
+    title: "Evidence ledger",
     description:
       "Review the recent learning evidence behind this record. Use the ledger’s pages to move through the available events.",
     waitFor: "#tour-record-ledger",

@@ -12,7 +12,7 @@ let assertions=0;const check=(condition,label)=>{assert.ok(condition,label);asse
 const skill={skillId:'storage',name:'Cloud storage',moduleRef:'Cloud basics',bloomLevel:'understand',estimate:0.5,attempts:2,band:'proficient'};
 const ident={userId:'learner',displayName:'Demo learner',pseudonym:'Learner A',initials:'DL'};
 const evidence=Array.from({length:20},(_,i)=>({id:'event-'+i,type:'practice',correct:true,latencyMs:1000,skillName:'Cloud storage',createdAt:'2026-10-25T00:00:00Z'}));
-async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal',noFlags=false,mixedProgress=false,noProgress=false}={}){
+async function fixture(width,{role='student',completed=false,empty=false,noMaterial=false,reduced='reduce',dismissal=null,step15Layout='normal',noFlags=false,mixedProgress=false,noProgress=false,noCharts=false}={}){
  const context=await browser.newContext({viewport:{width,height:950},reducedMotion:reduced});const page=await context.newPage();page.setDefaultTimeout(15000);
  if(dismissal!==null)await context.addInitScript(({role,dismissal})=>localStorage.setItem(`kala.${role}.tour.demo`,dismissal),{role,dismissal});
  await context.addInitScript(()=>{
@@ -21,7 +21,7 @@ async function fixture(width,{role='student',completed=false,empty=false,noMater
    if(event.target instanceof Element&&event.target.closest('#tour-skill-approve,#live-skill-approval,#tour-run-analysis,#tour-decision-buttons button,#tour-record-intervene button'))window.__tourWriteClicks.push(event.target.textContent);
   },true);
  });
- const errors=[],state={mutations:[],gets:[],skipped:[],visited:[],choosers:0};page.on('pageerror',e=>errors.push(e.message));page.on('filechooser',()=>state.choosers++);
+ const errors=[],state={mutations:[],gets:[],skipped:[],visited:[],choosers:0,noCharts};page.on('pageerror',e=>errors.push(e.message));page.on('filechooser',()=>state.choosers++);
  page.on('request',request=>{if(!['GET','HEAD','OPTIONS'].includes(request.method()))state.mutations.push({path:new URL(request.url()).pathname,method:request.method()});});
  await context.route('**/*',async route=>{
   const url=new URL(route.request().url());if(url.hostname!=='localhost'||url.port!=='5173')return route.abort();
@@ -57,7 +57,7 @@ async function fixture(width,{role='student',completed=false,empty=false,noMater
   if(path.endsWith('/stats'))return reply({courseId:'course',learners:empty?0:1,activeLearners:0,startedLearners:empty?0:1,notStartedLearners:0,cohortReadiness:0.5,medianReadiness:0.5,accuracy:0.5,evidenceCount:20,medianLatencyMs:1000,hintsUsed:0,skillsTracked:1,skillsCovered:1,bandDistribution:[{band:'proficient',count:1}],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
   if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:0.5,skills:[{skillId:'storage',name:'Cloud storage',bloomLevel:'understand',cohortBand:'proficient',cohortEstimate:0.5}],students:empty?[]:[ident],cells:empty?[]:[{userId:'learner',skillId:'storage',estimate:0.5,attempts:20,band:'proficient'}]});
   if(path.endsWith('/at-risk'))return reply({courseId:'course',flags:empty||noFlags?[]:[{...ident,...(mixedProgress||noProgress?{userId:'empty-0',displayName:'Unstarted learner 0'}:{}),reason:'Practice can reinforce storage concepts.',daysInactive:0,evidenceCount:20,weakestSkillNames:['Cloud storage']}]});
-  if(path.endsWith('/record'))return reply({courseId:'course',...ident,readiness:0.5,band:'proficient',cohortReadiness:0.5,percentile:50,accuracy:0.5,momentum:null,attempts:20,evidenceCount:20,hintsUsed:0,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,status:'developing',skills:[skill],activityByType:[],activitySeries:[],readinessTrend:[],evidence});
+  if(path.endsWith('/record'))return reply({courseId:'course',...ident,readiness:0.74,band:'proficient',cohortReadiness:0.5,percentile:50,accuracy:0.5,momentum:null,attempts:20,evidenceCount:20,hintsUsed:0,lastActiveAt:'2026-10-25T00:00:00Z',daysInactive:0,status:'developing',skills:[skill],activityByType:noCharts?[]:[{type:'practice',count:12}],activitySeries:noCharts?[]:[{date:'2026-10-20',correct:3,missed:1,ungraded:0},{date:'2026-10-21',correct:4,missed:0,ungraded:0},{date:'2026-10-22',correct:3,missed:1,ungraded:0}],readinessTrend:noCharts?[]:[{date:'2026-10-20',readiness:0.5},{date:'2026-10-21',readiness:0.65},{date:'2026-10-22',readiness:0.74}],evidence});
   if(path.endsWith('/evidence'))return reply({courseId:'course',evidence,nextCursor:null});
   if(path.endsWith('/recommendations'))return reply({courseId:'course',userId:'learner',recommendations:empty?[]:[{id:'recommendation',userId:'learner',courseId:'course',skillId:'storage',skillName:'Cloud storage',title:'Review cloud storage',kind:'practice',priority:'medium',rationale:'Review reinforces this concept.',evidence:[{label:'Practice',detail:'Two recent checks show room to improve.'}],status:'suggested',confidence:0.5,expectedGain:null,source:'heuristic',decidedBy:null,decidedAt:null,decisionNote:null,instructorNote:null,createdAt:'2026-10-25T00:00:00Z'}]});
   return reply({});
@@ -71,8 +71,8 @@ async function start(f,{direct=false,blocked=false}={}){
  await f.page.getByRole('button',{name:'Take the tour',exact:true}).first().click();await f.page.getByRole('button',{name:'Start tour',exact:true}).click();
  if(!blocked)await f.page.waitForFunction(()=>window.__tourStore.getState().tourStep!==null);
 }
-async function walk(f,{back=false,width,role}={}){
- const {page,state}=f;let didBack=false;const totalSteps=await page.evaluate(()=>window.__tourSteps.length);
+async function walk(f,{back=false,width,role,sectionBack=false}={}){
+ const {page,state}=f;let didBack=false;const sectionBacks=new Set();const totalSteps=await page.evaluate(()=>window.__tourSteps.length);
  for(let turns=0;turns<70;turns++){
   const ready=await page.waitForFunction(()=>{const index=window.__tourStore.getState().tourStep;if(index===null)return {done:true};const el=document.querySelector(`.driver-popover[data-tour-step="${index}"]`);if(el&&el.getBoundingClientRect().height>0&&getComputedStyle(el).visibility!=='hidden')return {index};return false;});
   const stateAtReady=await ready.jsonValue();if(stateAtReady.done)break;const index=stateAtReady.index;
@@ -81,6 +81,22 @@ async function walk(f,{back=false,width,role}={}){
   if(fallback){
    check(await popover.evaluate(el=>{const b=el.getBoundingClientRect();return Math.abs(b.left+b.width/2-innerWidth/2)<=2&&Math.abs(b.top+b.height/2-innerHeight/2)<=2;}),'TOUR-REQ-009 step '+index+' has a centered fallback');
   }else check(await page.evaluate(index=>[...document.querySelectorAll('.driver-active-element')].some(el=>el.matches(window.__tourSteps[index].selector)),index),'step '+index+' highlights its actual configured target');
+  if(!fallback&&index===21){
+   const ring=page.locator('#tour-record-readiness');
+   check(await ring.getByRole('img',{name:'Readiness: Mastered, 74 percent',exact:true}).isVisible(),'TOUR-REQ-009 readiness stop highlights the actual 74 donut');
+   check(await ring.locator('svg circle').count()===2,'TOUR-REQ-009 readiness includes the donut artwork');
+   check(await ring.locator('[data-slot=mastery-ring-value]').innerText()==='74','TOUR-REQ-009 readiness stop includes the central number');
+  }
+  if(!fallback&&index===24){
+   const trend=page.locator('#tour-record-readiness-trend');
+   if(state.noCharts)check(await trend.getByText('Not enough snapshots yet to draw a trend.',{exact:true}).isVisible(),'TOUR-REQ-009 trend stop retains its genuine empty state');
+   else{await trend.locator('svg.recharts-surface').waitFor();check(await trend.locator('.recharts-area').count()>0,'TOUR-REQ-009 readiness trend highlights the plotted snapshots');}
+  }
+  if(!fallback&&index===25){
+   const activity=page.locator('#tour-record-activity');await activity.locator('svg.recharts-surface').waitFor();
+   check(await activity.getByText('Practice, last 14 days',{exact:true}).isVisible(),'TOUR-REQ-009 activity has its own chart explanation before the ledger');
+   if(!state.noCharts)check(await activity.getByText('practice · 12',{exact:true}).isVisible(),'TOUR-REQ-009 activity includes recorded type counts');
+  }
   check(await popover.getByText(`${index+1} of ${totalSteps}`,{exact:true}).count()===1,'TOUR-REQ-009 progress stays fixed at step '+index);
   check(await popover.locator('.driver-popover-next-btn').innerText()===(index===totalSteps-1?'Done':'Next'),'TOUR-REQ-009 every instructor step advances with Next or final Done');
   check(await popover.evaluate(el=>{const b=el.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1&&b.top>=0&&b.bottom<=innerHeight+1;}),'popover fits viewport '+width);
@@ -91,7 +107,8 @@ async function walk(f,{back=false,width,role}={}){
   if(back&&!didBack&&await previous.isEnabled()){
    didBack=true;if(width===375){await previous.focus();await previous.press('Enter');}else await previous.click();await page.waitForFunction(previousIndex=>window.__tourStore.getState().tourStep<previousIndex,index);continue;
   }
-  if(state.visited.length===1||index===14||title==='Keep track of your chats')await page.screenshot({path:resolve(out,`${role}-${width}-${index}-${fallback?'fallback':'target'}.png`),animations:'disabled'});
+  if(sectionBack&&[21,24].includes(index)&&!sectionBacks.has(index)){sectionBacks.add(index);await previous.click();await page.waitForFunction(prior=>window.__tourStore.getState().tourStep<prior,index);continue;}
+  if(state.visited.length===1||[14,15,21,24,25].includes(index)||title==='Keep track of your chats')await page.screenshot({path:resolve(out,`${role}-${width}-${index}-${fallback?'fallback':'target'}.png`),animations:'disabled'});
   await popover.locator('.driver-popover-next-btn').click();
   await page.waitForFunction(previousIndex=>window.__tourStore.getState().tourStep!==previousIndex,index).catch(async e=>{throw new Error(`Stuck after ${role} step ${index} ${title}; path=${new URL(page.url()).pathname}; errors=${f.errors.join('; ')}; ${e.message}`);});
  }
@@ -167,12 +184,12 @@ try {
    await f.context.close();
   }
   {
-   const f=await fixture(width,{role:'instructor',noFlags:true});await start(f);
+   const f=await fixture(width,{role:'instructor',noFlags:true,noCharts:true});await start(f);
    await walk(f,{width,role:'instructor',back:true});
    check(new Set(f.state.visited.map(step=>step.index)).size===27,'TOUR-REQ-009 no-flags class visits all 27 steps '+width);
-   const recordSteps=f.state.visited.filter(step=>step.index>=16);
-   check(recordSteps.length===11&&recordSteps.every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 no-flags steps 17–27 show actual record targets '+width);
-   check(f.state.visited.some(step=>step.index===15&&step.fallback),'TOUR-REQ-009 missing step-16 flag explains the roster route '+width);
+   const recordSteps=f.state.visited.filter(step=>step.index>=15);
+   check(recordSteps.length===12&&recordSteps.every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 no-flags steps 16–27 show actual record targets '+width+' '+JSON.stringify(recordSteps));
+   check(f.state.visited.some(step=>step.index===15&&!step.fallback&&step.path==='/class/student/learner'),'TOUR-REQ-009 step 16 directly highlights the learner record '+width);
    check(f.state.gets.every(path=>instructorReads.has(path))&&f.state.mutations.length===0&&await f.page.evaluate(()=>window.__tourWriteClicks.length===0),'TOUR-REQ-009 no-flags transition uses only audited reads '+width);
    await f.context.close();
   }
@@ -181,14 +198,14 @@ try {
    await f.page.getByRole('textbox',{name:'Search the roster',exact:true}).fill('Unstarted');
    await f.page.locator('#tour-roster-filter').locator('button').filter({hasText:/^Not started$/}).click();
    await f.page.getByRole('switch',{name:'De-identify names on this page',exact:true}).click();
-   await start(f);await walk(f,{width,role:'instructor',back:true});
+   await start(f);await walk(f,{width,role:'instructor',back:true,sectionBack:!noProgress});
    check(new Set(f.state.visited.map(step=>step.index)).size===27,'TOUR-REQ-009 mixed roster all 27 steps '+width+' noProgress='+noProgress);
    if(noProgress){
     check(!f.state.gets.some(path=>path.includes('/students/')),'TOUR-REQ-009 no-progress roster never opens an empty learner');
     check(f.state.visited.some(step=>step.index===4&&step.fallback),'TOUR-REQ-009 no-progress triage explains its fallback');
     check(await f.page.getByRole('textbox',{name:'Search the roster',exact:true}).inputValue()==='Unstarted','TOUR-REQ-009 no-progress view preserves prior search');
    }else{
-    check(f.state.visited.filter(step=>step.index>=16).every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 mixed roster record steps use the progress learner');
+    check(f.state.visited.filter(step=>step.index>=15).every(step=>step.path==='/class/student/learner'&&!step.fallback),'TOUR-REQ-009 mixed roster record steps use the progress learner');
     check(f.state.visited.filter(step=>[5,6,7].includes(step.index)).every(step=>!step.fallback),'TOUR-REQ-009 triage opens the off-page progress learner');
     check(!f.state.gets.some(path=>path.includes('/students/empty-')||path.includes('/students/other-progress/')),'TOUR-REQ-009 unrelated support flag and unstarted rows never override chosen progress learner');
    }

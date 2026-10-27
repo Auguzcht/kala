@@ -110,7 +110,7 @@ export function LearnerRecord({
 
         <TabsContent value="mastery" className="mt-4 space-y-4">
           <div className="grid gap-4 lg:grid-cols-12">
-            <Card className="flex flex-col items-center justify-center gap-3 py-8 lg:col-span-4">
+            <Card id="tour-record-readiness" className="flex flex-col items-center justify-center gap-3 py-8 lg:col-span-4">
               <MasteryRing estimate={r.readiness} size={144} strokeWidth={11} label="Readiness" />
               <p className="text-center text-xs text-muted-foreground">
                 Blueprint-weighted rollup across {r.skills.length} tracked skills
@@ -166,7 +166,7 @@ export function LearnerRecord({
 
         <TabsContent value="activity" className="mt-4 space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
+            <Card id="tour-record-readiness-trend">
               <CardHeader>
                 <CardTitle className="text-base">Readiness over time</CardTitle>
               </CardHeader>
@@ -213,7 +213,7 @@ export function LearnerRecord({
               </CardContent>
             </Card>
 
-            <Card>
+            <Card id="tour-record-activity">
               <CardHeader>
                 <CardTitle className="text-base">Practice, last 14 days</CardTitle>
               </CardHeader>

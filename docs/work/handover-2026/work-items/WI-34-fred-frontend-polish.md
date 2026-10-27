@@ -459,3 +459,42 @@ docs/features/tour/README.md
 docs/features/tutor/README.md
 docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
 ```
+
+
+## Final tour coverage: Direct record entry and every chart
+
+2026-10-28. Fred’s live review confirms the progress learner opens, but the step-16 transition is an empty popover and readiness/activity charts lack individual explanations. TOUR-REQ-009 is amended before code. WI-34-T15 keeps 27 steps by removing that transition, using Next on skill review to enter the learner record directly, and replacing the redundant Mastery/Activity tab stops with the donut and readiness-trend cards. The additional Practice/activity card balances the removed transition. Steps 22–27 now cover donut, radar, intervention, readiness trend, activity and ledger. Read-only tabs activate on arrival and Back. Only three new Card IDs are allowed in LearnerRecord. E3 gains current-renderer registrations for these new targets, with all seven historical proofs retained. No API, chart data/calculation, student-tour flag or write behavior changes. Status: in-progress.
+
+
+WI-34-T15 implementation and verification: done-awaiting-confirmation. The tour remains 27 steps. Next on skill review now enters the selected progress learner’s standing card directly, with no empty transition stop. The final section is:
+
+| Step | Highlight |
+| --- | --- |
+| 16 | Learner standing on the full record |
+| 22 | Readiness number and donut |
+| 23 | Mastery across skills radar |
+| 24 | Where to intervene |
+| 25 | Readiness over time |
+| 26 | Practice and activity chart and type counts |
+| 27 | Evidence ledger |
+
+Read-only tab activation runs on entry to these sections and on Back. It uses the same mousedown/click sequence as existing Next-driven tab actions. An initial click-only implementation did not activate Radix tabs and was corrected. A synthetic populated-chart fixture initially omitted the existing required ungraded field, causing the learner-record error state. The fixture was corrected to the real schema without weakening API validation or changing product data. Both issues are resolved by the final full run.
+
+Final sequential verification on the original one-server 5173 worktree setup: every stage succeeds in `/tmp/kala-tour-chart-final/results.json`, local only, not retained. Lint has zero errors and 18 existing warnings, typecheck/build pass, frontend units pass 55, E3 passes 56 and documentation units pass 18. All eleven browser suites pass, 4838 assertions total. Tour coverage is 3386 assertions, including actual chart/number highlights, empty snapshots, no-progress fallbacks, stable learner identity, Back across Decide/Mastery/Activity, hidden student entry and zero mutating/model requests or write-control clicks. Instructor read-states/review-feedback/presentation remain 326/63/148. Documentation checker covers 188 files with zero violations.
+
+Byte proofs: LearnerRecord differs from base 2b6789f only in the three new Card IDs. Normalizing those three attributes restores the exact original file. E3 differs only by three new current-renderer registrations and collection of the activateSelector property. Removing those additions restores the exact prior E3 source, including all seven historical proofs. CourseShell/student definitions and the student-tour flag are unchanged. No API, migration, configuration, hosted operation, chart computation, merge/push or deployment.
+
+Files for this one tour-coverage item:
+
+```text
+apps/web/src/components/shell/TourRunner.tsx
+apps/web/src/components/shell/instructor-tour.ts
+apps/web/src/components/shell/tests/tour-anchors.test.mjs
+apps/web/src/components/shell/tests/tour-route.test.mjs
+apps/web/src/components/shell/tests/tour.browser.mjs
+apps/web/src/features/instructor/components/LearnerRecord.tsx
+docs/features/tour/README.md
+docs/work/handover-2026/work-items/WI-34-fred-frontend-polish.md
+```
+
+Fred’s final live tour confirmation remains pending. Earlier backend/data follow-ups retain their previously recorded status. Secrets printed: none.

@@ -28,15 +28,17 @@ test('student tour keeps one prepared skill and no automatic sessions',()=>{
 });
 test('TOUR-REQ-009 all 27 instructor steps avoid write clicks and write-completion waits',()=>{
  assert.equal(INSTRUCTOR_TOUR_STEPS.length,27);
- const readWaits=new Set(['#tour-standing','#heatmap-panel','#tour-skill-review-panel','#tour-decide-center','#tour-record-radar','#tour-record-ledger']);
+ const readWaits=new Set(['#tour-standing','#heatmap-panel','#tour-skill-review-panel','#tour-decide-center','#tour-record-radar','#tour-record-ledger','#tour-record-readiness','#tour-record-readiness-trend','#tour-record-activity']);
  for(const [index,step] of INSTRUCTOR_TOUR_STEPS.entries()){
   assert.ok(!step.studentAction&&!step.waitState,`step ${index+1} must not require a recorded action`);
   if(step.click)assert.ok(isTourUiClick(step.clickSelector??step.selector),`step ${index+1} clicks only permitted UI`);
+  if(step.activateSelector)assert.ok(['#tour-tab-decide','#tour-tab-mastery','#tour-tab-activity'].includes(step.activateSelector)&&isTourUiClick(step.activateSelector),'only existing read-only tabs activate on arrival');
   if(step.waitFor)assert.ok(readWaits.has(step.waitFor),`step ${index+1} waits only for read-only UI`);
   assert.ok(!step.description.includes(';'),`step ${index+1} copy has no semicolon`);
  }
- for(const number of [15,20,21,22,25]){
-  const step=INSTRUCTOR_TOUR_STEPS[number-1];
+ for(const selector of ['#tour-skill-approve','#tour-run-analysis','#tour-rec-card','#tour-decision-buttons','#tour-record-intervene']){
+  const step=INSTRUCTOR_TOUR_STEPS.find(step=>step.selector===selector);
+  const number=INSTRUCTOR_TOUR_STEPS.indexOf(step)+1;
   assert.ok(step.explainOnly&&!step.click&&!step.waitFor,`step ${number} explains without waiting for a write control`);
   assert.ok(step.fallbackDescription);
  }
@@ -56,8 +58,10 @@ test('TOUR-REQ-009 selects progress beyond page one without hard-coded identitie
  assert.equal(progressTourLearner(undefined,'course'),undefined);
  assert.equal(progressTourLearner({courseId:'course',students:students.slice(0,23)},'course'),undefined);
  assert.equal(INSTRUCTOR_TOUR_STEPS[4].progressLearner,'select');
- assert.equal(INSTRUCTOR_TOUR_STEPS[15].progressLearner,'record');
- assert.ok(INSTRUCTOR_TOUR_STEPS[15].explainOnly&&!INSTRUCTOR_TOUR_STEPS[15].click);
+ assert.equal(INSTRUCTOR_TOUR_STEPS[14].progressLearner,'record');
+ assert.ok(INSTRUCTOR_TOUR_STEPS[14].explainOnly&&!INSTRUCTOR_TOUR_STEPS[14].click);
+ assert.equal(INSTRUCTOR_TOUR_STEPS[15].route,'/class/student/$uid');
+ assert.deepEqual(INSTRUCTOR_TOUR_STEPS.slice(21).map(step=>step.selector),['#tour-record-readiness','#tour-record-radar','#tour-record-intervene','#tour-record-readiness-trend','#tour-record-activity','#tour-record-ledger']);
  const duplicates={courseId:'course',students:[{...row('a',1),pseudonym:'Same',displayName:'Same'},{...row('b',1),pseudonym:'Same',displayName:'Same'}]};
  assert.equal(progressLearnerSearch(duplicates,duplicates.students[0]),undefined);
  assert.equal(progressTourLearner(duplicates,'course').userId,'a');

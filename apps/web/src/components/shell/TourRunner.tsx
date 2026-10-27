@@ -15,6 +15,7 @@ export type TourPresentationStep = TourStepConfig & {
   explainOnly?: boolean;
   fallbackDescription?: string;
   progressLearner?: "select" | "record";
+  activateSelector?: string;
 };
 
 type Visit = { index: number; pathname: string; search: Record<string, unknown> };
@@ -269,12 +270,21 @@ export function TourRunner({ steps, dismissKey }: {
         });
       }
     }
-    const ready = instructor && step.progressLearner === "record"
-        && (!rosterLearnerRoute.current || rosterLearnerCourse.current !== session?.courseId) ? Promise.resolve(undefined)
-      : instructor && step.progressLearner === "select" ? prepareProgressRow()
-      : instructor && step.explainOnly
-      ? Promise.resolve(visibleTarget(step.selector))
-      : wait(step.waitFor ?? step.selector, instructor ? 1200 : step.waitState ? 120_000 : step.optional || backwards.current ? 1200 : 8000);
+    async function readyTarget() {
+      if (instructor && step.activateSelector && !visibleTarget(step.selector) && isTourUiClick(step.activateSelector)) {
+        const tab = visibleTarget(step.activateSelector);
+        if (tab instanceof HTMLElement && !tab.matches(":disabled, [aria-disabled=true]")) {
+          tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+          tab.click();
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        }
+      }
+      if (cancelled) return;
+      return instructor && step.progressLearner === "select" ? prepareProgressRow()
+        : instructor && step.explainOnly ? visibleTarget(step.selector)
+        : wait(step.waitFor ?? step.selector, instructor ? 1200 : step.waitState ? 120_000 : step.optional || backwards.current ? 1200 : 8000);
+    }
+    const ready = readyTarget();
     void ready.then(async (element) => {
       if (cancelled) return;
       const target = visibleTarget(step.selector);
