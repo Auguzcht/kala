@@ -120,7 +120,7 @@ export function CohortStats({ courseId }: { courseId: string }) {
       <StatTile
         label="Skills covered"
         value={`${data.skillsCovered}/${data.skillsTracked}`}
-        sub={`${data.hintsUsed} hints used`}
+        sub="With evidence"
         tone="neutral"
         help="Approved skills with at least one learner's evidence against them. Uncovered skills have no measurement yet."
       />

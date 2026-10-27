@@ -169,6 +169,15 @@ The local app points to the deployed API and the same Supabase project used for 
 
 Final integrated checks after the learner presentation changes: lint passes with zero errors and 18 existing warnings, typecheck/build pass, frontend units pass 54 and unchanged E3 passes 53. All ten browser suites run sequentially against the original 5173 server. The new drawer fixture first selected the first triage row, which was an unmeasured learner rather than its intended synthetic learner. The rank correctly remained unavailable. The fixture now searches for the intended learner before opening the drawer, also proving rank uses the full roster despite filtering. The full read-states suite then passes 314, while review-feedback passes 63 and presentation passes 148. No product change was needed for that fixture correction. The original failed run remains in the local result manifest. Documentation checks pass. No backend, model/configuration, migration, identity repair or hosted application write is part of these fixes.
 
+### INSTR-REQ-013: Keep coverage and hint telemetry truthful
+
+- Rule: Skills covered displays approved skills with learner evidence over approved skills tracked. Its supporting caption describes coverage, not hints. Do not present the current evidence hintsUsed sum as a count of all Skill hub Give hint requests. Where the learner record retains this field, call it recorded hints and retain its 200-event window label.
+- Source finding: Cohort stats sums hints_used across up to 2,000 course evidence events. Learner record sums it across up to 200 learner events. Lesson check hints increment a frontend ref and reach the existing lesson check submission. Flashcard Give hint uses a stateless Tutor ask with course/question/style, and its rating contract has no hint count. Consequently zero stored hints is not proof that no hint was requested. This is incomplete telemetry, not a coverage calculation bug.
+- Boundary: Correct the frontend wording now. Do not invent counts from local storage, infer them from model response text, repurpose lesson evidence or change review/Tutor APIs, mastery, migrations or stored history. Complete flashcard/Skill hub hint-request tracking needs a separately approved backend contract and event semantics. That item stays open.
+- Acceptance: At 375px/1440px, Skills covered retains its actual numerator/denominator and coverage caption with zero or nonzero hintsUsed inputs. No broad hints-used caption remains. Learner accuracy explicitly labels recorded hints inside its bounded evidence window. Loading/error/empty states and zero-write view tests remain unchanged.
+- Status: in-progress, owner Codex for frontend presentation. Complete hint telemetry is deferred pending backend scope.
+- Verified by: Static source trace of cohort.py, LessonChat.tsx, lessons.py CheckBody, flashcards.py ReviewBody and tutor.py Ask. Browser verification follows implementation.
+
 ## API contract
 
 ### Accepted presentation boundary
@@ -276,6 +285,7 @@ At integrated source `8e51040f1dda4235f9b12ad344da4cd81442e1e9`, reviewed staff 
 
 | Date | Change | Reason and decision source | IDs affected |
 | --- | --- | --- | --- |
+| 2026-10-28 | Specify truthful coverage caption and recorded-hints wording after discovering incomplete flashcard hint telemetry | Fred’s Skills covered screenshot, WI-34 | INSTR-REQ-013 |
 | 2026-10-27 | Record completed standing/window/momentum checks, current-record counts and remaining historical identity/provenance limits | Fred's learner drawer items 1–5, WI-34 | INSTR-REQ-006, INSTR-REQ-012 |
 | 2026-10-27 | Specify neutral rounded zero after 9/10 versus 9/10 hosted counts confirm zero momentum | Fred's drawer item 3, WI-34 | INSTR-REQ-012 |
 | 2026-10-27 | Specify measured course rank shared by drawer/full record, ties and unavailable roster handling before replacing the percentile ordinal | Fred's drawer item 1 after current-record counts, WI-34 | INSTR-REQ-012 |

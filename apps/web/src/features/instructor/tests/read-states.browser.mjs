@@ -38,7 +38,7 @@ async function fixture(width,{mode='instructor',reduced='reduce',failure='empty'
     if(metrics&&path.endsWith('/roster'))return state.rosterFailed?route.fulfill({status:403,json:{detail:'synthetic denial'}}):reply(state.metricRoster);
     if(path.endsWith('/roster'))return reply({courseId:'course',students:surface==='sheet'?[{userId:'learner',displayName:'Synthetic sheet learner',pseudonym:'Synthetic learner',initials:'SL',readiness:null,band:'no-evidence',attempts:0,evidenceCount:0,accuracy:null,lastActiveAt:null,daysInactive:null,weakestSkillName:null,skillsWithEvidence:0,skillsTotal:0,status:'not-started'}]:[]});
     if(path.endsWith('/heatmap'))return reply({courseId:'course',cohortReadiness:null,skills:[],students:[],cells:[]});
-    if(path.endsWith('/stats'))return reply({courseId:'course',learners:0,activeLearners:0,startedLearners:0,notStartedLearners:0,cohortReadiness:null,medianReadiness:null,accuracy:null,evidenceCount:0,medianLatencyMs:null,hintsUsed:0,skillsTracked:0,skillsCovered:0,bandDistribution:[],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
+    if(path.endsWith('/stats'))return reply({courseId:'course',learners:0,activeLearners:0,startedLearners:0,notStartedLearners:0,cohortReadiness:null,medianReadiness:null,accuracy:null,evidenceCount:0,medianLatencyMs:null,hintsUsed:metrics?4:0,skillsTracked:metrics?15:0,skillsCovered:metrics?11:0,bandDistribution:[],bloomCoverage:[],skillBreakdown:[],readinessTrend:[],activitySeries:[],decisions:{pending:0,approved:0,rejected:0,completed:0}});
     if(path.endsWith('/proposed'))return reply({courseId:'course',proposed:[]});
     if(path.endsWith('/auto-matched'))return reply({courseId:'course',autoMatched:[]});
     if(path==='/courses/course')return reply({id:'course',title:'AWS101'});
@@ -104,10 +104,12 @@ try {
         await page.getByText('No one needs support right now. Check back after the next activity.',{exact:true}).waitFor();
         await page.locator('#tour-cohort-kpis').waitFor();
         check(await page.getByRole('alert').count()===0,'successful empty class recovers without error states');
+        const coverage=page.locator('#tour-cohort-kpis').getByText('Skills covered',{exact:true}).locator('..');
+        check(await coverage.getByText('With evidence',{exact:true}).isVisible()&&await coverage.getByText(/hints used/).count()===0,'INSTR-REQ-013 empty coverage never claims no hints were requested');
       }else{
         await page.locator('#tour-standing').getByRole('heading',{name:'Demo learner',exact:true}).waitFor();
         check(await page.getByRole('alert').count()===0,'learner retry recovers');
-        check(await page.locator('#tour-standing').getByText('Graded outcomes in last 200 events · 0 hints used',{exact:true}).isVisible(),'INSTR-REQ-012 drawer accuracy names the bounded graded window');
+        check(await page.locator('#tour-standing').getByText('Graded outcomes in last 200 events · 0 recorded hints',{exact:true}).isVisible(),'INSTR-REQ-012 drawer accuracy names the bounded graded window');
         await page.getByRole('tab',{name:'Activity',exact:true}).click();
         await page.getByText("Showing 0 of this learner's activity",{exact:true}).waitFor();
         await page.getByText(/No evidence yet\. Your recent answers/).waitFor();
@@ -150,13 +152,18 @@ try {
   }
   for(const width of [375,1440]) for(const surface of ['sheet','learner']) {
     const f=await fixture(width,{surface,metrics:true}),{page,state}=f;
-    if(surface==='sheet'){await page.getByRole('textbox',{name:'Search the roster',exact:true}).fill('Demo learner');await page.getByRole('row').filter({hasText:'Demo learner'}).click();}
+    if(surface==='sheet'){
+      const coverage=page.locator('#tour-cohort-kpis').getByText('Skills covered',{exact:true}).locator('..');
+      check(await coverage.getByText('11/15',{exact:true}).isVisible(),'INSTR-REQ-013 coverage retains actual approved-skill counts');
+      check(await coverage.getByText('With evidence',{exact:true}).isVisible()&&await coverage.getByText(/hints used/).count()===0,'INSTR-REQ-013 nonzero hint input is not presented as coverage');
+      await page.getByRole('textbox',{name:'Search the roster',exact:true}).fill('Demo learner');await page.getByRole('row').filter({hasText:'Demo learner'}).click();
+    }
     const standing=page.locator('#tour-standing');await standing.waitFor();
     await standing.getByText('1st of 2',{exact:true}).waitFor();
     check(await standing.getByText('Learners with measured readiness',{exact:true}).isVisible(),'INSTR-REQ-012 rank denominator labels only measured course learners');
     check(await standing.getByText('200th',{exact:true}).count()===0,'INSTR-REQ-012 never renders the invalid percentile as ordinal');
     check(await standing.getByText('69%',{exact:true}).isVisible(),'INSTR-REQ-012 keeps the learner record accuracy');
-    check(await standing.getByText('Graded outcomes in last 200 events · 0 hints used',{exact:true}).isVisible(),'INSTR-REQ-012 accuracy window visible on '+surface);
+    check(await standing.getByText('Graded outcomes in last 200 events · 0 recorded hints',{exact:true}).isVisible(),'INSTR-REQ-012 accuracy window visible on '+surface);
     const momentumCard=standing.getByText('Momentum',{exact:true}).locator('..');
     check((await momentumCard.getByText('0 pts',{exact:true}).getAttribute('class')).includes('text-foreground'),'INSTR-REQ-012 true zero momentum is neutral');
     check(await momentumCard.getByText('Last 10 vs previous 10 graded',{exact:true}).isVisible(),'INSTR-REQ-012 momentum identifies graded windows');
