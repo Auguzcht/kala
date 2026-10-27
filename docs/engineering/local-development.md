@@ -69,6 +69,27 @@ python3 -m unittest discover -s scripts -p 'test_docs_check.py'
 
 The checker covers published text documentation, record-link placement and portable paths. Ignored local notes and generated caches are not published inputs. Historical paths kept as evidence carry the literal marker `local only, not retained`. No external network/link request is made.
 
+## Claude overview packets
+
+`pnpm context:claude` (or `node scripts/claude-context.mjs`) writes the ignored `claude-context.md` in the checkout. It is an orientation packet, not a repository dump. The independent `context:claude:scaffold` generator is unchanged.
+
+- **CTX-REQ-001 — Bounded overview:** embed only AGENTS.md, the root CLAUDE.md pointer, the documentation guide, feature registry and architecture guide. Add a compact repository map and selected manifest commands, not application bodies, migration bodies, historical records, generated types or an exhaustive file listing. Limit the complete packet to 64 KiB and each embedded source to 24 KiB. Fail without overwriting the previous packet if a limit is exceeded; never silently truncate a source.
+- **CTX-REQ-002 — Explicit task reading:** `--include PATH` adds one complete tracked text file; `--include PATH:START-END` adds an explicitly labeled, numbered excerpt. Repeat the option for additional sources. The manifest identifies every embedded source/range. Omitted links are reading routes, not documents already read. Historical documents are included only by explicit request and remain historical, never authority.
+- **CTX-REQ-003 — One committed snapshot:** default to local HEAD; `--ref REF` selects another locally available commit. All source and metadata come from that single resolved SHA, excluding working edits and untracked files. Never fetch, query GitHub, open environment/credential files, read symlink sources or call hosted services. No claim about remote freshness, deployment, acceptance or previous-chat authorization follows from generation.
+- **CTX-REQ-004 — Disposable output:** preserve the existing optional Markdown output argument. Reject tracked-file and symlink destinations rather than overwriting project source. Generated packets remain local, uncommitted artifacts. Use Node's built-in test runner; no dependency installation is required.
+
+```sh
+pnpm context:claude
+node scripts/claude-context.mjs --ref origin/main
+node scripts/claude-context.mjs --include docs/features/tutor/README.md
+node scripts/claude-context.mjs --include services/api/app/main.py:1-60
+node --test scripts/claude-context.test.mjs
+```
+
+If Claude cannot access the repository, provide the overview first, then the exact task document or source range chosen by its router. Do not upload the entire repository. The byte limit bounds packet size; it does not guarantee space in an already-full chat.
+
+Change log: 2026-10-27 — CTX-REQ-001–004 replace the recursive context dump with a bounded overview and explicit follow-up sources, following Fred's generator-only request and the Bellaura exporter pattern.
+
 ## Historical sources
 
 These links preserve provenance only. Required rules, commands and limits are stated above; do not read the records unless the task explicitly names them.
